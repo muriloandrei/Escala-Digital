@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Escala Digital</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="auth-page">
+  <main class="login-panel">
+    <section class="login-copy">
+      <p class="eyebrow">Escala Web</p>
+      <h1>Controle de escalas por loja</h1>
+      <p>Entre com seu usuario para consultar funcionarios, gerar escalas e salvar a programacao no banco Oracle.</p>
+    </section>
+
+    <form id="loginForm" class="login-form" autocomplete="off">
+      <label for="login">Usuario</label>
+      <input id="login" name="login" type="text" required maxlength="80" autocomplete="username">
+
+      <label for="password">Senha</label>
+      <input id="password" name="password" type="password" required maxlength="200" autocomplete="current-password">
+
+      <button type="submit">Entrar</button>
+      <p id="loginMessage" class="form-message" role="alert"></p>
+    </form>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/login.js"></script>
+</body>
+</html>

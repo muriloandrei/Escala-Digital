@@ -1,0 +1,67 @@
+# Banco Oracle
+
+## Tabelas existentes esperadas
+
+- `SGN_ESC_FUNC`: funcionarios.
+- `SGN_ESC_AUSENCIA`: ausencias.
+- `SGN_ESC_LOJA`: lojas.
+- `SGN_ESC_FUNCAO`: funcoes.
+- `SGN_ESC_SECAO`: secoes.
+- `SGN_ESC_PROG`: cabecalho da escala/programacao.
+- `SGN_ESC_PROG_DIA`: dias da escala/programacao.
+
+## Tabelas recomendadas para autenticacao
+
+```sql
+create table SGN_ESC_USUARIO (
+  USUARIO_ID number(15) not null,
+  LOGIN varchar2(80) not null,
+  NOME varchar2(100) not null,
+  SENHA_HASH varchar2(255) not null,
+  PERFIL varchar2(20) default 'OPERADOR' not null,
+  STATUS varchar2(1) default 'A' not null,
+  DT_HR_INCL date default sysdate not null,
+  constraint SGN_ESC_USUARIO_PK primary key (USUARIO_ID),
+  constraint SGN_ESC_USUARIO_1_UK unique (LOGIN),
+  constraint SGN_ESC_USUARIO_STATUS_CK check (STATUS in ('A', 'I'))
+);
+
+create table SGN_ESC_USUARIO_LOJA (
+  USUARIO_ID number(15) not null,
+  LOJA number(10) not null,
+  constraint SGN_ESC_USULOJA_PK primary key (USUARIO_ID, LOJA),
+  constraint SGN_ESC_USULOJA_1_FK foreign key (USUARIO_ID)
+    references SGN_ESC_USUARIO (USUARIO_ID)
+);
+
+create table SGN_ESC_AUDITORIA (
+  AUDITORIA_ID number(15) not null,
+  USUARIO_ID number(15),
+  ACAO varchar2(40) not null,
+  ENTIDADE varchar2(40) not null,
+  ENTIDADE_ID number(15),
+  LOJA number(10),
+  DETALHE clob,
+  IP_ORIGEM varchar2(45),
+  DT_HR_INCL date default sysdate not null,
+  constraint SGN_ESC_AUDITORIA_PK primary key (AUDITORIA_ID)
+);
+```
+
+## Sequences esperadas
+
+O backend inicial usa sequences para inserts:
+
+```sql
+create sequence SGN_ESC_PROG_SEQ start with 1 increment by 1 nocache;
+create sequence SGN_ESC_PROG_DIA_SEQ start with 1 increment by 1 nocache;
+create sequence SGN_ESC_USUARIO_SEQ start with 1 increment by 1 nocache;
+create sequence SGN_ESC_AUDITORIA_SEQ start with 1 increment by 1 nocache;
+```
+
+Se o banco ja usa triggers ou outra estrategia para IDs, a camada `escalaService.js` deve ser ajustada para seguir o padrao existente.
+
+## Hash de senha
+
+Nunca inserir senha pura em `SGN_ESC_USUARIO`. Gere hash `bcrypt` no backend ou em script administrativo controlado.
+

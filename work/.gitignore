@@ -1,0 +1,11 @@
+node_modules/
+.env
+npm-debug.log*
+*.log
+server.*.log
+tmp-*
+
+# Banco local de desenvolvimento. Use data/mock-db.example.json se precisar versionar seeds.
+data/mock-db.local.json
+data/*real*.json
+data/*producao*.json

@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Escalas</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="/css/app-original.css">
+    
+</head>
+<body>
+
+    <div class="dashboard-container">
+        <aside class="sidebar no-print">
+            <div class="sidebar-logo">
+                <span class="material-symbols-outlined">bubble_chart</span>
+            </div>
+            <nav class="sidebar-nav">
+                <ul>
+                    <li><a href="#" id="nav-timeline" class="active"><span class="material-symbols-outlined">schedule</span></a></li>
+                    <li><a href="#" id="nav-registros"><span class="material-symbols-outlined">wysiwyg</span></a></li>
+                    <li><a href="#" id="nav-funcionarios"><span class="material-symbols-outlined">badge</span></a></li>
+                    <li><a href="#" id="nav-acessos"><span class="material-symbols-outlined">admin_panel_settings</span></a></li>
+                    <li><a href="#" id="nav-settings"><span class="material-symbols-outlined">settings</span></a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+
+            <div id="timeline-page">
+                <header class="main-header">
+                    <h1>Escala Digital</h1>
+                    
+                </header>
+                <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                    <div class="lg:col-span-1 space-y-6 lg:sticky lg:top-8 no-print">
+                        <form id="form-container" class="bg-white p-6 rounded-xl shadow-md">
+                            <h2 id="form-title" class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Adicionar Turno</h2>
+                            <div class="space-y-4">
+                                <div><label for="quantidade" class="block text-sm font-medium text-gray-700">Quantidade</label><input type="number" id="quantidade" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Ex: 6"></div>
+                                <div><label for="inicioEscala" class="block text-sm font-medium text-gray-700">Entrada do Turno</label><input type="time" id="inicioEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></div>
+                                <div><label for="inicioIntervalo" class="block text-sm font-medium text-gray-700">Início do Intervalo</label><input type="time" id="inicioIntervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></div>
+                                <div><label for="fimIntervalo" class="block text-sm font-medium text-gray-700">Fim do Intervalo</label><input type="time" id="fimIntervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></div>
+                                <div><label for="fimEscala" class="block text-sm font-medium text-gray-700">Saída do Turno</label><input type="time" id="fimEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></div>
+                                <div class="flex space-x-2">
+                                    <button id="addEscalaBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Adicionar</button>
+                                    <button id="cancelEditBtn" type="button" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300 hidden">Cancelar Edição</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <div id="timeline-container-for-print" class="lg:col-span-2 bg-white p-4 sm:p-6 rounded-xl shadow-md">
+                        <div class="flex flex-wrap gap-4 justify-between items-center mb-4 no-print">
+                            <h2 class="text-xl font-bold text-gray-800">Linha do Tempo</h2>
+                            <div class="flex items-center gap-4 flex-wrap">
+                                <div id="timeline-zoom-controls" class="flex items-center gap-2 p-1 bg-gray-100 rounded-full">
+                                    <span id="timelineZoomOutBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Diminuir Zoom">zoom_out</span>
+                                    <span id="timelineZoomResetBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Resetar Zoom">restart_alt</span>
+                                    <span id="timelineZoomInBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Aumentar Zoom">zoom_in</span>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button id="abrirModalEscalaBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200">Gerador de Escala</button>
+                                    <button id="printBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200">Imprimir Timeline</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="timeline-scroll-container" class="timeline-scroll-container overflow-x-auto pb-4">
+                            <div id="timeline-content" style="min-width: 1200px; position: relative;">
+                                </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="registros-page" class="hidden">
+                <header class="main-header">
+                    <h1>Registros Atuais</h1>
+                    <div class="header-actions">
+                        <button class="action-button secondary" id="importarEscalaBtn">
+                            <span class="material-symbols-outlined">upload_file</span>
+                            Importar Escala
+                        </button>
+                        <button class="action-button secondary" id="consultarBancoBtn">
+                            <span class="material-symbols-outlined">database</span>
+                            Consultar Banco Local
+                        </button>
+                        <button class="action-button secondary" id="sincronizarBancoBtn">
+                            <span class="material-symbols-outlined">sync</span>
+                            Sincronizar Banco Local
+                        </button>
+                        <input type="file" id="importarEscalaInput" class="hidden" accept=".json">
+                        <button class="action-button" id="goToTimelineBtn">
+                            <span class="material-symbols-outlined">add</span>
+                            Criar Nova Escala
+                        </button>
+                    </div>
+                </header>
+    
+                <div class="table-card">
+                    <div class="table-card-header">
+                        <h2>Escalas Salvas</h2>
+                    </div>
+                    
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Nome</th>
+                                <th>Setor</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-registros-body">
+                            </tbody>
+                    </table>
+                </div>
+
+                <div class="table-card mt-6">
+                    <div class="table-card-header">
+                        <h2>Escalas no Banco Local</h2>
+                    </div>
+                    
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Mês</th>
+                                <th>Loja</th>
+                                <th>Chapa</th>
+                                <th>Funcionário</th>
+                                <th>Revisão</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-banco-body">
+                            <tr><td colspan="7" class="text-center text-gray-500 py-8">Consulte o banco local para visualizar as escalas sincronizadas.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="funcionarios-page" class="hidden">
+                <header class="main-header">
+                    <h1>Funcionários da Loja</h1>
+                    <div class="header-actions">
+                        <select id="funcionariosLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                        <button class="action-button secondary" id="carregarFuncionariosTelaBtn">
+                            <span class="material-symbols-outlined">refresh</span>
+                            Carregar
+                        </button>
+                    </div>
+                </header>
+
+                <div class="table-card">
+                    <div class="table-card-header">
+                        <h2 id="funcionariosTitulo">Funcionários cadastrados</h2>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Chapa</th>
+                                <th>Nome</th>
+                                <th>Loja</th>
+                                <th>Seção</th>
+                                <th>Função</th>
+                                <th>Brigadista</th>
+                                <th>Entrada 1</th>
+                                <th>Saída 1</th>
+                                <th>Entrada 2</th>
+                                <th>Saída 2</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-funcionarios-body">
+                            <tr><td colspan="10" class="text-center text-gray-500 py-8">Selecione uma loja e carregue os funcionários.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="acessos-page" class="hidden">
+                <header class="main-header">
+                    <h1>Usuários e Acessos</h1>
+                    <div class="header-actions">
+                        <button class="action-button secondary" id="carregarAcessosBtn">
+                            <span class="material-symbols-outlined">refresh</span>
+                            Carregar Acessos
+                        </button>
+                    </div>
+                </header>
+
+                <div class="table-card">
+                    <div class="table-card-header">
+                        <h2>Usuários com acesso à escala</h2>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Login</th>
+                                <th>Nome</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Lojas Permitidas</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-acessos-body">
+                            <tr><td colspan="5" class="text-center text-gray-500 py-8">Carregue os usuários com acesso à escala.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="settings-page" class="hidden">
+                 <header class="main-header"><h1>Configurações</h1></header>
+                <div class="bg-white p-6 rounded-xl shadow-md w-full max-w-2xl mx-auto">
+                    
+                        <hr class="my-6">
+                        <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Linha do Tempo</h4>
+                        <div><label for="horaInicioTimeline" class="block text-sm font-medium text-gray-700">Hora Início</label><input type="time" id="horaInicioTimeline" value="05:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="horaFimTimeline" class="block text-sm font-medium text-gray-700">Hora Fim</label><input type="time" id="horaFimTimeline" value="23:30" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="intervaloMarcacao" class="block text-sm font-medium text-gray-700">Intervalo (minutos)</label><input type="number" id="intervaloMarcacao" value="30" min="5" step="5" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <hr class="my-6">
+                        <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Regras de Turno</h4>
+                        <div><label for="regraJornadaTrabalho" class="block text-sm font-medium text-gray-700">Jornada de Trabalho Padrão</label><input type="time" id="regraJornadaTrabalho" value="07:20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxHoraExtra" class="block text-sm font-medium text-gray-700">Máximo de Hora Extra Diária</label><input type="time" id="regraMaxHoraExtra" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <hr>
+                        <div><label for="regraMinIntervalo" class="block text-sm font-medium text-gray-700">Duração Mínima Intervalo</label><input type="time" id="regraMinIntervalo" value="01:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxIntervalo" class="block text-sm font-medium text-gray-700">Duração Máxima Intervalo</label><input type="time" id="regraMaxIntervalo" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxJornadaContinua" class="block text-sm font-medium text-gray-700">Jornada Máxima Contínua</label><input type="time" id="regraMaxJornadaContinua" value="06:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraDescansoEntreTurnos" class="block text-sm font-medium text-gray-700">Descanso Mínimo Entre Turnos</label><input type="time" id="regraDescansoEntreTurnos" value="11:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraDescansoPosFolga" class="block text-sm font-medium text-gray-700">Descanso Mínimo Pós-Folga (horas)</label><input type="number" id="regraDescansoPosFolga" value="35" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxDiasConsecutivos" class="block text-sm font-medium text-gray-700">Máximo de Dias de Trabalho Consecutivos</label><input type="number" id="regraMaxDiasConsecutivos" value="7" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        
+                        <hr class="my-6">
+                        <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Backup e Restauração de TUDO</h4>
+                        <div class="space-y-3">
+                            <p class="text-sm text-gray-600">
+                                Salve um arquivo de backup com TODAS as suas escalas e configurações. 
+                                Use a opção de carregar para restaurar TODOS os dados a partir de um backup.
+                            </p>
+                            <div class="flex gap-4">
+                                <button id="salvarBackupBtn" type="button" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Salvar Backup Total</button>
+                                <button id="carregarBackupBtn" type="button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Carregar Backup Total</button>
+                            </div>
+                        </div>
+                        <input type="file" id="backupFileInput" class="hidden" accept=".json">
+                        </div>
+                    <div class="pt-6 border-t mt-6">
+                        <button id="salvarSettingsBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Salvar Alterações</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ESCALAS AUTOMATICA - MODAL DO ESQUELETO ATUALIZADO -->
+<div id="esqueletoModal" class="modal-overlay hidden no-print">
+    <div id="esqueleto-modal-content" class="bg-white rounded-lg shadow-xl w-11/12 h-[95vh] max-w-none flex flex-col modal-content">
+        
+        <!-- CABEÇALHO COM TODOS OS BOTÕES EM UMA LINHA -->
+        <div id="esqueleto-modal-header" class="flex items-center justify-between p-4 border-b overflow-x-auto overflow-y-hidden no-scrollbar" style="-ms-overflow-style: none; scrollbar-width: none;">
+            <h3 class="text-lg font-bold text-gray-800 whitespace-nowrap mr-6">Escala</h3>
+            
+            <div class="flex items-center gap-2 no-print flex-nowrap">
+                <!-- Seletores de Data -->
+                <select id="lojaEscalaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10" title="Loja"></select>
+                <button id="carregarFuncionariosBtn" class="whitespace-nowrap text-sm bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Carregar Funcionários</button>
+                <span id="funcionariosStatus" class="text-xs text-gray-600 whitespace-nowrap"></span>
+                <select id="mesSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                <select id="anoSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                  <!-- Regra e Distribuição Automática -->
+                <select id="regraDomingoSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10" title="Regra de Domingo">
+                    <option value="3">Dom. 2×1</option>
+                    <option value="2">Dom. 1×1</option>
+                </select>
+                <button id="autoDistribuirFolgasBtn" class="whitespace-nowrap text-sm bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Distribuir Folgas 5×2</button>
+                <!-- Botões de Visualização -->
+                <button id="visualizarTimelineBtn" class="whitespace-nowrap text-sm bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Visualizar Timeline</button>
+                <button id="gerarEscalaDetalhadaBtn" class="whitespace-nowrap text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Gerar Escala Detalhada</button>
+                
+              
+                
+                <!-- Ações e Utilidades -->
+                <button id="imprimirEsqueletoBtn" class="whitespace-nowrap text-sm bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Imprimir Esqueleto</button>
+                
+                <!-- Controles de Zoom -->
+                <div id="zoom-controls-esqueleto" class="flex items-center gap-1 p-1 bg-gray-100 rounded-lg h-10">
+                    <span id="zoomOutBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Diminuir Zoom">zoom_out</span>
+                    <span id="zoomResetBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Resetar Zoom">restart_alt</span>
+                    <span id="zoomInBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Aumentar Zoom">zoom_in</span>
+                </div>
+                
+                <!-- Botão Fechar -->
+                <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-3xl font-bold" title="Fechar" aria-label="Fechar modal">&times;</button>
+            </div>
+        </div>
+
+        <div id="modal-body" class="p-4 overflow-auto bg-gray-50">
+            <div id="tabela-esqueleto-container"></div>
+        </div>
+    </div>
+</div>
+
+    <div id="detalhadaModal" class="modal-overlay hidden no-print" style="z-index: 1060;">
+        <div id="detalhada-modal-content" class="bg-white rounded-lg shadow-xl w-11/12 h-[95vh] max-w-7xl flex flex-col modal-content">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 class="text-lg font-bold text-gray-800">Escala de Trabalho Detalhada</h3>
+                <div class="flex items-center gap-2 md:gap-4 no-print flex-wrap">
+                     <span id="detalhadaMesAno" class="text-sm font-semibold text-gray-700"></span>
+                     <button id="validarEscalaBtn" class="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Validar Escala</button>
+                     <button id="salvarEscalaBtn" class="text-sm bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Salvar</button>
+                    <button id="imprimirDetalhadaBtn" class="text-sm bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Imprimir Escala Detalhada</button>
+                    <button id="closeDetalhadaModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl font-bold">&times;</button>
+                </div>
+            </div>
+            <div id="detalhada-modal-body" class="p-2 overflow-auto"></div>
+        </div>
+    </div>
+    
+     <div id="timelineVisualizerModal" class="modal-overlay hidden no-print" style="z-index: 1065;">
+        <div class="bg-white rounded-lg shadow-xl w-11/12 h-[95vh] max-w-6xl flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b">
+                <h3 id="timelineVisualizerTitle" class="text-lg font-bold text-gray-800">Visualizador de Linha do Tempo</h3>
+                <div class="flex items-center gap-4">
+                    <button id="printTimelineVisualizerBtn" class="text-sm bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Imprimir</button>
+                    <button id="closeTimelineVisualizerBtn" class="text-gray-500 hover:text-gray-800 text-2xl font-bold">&times;</button>
+                </div>
+            </div>
+            <div id="timelineVisualizerBody" class="p-6 overflow-auto">
+                 <div class="timeline-scroll-container overflow-x-auto pb-4">
+                    <div id="timeline-visualizer-content" style="min-width: 1200px;">
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="infoModal" class="modal-overlay hidden no-print" style="z-index: 1070;">
+        <div class="bg-white rounded-lg shadow-xl w-11/12 max-w-md flex flex-col modal-content">
+            <div id="infoModalHeader" class="flex justify-between items-center p-4 text-white rounded-t-lg">
+                <h3 id="infoModalTitle" class="text-lg font-bold">Atenção</h3>
+                <button id="closeInfoModalBtn" class="text-white hover:text-gray-200 text-2xl font-bold">&times;</button>
+            </div>
+            <div id="infoModalBody" class="p-6">
+                <ul id="infoMessagesList" class="list-disc list-inside space-y-2 text-gray-700"></ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="inputModal" class="modal-overlay hidden no-print" style="z-index: 1080;">
+        <div class="bg-white rounded-lg shadow-xl w-11/12 max-w-sm flex flex-col">
+            <h3 id="inputModalTitle" class="text-lg font-bold p-4 border-b text-gray-800">Título do Modal</h3>
+            <div id="inputModalBody" class="p-6 space-y-4">
+                </div>
+            <div class="p-4 bg-gray-50 rounded-b-lg flex justify-end gap-3">
+                <button id="inputModalCancelBtn" type="button" class="px-4 py-2 rounded-md text-gray-700 bg-gray-200 hover:bg-gray-300 font-semibold transition">Cancelar</button>
+                <button id="inputModalConfirmBtn" type="button" class="px-4 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-700 font-semibold transition">Confirmar</button>
+            </div>
+        </div>
+    </div>
+    
+    
+
+
+    <div id="print-container" style="display: none;"></div>
+
+    <footer class="footer no-print">
+        Criado por Mike Moraes - Gerente Loja 35 <span></span>
+    </footer>
+
+    <script src="/js/escala-rules-core.js"></script>
+    <script src="/js/app-original.js"></script>
+<script src="/js/license-lock.js"></script>
+</body>
+</html>

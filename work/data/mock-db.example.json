@@ -1,0 +1,3 @@
+{
+  "observacao": "Use data/mock-db.json para desenvolvimento local. Este arquivo documenta que a base mock existe e pode ser recriada sem credenciais reais."
+}

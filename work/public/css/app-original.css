@@ -1,0 +1,474 @@
+/* --- Reset Básico e Estilos Globais (Layout Base) --- */
+        :root {
+            --cor-principal: #6a5af9;
+            --cor-principal-leve: #f0efff;
+            --cor-fundo: #f4f7fa;
+            --cor-branco: #ffffff;
+            --cor-texto: #334155;
+            --cor-texto-leve: #64748b;
+            --cor-borda: #e2e8f0;
+            --cor-sucesso: #10b981;
+            --cor-alerta: #ef4444;
+            --cor-info: #3b82f6;
+            --sombra-card: 0 4px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--cor-fundo);
+            color: var(--cor-texto);
+            display: flex;
+        }
+        
+        .sidebar, .main-header h1, .footer {
+             font-family: 'Poppins', sans-serif;
+        }
+
+        /* --- Estrutura Principal do Dashboard --- */
+        .dashboard-container {
+            display: flex;
+            width: 100%;
+            padding-bottom: 60px; 
+        }
+
+        /* --- Barra Lateral (Sidebar) --- */
+        .sidebar {
+            width: 64px;
+            background-color: var(--cor-branco);
+            border-right: 1px solid var(--cor-borda);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 24px 0;
+            transition: width 0.3s ease;
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100%;
+            z-index: 1000;
+        }
+
+        .sidebar-logo {
+            color: var(--cor-principal);
+            font-size: 2.5rem;
+            margin-bottom: 40px;
+        }
+
+        .sidebar-nav ul {
+            list-style: none;
+            width: 100%;
+        }
+
+        .sidebar-nav li {
+            position: relative;
+            display: flex;
+            justify-content: center;
+        }
+
+        .sidebar-nav a {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px 0;
+            color: var(--cor-texto-leve);
+            text-decoration: none;
+            width: 100%;
+            transition: color 0.2s;
+        }
+
+        .sidebar-nav a:hover {
+            color: var(--cor-principal);
+        }
+
+        .sidebar-nav a.active {
+            color: var(--cor-principal);
+            background-color: var(--cor-principal-leve);
+        }
+        
+        .sidebar-nav .material-symbols-outlined {
+            font-size: 1.7rem;
+        }
+
+        /* --- Conteúdo Principal --- */
+        .main-content {
+            flex-grow: 1;
+            padding: 24px 32px;
+            overflow-y: auto;
+            margin-left: 64px;
+        }
+        
+        .main-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .main-header h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        /* --- ESTILOS DA PÁGINA DE REGISTROS --- */
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .action-button {
+            background-color: var(--cor-principal);
+            color: var(--cor-branco);
+            border: none;
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.2s;
+        }
+
+        .action-button:hover {
+            background-color: #5848d8;
+        }
+
+        .action-button.secondary {
+            background-color: var(--cor-info);
+        }
+        .action-button.secondary:hover {
+             background-color: #2563eb;
+        }
+        
+        .table-card {
+            background-color: var(--cor-branco);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: var(--sombra-card);
+        }
+
+        .table-card-header {
+            margin-bottom: 24px;
+        }
+
+        .table-card-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th, .data-table td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--cor-borda);
+        }
+
+        .data-table thead {
+            background-color: #f8fafc;
+        }
+
+        .data-table thead th {
+            color: var(--cor-texto-leve);
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+        }
+        
+        .data-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: #fafbfd;
+        }
+        
+        .data-table td {
+            font-size: 1rem;
+        }
+
+        .actions-cell {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn-table {
+            background: none;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--cor-texto-leve);
+            transition: color 0.2s;
+            padding: 4px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1rem;
+        }
+        
+        .action-btn-table.load:hover {
+            color: var(--cor-sucesso);
+        }
+
+        .action-btn-table.delete:hover {
+            color: var(--cor-alerta);
+        }
+        
+        .action-btn-table.view-skeleton:hover {
+            color: var(--cor-info);
+        }
+        
+        .action-btn-table.view-timeline:hover {
+            color: #6a5af9;
+        }
+        .action-btn-table.backup:hover {
+            color: #f59e0b;
+        }
+
+        /* --- RODAPÉ FIXO --- */
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 64px; 
+            width: calc(100% - 64px);
+            background-color: var(--cor-branco);
+            padding: 1rem;
+            text-align: center;
+            border-top: 1px solid var(--cor-borda);
+            color: var(--cor-texto-leve);
+            font-size: 0.875rem;
+            z-index: 200;
+        }
+        
+        .footer span {
+            color: var(--cor-alerta);
+            font-size: 1rem;
+            vertical-align: middle;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .main-content { padding: 16px; margin-left: 0; }
+            .main-header { flex-direction: column; align-items: flex-start; gap: 16px; }
+            .footer { left: 0; width: 100%; }
+
+            #registros-page .table-card {
+                padding: 0;
+                background: none;
+                box-shadow: none;
+            }
+            #registros-page .data-table thead {
+                display: none;
+            }
+            #registros-page .data-table, 
+            #registros-page .data-table tbody, 
+            #registros-page .data-table tr, 
+            #registros-page .data-table td {
+                display: block;
+                width: 100%;
+            }
+            #registros-page .data-table tr {
+                margin-bottom: 16px;
+                border: 1px solid var(--cor-borda);
+                border-radius: 8px;
+                padding: 16px;
+                background-color: var(--cor-branco);
+            }
+            #registros-page .data-table td {
+                padding: 8px 0;
+                border: none;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+            }
+            #registros-page .data-table td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                width: 80px;
+                color: var(--cor-texto-leve);
+            }
+            #registros-page .actions-cell {
+                justify-content: flex-start;
+                padding-top: 16px;
+            }
+        }
+
+/* ---- bloco CSS extraido ---- */
+
+/* --- ESTILOS DA ESCALA AUTOMATICA --- */
+        .timeline-scroll-container::-webkit-scrollbar { height: 8px; }
+        .timeline-scroll-container::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 10px; }
+        .timeline-scroll-container::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
+        .timeline-scroll-container::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        .summary-bar-text { color: white; font-weight: bold; font-size: 12px; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        .action-btn { padding: 2px 8px; font-size: 12px; border-radius: 6px; border: 1px solid transparent; transition: all 0.2s; }
+        .edit-btn { background-color: #e0e7ff; color: #4338ca; border-color: #c7d2fe; }
+        .edit-btn:hover { background-color: #c7d2fe; }
+        .delete-btn { background-color: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+        .delete-btn:hover { background-color: #fecaca; }
+
+        .timeline-grid-line {
+            width: 1px;
+            border-left: 1px dotted red;
+        }
+
+        /* Estilos da Modal e Tabela */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 1050; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #tabela-esqueleto th, #tabela-esqueleto td { border: 1px solid #e2e8f0; padding: 4px; text-align: center; font-size: 10px; min-width: 45px; }
+        
+        #tabela-esqueleto td:first-child {
+            white-space: nowrap;
+        }
+
+        #tabela-esqueleto th { font-weight: bold; background-color: #f1f5f9; }
+        #tabela-esqueleto tfoot td { font-weight: bold; background-color: #f1f5f9; }
+        .escala-cell { cursor: pointer; transition: background-color 0.2s; }
+        .collaborator-name-span[contenteditable="true"] { cursor: text; }
+        .collaborator-name-span[contenteditable="true"]:hover, .collaborator-name-span[contenteditable="true"]:focus { background-color: #eff6ff; outline: 1px solid #3b82f6; border-radius: 2px; }
+        #tabela-esqueleto.is-readonly .escala-cell { cursor: not-allowed; }
+        #tabela-esqueleto .dias-trabalhados-cell, #tabela-esqueleto .folgas-cell { font-weight: bold; }
+        #esqueleto-modal-content { position: relative; }
+        #esqueleto-modal-header { padding-right: 58px; }
+        #closeModalBtn {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            z-index: 20;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16);
+            line-height: 1;
+        }
+        #closeModalBtn:hover { background: #f1f5f9; }
+        
+        .colaborador-escala-detalhada { border: 2px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 20px; background-color: #fff; }
+        .colaborador-escala-detalhada table { table-layout: fixed; width: 100%; }
+        .colaborador-escala-detalhada table th, .colaborador-escala-detalhada table td { border: 1px solid #e2e8f0; padding: 2px 4px; text-align: center; font-size: 11px; white-space: nowrap; }
+        .colaborador-escala-detalhada table th:first-child, .colaborador-escala-detalhada table td:first-child { width: 55px; text-align: left; font-weight: 500; padding-left: 6px; }
+        .colaborador-escala-detalhada table th { background-color: #f8fafc; }
+        .colaborador-escala-detalhada .header-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
+        [contenteditable="true"] { cursor: text; outline: none; }
+        .colaborador-escala-detalhada h3[contenteditable="true"]:hover,
+        .colaborador-escala-detalhada h3[contenteditable="true"]:focus,
+        .colaborador-escala-detalhada td[contenteditable="true"]:hover,
+        .colaborador-escala-detalhada td[contenteditable="true"]:focus { background-color: #eff6ff !important; box-shadow: 0 0 0 1px #3b82f6; border-radius: 2px; }
+        .selection-highlight { background-color: #dbeafe !important; box-shadow: inset 0 0 0 1px #3b82f6; }
+
+        #tabela-esqueleto-container, #timeline-content {
+            transition: transform 0.2s ease-in-out;
+            transform-origin: top left;
+        }
+
+        /* --- ESTILOS DE IMPRESSÃO --- */
+        @media print {
+            @page { size: A4 landscape; margin: 1cm; }
+            body { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; background-color: #fff !important; }
+            .no-print, body > *:not(#print-container) { display: none !important; }
+            #print-container { display: block !important; }
+            .print-title { text-align: center; font-size: 1.5rem; font-weight: bold; margin-bottom: 0.5rem; }
+            .print-subtitle { text-align: center; font-size: 1.1rem; margin-bottom: 1rem; color: #555; }
+            
+            /* ====================================================================== */
+            /* ESTILOS CORRIGIDOS E MELHORADOS PARA A IMPRESSÃO DA TIMELINE */
+            /* ====================================================================== */
+            .print-timeline-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed; /* Importante para o layout funcionar */
+            }
+            /* Estas regras fazem o cabeçalho e rodapé repetirem em cada página */
+            .print-timeline-table thead { display: table-header-group; }
+            .print-timeline-table tfoot { display: table-footer-group; }
+            
+            .print-timeline-table th, .print-timeline-table td {
+                border: 1px solid #ccc;
+                padding: 4px;
+                vertical-align: middle;
+            }
+            
+            .print-timeline-table thead th {
+                background-color: #f2f2f2 !important;
+                font-weight: bold;
+                text-align: center;
+                font-size: 7pt; /* Fonte menor para caber mais horários */
+                white-space: nowrap; /* Impede que o horário quebre a linha */
+                padding: 5px 2px;
+            }
+            
+            .print-timeline-table .col-info {
+                width: 150px; /* Largura fixa para a coluna de informação do turno */
+                font-size: 8pt;
+                font-weight: 500;
+            }
+
+            .print-timeline-table .col-timeline {
+                width: auto;
+                padding: 2px 0; /* Reduz o padding vertical na célula da timeline */
+            }
+
+            .print-timeline-table .timeline-bar-container,
+            .print-timeline-table .summary-bar-container {
+                position: relative;
+                height: 24px;
+                background-color: #f0f0f0;
+            }
+            
+            .print-timeline-table .timeline-bar {
+                position: absolute;
+                height: 100%;
+            }
+
+            .print-timeline-table .summary-bar {
+                position: absolute;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            /* ================== FIM DOS ESTILOS CORRIGIDOS ================== */
+
+
+            .print-skeleton-table { width: 100%; border-collapse: collapse; }
+            .print-skeleton-table thead, .print-skeleton-table tfoot { display: table-row-group; }
+            .print-skeleton-table th, .print-skeleton-table td { border: 1px solid #ccc; padding: 3px; font-size: 9pt; text-align: center; }
+            .print-skeleton-table th { background-color: #f2f2f2 !important; font-weight: bold; }
+            #print-container .colaborador-escala-detalhada { page-break-inside: avoid; border: 0px solid #ccc !important; margin-bottom: 1rem; padding: 8px 0; }
+            #print-container .colaborador-escala-detalhada table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+            #print-container .colaborador-escala-detalhada table th, #print-container .colaborador-escala-detalhada table td { font-size: 7pt; padding: 2px; text-align: center; border: 1px solid #ccc; overflow: hidden; }
+            #print-container .colaborador-escala-detalhada table th:first-child, #print-container .colaborador-escala-detalhada table td:first-child { width: 50px; text-align: left; font-weight: 500; padding-left: 2px; }
+            
+            #print-container .summary-bar-text { color: white !important; font-size: 10pt; }
+            #print-container .bg-blue-600 { background-color: #2563eb !important; }
+            #print-container .bg-green-500 { background-color: #22c55e !important; }
+            #print-container .bg-yellow-500 { background-color: #eab308 !important; }
+        }
