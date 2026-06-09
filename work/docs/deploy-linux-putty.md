@@ -242,6 +242,31 @@ Em producao, configurar HTTPS e manter `COOKIE_SECURE=true`.
 11. Validacao bloqueia funcionario ausente em dia trabalhado.
 12. Logs nao mostram senha, token ou dados sensiveis.
 
+## 11.1 Diagnostico Oracle
+
+Com `DB_DRIVER=oracle`, fazer login com usuario `ADMIN` e acessar:
+
+```txt
+/api/diagnostics/oracle
+```
+
+A resposta esperada deve ter:
+
+```json
+{
+  "driver": "oracle",
+  "status": "ok",
+  "tables": {
+    "missing": []
+  },
+  "sequences": {
+    "missing": []
+  }
+}
+```
+
+Se `missing` retornar alguma tabela ou sequence, o usuario Oracle da aplicacao nao esta enxergando esse objeto ou o nome esta diferente do esperado pelo backend.
+
 ## 12. Atualizar versao no servidor
 
 Depois de enviar alteracoes para o GitHub:

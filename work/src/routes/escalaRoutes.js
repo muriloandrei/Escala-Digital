@@ -77,18 +77,13 @@ router.post('/', requireLojaAccess, async (req, res, next) => {
       return res.status(422).json({ errors: ausenciaErrors });
     }
 
-    const saved = [];
-    for (const funcionario of payload.funcionarios) {
-      const result = await escalaService.saveEscala({
-        lojaId: payload.lojaId,
-        mesRef: payload.mesRef,
-        escalaOrigemId: payload.escalaOrigemId,
-        funcionario,
-        dias: funcionario.dias,
-        oficializada: payload.oficializada || 0
-      });
-      saved.push(result);
-    }
+    const saved = await escalaService.saveEscalasBatch({
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      escalaOrigemId: payload.escalaOrigemId,
+      funcionarios: payload.funcionarios,
+      oficializada: payload.oficializada || 0
+    });
 
     return res.status(201).json({ saved });
   } catch (error) {

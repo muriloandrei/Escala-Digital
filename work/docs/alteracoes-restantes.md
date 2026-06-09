@@ -18,6 +18,10 @@ Concluido:
 - Regras principais isoladas em `public/js/escala-rules-core.js`.
 - Testes automatizados com `npm test`.
 - Documentacao inicial de banco, seguranca, deploy e GitHub privado.
+- Branch `codex/oracle-integration` criada para integracao Oracle.
+- Diagnostico protegido `/api/diagnostics/oracle` criado para deploy.
+- `/api/state` ajustado para nao bloquear a UI em `DB_DRIVER=oracle`.
+- Salvamento Oracle preparado para transacao unica e revisao automatica por funcionario/mes.
 
 ## Fase 1. Fechar simulacao local
 
@@ -51,14 +55,14 @@ Concluido:
 
 1. Confirmar nomes finais das tabelas, sequences, triggers e constraints.
 2. Confirmar se `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA` aceitam o modelo atual.
-3. Ajustar SQLs do backend para o padrao real do banco.
+3. Ajustar SQLs do backend para o padrao real do banco. Iniciado na branch `codex/oracle-integration`.
 4. Criar tabela real de usuarios:
    - `SGN_ESC_USUARIO`.
    - `SGN_ESC_USUARIO_LOJA`.
 5. Criar ou validar tabela de auditoria:
    - `SGN_ESC_AUDITORIA`.
 6. Instalar Oracle Instant Client na maquina local para teste real.
-7. Testar `DB_DRIVER=oracle` em ambiente controlado.
+7. Testar `DB_DRIVER=oracle` em ambiente controlado usando `/api/diagnostics/oracle`.
 8. Validar timezone e campos `DATE`.
 9. Validar transacao: cabecalho e dias devem gravar juntos ou falhar juntos.
 

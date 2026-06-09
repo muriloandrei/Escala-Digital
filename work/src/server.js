@@ -12,6 +12,7 @@ const catalogRoutes = require('./routes/catalogRoutes');
 const escalaRoutes = require('./routes/escalaRoutes');
 const stateRoutes = require('./routes/stateRoutes');
 const accessRoutes = require('./routes/accessRoutes');
+const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
 
 const env = getEnv();
 const app = express();
@@ -31,7 +32,7 @@ app.use(rateLimit({
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', dbDriver: env.dbDriver });
 });
 
 app.get('/app', requireAuth, (req, res) => {
@@ -43,6 +44,7 @@ app.use('/api/catalog', catalogRoutes);
 app.use('/api/escalas', escalaRoutes);
 app.use('/api/state', stateRoutes);
 app.use('/api/acessos', accessRoutes);
+app.use('/api/diagnostics', diagnosticsRoutes);
 app.use('/api', notFound);
 
 app.get('*', (req, res) => {

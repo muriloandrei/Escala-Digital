@@ -28,4 +28,12 @@ function requireLojaAccess(req, res, next) {
   return res.status(403).json({ error: 'Usuario sem permissao para esta loja.' });
 }
 
-module.exports = { requireAuth, requireLojaAccess };
+function requireAdmin(req, res, next) {
+  if (req.user?.perfil === 'ADMIN') {
+    return next();
+  }
+
+  return res.status(403).json({ error: 'Acesso restrito a administradores.' });
+}
+
+module.exports = { requireAuth, requireLojaAccess, requireAdmin };

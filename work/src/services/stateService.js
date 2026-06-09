@@ -4,9 +4,12 @@ const { getEnv } = require('../config/env');
 async function getState(userId) {
   const env = getEnv();
   if (env.dbDriver !== 'mock') {
-    const error = new Error('Persistencia generica ainda nao implementada para Oracle.');
-    error.statusCode = 501;
-    throw error;
+    return {
+      escalasSalvas: [],
+      escalaConfig: {},
+      mode: 'oracle',
+      message: 'Estado local desativado. As escalas oficiais devem ser consultadas em SGN_ESC_PROG e SGN_ESC_PROG_DIA.'
+    };
   }
 
   const data = await readData();
@@ -20,9 +23,12 @@ async function getState(userId) {
 async function saveEscalas(userId, escalasSalvas) {
   const env = getEnv();
   if (env.dbDriver !== 'mock') {
-    const error = new Error('Persistencia generica ainda nao implementada para Oracle.');
-    error.statusCode = 501;
-    throw error;
+    return {
+      ok: true,
+      persisted: false,
+      mode: 'oracle',
+      message: 'Estado local ignorado em Oracle. Use /api/escalas para persistencia oficial.'
+    };
   }
 
   const data = await readData();
@@ -36,9 +42,12 @@ async function saveEscalas(userId, escalasSalvas) {
 async function saveConfig(userId, escalaConfig) {
   const env = getEnv();
   if (env.dbDriver !== 'mock') {
-    const error = new Error('Persistencia generica ainda nao implementada para Oracle.');
-    error.statusCode = 501;
-    throw error;
+    return {
+      ok: true,
+      persisted: false,
+      mode: 'oracle',
+      message: 'Configuracao de tela nao persistida no Oracle nesta versao.'
+    };
   }
 
   const data = await readData();

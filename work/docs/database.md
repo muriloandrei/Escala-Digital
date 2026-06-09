@@ -65,3 +65,31 @@ Se o banco ja usa triggers ou outra estrategia para IDs, a camada `escalaService
 
 Nunca inserir senha pura em `SGN_ESC_USUARIO`. Gere hash `bcrypt` no backend ou em script administrativo controlado.
 
+Para gerar um hash antes de inserir um usuario admin:
+
+```bash
+node scripts/hash-password.js "senha-do-usuario"
+```
+
+Exemplo de insert, ajustando IDs conforme o ambiente:
+
+```sql
+insert into SGN_ESC_USUARIO (
+  USUARIO_ID, LOGIN, NOME, SENHA_HASH, PERFIL, STATUS, DT_HR_INCL
+) values (
+  SGN_ESC_USUARIO_SEQ.nextval,
+  'admin',
+  'Administrador',
+  '<HASH_BCRYPT_GERADO>',
+  'ADMIN',
+  'A',
+  sysdate
+);
+
+insert into SGN_ESC_USUARIO_LOJA (USUARIO_ID, LOJA)
+select USUARIO_ID, 101
+from SGN_ESC_USUARIO
+where LOGIN = 'admin';
+```
+
+Para usuario `ADMIN`, o backend permite acessar todas as lojas mesmo se a tabela de vinculo tiver apenas uma loja. Para perfis nao admin, vincular todas as lojas permitidas em `SGN_ESC_USUARIO_LOJA`.

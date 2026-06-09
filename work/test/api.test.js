@@ -96,6 +96,20 @@ test('access API returns users, roles and allowed stores without password hashes
   assert.ok(acessos.body.usuarios.some((usuario) => usuario.LOGIN === 'gerente101' && usuario.PERFIL === 'GERENTE'));
 });
 
+test('admin diagnostics endpoint reports skipped Oracle check in mock mode', async (t) => {
+  const { server, baseUrl } = await startTestServer();
+  t.after(() => server.close());
+  const cookie = await login(baseUrl);
+
+  const diagnostics = await requestJson(baseUrl, '/api/diagnostics/oracle', {
+    headers: { Cookie: cookie }
+  });
+
+  assert.equal(diagnostics.response.status, 200);
+  assert.equal(diagnostics.body.status, 'skipped');
+  assert.equal(diagnostics.body.driver, 'mock');
+});
+
 test('structured schedule saves headers and days', async (t) => {
   const { server, baseUrl } = await startTestServer();
   t.after(() => server.close());

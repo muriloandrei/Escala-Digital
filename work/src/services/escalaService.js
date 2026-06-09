@@ -135,49 +135,115 @@ async function saveEscala({ lojaId, mesRef, escalaOrigemId, funcionario, dias, o
   }
 
   return withConnection(async (connection) => {
-    const header = await connection.execute(
-      `insert into sgn_esc_prog (
-          escprog_id, mes_ref, escfunc_id, loja, chapa, revisao, oficializada
+    const result = await insertEscalaOracle(connection, {
+      lojaId,
+      mesRef,
+      funcionario,
+      dias,
+      oficializada
+    });
+    await connection.commit();
+    return result;
+  });
+}
+
+async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dias, oficializada = 0 }) {
+  const revisionResult = await connection.execute(
+    `select nvl(max(revisao), 0) + 1 as revisao
+     from sgn_esc_prog
+     where loja = :lojaId
+       and escfunc_id = :escfuncId
+       and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')`,
+    {
+      lojaId,
+      escfuncId: funcionario.escfuncId,
+      mesRef
+    },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+
+  const revisao = Number(revisionResult.rows[0]?.REVISAO || 1);
+  const header = await connection.execute(
+    `insert into sgn_esc_prog (
+        escprog_id, mes_ref, escfunc_id, loja, chapa, revisao, oficializada
+     ) values (
+        sgn_esc_prog_seq.nextval, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :lojaId, :chapa, :revisao, :oficializada
+     )
+     returning escprog_id into :escprogId`,
+    {
+      mesRef,
+      escfuncId: funcionario.escfuncId,
+      lojaId,
+      chapa: funcionario.chapa,
+      revisao,
+      oficializada,
+      escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
+    },
+    { autoCommit: false }
+  );
+
+  const escprogId = header.outBinds.escprogId[0];
+  const binds = dias.map((dia) => ({
+    escprogId,
+    dt: dia.data,
+    hrEnt1: dia.hrEnt1 || null,
+    hrSai1: dia.hrSai1 || null,
+    hrEnt2: dia.hrEnt2 || null,
+    hrSai2: dia.hrSai2 || null,
+    programacao: dia.programacao || null
+  }));
+
+  if (binds.length > 0) {
+    await connection.executeMany(
+      `insert into sgn_esc_prog_dia (
+          escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
        ) values (
-          sgn_esc_prog_seq.nextval, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :lojaId, :chapa, 1, :oficializada
-       )
-       returning escprog_id into :escprogId`,
-      {
-        mesRef,
-        escfuncId: funcionario.escfuncId,
-        lojaId,
-        chapa: funcionario.chapa,
-        oficializada,
-        escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
-      },
+          sgn_esc_prog_dia_seq.nextval, :escprogId, to_date(:dt, 'YYYY-MM-DD'), :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :programacao
+       )`,
+      binds,
       { autoCommit: false }
     );
+  }
 
-    const escprogId = header.outBinds.escprogId[0];
-    const binds = dias.map((dia) => ({
-      escprogId,
-      dt: dia.data,
-      hrEnt1: dia.hrEnt1 || null,
-      hrSai1: dia.hrSai1 || null,
-      hrEnt2: dia.hrEnt2 || null,
-      hrSai2: dia.hrSai2 || null,
-      programacao: dia.programacao || null
-    }));
+  return { escprogId, revisao };
+}
 
-    if (binds.length > 0) {
-      await connection.executeMany(
-        `insert into sgn_esc_prog_dia (
-            escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
-         ) values (
-            sgn_esc_prog_dia_seq.nextval, :escprogId, to_date(:dt, 'YYYY-MM-DD'), :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :programacao
-         )`,
-        binds,
-        { autoCommit: false }
-      );
+async function saveEscalasBatch({ lojaId, mesRef, escalaOrigemId, funcionarios, oficializada = 0 }) {
+  const env = getEnv();
+  if (env.dbDriver === 'mock') {
+    const saved = [];
+    for (const funcionario of funcionarios) {
+      saved.push(await saveEscala({
+        lojaId,
+        mesRef,
+        escalaOrigemId,
+        funcionario,
+        dias: funcionario.dias,
+        oficializada
+      }));
     }
+    return saved;
+  }
 
-    await connection.commit();
-    return { escprogId };
+  return withConnection(async (connection) => {
+    try {
+      const saved = [];
+      for (const funcionario of funcionarios) {
+        saved.push(await insertEscalaOracle(connection, {
+          lojaId,
+          mesRef,
+          funcionario,
+          dias: funcionario.dias || [],
+          oficializada
+        }));
+      }
+
+      await connection.commit();
+      return saved;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    }
   });
 }
 
@@ -245,5 +311,6 @@ module.exports = {
   getEscalaHeader,
   getEscalaDias,
   saveEscala,
+  saveEscalasBatch,
   validateAusencias
 };
