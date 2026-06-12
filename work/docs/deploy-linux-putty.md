@@ -267,6 +267,45 @@ A resposta esperada deve ter:
 
 Se `missing` retornar alguma tabela ou sequence, o usuario Oracle da aplicacao nao esta enxergando esse objeto ou o nome esta diferente do esperado pelo backend.
 
+## 11.2 Diagnostico quando o login retorna erro interno
+
+No servidor, dentro da pasta da aplicacao:
+
+```bash
+cd /opt/escala-app
+node scripts/check-oracle-login.js admin admin123
+```
+
+O script valida:
+
+- conexao Oracle;
+- schema conectado;
+- existencia do usuario em `SGN_ESC_USUARIO`;
+- `STATUS`;
+- se `SENHA_HASH` esta em formato bcrypt valido;
+- se a senha informada confere;
+- lojas vinculadas em `SGN_ESC_USUARIO_LOJA`.
+
+Se `SENHA_HASH bcrypt valido` retornar `nao`, gere um hash:
+
+```bash
+node scripts/hash-password.js "admin123"
+```
+
+Depois atualize o usuario no Oracle:
+
+```sql
+update SGN_ESC_USUARIO
+set SENHA_HASH = '<HASH_GERADO>',
+    STATUS = 'A',
+    PERFIL = 'ADMIN'
+where upper(LOGIN) = 'ADMIN';
+
+commit;
+```
+
+Se o usuario nao existir, crie conforme o exemplo em `docs/database.md`.
+
 ## 12. Atualizar versao no servidor
 
 Depois de enviar alteracoes para o GitHub:

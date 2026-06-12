@@ -4,6 +4,20 @@ const { withConnection, oracledb } = require('../db/oracle');
 const { readData } = require('../db/mockStore');
 const { getEnv } = require('../config/env');
 
+function isActiveStatus(status) {
+  return String(status || '').trim().toUpperCase() === 'A';
+}
+
+function isBcryptHash(value) {
+  return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(String(value || ''));
+}
+
+function invalidLoginError() {
+  const error = new Error('Usuario ou senha invalidos.');
+  error.statusCode = 401;
+  return error;
+}
+
 async function findUserByLogin(login) {
   const env = getEnv();
   if (env.dbDriver === 'mock') {
@@ -54,17 +68,18 @@ async function findUserStores(usuarioId) {
 
 async function login({ login, password }) {
   const user = await findUserByLogin(login);
-  if (!user || user.STATUS !== 'A') {
-    const error = new Error('Usuario ou senha invalidos.');
-    error.statusCode = 401;
-    throw error;
+  if (!user || !isActiveStatus(user.STATUS)) {
+    throw invalidLoginError();
+  }
+
+  if (!isBcryptHash(user.SENHA_HASH)) {
+    console.warn(`Usuario ${user.LOGIN} sem SENHA_HASH bcrypt valido.`);
+    throw invalidLoginError();
   }
 
   const passwordMatches = await bcrypt.compare(password, user.SENHA_HASH);
   if (!passwordMatches) {
-    const error = new Error('Usuario ou senha invalidos.');
-    error.statusCode = 401;
-    throw error;
+    throw invalidLoginError();
   }
 
   const lojas = await findUserStores(user.USUARIO_ID);
