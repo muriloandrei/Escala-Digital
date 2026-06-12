@@ -112,6 +112,7 @@ ORACLE_POOL_INCREMENT=1
 JWT_SECRET=segredo-longo-com-32-caracteres-ou-mais
 JWT_EXPIRES_IN=8h
 COOKIE_SECURE=true
+TRUST_PROXY=true
 ```
 
 Permissao:
@@ -225,7 +226,16 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Em producao, configurar HTTPS e manter `COOKIE_SECURE=true`.
+Em producao com HTTPS no Nginx, manter `COOKIE_SECURE=true` e `TRUST_PROXY=true`.
+
+Se o teste for feito acessando diretamente `http://IP_DO_SERVIDOR:3000/app`, sem HTTPS e sem Nginx, usar temporariamente:
+
+```txt
+COOKIE_SECURE=false
+TRUST_PROXY=false
+```
+
+Com `COOKIE_SECURE=true` em HTTP direto, o navegador ignora o cookie de login e a tela volta como `Login necessario`.
 
 ## 11. Checklist de validacao
 

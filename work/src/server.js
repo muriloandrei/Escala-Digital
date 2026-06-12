@@ -17,6 +17,10 @@ const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
 const env = getEnv();
 const app = express();
 
+if (env.trustProxy) {
+  app.set('trust proxy', 1);
+}
+
 app.use(helmet({
   contentSecurityPolicy: false
 }));
@@ -35,7 +39,15 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', dbDriver: env.dbDriver });
 });
 
-app.get('/app', requireAuth, (req, res) => {
+function redirectToLoginWhenMissingSession(req, res, next) {
+  if (!req.cookies.access_token) {
+    return res.redirect('/login.html');
+  }
+
+  return next();
+}
+
+app.get('/app', redirectToLoginWhenMissingSession, requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'views', 'app-original.html'));
 });
 

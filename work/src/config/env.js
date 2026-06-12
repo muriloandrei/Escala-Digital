@@ -30,7 +30,8 @@ function getEnv() {
       jwtSecret: process.env.JWT_SECRET,
       jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
       cookieSecure: String(process.env.COOKIE_SECURE || 'false') === 'true'
-    }
+    },
+    trustProxy: String(process.env.TRUST_PROXY || 'false') === 'true'
   };
 }
 

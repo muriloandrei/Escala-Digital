@@ -16,6 +16,13 @@ router.post('/login', async (req, res, next) => {
     const credentials = loginSchema.parse(req.body);
     const { token, user } = await authService.login(credentials);
     const { auth, nodeEnv } = getEnv();
+    const requestIsSecure = req.secure || String(req.get('x-forwarded-proto') || '').split(',')[0].trim() === 'https';
+
+    if (auth.cookieSecure && !requestIsSecure) {
+      const error = new Error('COOKIE_SECURE=true exige acesso via HTTPS. Use HTTPS/Nginx ou defina COOKIE_SECURE=false para acesso direto por HTTP.');
+      error.statusCode = 500;
+      throw error;
+    }
 
     res.cookie('access_token', token, {
       httpOnly: true,
