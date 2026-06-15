@@ -94,6 +94,7 @@ Os testes cobrem login, consulta de lojas/funcionarios, salvamento estruturado d
 ## Roteiros do projeto
 
 - [Escopo restante](docs/alteracoes-restantes.md)
+- [Escopo de desenvolvimento Savegnago](docs/escopo-dev-savegnago.md)
 - [Banco Oracle](docs/database.md)
 - [Seguranca](docs/security.md)
 - [Deploy Linux via PuTTY](docs/deploy-linux-putty.md)

@@ -22,6 +22,7 @@ Concluido:
 - Diagnostico protegido `/api/diagnostics/oracle` criado para deploy.
 - `/api/state` ajustado para nao bloquear a UI em `DB_DRIVER=oracle`.
 - Salvamento Oracle preparado para transacao unica e revisao automatica por funcionario/mes.
+- Escopo de desenvolvimento Savegnago extraido para `docs/escopo-dev-savegnago.md`.
 
 ## Fase 1. Fechar simulacao local
 
