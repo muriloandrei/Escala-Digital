@@ -9,7 +9,7 @@ async function listEscalas({ lojaId, mesRef }) {
     return data.SGN_ESC_PROG
       .filter((escala) => Number(escala.LOJA) === Number(lojaId) && escala.MES_REF === mesRef)
       .map((escala) => {
-        const funcionario = data.SGN_ESC_FUNC.find((item) => Number(item.ESCFUNC_ID) === Number(escala.ESCFUNC_ID));
+        const funcionario = data.SGN_ESC_FUNCIONARIO.find((item) => Number(item.ESCFUNC_ID) === Number(escala.ESCFUNC_ID));
         return {
           ...escala,
           NOME: funcionario?.NOME || null
@@ -30,7 +30,7 @@ async function listEscalas({ lojaId, mesRef }) {
           p.revisao,
           p.oficializada
        from sgn_esc_prog p
-       left join sgn_esc_func f on f.escfunc_id = p.escfunc_id
+       left join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
        order by p.chapa, p.revisao desc`,
