@@ -17,6 +17,7 @@
         const consultarBancoBtn = document.getElementById('consultarBancoBtn');
         const sincronizarBancoBtn = document.getElementById('sincronizarBancoBtn');
         const tabelaBancoBody = document.getElementById('tabela-banco-body');
+        const bancoResumo = document.getElementById('bancoResumo');
         const funcionariosLojaSelect = document.getElementById('funcionariosLojaSelect');
         const carregarFuncionariosTelaBtn = document.getElementById('carregarFuncionariosTelaBtn');
         const funcionariosTitulo = document.getElementById('funcionariosTitulo');
@@ -217,6 +218,7 @@
         let funcionariosLojaCache = [];
         let ausenciasLojaCache = [];
         let lojasPermitidasCache = [];
+        let usuarioSessaoCache = null;
         
         // --- Variáveis para Copiar/Colar e Seleção ---
         let scheduleClipboard = null; 
@@ -1439,6 +1441,7 @@
         const carregarUsuarioSessao = async () => {
             const data = await apiRequest('/api/auth/me');
             const user = data.user || {};
+            usuarioSessaoCache = user;
             const lojas = Array.isArray(user.lojas) ? user.lojas : [];
 
             if (loggedUserName) {
@@ -1749,6 +1752,23 @@
             });
         };
 
+        const contarFuncionariosEscalaSalva = (escala) => {
+            return (escala.dados || []).filter(colaborador => colaborador.escfuncId && colaborador.chapa).length;
+        };
+
+        const criarResumoEscalaSalva = (escala) => {
+            const loja = escala.lojaId || '-';
+            const mes = escala.mesAno || (Number.isInteger(escala.mes) && escala.ano ? `${String(escala.mes + 1).padStart(2, '0')}/${escala.ano}` : '-');
+            const funcionarios = contarFuncionariosEscalaSalva(escala);
+            const criadoPor = escala.criadoPorNome || escala.criadoPorLogin || '-';
+
+            return `
+                <span class="record-meta-line">Setor: ${escala.setor || '-'}</span>
+                <span class="record-meta-line">Loja ${loja} | ${mes} | ${funcionarios} funcionário(s)</span>
+                <span class="record-meta-line">Criado por: ${criadoPor}</span>
+            `;
+        };
+
         const renderizarTabelaRegistros = () => {
             const escalas = getEscalasSalvas();
             tabelaRegistrosBody.innerHTML = '';
@@ -1763,7 +1783,7 @@
                     <tr>
                         <td data-label="Data">${escala.dataSalva}</td>
                         <td data-label="Nome">${escala.nome}</td>
-                        <td data-label="Setor">${escala.setor}</td>
+                        <td data-label="Setor">${criarResumoEscalaSalva(escala)}</td>
                         <td data-label="Ações" class="actions-cell">
                              <button class="action-btn-table backup" data-id="${escala.id}" title="Fazer Backup Individual">
                                 <span class="material-symbols-outlined">download</span>
@@ -2040,8 +2060,15 @@
             tabelaBancoBody.innerHTML = '';
 
             if (!escalas || escalas.length === 0) {
+                if (bancoResumo) bancoResumo.textContent = 'Nenhuma escala estruturada encontrada para a loja e mês selecionados.';
                 tabelaBancoBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhuma escala estruturada encontrada para a loja e mês selecionados.</td></tr>';
                 return;
+            }
+
+            if (bancoResumo) {
+                const funcionarios = new Set(escalas.map(escala => escala.CHAPA).filter(Boolean));
+                const maiorRevisao = escalas.reduce((max, escala) => Math.max(max, Number(escala.REVISAO || 0)), 0);
+                bancoResumo.textContent = `${funcionarios.size} funcionário(s) com escala no banco. Maior revisão: ${maiorRevisao || '-'}.`;
             }
 
             escalas.forEach(escala => {
@@ -2124,6 +2151,9 @@
                     setor: values['escala-setor'],
                     senha: values['escala-senha'],
                     dataSalva: new Date().toLocaleDateString('pt-BR'),
+                    criadoEm: new Date().toISOString(),
+                    criadoPorLogin: usuarioSessaoCache?.login || '',
+                    criadoPorNome: usuarioSessaoCache?.nome || usuarioSessaoCache?.login || '',
                     lojaId: parseInt(lojaEscalaSelect.value, 10),
                     dados: parseEscalaFromModal(),
                     timelineData: JSON.parse(JSON.stringify(dadosEscala)),
