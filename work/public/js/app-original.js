@@ -106,6 +106,7 @@
             navLinks.forEach(link => link.classList.remove('active'));
             navSettings.classList.add('active');
             setCurrentPageTitle('configuracoes');
+            renderizarRolesSettings().catch(error => showInfoModal(error.message, 'error'));
         }
 
         function navigateToPage(pageKey) {
@@ -1933,6 +1934,56 @@
             `;
         };
 
+        const renderizarRolesSettings = async () => {
+            if (usuarioSessaoCache?.perfil !== 'ADMIN') return;
+
+            let container = document.getElementById('rolesSettingsContainer');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'rolesSettingsContainer';
+                container.className = 'mt-6 border-t pt-6';
+                settingsPage.querySelector('.bg-white')?.appendChild(container);
+            }
+
+            if (usuariosAcessoCache.length === 0) {
+                const data = await apiRequest('/api/acessos/usuarios');
+                usuariosAcessoCache = data.usuarios || [];
+            }
+
+            const roles = usuariosAcessoCache.reduce((acc, usuario) => {
+                const role = usuario.PERFIL || 'SEM_ROLE';
+                acc[role] = acc[role] || { total: 0, ativos: 0, lojas: new Set() };
+                acc[role].total += 1;
+                if (usuario.STATUS === 'A') acc[role].ativos += 1;
+                (usuario.LOJAS || []).forEach(loja => acc[role].lojas.add(loja));
+                return acc;
+            }, {});
+
+            const rows = Object.entries(roles).map(([role, info]) => `
+                <tr>
+                    <td data-label="Role">${role}</td>
+                    <td data-label="Usuários">${info.ativos}/${info.total} ativo(s)</td>
+                    <td data-label="Lojas">${Array.from(info.lojas).sort((a, b) => a - b).join(', ') || '-'}</td>
+                    <td data-label="Permissões">${role === 'ADMIN' ? 'Administração completa' : 'Operação nas lojas permitidas'}</td>
+                </tr>
+            `).join('');
+
+            container.innerHTML = `
+                <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Roles e Permissões</h4>
+                <table class="data-table mt-4">
+                    <thead>
+                        <tr>
+                            <th>Role</th>
+                            <th>Usuários</th>
+                            <th>Lojas</th>
+                            <th>Permissões</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows || '<tr><td colspan="4" class="text-center text-gray-500 py-8">Nenhuma role encontrada.</td></tr>'}</tbody>
+                </table>
+            `;
+        };
+
         const renderizarTabelaRegistros = () => {
             const escalas = getEscalasSalvas();
             tabelaRegistrosBody.innerHTML = '';
@@ -1949,10 +2000,6 @@
                         <td data-label="Nome">${escala.nome}</td>
                         <td data-label="Setor">${criarResumoEscalaSalva(escala)}</td>
                         <td data-label="Ações" class="actions-cell">
-                             <button class="action-btn-table backup" data-id="${escala.id}" title="Fazer Backup Individual">
-                                <span class="material-symbols-outlined">download</span>
-                                Backup
-                            </button>
                             <button class="action-btn-table load" data-id="${escala.id}" title="Carregar e Editar Escala Detalhada">
                                 <span class="material-symbols-outlined">edit_calendar</span>
                                 Ver escala
@@ -2518,6 +2565,21 @@
             }
         };
 
+        const ocultarBackupConfiguracoes = () => {
+            const salvarBackupBtn = document.getElementById('salvarBackupBtn');
+            const carregarBackupBtn = document.getElementById('carregarBackupBtn');
+            const backupBlock = salvarBackupBtn?.closest('.space-y-3');
+            const backupTitle = backupBlock?.previousElementSibling;
+            const backupSeparator = backupTitle?.previousElementSibling;
+
+            backupBlock?.classList.add('hidden');
+            backupTitle?.classList.add('hidden');
+            backupSeparator?.classList.add('hidden');
+            salvarBackupBtn?.classList.add('hidden');
+            carregarBackupBtn?.classList.add('hidden');
+            document.getElementById('backupFileInput')?.classList.add('hidden');
+        };
+
        
 
         // --- INICIALIZAÇÃO ---
@@ -2534,6 +2596,7 @@
             }
            
             carregarConfiguracoes();
+            ocultarBackupConfiguracoes();
             
             if (getEscalasSalvas().length === 0) {
                  dadosEscala = []; 
@@ -2553,7 +2616,7 @@
             const backupFileInput = document.getElementById('backupFileInput');
 
             // --- Lógica para Salvar o Backup (Exportar) ---
-            salvarBackupBtn.addEventListener('click', () => {
+            salvarBackupBtn?.addEventListener('click', () => {
                 try {
                     const escalas = getEscalasSalvas();
                     const config = escalaConfigCache || {};
@@ -2583,12 +2646,12 @@
             });
 
             // --- Gatilho para abrir o seletor de arquivo ---
-            carregarBackupBtn.addEventListener('click', () => {
-                backupFileInput.click();
+            carregarBackupBtn?.addEventListener('click', () => {
+                backupFileInput?.click();
             });
 
             // --- Lógica para Carregar o Backup (Importar) ---
-            backupFileInput.addEventListener('change', (event) => {
+            backupFileInput?.addEventListener('change', (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
 
