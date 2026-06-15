@@ -36,7 +36,7 @@ app.use(rateLimit({
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', dbDriver: env.dbDriver });
+  res.json({ status: 'ok', database: 'oracle' });
 });
 
 function redirectToLoginWhenMissingSession(req, res, next) {
@@ -70,7 +70,7 @@ function listen(port, attemptsLeft = 10) {
     const server = app.listen(port);
 
     server.once('listening', () => {
-      console.log(`Servidor de escala rodando em http://localhost:${port} usando DB_DRIVER=${env.dbDriver}`);
+      console.log(`Servidor de escala rodando em http://localhost:${port} usando Oracle`);
       resolve(server);
     });
 
@@ -89,17 +89,13 @@ function listen(port, attemptsLeft = 10) {
 }
 
 async function start() {
-  if (env.dbDriver === 'oracle') {
-    await initOraclePool();
-  }
+  await initOraclePool();
 
   const server = await listen(env.port);
 
   async function shutdown() {
     server.close(async () => {
-      if (env.dbDriver === 'oracle') {
-        await closeOraclePool();
-      }
+      await closeOraclePool();
       process.exit(0);
     });
   }

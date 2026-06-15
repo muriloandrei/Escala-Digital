@@ -24,18 +24,19 @@ O acesso passa pelo login em:
 
 - O bloqueio local de licenca foi desativado porque a autenticacao agora e feita pelo backend.
 - Nenhuma regra de calculo da escala foi alterada nesta etapa.
+- O fluxo de dados foi movido para APIs que consultam e gravam diretamente no Oracle.
 
 ## Ordem segura de migracao
 
 1. Preservar a UI original funcionando atras do login.
-2. Mapear todos os usos de `localStorage`.
+2. Mapear todos os usos remanescentes de `localStorage`.
 3. Extrair CSS para `public/css/app-original.css`.
 4. Extrair JavaScript para modulos em `public/js`.
 5. Isolar regras de calculo em `src/rules` e `public/js/escala-rules.js`.
 6. Criar testes de regressao para comparar entradas e saidas com o arquivo original.
 7. Trocar leitura de funcionarios para `/api/catalog/lojas/:lojaId/funcionarios`.
-8. Trocar salvamento de escala de `localStorage` para `/api/escalas`.
-9. Remover importacao/exportacao JSON como fluxo principal, mantendo apenas backup administrativo se necessario.
+8. Trocar salvamento oficial de escala para `/api/escalas`.
+9. Remover importacao/exportacao JSON como fluxo principal.
 
 ## Pontos de persistencia local identificados
 
@@ -43,17 +44,16 @@ O acesso passa pelo login em:
 - `escalaConfig`
 - `genericAppLicenseKey`
 
-`genericAppLicenseKey` deixou de ser necessario no fluxo novo.
+`genericAppLicenseKey` deixou de ser necessario no fluxo novo. `escalasSalvas` e `escalaConfig` nao representam persistencia oficial no Oracle; a persistencia oficial da escala fica em `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA`.
 
 ## Progresso da persistencia
 
-- `escalasSalvas` agora carrega de `/api/state` e salva em `/api/state/escalas` no modo mock.
-- `escalaConfig` agora carrega de `/api/state` e salva em `/api/state/config` no modo mock.
-- Lojas agora carregam de `/api/catalog/lojas` no modal de escala.
-- Funcionarios agora carregam de `/api/catalog/lojas/:lojaId/funcionarios` e preenchem os nomes do esqueleto.
-- Ao salvar uma escala detalhada com funcionarios vinculados, a UI tambem sincroniza com `/api/escalas`, preenchendo `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA` no mock.
+- Lojas carregam de `/api/catalog/lojas`.
+- Funcionarios carregam de `/api/catalog/lojas/:lojaId/funcionarios` e preenchem os nomes do esqueleto.
+- Ausencias carregam de `/api/catalog/lojas/:lojaId/ausencias`.
+- Usuarios carregam e salvam por `/api/acessos/usuarios`.
+- Ao salvar uma escala detalhada com funcionarios vinculados, a UI sincroniza com `/api/escalas`, preenchendo `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA`.
 - A UI manteve os nomes das funcoes principais para reduzir risco de alterar regras.
-- A proxima etapa e substituir esse armazenamento generico por tabelas definitivas no Oracle ou por uma tabela CLOB de rascunho/revisao, conforme a decisao de modelagem.
 
 ## Observacao sobre funcionarios
 
@@ -74,17 +74,6 @@ Os testes de regressao do nucleo de regras estao em:
 ```txt
 test/rules-core.test.js
 ```
-
-Eles cobrem:
-
-- conversao de horario para minutos;
-- conversao de minutos para horario;
-- validacao de turno valido;
-- fim de intervalo menor que inicio;
-- intervalo fora do turno;
-- intervalo abaixo do minimo;
-- intervalo acima do maximo;
-- jornada continua maxima.
 
 Execute:
 

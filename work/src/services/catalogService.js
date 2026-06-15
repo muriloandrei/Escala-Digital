@@ -1,6 +1,4 @@
 const { withConnection, oracledb } = require('../db/oracle');
-const { readData, writeData } = require('../db/mockStore');
-const { getEnv } = require('../config/env');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -38,12 +36,6 @@ function normalizeFuncionario(row) {
 }
 
 async function listLojas() {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    return [...data.SGN_ESC_LOJA].sort((a, b) => Number(a.LOJA) - Number(b.LOJA));
-  }
-
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia
@@ -66,14 +58,6 @@ async function resolveLojaCodigo(lojaId) {
 
 async function listFuncionariosByLoja(lojaId) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    return data.SGN_ESC_FUNC
-      .filter((funcionario) => Number(funcionario.LOJA) === Number(lojaCodigo))
-      .sort((a, b) => a.NOME.localeCompare(b.NOME));
-  }
-
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select
@@ -104,25 +88,6 @@ async function listFuncionariosByLoja(lojaId) {
 
 async function listAusenciasByLojaMes(lojaId, inicio, fim) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    const funcionariosDaLoja = new Set(
-      data.SGN_ESC_FUNC
-        .filter((funcionario) => Number(funcionario.LOJA) === Number(lojaCodigo))
-        .map((funcionario) => Number(funcionario.ESCFUNC_ID))
-    );
-
-    return data.SGN_ESC_AUSENCIA
-      .filter((ausencia) => {
-        const fimAusencia = ausencia.DT_FIM || ausencia.DT_INIC;
-        return funcionariosDaLoja.has(Number(ausencia.ESCFUNC_ID))
-          && ausencia.DT_INIC <= fim
-          && fimAusencia >= inicio;
-      })
-      .sort((a, b) => a.DT_INIC.localeCompare(b.DT_INIC) || a.CHAPA.localeCompare(b.CHAPA));
-  }
-
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select
@@ -156,21 +121,6 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
 
   if (Object.keys(updates).length === 0) {
     throw new Error('Nenhum campo permitido informado para atualizacao.');
-  }
-
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const mockData = await readData();
-    const funcionario = mockData.SGN_ESC_FUNC.find((item) => {
-      return Number(item.ESCFUNC_ID) === Number(escfuncId)
-        && Number(item.LOJA) === Number(lojaCodigo);
-    });
-
-    if (!funcionario) return null;
-
-    Object.assign(funcionario, updates);
-    await writeData(mockData);
-    return funcionario;
   }
 
   return withConnection(async (connection) => {

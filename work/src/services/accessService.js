@@ -1,7 +1,5 @@
 const bcrypt = require('bcryptjs');
 const { withConnection, oracledb } = require('../db/oracle');
-const { readData, writeData, nextId } = require('../db/mockStore');
-const { getEnv } = require('../config/env');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -28,21 +26,6 @@ function canSeeUser(requestUser, lojas) {
 }
 
 async function listUsuariosAcesso(requestUser) {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    return data.SGN_ESC_USUARIO.map((usuario) => {
-      const lojas = data.SGN_ESC_USUARIO_LOJA
-        .filter((row) => Number(row.USUARIO_ID) === Number(usuario.USUARIO_ID))
-        .map((row) => Number(row.LOJA))
-        .sort((a, b) => a - b);
-
-      return normalizeUser(usuario, lojas);
-    })
-      .filter((usuario) => canSeeUser(requestUser, usuario.LOJAS))
-      .sort((a, b) => a.LOGIN.localeCompare(b.LOGIN));
-  }
-
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select
@@ -69,35 +52,9 @@ async function listUsuariosAcesso(requestUser) {
   });
 }
 
-async function replaceUserStoresMock(data, usuarioId, lojas) {
-  data.SGN_ESC_USUARIO_LOJA = data.SGN_ESC_USUARIO_LOJA.filter((row) => Number(row.USUARIO_ID) !== Number(usuarioId));
-  for (const loja of lojas || []) {
-    data.SGN_ESC_USUARIO_LOJA.push({ USUARIO_ID: Number(usuarioId), LOJA: Number(loja) });
-  }
-}
-
 async function updateUsuarioAcesso(usuarioId, updates) {
   const allowed = ['NOME', 'PERFIL', 'STATUS', 'LOJAS'];
   const data = Object.fromEntries(Object.entries(updates || {}).filter(([field]) => allowed.includes(field)));
-  const env = getEnv();
-
-  if (env.dbDriver === 'mock') {
-    const mockData = await readData();
-    const usuario = mockData.SGN_ESC_USUARIO.find((item) => Number(item.USUARIO_ID) === Number(usuarioId));
-    if (!usuario) return null;
-
-    if (data.NOME !== undefined) usuario.NOME = data.NOME;
-    if (data.PERFIL !== undefined) usuario.PERFIL = data.PERFIL;
-    if (data.STATUS !== undefined) usuario.STATUS = data.STATUS;
-    if (data.LOJAS !== undefined) await replaceUserStoresMock(mockData, usuarioId, data.LOJAS);
-
-    await writeData(mockData);
-    const lojas = mockData.SGN_ESC_USUARIO_LOJA
-      .filter((row) => Number(row.USUARIO_ID) === Number(usuarioId))
-      .map((row) => Number(row.LOJA))
-      .sort((a, b) => a - b);
-    return normalizeUser(usuario, lojas);
-  }
 
   return withConnection(async (connection) => {
     const fields = [];
@@ -140,31 +97,6 @@ async function updateUsuarioAcesso(usuarioId, updates) {
 
 async function createUsuarioAcesso({ login, nome, password, perfil, status = 'A', lojas = [] }) {
   const senhaHash = await bcrypt.hash(password, 10);
-  const env = getEnv();
-
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    if (data.SGN_ESC_USUARIO.some((usuario) => usuario.LOGIN.toUpperCase() === login.toUpperCase())) {
-      const error = new Error('Login ja cadastrado.');
-      error.statusCode = 409;
-      throw error;
-    }
-
-    const usuarioId = nextId(data.SGN_ESC_USUARIO, 'USUARIO_ID');
-    const usuario = {
-      USUARIO_ID: usuarioId,
-      LOGIN: login,
-      NOME: nome,
-      SENHA_HASH: senhaHash,
-      PERFIL: perfil,
-      STATUS: status,
-      DT_HR_INCL: new Date().toISOString()
-    };
-    data.SGN_ESC_USUARIO.push(usuario);
-    await replaceUserStoresMock(data, usuarioId, lojas);
-    await writeData(data);
-    return normalizeUser(usuario, lojas.map(Number).sort((a, b) => a - b));
-  }
 
   return withConnection(async (connection) => {
     const result = await connection.execute(

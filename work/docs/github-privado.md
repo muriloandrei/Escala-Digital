@@ -10,7 +10,7 @@ Versionar o projeto em um repositorio privado, sem enviar credenciais, banco rea
 2. Confirmar que `node_modules/` nao sera versionado.
 3. Confirmar que logs e arquivos temporarios nao serao versionados.
 4. Trocar qualquer senha que ja apareceu em print, chat ou arquivo compartilhado.
-5. Revisar `data/mock-db.json`: ele pode ir para o GitHub privado somente se contiver dados ficticios.
+5. Confirmar que nenhum export real do banco Oracle sera versionado.
 
 ## Arquivos que devem ir
 

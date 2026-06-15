@@ -8,9 +8,7 @@
     "start": "node src/server.js",
     "dev": "node src/server.js",
     "check": "node --check src/server.js",
-    "test": "node test/run-tests.js",
-    "mock:reset": "node scripts/reset-mock-db.js",
-    "mock:seed-large": "node scripts/seed-large-mock-db.js"
+    "test": "node test/run-tests.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

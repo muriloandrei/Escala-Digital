@@ -1,24 +1,6 @@
 const { withConnection, oracledb } = require('../db/oracle');
-const { readData, writeData, nextId } = require('../db/mockStore');
-const { getEnv } = require('../config/env');
 
 async function listEscalas({ lojaId, mesRef }) {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    const funcionarios = data.SGN_ESC_FUNCIONARIO || data.SGN_ESC_FUNC || [];
-    return data.SGN_ESC_PROG
-      .filter((escala) => Number(escala.LOJA) === Number(lojaId) && escala.MES_REF === mesRef)
-      .map((escala) => {
-        const funcionario = funcionarios.find((item) => Number(item.ESCFUNC_ID) === Number(escala.ESCFUNC_ID));
-        return {
-          ...escala,
-          NOME: funcionario?.NOME || null
-        };
-      })
-      .sort((a, b) => a.CHAPA.localeCompare(b.CHAPA) || Number(b.REVISAO) - Number(a.REVISAO));
-  }
-
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select
@@ -44,12 +26,6 @@ async function listEscalas({ lojaId, mesRef }) {
 }
 
 async function getEscalaHeader(escprogId) {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    return data.SGN_ESC_PROG.find((escala) => Number(escala.ESCPROG_ID) === Number(escprogId)) || null;
-  }
-
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select escprog_id, mes_ref, escfunc_id, loja, chapa, revisao, oficializada
@@ -64,14 +40,6 @@ async function getEscalaHeader(escprogId) {
 }
 
 async function getEscalaDias(escprogId) {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    return data.SGN_ESC_PROG_DIA
-      .filter((dia) => Number(dia.ESCPROG_ID) === Number(escprogId))
-      .sort((a, b) => a.DT.localeCompare(b.DT));
-  }
-
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
@@ -87,54 +55,6 @@ async function getEscalaDias(escprogId) {
 }
 
 async function saveEscala({ lojaId, mesRef, escalaOrigemId, funcionario, dias, oficializada = 0 }) {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    let revisao = 1;
-
-    if (escalaOrigemId) {
-      const existingHeaders = data.SGN_ESC_PROG.filter((escala) => {
-        return Number(escala.APP_ESCALA_ID) === Number(escalaOrigemId)
-          && Number(escala.ESCFUNC_ID) === Number(funcionario.escfuncId);
-      });
-      revisao = existingHeaders.reduce((max, escala) => Math.max(max, Number(escala.REVISAO || 1)), 0) + 1;
-      const existingIds = new Set(existingHeaders.map((escala) => Number(escala.ESCPROG_ID)));
-      data.SGN_ESC_PROG = data.SGN_ESC_PROG.filter((escala) => !existingIds.has(Number(escala.ESCPROG_ID)));
-      data.SGN_ESC_PROG_DIA = data.SGN_ESC_PROG_DIA.filter((dia) => !existingIds.has(Number(dia.ESCPROG_ID)));
-    }
-
-    const escprogId = nextId(data.SGN_ESC_PROG, 'ESCPROG_ID');
-
-    data.SGN_ESC_PROG.push({
-      ESCPROG_ID: escprogId,
-      APP_ESCALA_ID: escalaOrigemId || null,
-      MES_REF: mesRef,
-      ESCFUNC_ID: funcionario.escfuncId,
-      LOJA: lojaId,
-      CHAPA: funcionario.chapa,
-      REVISAO: revisao,
-      OFICIALIZADA: oficializada
-    });
-
-    let nextDiaId = nextId(data.SGN_ESC_PROG_DIA, 'ESCPROGDIA_ID');
-    for (const dia of dias) {
-      data.SGN_ESC_PROG_DIA.push({
-        ESCPROGDIA_ID: nextDiaId,
-        ESCPROG_ID: escprogId,
-        DT: dia.data,
-        HR_ENT1: dia.hrEnt1 || null,
-        HR_SAI1: dia.hrSai1 || null,
-        HR_ENT2: dia.hrEnt2 || null,
-        HR_SAI2: dia.hrSai2 || null,
-        PROGRAMACAO: dia.programacao || null
-      });
-      nextDiaId += 1;
-    }
-
-    await writeData(data);
-    return { escprogId };
-  }
-
   return withConnection(async (connection) => {
     const result = await insertEscalaOracle(connection, {
       lojaId,
@@ -210,22 +130,6 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
 }
 
 async function saveEscalasBatch({ lojaId, mesRef, escalaOrigemId, funcionarios, oficializada = 0 }) {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const saved = [];
-    for (const funcionario of funcionarios) {
-      saved.push(await saveEscala({
-        lojaId,
-        mesRef,
-        escalaOrigemId,
-        funcionario,
-        dias: funcionario.dias,
-        oficializada
-      }));
-    }
-    return saved;
-  }
-
   return withConnection(async (connection) => {
     try {
       const saved = [];
@@ -249,35 +153,6 @@ async function saveEscalasBatch({ lojaId, mesRef, escalaOrigemId, funcionarios, 
 }
 
 async function validateAusencias({ lojaId, funcionarios }) {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    const errors = [];
-
-    for (const funcionario of funcionarios) {
-      const ausencias = data.SGN_ESC_AUSENCIA.filter((ausencia) => {
-        return Number(ausencia.ESCFUNC_ID) === Number(funcionario.escfuncId)
-          || String(ausencia.CHAPA) === String(funcionario.chapa);
-      });
-
-      for (const dia of funcionario.dias || []) {
-        const trabalha = String(dia.programacao || 'TRB').toUpperCase() !== 'F';
-        if (!trabalha) continue;
-
-        const conflito = ausencias.find((ausencia) => {
-          const fimAusencia = ausencia.DT_FIM || ausencia.DT_INIC;
-          return ausencia.DT_INIC <= dia.data && fimAusencia >= dia.data;
-        });
-
-        if (conflito) {
-          errors.push(`Funcionario ${funcionario.chapa} possui ausencia em ${dia.data}: ${conflito.MOTIVO || 'ausencia'}.`);
-        }
-      }
-    }
-
-    return errors;
-  }
-
   return withConnection(async (connection) => {
     const errors = [];
 

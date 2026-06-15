@@ -1,6 +1,4 @@
 const { withConnection, oracledb } = require('../db/oracle');
-const { getEnv } = require('../config/env');
-
 const REQUIRED_TABLES = [
   'SGN_ESC_FUNC',
   'SGN_ESC_AUSENCIA',
@@ -19,15 +17,6 @@ const REQUIRED_SEQUENCES = [
 ];
 
 async function checkOracle() {
-  const env = getEnv();
-  if (env.dbDriver !== 'oracle') {
-    return {
-      driver: env.dbDriver,
-      status: 'skipped',
-      message: 'Diagnostico Oracle disponivel somente com DB_DRIVER=oracle.'
-    };
-  }
-
   return withConnection(async (connection) => {
     const ping = await connection.execute(
       `select sys_context('USERENV', 'CURRENT_SCHEMA') as current_schema from dual`,

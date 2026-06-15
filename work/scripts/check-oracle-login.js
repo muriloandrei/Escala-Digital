@@ -1,6 +1,5 @@
 const bcrypt = require('bcryptjs');
 const { withConnection, closeOraclePool, oracledb } = require('../src/db/oracle');
-const { getEnv } = require('../src/config/env');
 
 function isBcryptHash(value) {
   return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(String(value || ''));
@@ -12,12 +11,6 @@ async function main() {
 
   if (!login || !password) {
     console.error('Uso: node scripts/check-oracle-login.js admin admin123');
-    process.exit(1);
-  }
-
-  const env = getEnv();
-  if (env.dbDriver !== 'oracle') {
-    console.error(`DB_DRIVER atual: ${env.dbDriver}. Configure DB_DRIVER=oracle no .env do servidor.`);
     process.exit(1);
   }
 

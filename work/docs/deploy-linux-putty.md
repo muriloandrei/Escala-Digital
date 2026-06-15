@@ -100,7 +100,6 @@ Conteudo base:
 ```txt
 NODE_ENV=production
 PORT=3000
-DB_DRIVER=oracle
 
 ORACLE_USER=usuario_da_aplicacao
 ORACLE_PASSWORD=senha_nova_nao_exposta
@@ -254,7 +253,7 @@ Com `COOKIE_SECURE=true` em HTTP direto, o navegador ignora o cookie de login e 
 
 ## 11.1 Diagnostico Oracle
 
-Com `DB_DRIVER=oracle`, fazer login com usuario `ADMIN` e acessar:
+Fazer login com usuario `ADMIN` e acessar:
 
 ```txt
 /api/diagnostics/oracle

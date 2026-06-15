@@ -1,7 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { withConnection, oracledb } = require('../db/oracle');
-const { readData } = require('../db/mockStore');
 const { getEnv } = require('../config/env');
 
 function pick(row, ...keys) {
@@ -26,12 +25,6 @@ function invalidLoginError() {
 }
 
 async function findUserByLogin(login) {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    return data.SGN_ESC_USUARIO.find((user) => user.LOGIN.toUpperCase() === login.toUpperCase()) || null;
-  }
-
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select
@@ -52,12 +45,6 @@ async function findUserByLogin(login) {
 }
 
 async function findUserById(usuarioId) {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    return data.SGN_ESC_USUARIO.find((user) => Number(user.USUARIO_ID) === Number(usuarioId)) || null;
-  }
-
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select
@@ -77,14 +64,6 @@ async function findUserById(usuarioId) {
 }
 
 async function findUserStores(usuarioId) {
-  const env = getEnv();
-  if (env.dbDriver === 'mock') {
-    const data = await readData();
-    return data.SGN_ESC_USUARIO_LOJA
-      .filter((row) => Number(row.USUARIO_ID) === Number(usuarioId))
-      .map((row) => Number(row.LOJA));
-  }
-
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select loja
