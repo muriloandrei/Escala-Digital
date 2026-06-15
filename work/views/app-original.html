@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard de Escalas</title>
+    <title>Escala Inteligente</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,23 +22,41 @@
         <aside class="sidebar no-print">
             <div class="sidebar-logo">
                 <span class="material-symbols-outlined">bubble_chart</span>
+                <span class="sidebar-brand-text">Escala Inteligente</span>
             </div>
             <nav class="sidebar-nav">
                 <ul>
-                    <li><a href="#" id="nav-timeline" class="active"><span class="material-symbols-outlined">schedule</span></a></li>
-                    <li><a href="#" id="nav-registros"><span class="material-symbols-outlined">wysiwyg</span></a></li>
-                    <li><a href="#" id="nav-funcionarios"><span class="material-symbols-outlined">badge</span></a></li>
-                    <li><a href="#" id="nav-acessos"><span class="material-symbols-outlined">admin_panel_settings</span></a></li>
-                    <li><a href="#" id="nav-settings"><span class="material-symbols-outlined">settings</span></a></li>
+                    <li><a href="#/home" id="nav-timeline" class="active"><span class="material-symbols-outlined">schedule</span><span class="nav-label">Home</span></a></li>
+                    <li><a href="#/escalas" id="nav-registros"><span class="material-symbols-outlined">wysiwyg</span><span class="nav-label">Escalas Geradas</span></a></li>
+                    <li><a href="#/funcionarios" id="nav-funcionarios"><span class="material-symbols-outlined">badge</span><span class="nav-label">Funcionários</span></a></li>
+                    <li><a href="#/acessos" id="nav-acessos"><span class="material-symbols-outlined">admin_panel_settings</span><span class="nav-label">Controle de Acesso</span></a></li>
+                    <li><a href="#/configuracoes" id="nav-settings"><span class="material-symbols-outlined">settings</span><span class="nav-label">Configurações</span></a></li>
                 </ul>
             </nav>
         </aside>
 
         <main class="main-content">
+            <header class="app-topbar no-print">
+                <div>
+                    <p class="app-eyebrow">Escala Inteligente Savegnago</p>
+                    <strong id="currentPageTitle">Home</strong>
+                </div>
+                <div class="session-summary">
+                    <span class="material-symbols-outlined">account_circle</span>
+                    <div>
+                        <strong id="loggedUserName">Carregando...</strong>
+                        <span id="loggedUserStores">Loja não carregada</span>
+                    </div>
+                    <button id="logoutAppBtn" type="button" class="logout-button">
+                        <span class="material-symbols-outlined">logout</span>
+                        Sair
+                    </button>
+                </div>
+            </header>
 
             <div id="timeline-page">
                 <header class="main-header">
-                    <h1>Escala Digital</h1>
+                    <h1>Home</h1>
                     
                 </header>
                 <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
@@ -83,19 +101,19 @@
 
             <div id="registros-page" class="hidden">
                 <header class="main-header">
-                    <h1>Registros Atuais</h1>
+                    <h1>Escalas Geradas</h1>
                     <div class="header-actions">
-                        <button class="action-button secondary" id="importarEscalaBtn">
+                        <button class="action-button secondary hidden" id="importarEscalaBtn">
                             <span class="material-symbols-outlined">upload_file</span>
                             Importar Escala
                         </button>
                         <button class="action-button secondary" id="consultarBancoBtn">
                             <span class="material-symbols-outlined">database</span>
-                            Consultar Banco Local
+                            Consultar Banco
                         </button>
                         <button class="action-button secondary" id="sincronizarBancoBtn">
                             <span class="material-symbols-outlined">sync</span>
-                            Sincronizar Banco Local
+                            Sincronizar Banco
                         </button>
                         <input type="file" id="importarEscalaInput" class="hidden" accept=".json">
                         <button class="action-button" id="goToTimelineBtn">
@@ -126,7 +144,7 @@
 
                 <div class="table-card mt-6">
                     <div class="table-card-header">
-                        <h2>Escalas no Banco Local</h2>
+                        <h2>Escalas no Banco</h2>
                     </div>
                     
                     <table class="data-table">
@@ -142,7 +160,7 @@
                             </tr>
                         </thead>
                         <tbody id="tabela-banco-body">
-                            <tr><td colspan="7" class="text-center text-gray-500 py-8">Consulte o banco local para visualizar as escalas sincronizadas.</td></tr>
+                            <tr><td colspan="7" class="text-center text-gray-500 py-8">Consulte o banco para visualizar as escalas sincronizadas.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -150,7 +168,7 @@
 
             <div id="funcionarios-page" class="hidden">
                 <header class="main-header">
-                    <h1>Funcionários da Loja</h1>
+                    <h1>Funcion&aacute;rios</h1>
                     <div class="header-actions">
                         <select id="funcionariosLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
                         <button class="action-button secondary" id="carregarFuncionariosTelaBtn">
@@ -188,7 +206,7 @@
 
             <div id="acessos-page" class="hidden">
                 <header class="main-header">
-                    <h1>Usuários e Acessos</h1>
+                    <h1>Controle de Acesso</h1>
                     <div class="header-actions">
                         <button class="action-button secondary" id="carregarAcessosBtn">
                             <span class="material-symbols-outlined">refresh</span>

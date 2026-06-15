@@ -23,6 +23,24 @@
         const tabelaFuncionariosBody = document.getElementById('tabela-funcionarios-body');
         const carregarAcessosBtn = document.getElementById('carregarAcessosBtn');
         const tabelaAcessosBody = document.getElementById('tabela-acessos-body');
+        const currentPageTitle = document.getElementById('currentPageTitle');
+        const loggedUserName = document.getElementById('loggedUserName');
+        const loggedUserStores = document.getElementById('loggedUserStores');
+        const logoutAppBtn = document.getElementById('logoutAppBtn');
+
+        const pageTitles = {
+            home: 'Home',
+            escalas: 'Escalas Geradas',
+            funcionarios: 'Funcionários',
+            acessos: 'Controle de Acesso',
+            configuracoes: 'Configurações'
+        };
+
+        const setCurrentPageTitle = (key) => {
+            if (currentPageTitle) {
+                currentPageTitle.textContent = pageTitles[key] || pageTitles.home;
+            }
+        };
 
         function showTimelinePage() {
             timelinePage.classList.remove('hidden');
@@ -32,6 +50,7 @@
             settingsPage.classList.add('hidden');
             navLinks.forEach(link => link.classList.remove('active'));
             navTimeline.classList.add('active');
+            setCurrentPageTitle('home');
         }
 
         function showRegistrosPage() {
@@ -42,6 +61,7 @@
             settingsPage.classList.add('hidden');
             navLinks.forEach(link => link.classList.remove('active'));
             navRegistros.classList.add('active');
+            setCurrentPageTitle('escalas');
             renderizarTabelaRegistros();
         }
 
@@ -53,6 +73,7 @@
             settingsPage.classList.add('hidden');
             navLinks.forEach(link => link.classList.remove('active'));
             navFuncionarios.classList.add('active');
+            setCurrentPageTitle('funcionarios');
             carregarFuncionariosTela(false);
         }
 
@@ -64,6 +85,7 @@
             settingsPage.classList.add('hidden');
             navLinks.forEach(link => link.classList.remove('active'));
             navAcessos.classList.add('active');
+            setCurrentPageTitle('acessos');
             carregarAcessosTela(false);
         }
 
@@ -75,15 +97,34 @@
             settingsPage.classList.remove('hidden');
             navLinks.forEach(link => link.classList.remove('active'));
             navSettings.classList.add('active');
+            setCurrentPageTitle('configuracoes');
+        }
+
+        function navigateToPage(pageKey) {
+            const routes = {
+                home: showTimelinePage,
+                escalas: showRegistrosPage,
+                funcionarios: showFuncionariosPage,
+                acessos: showAcessosPage,
+                configuracoes: showSettingsPage
+            };
+
+            (routes[pageKey] || routes.home)();
+        }
+
+        function handleHashNavigation() {
+            const pageKey = (window.location.hash || '#/home').replace(/^#\/?/, '') || 'home';
+            navigateToPage(pageKey);
         }
         
-        navTimeline.addEventListener('click', (e) => { e.preventDefault(); showTimelinePage(); });
-        navRegistros.addEventListener('click', (e) => { e.preventDefault(); showRegistrosPage(); });
-        navFuncionarios.addEventListener('click', (e) => { e.preventDefault(); showFuncionariosPage(); });
-        navAcessos.addEventListener('click', (e) => { e.preventDefault(); showAcessosPage(); });
-        navSettings.addEventListener('click', (e) => { e.preventDefault(); showSettingsPage(); });
+        navTimeline.addEventListener('click', () => { window.location.hash = '/home'; });
+        navRegistros.addEventListener('click', () => { window.location.hash = '/escalas'; });
+        navFuncionarios.addEventListener('click', () => { window.location.hash = '/funcionarios'; });
+        navAcessos.addEventListener('click', () => { window.location.hash = '/acessos'; });
+        navSettings.addEventListener('click', () => { window.location.hash = '/configuracoes'; });
+        window.addEventListener('hashchange', handleHashNavigation);
         salvarSettingsBtn.addEventListener('click', (e) => { e.preventDefault(); salvarConfiguracoes(); });
-        goToTimelineBtn.addEventListener('click', (e) => { e.preventDefault(); showTimelinePage(); });
+        goToTimelineBtn.addEventListener('click', (e) => { e.preventDefault(); window.location.hash = '/home'; });
         consultarBancoBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             try {
@@ -484,7 +525,7 @@
         };
 
         const prepareSkeletonForPrint = () => { const tableElement = document.getElementById('tabela-esqueleto'); if (!tableElement) return; const clone = tableElement.cloneNode(true); clone.classList.add('print-skeleton-table'); clone.removeAttribute('id'); const month = mesSelect.options[mesSelect.selectedIndex].text; const year = anoSelect.value; printContainer.innerHTML = `<div class="print-title">Esqueleto da Escala</div><div class="print-subtitle">${month} / ${year}</div>`; printContainer.appendChild(clone); window.print(); };
-        const prepareDetailedForPrint = () => { const detailedElements = detalhadaModalBody.querySelectorAll('.colaborador-escala-detalhada'); if (detailedElements.length === 0) return; const month = mesSelect.options[mesSelect.selectedIndex].text; const year = anoSelect.value; printContainer.innerHTML = `<div class="print-title">Escala de Trabalho Detalhada</div><div class="print-subtitle">${month} / ${year}</div>`; detailedElements.forEach(el => { printContainer.appendChild(el.cloneNode(true)); }); window.print(); };
+        const prepareDetailedForPrint = () => { const detailedElements = detalhadaModalBody.querySelectorAll('.colaborador-escala-detalhada'); if (detailedElements.length === 0) return; const month = mesSelect.options[mesSelect.selectedIndex].text; const year = anoSelect.value; printContainer.innerHTML = `<div class="print-title">Escala Detalhada</div><div class="print-subtitle">${month} / ${year}</div>`; detailedElements.forEach(el => { printContainer.appendChild(el.cloneNode(true)); }); window.print(); };
         
         // --- EVENTOS E AÇÕES PRINCIPAIS ---
 
@@ -1251,6 +1292,30 @@
             return data;
         };
 
+        const carregarUsuarioSessao = async () => {
+            const data = await apiRequest('/api/auth/me');
+            const user = data.user || {};
+            const lojas = Array.isArray(user.lojas) ? user.lojas : [];
+
+            if (loggedUserName) {
+                loggedUserName.textContent = user.nome || user.login || 'Usuário';
+            }
+
+            if (loggedUserStores) {
+                loggedUserStores.textContent = lojas.length > 0
+                    ? `Lojas: ${lojas.join(', ')}`
+                    : 'Sem loja vinculada';
+            }
+        };
+
+        logoutAppBtn?.addEventListener('click', async () => {
+            try {
+                await apiRequest('/api/auth/logout', { method: 'POST' });
+            } finally {
+                window.location.href = '/login.html';
+            }
+        });
+
         const carregarEstadoServidor = async () => {
             const state = await apiRequest('/api/state');
             escalasSalvasCache = Array.isArray(state.escalasSalvas) ? state.escalasSalvas : [];
@@ -1821,7 +1886,7 @@
             const mes = parseInt(mesSelect.value, 10);
 
             if (!lojaId || Number.isNaN(ano) || Number.isNaN(mes)) {
-                showInfoModal('Selecione loja, mês e ano no Gerador de Escala antes de consultar o banco local.', 'info');
+                showInfoModal('Selecione loja, mês e ano no Gerador de Escala antes de consultar o banco.', 'info');
                 return;
             }
 
@@ -1847,7 +1912,7 @@
                     escalaParaAtualizar.dataSalva = new Date().toLocaleDateString('pt-BR');
                     await salvarEscalasNoStorage(escalas);
                     const syncResult = await tentarSincronizarEscalaComBanco(escalaParaAtualizar);
-                    showInfoModal(syncResult.ok && syncResult.count > 0 ? 'Escala atualizada e sincronizada com o banco local!' : `Escala atualizada, mas não sincronizada com o banco local: ${syncResult.message || 'carregue funcionários da loja antes de gerar a escala.'}`, syncResult.ok && syncResult.count > 0 ? 'success' : 'error');
+                    showInfoModal(syncResult.ok && syncResult.count > 0 ? 'Escala atualizada e sincronizada com o banco!' : `Escala atualizada, mas não sincronizada com o banco: ${syncResult.message || 'carregue funcionários da loja antes de gerar a escala.'}`, syncResult.ok && syncResult.count > 0 ? 'success' : 'error');
                     renderizarTabelaRegistros();
                 } else if(values) {
                     showInfoModal('Senha incorreta. As alterações não foram salvas.', 'error');
@@ -1884,7 +1949,7 @@
                 const syncResult = await tentarSincronizarEscalaComBanco(novaEscala);
                 escalaCarregadaId = novaEscala.id;
                 currentLoadedScale = novaEscala;
-                showInfoModal(syncResult.ok && syncResult.count > 0 ? "Escala salva e sincronizada com o banco local! Agora você pode continuar editando e salvar as alterações." : `Escala salva, mas não sincronizada com o banco local: ${syncResult.message || 'carregue funcionários da loja antes de gerar a escala.'}`, syncResult.ok && syncResult.count > 0 ? "success" : "error");
+                showInfoModal(syncResult.ok && syncResult.count > 0 ? "Escala salva e sincronizada com o banco! Agora você pode continuar editando e salvar as alterações." : `Escala salva, mas não sincronizada com o banco: ${syncResult.message || 'carregue funcionários da loja antes de gerar a escala.'}`, syncResult.ok && syncResult.count > 0 ? "success" : "error");
                 renderizarTabelaRegistros();
             }
         });
@@ -2071,6 +2136,7 @@
         window.onload = async () => { 
             try {
                 popularSeletoresData(); 
+                await carregarUsuarioSessao();
                 await carregarEstadoServidor();
                 await carregarLojasEscala();
                 await carregarFuncionariosDaLoja(true);
@@ -2086,7 +2152,7 @@
             mainTimelineZoomLevel = 1.0;
             applyMainTimelineZoom();
             renderizarTimelineCompleta('timeline-content'); 
-            showTimelinePage(); 
+            handleHashNavigation(); 
             renderizarTabelaRegistros();
 
             // ==========================================================

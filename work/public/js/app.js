@@ -136,7 +136,7 @@
 
     try {
       await api.salvarEscala({ lojaId, mesRef: first, funcionarios, oficializada: 0 });
-      statusMessage.textContent = 'Escala teste salva no banco local.';
+      statusMessage.textContent = 'Escala teste salva no banco.';
       await loadStoreData();
     } catch (error) {
       statusMessage.textContent = error.message;
