@@ -48,7 +48,7 @@ async function listFuncionariosByLoja(lojaId) {
           f.hr_ent2,
           f.hr_sai2,
           f.dt_hr_incl
-       from sgn_esc_func f
+       from sgn_esc_funcionario f
        where f.loja = :lojaId
        order by f.nome`,
       { lojaId },
