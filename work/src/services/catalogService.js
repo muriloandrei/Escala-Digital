@@ -2,6 +2,41 @@ const { withConnection, oracledb } = require('../db/oracle');
 const { readData, writeData } = require('../db/mockStore');
 const { getEnv } = require('../config/env');
 
+function pick(row, ...keys) {
+  for (const key of keys) {
+    if (row?.[key] !== undefined) return row[key];
+  }
+  return undefined;
+}
+
+function normalizeLoja(row) {
+  return {
+    ESCLOJA_ID: pick(row, 'ESCLOJA_ID', 'escloja_id'),
+    LOJA: pick(row, 'LOJA', 'loja'),
+    QTDE_BRIGADISTA_EXIGIDO: pick(row, 'QTDE_BRIGADISTA_EXIGIDO', 'qtde_brigadista_exigido'),
+    QTDE_BRIGADISTA_EXIGIDO_DIA: pick(row, 'QTDE_BRIGADISTA_EXIGIDO_DIA', 'qtde_brigadista_exigido_dia')
+  };
+}
+
+function normalizeFuncionario(row) {
+  return {
+    ESCFUNC_ID: pick(row, 'ESCFUNC_ID', 'escfunc_id'),
+    CODCOLIGADA: pick(row, 'CODCOLIGADA', 'codcoligada'),
+    LOJA: pick(row, 'LOJA', 'loja'),
+    CHAPA: pick(row, 'CHAPA', 'chapa'),
+    NOME: pick(row, 'NOME', 'nome'),
+    DT_ADMISS: pick(row, 'DT_ADMISS', 'dt_admiss'),
+    BRIGADISTA: pick(row, 'BRIGADISTA', 'brigadista'),
+    ESCSECAO_ID: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
+    ESCFUNCAO_ID: pick(row, 'ESCFUNCAO_ID', 'escfuncao_id'),
+    HR_ENT1: pick(row, 'HR_ENT1', 'hr_ent1'),
+    HR_SAI1: pick(row, 'HR_SAI1', 'hr_sai1'),
+    HR_ENT2: pick(row, 'HR_ENT2', 'hr_ent2'),
+    HR_SAI2: pick(row, 'HR_SAI2', 'hr_sai2'),
+    DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl')
+  };
+}
+
 async function listLojas() {
   const env = getEnv();
   if (env.dbDriver === 'mock') {
@@ -18,16 +53,24 @@ async function listLojas() {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows;
+    return result.rows.map(normalizeLoja);
   });
 }
 
+async function resolveLojaCodigo(lojaId) {
+  const lojas = await listLojas();
+  const loja = lojas.find((item) => Number(item.LOJA) === Number(lojaId))
+    || lojas.find((item) => Number(item.ESCLOJA_ID) === Number(lojaId));
+  return loja ? Number(loja.LOJA) : Number(lojaId);
+}
+
 async function listFuncionariosByLoja(lojaId) {
+  const lojaCodigo = await resolveLojaCodigo(lojaId);
   const env = getEnv();
   if (env.dbDriver === 'mock') {
     const data = await readData();
     return data.SGN_ESC_FUNC
-      .filter((funcionario) => Number(funcionario.LOJA) === Number(lojaId))
+      .filter((funcionario) => Number(funcionario.LOJA) === Number(lojaCodigo))
       .sort((a, b) => a.NOME.localeCompare(b.NOME));
   }
 
@@ -51,21 +94,22 @@ async function listFuncionariosByLoja(lojaId) {
        from sgn_esc_func f
        where f.loja = :lojaId
        order by f.nome`,
-      { lojaId },
+      { lojaId: lojaCodigo },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows;
+    return result.rows.map(normalizeFuncionario);
   });
 }
 
 async function listAusenciasByLojaMes(lojaId, inicio, fim) {
+  const lojaCodigo = await resolveLojaCodigo(lojaId);
   const env = getEnv();
   if (env.dbDriver === 'mock') {
     const data = await readData();
     const funcionariosDaLoja = new Set(
       data.SGN_ESC_FUNC
-        .filter((funcionario) => Number(funcionario.LOJA) === Number(lojaId))
+        .filter((funcionario) => Number(funcionario.LOJA) === Number(lojaCodigo))
         .map((funcionario) => Number(funcionario.ESCFUNC_ID))
     );
 
@@ -95,7 +139,7 @@ async function listAusenciasByLojaMes(lojaId, inicio, fim) {
          and a.dt_inic <= to_date(:fim, 'YYYY-MM-DD')
          and nvl(a.dt_fim, a.dt_inic) >= to_date(:inicio, 'YYYY-MM-DD')
        order by a.dt_inic, a.chapa`,
-      { lojaId, inicio, fim },
+      { lojaId: lojaCodigo, inicio, fim },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
@@ -104,6 +148,7 @@ async function listAusenciasByLojaMes(lojaId, inicio, fim) {
 }
 
 async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
+  const lojaCodigo = await resolveLojaCodigo(lojaId);
   const allowedFields = ['BRIGADISTA', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'];
   const updates = Object.fromEntries(
     Object.entries(data || {}).filter(([field]) => allowedFields.includes(field))
@@ -118,7 +163,7 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
     const mockData = await readData();
     const funcionario = mockData.SGN_ESC_FUNC.find((item) => {
       return Number(item.ESCFUNC_ID) === Number(escfuncId)
-        && Number(item.LOJA) === Number(lojaId);
+        && Number(item.LOJA) === Number(lojaCodigo);
     });
 
     if (!funcionario) return null;
@@ -135,13 +180,13 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
        set ${assignments}
        where escfunc_id = :escfuncId
          and loja = :lojaId`,
-      { ...updates, escfuncId, lojaId },
+      { ...updates, escfuncId, lojaId: lojaCodigo },
       { autoCommit: true }
     );
 
     if (result.rowsAffected === 0) return null;
 
-    const funcionarios = await listFuncionariosByLoja(lojaId);
+    const funcionarios = await listFuncionariosByLoja(lojaCodigo);
     return funcionarios.find((funcionario) => Number(funcionario.ESCFUNC_ID) === Number(escfuncId)) || null;
   });
 }
@@ -150,5 +195,6 @@ module.exports = {
   listLojas,
   listFuncionariosByLoja,
   listAusenciasByLojaMes,
-  updateFuncionarioEscala
+  updateFuncionarioEscala,
+  resolveLojaCodigo
 };

@@ -3,13 +3,20 @@ const { withConnection, oracledb } = require('../db/oracle');
 const { readData, writeData, nextId } = require('../db/mockStore');
 const { getEnv } = require('../config/env');
 
+function pick(row, ...keys) {
+  for (const key of keys) {
+    if (row?.[key] !== undefined) return row[key];
+  }
+  return undefined;
+}
+
 function normalizeUser(usuario, lojas) {
   return {
-    USUARIO_ID: usuario.USUARIO_ID,
-    LOGIN: usuario.LOGIN,
-    NOME: usuario.NOME,
-    PERFIL: usuario.PERFIL,
-    STATUS: usuario.STATUS,
+    USUARIO_ID: pick(usuario, 'USUARIO_ID', 'usuario_id'),
+    LOGIN: pick(usuario, 'LOGIN', 'login'),
+    NOME: pick(usuario, 'NOME', 'nome'),
+    PERFIL: pick(usuario, 'PERFIL', 'perfil'),
+    STATUS: pick(usuario, 'STATUS', 'status'),
     LOJAS: lojas
   };
 }
@@ -53,10 +60,12 @@ async function listUsuariosAcesso(requestUser) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows.map((row) => ({
-      ...row,
-      LOJAS: row.LOJAS ? String(row.LOJAS).split(',').map((loja) => Number(loja.trim())) : []
-    })).filter((usuario) => canSeeUser(requestUser, usuario.LOJAS));
+    return result.rows.map((row) => {
+      const lojas = pick(row, 'LOJAS', 'lojas')
+        ? String(pick(row, 'LOJAS', 'lojas')).split(',').map((loja) => Number(loja.trim()))
+        : [];
+      return normalizeUser(row, lojas);
+    }).filter((usuario) => canSeeUser(requestUser, usuario.LOJAS));
   });
 }
 

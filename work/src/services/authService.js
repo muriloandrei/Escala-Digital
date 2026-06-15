@@ -4,6 +4,13 @@ const { withConnection, oracledb } = require('../db/oracle');
 const { readData } = require('../db/mockStore');
 const { getEnv } = require('../config/env');
 
+function pick(row, ...keys) {
+  for (const key of keys) {
+    if (row?.[key] !== undefined) return row[key];
+  }
+  return undefined;
+}
+
 function isActiveStatus(status) {
   return String(status || '').trim().toUpperCase() === 'A';
 }
@@ -87,47 +94,50 @@ async function findUserStores(usuarioId) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows.map((row) => Number(row.LOJA));
+    return result.rows.map((row) => Number(pick(row, 'LOJA', 'loja')));
   });
 }
 
 async function getSessionUserById(usuarioId) {
   const user = await findUserById(usuarioId);
-  if (!user || !isActiveStatus(user.STATUS)) return null;
+  if (!user || !isActiveStatus(pick(user, 'STATUS', 'status'))) return null;
 
-  const lojas = await findUserStores(user.USUARIO_ID);
+  const currentUsuarioId = pick(user, 'USUARIO_ID', 'usuario_id');
+  const lojas = await findUserStores(currentUsuarioId);
   return {
-    sub: String(user.USUARIO_ID),
-    login: user.LOGIN,
-    nome: user.NOME,
-    perfil: user.PERFIL,
+    sub: String(currentUsuarioId),
+    login: pick(user, 'LOGIN', 'login'),
+    nome: pick(user, 'NOME', 'nome'),
+    perfil: pick(user, 'PERFIL', 'perfil'),
     lojas
   };
 }
 
 async function login({ login, password }) {
   const user = await findUserByLogin(login);
-  if (!user || !isActiveStatus(user.STATUS)) {
+  if (!user || !isActiveStatus(pick(user, 'STATUS', 'status'))) {
     throw invalidLoginError();
   }
 
-  if (!isBcryptHash(user.SENHA_HASH)) {
-    console.warn(`Usuario ${user.LOGIN} sem SENHA_HASH bcrypt valido.`);
+  const senhaHash = pick(user, 'SENHA_HASH', 'senha_hash');
+  if (!isBcryptHash(senhaHash)) {
+    console.warn(`Usuario ${pick(user, 'LOGIN', 'login')} sem SENHA_HASH bcrypt valido.`);
     throw invalidLoginError();
   }
 
-  const passwordMatches = await bcrypt.compare(password, user.SENHA_HASH);
+  const passwordMatches = await bcrypt.compare(password, senhaHash);
   if (!passwordMatches) {
     throw invalidLoginError();
   }
 
-  const lojas = await findUserStores(user.USUARIO_ID);
+  const usuarioId = pick(user, 'USUARIO_ID', 'usuario_id');
+  const lojas = await findUserStores(usuarioId);
   const { auth } = getEnv();
   const payload = {
-    sub: String(user.USUARIO_ID),
-    login: user.LOGIN,
-    nome: user.NOME,
-    perfil: user.PERFIL,
+    sub: String(usuarioId),
+    login: pick(user, 'LOGIN', 'login'),
+    nome: pick(user, 'NOME', 'nome'),
+    perfil: pick(user, 'PERFIL', 'perfil'),
     lojas
   };
 

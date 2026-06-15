@@ -222,6 +222,7 @@
         let lojasPermitidasCache = [];
         let usuarioSessaoCache = null;
         let usuariosAcessoCache = [];
+        const getLojaCodigo = (loja) => loja?.LOJA ?? loja?.loja;
         
         // --- Variáveis para Copiar/Colar e Seleção ---
         let scheduleClipboard = null; 
@@ -1529,7 +1530,7 @@
             const data = await apiRequest('/api/catalog/lojas');
             const lojas = data.lojas || [];
             const lojaAtual = lojaEscalaSelect.value || funcionariosLojaSelect.value;
-            lojasPermitidasCache = lojas.map(loja => Number(loja.LOJA));
+            lojasPermitidasCache = lojas.map(loja => Number(getLojaCodigo(loja))).filter(Boolean);
             lojaEscalaSelect.innerHTML = '';
             funcionariosLojaSelect.innerHTML = '';
 
@@ -1553,16 +1554,17 @@
             carregarFuncionariosTelaBtn.disabled = false;
 
             lojas.forEach(loja => {
+                const lojaCodigo = getLojaCodigo(loja);
                 const option = document.createElement('option');
-                option.value = loja.LOJA;
-                option.textContent = `Loja ${loja.LOJA}`;
+                option.value = lojaCodigo;
+                option.textContent = `Loja ${lojaCodigo}`;
                 lojaEscalaSelect.appendChild(option);
                 funcionariosLojaSelect.appendChild(option.cloneNode(true));
             });
 
             const lojaSelecionada = lojasPermitidasCache.includes(Number(lojaAtual))
                 ? String(lojaAtual)
-                : String(lojas[0].LOJA);
+                : String(getLojaCodigo(lojas[0]));
             lojaEscalaSelect.value = lojaSelecionada;
             funcionariosLojaSelect.value = lojaSelecionada;
             return lojas;

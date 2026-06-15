@@ -15,12 +15,25 @@ const funcionarioEscalaSchema = z.object({
 
 router.use(requireAuth);
 
+async function resolveLojaParam(req, res, next) {
+  try {
+    const lojaCodigo = await catalogService.resolveLojaCodigo(Number(req.params.lojaId));
+    req.params.lojaId = String(lojaCodigo);
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
+
 router.get('/lojas', async (req, res, next) => {
   try {
     const lojas = await catalogService.listLojas();
+    const lojasUsuario = new Set((req.user.lojas || []).map(Number));
     const allowed = req.user.perfil === 'ADMIN'
       ? lojas
-      : lojas.filter((loja) => req.user.lojas.includes(Number(loja.LOJA)));
+      : lojas.filter((loja) => {
+        return lojasUsuario.has(Number(loja.LOJA)) || lojasUsuario.has(Number(loja.ESCLOJA_ID));
+      });
 
     res.json({ lojas: allowed });
   } catch (error) {
@@ -28,7 +41,7 @@ router.get('/lojas', async (req, res, next) => {
   }
 });
 
-router.get('/lojas/:lojaId/funcionarios', requireLojaAccess, async (req, res, next) => {
+router.get('/lojas/:lojaId/funcionarios', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
     const funcionarios = await catalogService.listFuncionariosByLoja(Number(req.params.lojaId));
     res.json({ funcionarios });
@@ -37,7 +50,7 @@ router.get('/lojas/:lojaId/funcionarios', requireLojaAccess, async (req, res, ne
   }
 });
 
-router.patch('/lojas/:lojaId/funcionarios/:escfuncId', requireLojaAccess, async (req, res, next) => {
+router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
     const data = funcionarioEscalaSchema.parse(req.body);
     const funcionario = await catalogService.updateFuncionarioEscala({
@@ -59,7 +72,7 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId', requireLojaAccess, async 
   }
 });
 
-router.get('/lojas/:lojaId/ausencias', requireLojaAccess, async (req, res, next) => {
+router.get('/lojas/:lojaId/ausencias', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
     const { inicio, fim } = req.query;
     if (!inicio || !fim) {

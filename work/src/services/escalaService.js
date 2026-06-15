@@ -6,10 +6,11 @@ async function listEscalas({ lojaId, mesRef }) {
   const env = getEnv();
   if (env.dbDriver === 'mock') {
     const data = await readData();
+    const funcionarios = data.SGN_ESC_FUNCIONARIO || data.SGN_ESC_FUNC || [];
     return data.SGN_ESC_PROG
       .filter((escala) => Number(escala.LOJA) === Number(lojaId) && escala.MES_REF === mesRef)
       .map((escala) => {
-        const funcionario = data.SGN_ESC_FUNCIONARIO.find((item) => Number(item.ESCFUNC_ID) === Number(escala.ESCFUNC_ID));
+        const funcionario = funcionarios.find((item) => Number(item.ESCFUNC_ID) === Number(escala.ESCFUNC_ID));
         return {
           ...escala,
           NOME: funcionario?.NOME || null
