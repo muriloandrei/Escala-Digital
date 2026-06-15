@@ -1808,7 +1808,7 @@
             let allDetailsHtml = '';
 
             dados.forEach((colaborador, index) => {
-                let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${index}"><div class="header-info"><h3 class="font-bold text-lg" contenteditable="true">${colaborador.nome}</h3></div><table><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}">${i + 1}</th>`).join('')}</tr></thead><tbody>`;
+                let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${index}" data-escfunc-id="${colaborador.escfuncId || ''}" data-chapa="${colaborador.chapa || ''}"><div class="header-info"><h3 class="font-bold text-lg" contenteditable="true">${colaborador.nome}</h3></div><table><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}">${i + 1}</th>`).join('')}</tr></thead><tbody>`;
                 const fields = [ 'inicio', 'inicioIntervalo', 'intervalo', 'fimIntervalo', 'fim', 'trabalhadas' ];
                 const labels = { inicio: 'ENT.', inicioIntervalo: 'SAÍ.INT.', intervalo: 'INTER.', fimIntervalo: 'RET.INT.', fim: 'SAÍ.', trabalhadas: 'H.TRAB' };
                 const isBold = { trabalhadas: true };
@@ -1949,7 +1949,7 @@
         };
 
         const montarPayloadBancoEscala = (escalaSalva) => {
-            const lojaId = parseInt(lojaEscalaSelect.value, 10);
+            const lojaId = parseInt(escalaSalva.lojaId || lojaEscalaSelect.value, 10);
             const mesRef = formatDateForDb(escalaSalva.ano, escalaSalva.mes, 1);
             const funcionarios = (escalaSalva.dados || [])
                 .filter(colaborador => colaborador.escfuncId && colaborador.chapa)
@@ -1971,6 +1971,14 @@
                 }));
 
             return { lojaId, mesRef, escalaOrigemId: escalaSalva.id, funcionarios, oficializada: 0 };
+        };
+
+        const aplicarLojaDaEscalaSalva = async (escalaSalva) => {
+            if (!escalaSalva.lojaId || !lojasPermitidasCache.includes(Number(escalaSalva.lojaId))) return;
+
+            lojaEscalaSelect.value = String(escalaSalva.lojaId);
+            funcionariosLojaSelect.value = String(escalaSalva.lojaId);
+            await carregarFuncionariosDaLoja(true);
         };
 
         const sincronizarEscalaComBanco = async (escalaSalva) => {
@@ -2087,6 +2095,7 @@
                 });
 
                 if (values && values['escala-senha'] === escalaParaAtualizar.senha) {
+                    escalaParaAtualizar.lojaId = escalaParaAtualizar.lojaId || parseInt(lojaEscalaSelect.value, 10);
                     escalaParaAtualizar.dados = parseEscalaFromModal();
                     escalaParaAtualizar.dataSalva = new Date().toLocaleDateString('pt-BR');
                     await salvarEscalasNoStorage(escalas);
@@ -2115,6 +2124,7 @@
                     setor: values['escala-setor'],
                     senha: values['escala-senha'],
                     dataSalva: new Date().toLocaleDateString('pt-BR'),
+                    lojaId: parseInt(lojaEscalaSelect.value, 10),
                     dados: parseEscalaFromModal(),
                     timelineData: JSON.parse(JSON.stringify(dadosEscala)),
                     mesAno: detalhadaMesAno.textContent,
@@ -2143,12 +2153,14 @@
             if (!escalaAlvo) return;
 
             if (targetButton.classList.contains('load')) {
+                await aplicarLojaDaEscalaSalva(escalaAlvo);
                 dadosEscala = JSON.parse(JSON.stringify(escalaAlvo.timelineData || []));
                 renderizarTimelineCompleta('timeline-content');
                 atualizarContadoresHome();
                 carregarEscalaDetalhada(escalaAlvo);
             } 
             else if (targetButton.classList.contains('view-skeleton')) {
+                await aplicarLojaDaEscalaSalva(escalaAlvo);
                 dadosEscala = JSON.parse(JSON.stringify(escalaAlvo.timelineData || []));
                 renderizarTimelineCompleta('timeline-content');
                 atualizarContadoresHome();
