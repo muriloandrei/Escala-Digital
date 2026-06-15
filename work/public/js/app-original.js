@@ -210,6 +210,7 @@
         let currentLoadedScale = null;
         let funcionariosLojaCache = [];
         let ausenciasLojaCache = [];
+        let lojasPermitidasCache = [];
         
         // --- Variáveis para Copiar/Colar e Seleção ---
         let scheduleClipboard = null; 
@@ -1172,12 +1173,25 @@
         addEscalaBtn.addEventListener('click', manipularEnvioFormulario);
         cancelEditBtn.addEventListener('click', cancelarModoEdicao);
         carregarFuncionariosBtn.addEventListener('click', () => carregarFuncionariosDaLoja(false));
-        lojaEscalaSelect.addEventListener('change', () => {
-            funcionariosLojaSelect.value = lojaEscalaSelect.value;
-            carregarFuncionariosDaLoja(true);
+        lojaEscalaSelect.addEventListener('change', async () => {
+            try {
+                funcionariosLojaSelect.value = lojaEscalaSelect.value;
+                await carregarFuncionariosDaLoja(true);
+                if (!funcionariosPage.classList.contains('hidden')) {
+                    await carregarFuncionariosTela(false);
+                }
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
         });
-        funcionariosLojaSelect.addEventListener('change', () => {
-            lojaEscalaSelect.value = funcionariosLojaSelect.value;
+        funcionariosLojaSelect.addEventListener('change', async () => {
+            try {
+                lojaEscalaSelect.value = funcionariosLojaSelect.value;
+                await carregarFuncionariosTela(false);
+                await carregarFuncionariosDaLoja(false);
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
         });
         carregarFuncionariosTelaBtn.addEventListener('click', async () => {
             try {
@@ -1333,8 +1347,30 @@
         const carregarLojasEscala = async () => {
             const data = await apiRequest('/api/catalog/lojas');
             const lojas = data.lojas || [];
+            const lojaAtual = lojaEscalaSelect.value || funcionariosLojaSelect.value;
+            lojasPermitidasCache = lojas.map(loja => Number(loja.LOJA));
             lojaEscalaSelect.innerHTML = '';
             funcionariosLojaSelect.innerHTML = '';
+
+            if (lojas.length === 0) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'Nenhuma loja permitida';
+                lojaEscalaSelect.appendChild(option);
+                funcionariosLojaSelect.appendChild(option.cloneNode(true));
+                lojaEscalaSelect.disabled = true;
+                funcionariosLojaSelect.disabled = true;
+                carregarFuncionariosBtn.disabled = true;
+                carregarFuncionariosTelaBtn.disabled = true;
+                funcionariosStatus.textContent = 'Usuario sem loja permitida';
+                return [];
+            }
+
+            lojaEscalaSelect.disabled = false;
+            funcionariosLojaSelect.disabled = false;
+            carregarFuncionariosBtn.disabled = false;
+            carregarFuncionariosTelaBtn.disabled = false;
+
             lojas.forEach(loja => {
                 const option = document.createElement('option');
                 option.value = loja.LOJA;
@@ -1342,6 +1378,12 @@
                 lojaEscalaSelect.appendChild(option);
                 funcionariosLojaSelect.appendChild(option.cloneNode(true));
             });
+
+            const lojaSelecionada = lojasPermitidasCache.includes(Number(lojaAtual))
+                ? String(lojaAtual)
+                : String(lojas[0].LOJA);
+            lojaEscalaSelect.value = lojaSelecionada;
+            funcionariosLojaSelect.value = lojaSelecionada;
             return lojas;
         };
 
@@ -1375,7 +1417,11 @@
 
         const carregarFuncionariosTela = async (showSuccess = true) => {
             const loja = funcionariosLojaSelect.value || lojaEscalaSelect.value;
-            if (!loja) return;
+            if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
+                funcionariosTitulo.textContent = 'Funcionários cadastrados';
+                tabelaFuncionariosBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Selecione uma loja permitida para carregar os funcionários.</td></tr>';
+                return;
+            }
 
             const data = await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios`);
             renderizarFuncionariosTela(data.funcionarios || [], loja);
