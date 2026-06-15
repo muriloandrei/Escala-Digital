@@ -120,6 +120,39 @@ test('access API returns users, roles and allowed stores without password hashes
   assert.ok(acessos.body.usuarios.some((usuario) => usuario.LOGIN === 'gerente101' && usuario.PERFIL === 'GERENTE'));
 });
 
+test('admin can create and inactivate access users without exposing password hashes', async (t) => {
+  const { server, baseUrl } = await startTestServer();
+  t.after(() => server.close());
+  const cookie = await login(baseUrl);
+
+  const created = await requestJson(baseUrl, '/api/acessos/usuarios', {
+    method: 'POST',
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      LOGIN: 'lider102',
+      NOME: 'Lider Loja 102',
+      PASSWORD: 'senha123',
+      PERFIL: 'GERENTE',
+      LOJAS: [102]
+    })
+  });
+
+  assert.equal(created.response.status, 201);
+  assert.equal(created.body.usuario.LOGIN, 'lider102');
+  assert.equal(created.body.usuario.SENHA_HASH, undefined);
+
+  const updated = await requestJson(baseUrl, `/api/acessos/usuarios/${created.body.usuario.USUARIO_ID}`, {
+    method: 'PATCH',
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ STATUS: 'I', LOJAS: [101, 102] })
+  });
+
+  assert.equal(updated.response.status, 200);
+  assert.equal(updated.body.usuario.STATUS, 'I');
+  assert.deepEqual(updated.body.usuario.LOJAS, [101, 102]);
+  assert.equal(updated.body.usuario.SENHA_HASH, undefined);
+});
+
 test('admin diagnostics endpoint reports skipped Oracle check in mock mode', async (t) => {
   const { server, baseUrl } = await startTestServer();
   t.after(() => server.close());

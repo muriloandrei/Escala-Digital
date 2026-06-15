@@ -24,6 +24,7 @@
         const tabelaFuncionariosBody = document.getElementById('tabela-funcionarios-body');
         const carregarAcessosBtn = document.getElementById('carregarAcessosBtn');
         const tabelaAcessosBody = document.getElementById('tabela-acessos-body');
+        let novoUsuarioBtn = null;
         const currentPageTitle = document.getElementById('currentPageTitle');
         const loggedUserName = document.getElementById('loggedUserName');
         const loggedUserStores = document.getElementById('loggedUserStores');
@@ -219,6 +220,7 @@
         let ausenciasLojaCache = [];
         let lojasPermitidasCache = [];
         let usuarioSessaoCache = null;
+        let usuariosAcessoCache = [];
         
         // --- Variáveis para Copiar/Colar e Seleção ---
         let scheduleClipboard = null; 
@@ -1339,6 +1341,39 @@
                 showInfoModal(error.message, 'error');
             }
         });
+        carregarAcessosBtn.parentElement.addEventListener('click', async (event) => {
+            if (event.target.closest('#novoUsuarioBtn')) {
+                const values = await showInputModal({
+                    title: 'Novo Usuário',
+                    inputs: [
+                        { label: 'Login', type: 'text', id: 'LOGIN', required: true },
+                        { label: 'Nome', type: 'text', id: 'NOME', required: true },
+                        { label: 'Senha inicial', type: 'password', id: 'PASSWORD', required: true },
+                        { label: 'Role', type: 'text', id: 'PERFIL', value: 'GERENTE', required: true },
+                        { label: 'Lojas permitidas (separadas por vírgula)', type: 'text', id: 'LOJAS', value: (lojasPermitidasCache[0] || '').toString() }
+                    ],
+                    confirmText: 'Criar'
+                });
+                if (!values) return;
+
+                try {
+                    await apiRequest('/api/acessos/usuarios', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            LOGIN: values.LOGIN,
+                            NOME: values.NOME,
+                            PASSWORD: values.PASSWORD,
+                            PERFIL: values.PERFIL,
+                            LOJAS: String(values.LOJAS || '').split(',').map(loja => Number(loja.trim())).filter(Boolean)
+                        })
+                    });
+                    await carregarAcessosTela(false);
+                    showInfoModal('Usuário criado com sucesso.', 'success');
+                } catch (error) {
+                    showInfoModal(error.message, 'error');
+                }
+            }
+        });
         
         // --- SISTEMA DE MODAL DE INPUT ---
         const inputModal = document.getElementById('inputModal');
@@ -1454,6 +1489,17 @@
                     ? `Lojas: ${lojas.join(', ')}`
                     : 'Sem loja vinculada';
             }
+        };
+
+        const configurarAcoesAdmin = () => {
+            if (usuarioSessaoCache?.perfil !== 'ADMIN' || novoUsuarioBtn) return;
+
+            novoUsuarioBtn = document.createElement('button');
+            novoUsuarioBtn.type = 'button';
+            novoUsuarioBtn.id = 'novoUsuarioBtn';
+            novoUsuarioBtn.className = 'action-button';
+            novoUsuarioBtn.innerHTML = '<span class="material-symbols-outlined">person_add</span>Novo Usuário';
+            carregarAcessosBtn.parentElement.appendChild(novoUsuarioBtn);
         };
 
         logoutAppBtn?.addEventListener('click', async () => {
@@ -1626,13 +1672,26 @@
             usuarios.forEach(usuario => {
                 const statusLabel = usuario.STATUS === 'A' ? 'Ativo' : 'Inativo';
                 const lojas = Array.isArray(usuario.LOJAS) ? usuario.LOJAS.join(', ') : '';
+                const isAdmin = usuarioSessaoCache?.perfil === 'ADMIN';
                 const row = `
-                    <tr>
+                    <tr data-usuario-id="${usuario.USUARIO_ID}">
                         <td data-label="Login">${usuario.LOGIN || ''}</td>
                         <td data-label="Nome">${usuario.NOME || ''}</td>
                         <td data-label="Role">${usuario.PERFIL || ''}</td>
                         <td data-label="Status">${statusLabel}</td>
-                        <td data-label="Lojas Permitidas">${lojas}</td>
+                        <td data-label="Lojas Permitidas">
+                            <span>${lojas}</span>
+                            ${isAdmin ? `<div class="actions-cell mt-2">
+                                <button class="action-btn-table edit-usuario" data-id="${usuario.USUARIO_ID}" title="Editar usuário">
+                                    <span class="material-symbols-outlined">edit</span>
+                                    Editar
+                                </button>
+                                <button class="action-btn-table toggle-usuario" data-id="${usuario.USUARIO_ID}" data-status="${usuario.STATUS}" title="Alterar status">
+                                    <span class="material-symbols-outlined">block</span>
+                                    ${usuario.STATUS === 'A' ? 'Inativar' : 'Reativar'}
+                                </button>
+                            </div>` : ''}
+                        </td>
                     </tr>
                 `;
                 tabelaAcessosBody.innerHTML += row;
@@ -1641,11 +1700,64 @@
 
         const carregarAcessosTela = async (showSuccess = true) => {
             const data = await apiRequest('/api/acessos/usuarios');
-            renderizarAcessosTela(data.usuarios || []);
+            usuariosAcessoCache = data.usuarios || [];
+            renderizarAcessosTela(usuariosAcessoCache);
             if (showSuccess) {
                 showInfoModal(`${(data.usuarios || []).length} usuário(s) carregado(s).`, 'success');
             }
         };
+
+        tabelaAcessosBody.addEventListener('click', async (event) => {
+            const editButton = event.target.closest('.edit-usuario');
+            const toggleButton = event.target.closest('.toggle-usuario');
+            const actionButton = editButton || toggleButton;
+            if (!actionButton) return;
+
+            const usuario = usuariosAcessoCache.find(item => Number(item.USUARIO_ID) === Number(actionButton.dataset.id));
+            if (!usuario) {
+                showInfoModal('Usuário não encontrado.', 'error');
+                return;
+            }
+
+            try {
+                if (toggleButton) {
+                    const novoStatus = usuario.STATUS === 'A' ? 'I' : 'A';
+                    await apiRequest(`/api/acessos/usuarios/${encodeURIComponent(usuario.USUARIO_ID)}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ STATUS: novoStatus })
+                    });
+                    await carregarAcessosTela(false);
+                    showInfoModal(novoStatus === 'A' ? 'Usuário reativado.' : 'Usuário inativado.', 'success');
+                    return;
+                }
+
+                const values = await showInputModal({
+                    title: `Editar usuário - ${usuario.LOGIN}`,
+                    inputs: [
+                        { label: 'Nome', type: 'text', id: 'NOME', value: usuario.NOME || '', required: true },
+                        { label: 'Role', type: 'text', id: 'PERFIL', value: usuario.PERFIL || '', required: true },
+                        { label: 'Status (A/I)', type: 'text', id: 'STATUS', value: usuario.STATUS || 'A', required: true },
+                        { label: 'Lojas permitidas (separadas por vírgula)', type: 'text', id: 'LOJAS', value: (usuario.LOJAS || []).join(', ') }
+                    ],
+                    confirmText: 'Salvar'
+                });
+                if (!values) return;
+
+                await apiRequest(`/api/acessos/usuarios/${encodeURIComponent(usuario.USUARIO_ID)}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        NOME: values.NOME,
+                        PERFIL: values.PERFIL,
+                        STATUS: String(values.STATUS || 'A').trim().toUpperCase().slice(0, 1),
+                        LOJAS: String(values.LOJAS || '').split(',').map(loja => Number(loja.trim())).filter(Boolean)
+                    })
+                });
+                await carregarAcessosTela(false);
+                showInfoModal('Usuário atualizado com sucesso.', 'success');
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
 
         const carregarAusenciasDaLoja = async () => {
             const loja = lojaEscalaSelect.value;
@@ -2413,6 +2525,7 @@
             try {
                 popularSeletoresData(); 
                 await carregarUsuarioSessao();
+                configurarAcoesAdmin();
                 await carregarEstadoServidor();
                 await carregarLojasEscala();
                 await carregarFuncionariosDaLoja(true);
