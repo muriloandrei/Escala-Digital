@@ -250,6 +250,26 @@
             if (turnoModal) turnoModal.classList.add('hidden');
         };
 
+        const escapeHtml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+        const getFuncionarioOptionValue = (funcionario) => String(funcionario?.ESCFUNC_ID || funcionario?.CHAPA || '');
+
+        const atualizarOpcoesFuncionariosEsqueleto = () => {
+            const selects = Array.from(tabelaEsqueletoContainer.querySelectorAll('.collaborator-select'));
+            const selecionados = new Set(selects.map(select => select.value).filter(Boolean));
+
+            selects.forEach(select => {
+                Array.from(select.options).forEach(option => {
+                    option.disabled = !!option.value && option.value !== select.value && selecionados.has(option.value);
+                });
+            });
+        };
+
         const validarTurnoSimples = (turno) => {
             return window.EscalaRulesCore.validarTurnoSimples(turno, {
                 minIntervalo: regraMinIntervaloInput.value,
@@ -400,8 +420,15 @@
                 const nomeBase = funcionario ? `${funcionario.NOME} (${funcionario.CHAPA})` : `Colaborador ${index + 1}`;
                 const escfuncId = funcionario ? funcionario.ESCFUNC_ID : '';
                 const chapa = funcionario ? funcionario.CHAPA : '';
+                const selectedFuncionarioValue = funcionario ? getFuncionarioOptionValue(funcionario) : '';
+                const funcionarioOptions = funcionariosLojaCache.map(item => {
+                    const value = getFuncionarioOptionValue(item);
+                    const label = `${item.NOME} (${item.CHAPA})`;
+                    const selected = value === selectedFuncionarioValue ? 'selected' : '';
+                    return `<option value="${escapeHtml(value)}" data-escfunc-id="${escapeHtml(item.ESCFUNC_ID)}" data-chapa="${escapeHtml(item.CHAPA)}" data-name="${escapeHtml(label)}" ${selected}>${escapeHtml(label)}</option>`;
+                }).join('');
                 const horarios = ` ${escala.inicio} - ${escala.inicioIntervalo} - ${escala.fimIntervalo} - ${escala.fim}`;
-                tableHtml += `<tr data-colab-index="${index}" data-escfunc-id="${escfuncId}" data-chapa="${chapa}"><td data-name="${nomeBase}" class="sticky left-0 bg-white font-semibold z-10"><span contenteditable="true" class="collaborator-name-span">${nomeBase}</span><span class="collaborator-time-span text-gray-500">${horarios}</span></td>`;
+                tableHtml += `<tr data-colab-index="${index}" data-escfunc-id="${escapeHtml(escfuncId)}" data-chapa="${escapeHtml(chapa)}"><td data-name="${escapeHtml(nomeBase)}" class="sticky left-0 bg-white font-semibold z-10"><select class="collaborator-select" aria-label="Selecionar colaborador"><option value="">Colaborador ${index + 1}</option>${funcionarioOptions}</select><span class="collaborator-name-span hidden">${escapeHtml(nomeBase)}</span><span class="collaborator-time-span text-gray-500">${escapeHtml(horarios)}</span></td>`;
                 for (let dia = 1; dia <= diasNoMes; dia++) {
                     const data = new Date(ano, mes, dia);
                     tableHtml += `<td class="escala-cell ${data.getDay() === 0 ? 'bg-yellow-100' : ''}" data-dia="${dia}"></td>`;
@@ -425,6 +452,7 @@
 
             tableHtml += folgaRow + trabRow + grandTotalRow + '</tfoot></table>';
             tabelaEsqueletoContainer.innerHTML = tableHtml;
+            atualizarOpcoesFuncionariosEsqueleto();
             aplicarAusenciasNoEsqueleto();
             atualizarContagemEsqueleto();
         };
@@ -1084,6 +1112,36 @@
             }
         });
         
+        tabelaEsqueletoContainer.addEventListener('change', (e) => {
+            if (!e.target.classList.contains('collaborator-select')) return;
+
+            const select = e.target;
+            const row = select.closest('tr[data-colab-index]');
+            const nameCell = row?.querySelector('td[data-name]');
+            const selectedOption = select.selectedOptions[0];
+            const nomeSelecionado = selectedOption?.dataset.name || selectedOption?.textContent || `Colaborador ${Number(row?.dataset.colabIndex || 0) + 1}`;
+
+            if (!row || !nameCell) return;
+
+            row.dataset.escfuncId = selectedOption?.dataset.escfuncId || '';
+            row.dataset.chapa = selectedOption?.dataset.chapa || '';
+            nameCell.dataset.name = nomeSelecionado;
+            const hiddenName = nameCell.querySelector('.collaborator-name-span');
+            if (hiddenName) hiddenName.textContent = nomeSelecionado;
+
+            const detailedH3 = document.querySelector(`.colaborador-escala-detalhada[data-colab-index="${row.dataset.colabIndex}"] h3`);
+            if (detailedH3) {
+                detailedH3.textContent = nomeSelecionado;
+                const detailedContainer = detailedH3.closest('.colaborador-escala-detalhada');
+                if (detailedContainer) {
+                    detailedContainer.dataset.escfuncId = row.dataset.escfuncId;
+                    detailedContainer.dataset.chapa = row.dataset.chapa;
+                }
+            }
+
+            atualizarOpcoesFuncionariosEsqueleto();
+        });
+
         tabelaEsqueletoContainer.addEventListener('click', (e) => { 
             const table = e.target.closest('#tabela-esqueleto');
             if (table && table.classList.contains('is-readonly')) {

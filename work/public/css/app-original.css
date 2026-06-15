@@ -288,6 +288,18 @@
             margin-bottom: 16px;
             padding-bottom: 12px;
         }
+
+        .collaborator-select {
+            border: 1px solid var(--cor-borda);
+            border-radius: 6px;
+            color: var(--cor-texto);
+            display: block;
+            font-size: 0.82rem;
+            font-weight: 600;
+            max-width: 220px;
+            padding: 4px 8px;
+            width: 100%;
+        }
         
         .table-card {
             background-color: var(--cor-branco);
