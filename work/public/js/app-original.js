@@ -82,7 +82,7 @@
             navLinks.forEach(link => link.classList.remove('active'));
             navFuncionarios.classList.add('active');
             setCurrentPageTitle('funcionarios');
-            carregarFuncionariosTela(false);
+            carregarFuncionariosTela(false).catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showAcessosPage() {
@@ -1610,7 +1610,14 @@
                 return;
             }
 
-            const data = await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios`);
+            let data;
+            try {
+                data = await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios`);
+            } catch (error) {
+                funcionariosTitulo.textContent = `FuncionÃ¡rios cadastrados - Loja ${loja}`;
+                tabelaFuncionariosBody.innerHTML = `<tr><td colspan="11" class="text-center text-red-600 py-8">Erro ao carregar funcionÃ¡rios: ${escapeHtml(error.message)}</td></tr>`;
+                throw error;
+            }
             renderizarFuncionariosTela(data.funcionarios || [], loja);
             if (showSuccess) {
                 showInfoModal(`${(data.funcionarios || []).length} funcionário(s) carregado(s) da loja ${loja}.`, 'success');
@@ -1753,6 +1760,11 @@
                         LOJAS: String(values.LOJAS || '').split(',').map(loja => Number(loja.trim())).filter(Boolean)
                     })
                 });
+                if (String(usuario.USUARIO_ID) === String(usuarioSessaoCache?.sub)) {
+                    await carregarUsuarioSessao();
+                    await carregarLojasEscala();
+                    await carregarFuncionariosDaLoja(false);
+                }
                 await carregarAcessosTela(false);
                 showInfoModal('Usuário atualizado com sucesso.', 'success');
             } catch (error) {

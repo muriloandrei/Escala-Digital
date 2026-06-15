@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { getEnv } = require('../config/env');
+const authService = require('../services/authService');
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const { auth } = getEnv();
   const token = req.cookies.access_token;
 
@@ -10,10 +11,20 @@ function requireAuth(req, res, next) {
   }
 
   try {
-    req.user = jwt.verify(token, auth.jwtSecret);
+    const decoded = jwt.verify(token, auth.jwtSecret);
+    const sessionUser = await authService.getSessionUserById(decoded.sub);
+    if (!sessionUser) {
+      return res.status(401).json({ error: 'Sessao invalida ou expirada.' });
+    }
+
+    req.user = sessionUser;
     return next();
   } catch (error) {
-    return res.status(401).json({ error: 'Sessao invalida ou expirada.' });
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Sessao invalida ou expirada.' });
+    }
+
+    return next(error);
   }
 }
 

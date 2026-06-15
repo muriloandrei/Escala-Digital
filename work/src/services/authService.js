@@ -44,6 +44,31 @@ async function findUserByLogin(login) {
   });
 }
 
+async function findUserById(usuarioId) {
+  const env = getEnv();
+  if (env.dbDriver === 'mock') {
+    const data = await readData();
+    return data.SGN_ESC_USUARIO.find((user) => Number(user.USUARIO_ID) === Number(usuarioId)) || null;
+  }
+
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select
+          u.usuario_id,
+          u.login,
+          u.nome,
+          u.perfil,
+          u.status
+       from sgn_esc_usuario u
+       where u.usuario_id = :usuarioId`,
+      { usuarioId },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return result.rows[0] || null;
+  });
+}
+
 async function findUserStores(usuarioId) {
   const env = getEnv();
   if (env.dbDriver === 'mock') {
@@ -64,6 +89,20 @@ async function findUserStores(usuarioId) {
 
     return result.rows.map((row) => Number(row.LOJA));
   });
+}
+
+async function getSessionUserById(usuarioId) {
+  const user = await findUserById(usuarioId);
+  if (!user || !isActiveStatus(user.STATUS)) return null;
+
+  const lojas = await findUserStores(user.USUARIO_ID);
+  return {
+    sub: String(user.USUARIO_ID),
+    login: user.LOGIN,
+    nome: user.NOME,
+    perfil: user.PERFIL,
+    lojas
+  };
 }
 
 async function login({ login, password }) {
@@ -96,4 +135,4 @@ async function login({ login, password }) {
   return { token, user: payload };
 }
 
-module.exports = { login };
+module.exports = { login, getSessionUserById };
