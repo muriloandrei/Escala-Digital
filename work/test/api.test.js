@@ -81,6 +81,30 @@ test('catalog returns stores and employees from mock database', async (t) => {
   assert.equal(funcionarios.body.funcionarios[0].NOME, 'Ana Souza');
 });
 
+test('catalog allows partial employee schedule updates only for permitted fields', async (t) => {
+  const { server, baseUrl } = await startTestServer();
+  t.after(() => server.close());
+  const cookie = await login(baseUrl);
+
+  const update = await requestJson(baseUrl, '/api/catalog/lojas/101/funcionarios/1', {
+    method: 'PATCH',
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ BRIGADISTA: 'N', HR_ENT1: '07:30' })
+  });
+
+  assert.equal(update.response.status, 200);
+  assert.equal(update.body.funcionario.BRIGADISTA, 'N');
+  assert.equal(update.body.funcionario.HR_ENT1, '07:30');
+
+  const invalid = await requestJson(baseUrl, '/api/catalog/lojas/101/funcionarios/1', {
+    method: 'PATCH',
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ NOME: 'Nao permitido' })
+  });
+
+  assert.equal(invalid.response.status, 400);
+});
+
 test('access API returns users, roles and allowed stores without password hashes', async (t) => {
   const { server, baseUrl } = await startTestServer();
   t.after(() => server.close());

@@ -1,5 +1,5 @@
 const { withConnection, oracledb } = require('../db/oracle');
-const { readData } = require('../db/mockStore');
+const { readData, writeData } = require('../db/mockStore');
 const { getEnv } = require('../config/env');
 
 async function listLojas() {
@@ -103,8 +103,52 @@ async function listAusenciasByLojaMes(lojaId, inicio, fim) {
   });
 }
 
+async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
+  const allowedFields = ['BRIGADISTA', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'];
+  const updates = Object.fromEntries(
+    Object.entries(data || {}).filter(([field]) => allowedFields.includes(field))
+  );
+
+  if (Object.keys(updates).length === 0) {
+    throw new Error('Nenhum campo permitido informado para atualizacao.');
+  }
+
+  const env = getEnv();
+  if (env.dbDriver === 'mock') {
+    const mockData = await readData();
+    const funcionario = mockData.SGN_ESC_FUNC.find((item) => {
+      return Number(item.ESCFUNC_ID) === Number(escfuncId)
+        && Number(item.LOJA) === Number(lojaId);
+    });
+
+    if (!funcionario) return null;
+
+    Object.assign(funcionario, updates);
+    await writeData(mockData);
+    return funcionario;
+  }
+
+  return withConnection(async (connection) => {
+    const assignments = Object.keys(updates).map((field) => `${field.toLowerCase()} = :${field}`).join(', ');
+    const result = await connection.execute(
+      `update sgn_esc_func
+       set ${assignments}
+       where escfunc_id = :escfuncId
+         and loja = :lojaId`,
+      { ...updates, escfuncId, lojaId },
+      { autoCommit: true }
+    );
+
+    if (result.rowsAffected === 0) return null;
+
+    const funcionarios = await listFuncionariosByLoja(lojaId);
+    return funcionarios.find((funcionario) => Number(funcionario.ESCFUNC_ID) === Number(escfuncId)) || null;
+  });
+}
+
 module.exports = {
   listLojas,
   listFuncionariosByLoja,
-  listAusenciasByLojaMes
+  listAusenciasByLojaMes,
+  updateFuncionarioEscala
 };

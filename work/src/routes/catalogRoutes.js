@@ -1,8 +1,17 @@
 const express = require('express');
+const { z } = require('zod');
 const { requireAuth, requireLojaAccess } = require('../middleware/auth');
 const catalogService = require('../services/catalogService');
 
 const router = express.Router();
+
+const funcionarioEscalaSchema = z.object({
+  BRIGADISTA: z.string().max(1).optional(),
+  HR_ENT1: z.string().max(5).nullable().optional(),
+  HR_SAI1: z.string().max(5).nullable().optional(),
+  HR_ENT2: z.string().max(5).nullable().optional(),
+  HR_SAI2: z.string().max(5).nullable().optional()
+}).strict();
 
 router.use(requireAuth);
 
@@ -25,6 +34,28 @@ router.get('/lojas/:lojaId/funcionarios', requireLojaAccess, async (req, res, ne
     res.json({ funcionarios });
   } catch (error) {
     next(error);
+  }
+});
+
+router.patch('/lojas/:lojaId/funcionarios/:escfuncId', requireLojaAccess, async (req, res, next) => {
+  try {
+    const data = funcionarioEscalaSchema.parse(req.body);
+    const funcionario = await catalogService.updateFuncionarioEscala({
+      lojaId: Number(req.params.lojaId),
+      escfuncId: Number(req.params.escfuncId),
+      data
+    });
+
+    if (!funcionario) {
+      return res.status(404).json({ error: 'Funcionario nao encontrado para a loja.' });
+    }
+
+    return res.json({ funcionario });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos de funcionario invalidos.', details: error.errors });
+    }
+    return next(error);
   }
 });
 

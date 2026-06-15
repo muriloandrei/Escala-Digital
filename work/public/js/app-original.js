@@ -1375,6 +1375,7 @@
                         inputEl.type = input.type;
                         inputEl.id = input.id;
                         inputEl.required = input.required;
+                        inputEl.value = input.value || '';
                         inputEl.className = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
                         inputModalBody.appendChild(label);
                         inputModalBody.appendChild(inputEl);
@@ -1525,13 +1526,13 @@
             tabelaFuncionariosBody.innerHTML = '';
 
             if (!funcionarios || funcionarios.length === 0) {
-                tabelaFuncionariosBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Nenhum funcionário encontrado para a loja selecionada.</td></tr>';
+                tabelaFuncionariosBody.innerHTML = '<tr><td colspan="11" class="text-center text-gray-500 py-8">Nenhum funcionário encontrado para a loja selecionada.</td></tr>';
                 return;
             }
 
             funcionarios.forEach(funcionario => {
                 const row = `
-                    <tr>
+                    <tr data-escfunc-id="${funcionario.ESCFUNC_ID || ''}">
                         <td data-label="Chapa">${funcionario.CHAPA || ''}</td>
                         <td data-label="Nome">${funcionario.NOME || ''}</td>
                         <td data-label="Loja">${funcionario.LOJA || ''}</td>
@@ -1542,6 +1543,12 @@
                         <td data-label="Saída 1">${funcionario.HR_SAI1 || ''}</td>
                         <td data-label="Entrada 2">${funcionario.HR_ENT2 || ''}</td>
                         <td data-label="Saída 2">${funcionario.HR_SAI2 || ''}</td>
+                        <td data-label="A??es">
+                            <button class="action-btn-table edit-funcionario" data-id="${funcionario.ESCFUNC_ID || ''}" title="Editar dados de escala">
+                                <span class="material-symbols-outlined">edit</span>
+                                Editar
+                            </button>
+                        </td>
                     </tr>
                 `;
                 tabelaFuncionariosBody.innerHTML += row;
@@ -1552,7 +1559,7 @@
             const loja = funcionariosLojaSelect.value || lojaEscalaSelect.value;
             if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
                 funcionariosTitulo.textContent = 'Funcionários cadastrados';
-                tabelaFuncionariosBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Selecione uma loja permitida para carregar os funcionários.</td></tr>';
+                tabelaFuncionariosBody.innerHTML = '<tr><td colspan="11" class="text-center text-gray-500 py-8">Selecione uma loja permitida para carregar os funcionários.</td></tr>';
                 return;
             }
 
@@ -1562,6 +1569,51 @@
                 showInfoModal(`${(data.funcionarios || []).length} funcionário(s) carregado(s) da loja ${loja}.`, 'success');
             }
         };
+
+        tabelaFuncionariosBody.addEventListener('click', async (event) => {
+            const editButton = event.target.closest('.edit-funcionario');
+            if (!editButton) return;
+
+            const loja = funcionariosLojaSelect.value || lojaEscalaSelect.value;
+            const funcionario = funcionariosLojaCache.find(item => Number(item.ESCFUNC_ID) === Number(editButton.dataset.id));
+            if (!loja || !funcionario) {
+                showInfoModal('Funcionário não encontrado para edição.', 'error');
+                return;
+            }
+
+            const values = await showInputModal({
+                title: `Editar escala - ${funcionario.NOME}`,
+                inputs: [
+                    { label: 'Brigadista (S/N)', type: 'text', id: 'BRIGADISTA', value: funcionario.BRIGADISTA || '' },
+                    { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || '' },
+                    { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || '' },
+                    { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: funcionario.HR_ENT2 || '' },
+                    { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || '' }
+                ],
+                confirmText: 'Salvar'
+            });
+
+            if (!values) return;
+
+            try {
+                const payload = {
+                    BRIGADISTA: String(values.BRIGADISTA || '').trim().toUpperCase().slice(0, 1),
+                    HR_ENT1: values.HR_ENT1 || null,
+                    HR_SAI1: values.HR_SAI1 || null,
+                    HR_ENT2: values.HR_ENT2 || null,
+                    HR_SAI2: values.HR_SAI2 || null
+                };
+                await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios/${encodeURIComponent(funcionario.ESCFUNC_ID)}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(payload)
+                });
+                await carregarFuncionariosDaLoja(true);
+                await carregarFuncionariosTela(false);
+                showInfoModal('Funcionário atualizado com sucesso.', 'success');
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
 
         const renderizarAcessosTela = (usuarios) => {
             tabelaAcessosBody.innerHTML = '';
