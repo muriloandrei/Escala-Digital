@@ -270,6 +270,29 @@
             });
         };
 
+        const getFuncionarioSelecionadoPorLinha = (index) => {
+            const row = tabelaEsqueletoContainer.querySelector(`tr[data-colab-index="${index}"]`);
+            const escfuncId = row?.dataset.escfuncId;
+            const chapa = row?.dataset.chapa;
+
+            return funcionariosLojaCache.find(funcionario =>
+                String(funcionario.ESCFUNC_ID || '') === String(escfuncId || '')
+                || String(funcionario.CHAPA || '') === String(chapa || '')
+            ) || null;
+        };
+
+        const limparAusenciasObrigatoriasDoEsqueleto = () => {
+            tabelaEsqueletoContainer.querySelectorAll('.escala-cell[data-ausencia-obrigatoria="1"]').forEach(cell => {
+                const dia = parseInt(cell.dataset.dia, 10);
+                const isSunday = new Date(anoSelect.value, mesSelect.value, dia).getDay() === 0;
+                cell.textContent = '';
+                delete cell.dataset.ausenciaObrigatoria;
+                cell.removeAttribute('title');
+                cell.classList.remove('bg-red-300', 'bg-orange-600', 'text-white', 'font-bold');
+                if (isSunday) cell.classList.add('bg-yellow-100');
+            });
+        };
+
         const validarTurnoSimples = (turno) => {
             return window.EscalaRulesCore.validarTurnoSimples(turno, {
                 minIntervalo: regraMinIntervaloInput.value,
@@ -1140,6 +1163,11 @@
             }
 
             atualizarOpcoesFuncionariosEsqueleto();
+            limparAusenciasObrigatoriasDoEsqueleto();
+            aplicarAusenciasNoEsqueleto();
+            detailedScaleHasBeenGenerated = false;
+            gerarEscalaDetalhadaBtn.textContent = 'Gerar Escala Detalhada';
+            detalhadaModalBody.innerHTML = '';
         });
 
         tabelaEsqueletoContainer.addEventListener('click', (e) => { 
@@ -2494,7 +2522,7 @@ const distribuirFolgas5x2Auto = async () => {
 
     const aplicarAusenciasObrigatoriasNaSemana = (weekDays) => {
         for (let i = 0; i < total; i++) {
-            const funcionario = funcionariosLojaCache[i];
+            const funcionario = getFuncionarioSelecionadoPorLinha(i);
             if (!funcionario) continue;
 
             weekDays.forEach((date) => {
