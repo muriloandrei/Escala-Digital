@@ -231,6 +231,63 @@
         .action-button.secondary:hover {
              background-color: #2563eb;
         }
+
+        .timeline-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin: -12px 0 24px;
+        }
+
+        .timeline-metrics div {
+            background: var(--cor-branco);
+            border: 1px solid var(--cor-borda);
+            border-radius: 8px;
+            padding: 12px 14px;
+            box-shadow: var(--sombra-card);
+        }
+
+        .timeline-metrics span {
+            color: var(--cor-texto-leve);
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .timeline-metrics strong {
+            color: var(--cor-texto);
+            display: block;
+            font-size: 1.7rem;
+            line-height: 1.2;
+        }
+
+        .turno-modal-shell {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.58);
+            z-index: 1040;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .turno-modal-shell form {
+            width: min(520px, 100%);
+            max-height: calc(100vh - 48px);
+            overflow-y: auto;
+        }
+
+        .turno-modal-header {
+            align-items: center;
+            border-bottom: 1px solid var(--cor-borda);
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+        }
         
         .table-card {
             background-color: var(--cor-branco);
@@ -374,6 +431,7 @@
             .session-summary { width: 100%; flex-wrap: wrap; }
             .session-summary div { min-width: 0; flex: 1; }
             .main-header { flex-direction: column; align-items: flex-start; gap: 16px; }
+            .timeline-metrics { grid-template-columns: 1fr; }
             .footer { left: 0; width: 100%; }
 
             #registros-page .table-card {

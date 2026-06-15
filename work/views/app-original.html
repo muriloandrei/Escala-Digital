@@ -57,12 +57,25 @@
             <div id="timeline-page">
                 <header class="main-header">
                     <h1>Home</h1>
-                    
+                    <div class="header-actions">
+                        <button id="abrirTurnoModalBtn" type="button" class="action-button secondary">
+                            <span class="material-symbols-outlined">add_circle</span>
+                            Adicionar Turno
+                        </button>
+                    </div>
                 </header>
-                <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-                    <div class="lg:col-span-1 space-y-6 lg:sticky lg:top-8 no-print">
+                <div class="timeline-metrics no-print">
+                    <div><span>Funcionários na loja</span><strong id="funcionariosLojaCount">0</strong></div>
+                    <div><span>Turnos criados</span><strong id="turnosCriadosCount">0</strong></div>
+                    <div><span>Turnos restantes</span><strong id="turnosRestantesCount">0</strong></div>
+                </div>
+                <div class="max-w-7xl mx-auto">
+                    <div class="turno-modal-shell hidden no-print" id="turnoModal">
                         <form id="form-container" class="bg-white p-6 rounded-xl shadow-md">
-                            <h2 id="form-title" class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Adicionar Turno</h2>
+                            <div class="turno-modal-header">
+                                <h2 id="form-title" class="text-xl font-bold text-gray-800">Adicionar Turno</h2>
+                                <button id="closeTurnoModalBtn" type="button" class="text-gray-500 hover:text-gray-800 text-3xl font-bold" title="Fechar" aria-label="Fechar modal">&times;</button>
+                            </div>
                             <div class="space-y-4">
                                 <div><label for="quantidade" class="block text-sm font-medium text-gray-700">Quantidade</label><input type="number" id="quantidade" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Ex: 6"></div>
                                 <div><label for="inicioEscala" class="block text-sm font-medium text-gray-700">Entrada do Turno</label><input type="time" id="inicioEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></div>
@@ -76,7 +89,7 @@
                             </div>
                         </form>
                     </div>
-                    <div id="timeline-container-for-print" class="lg:col-span-2 bg-white p-4 sm:p-6 rounded-xl shadow-md">
+                    <div id="timeline-container-for-print" class="bg-white p-4 sm:p-6 rounded-xl shadow-md">
                         <div class="flex flex-wrap gap-4 justify-between items-center mb-4 no-print">
                             <h2 class="text-xl font-bold text-gray-800">Linha do Tempo</h2>
                             <div class="flex items-center gap-4 flex-wrap">

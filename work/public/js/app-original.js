@@ -27,6 +27,12 @@
         const loggedUserName = document.getElementById('loggedUserName');
         const loggedUserStores = document.getElementById('loggedUserStores');
         const logoutAppBtn = document.getElementById('logoutAppBtn');
+        const abrirTurnoModalBtn = document.getElementById('abrirTurnoModalBtn');
+        const turnoModal = document.getElementById('turnoModal');
+        const closeTurnoModalBtn = document.getElementById('closeTurnoModalBtn');
+        const funcionariosLojaCount = document.getElementById('funcionariosLojaCount');
+        const turnosCriadosCount = document.getElementById('turnosCriadosCount');
+        const turnosRestantesCount = document.getElementById('turnosRestantesCount');
 
         const pageTitles = {
             home: 'Home',
@@ -220,6 +226,30 @@
         const { timeToMinutes, minutesToTime, hoursToMinutes } = window.EscalaRulesCore;
         const showInfoModal = (messages, type = 'info') => { infoMessagesList.innerHTML = ''; if (type === 'error') { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-red-500'; infoModalTitle.textContent = 'Atenção: Erros Encontrados'; } else if (type === 'success') { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-green-500'; infoModalTitle.textContent = 'Sucesso'; } else { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-blue-500'; infoModalTitle.textContent = 'Informação'; } if (Array.isArray(messages)) { messages.forEach(msg => { const li = document.createElement('li'); li.textContent = msg; infoMessagesList.appendChild(li); }); } else { const li = document.createElement('li'); li.textContent = messages; infoMessagesList.appendChild(li); } infoModal.classList.remove('hidden'); };
         
+        const contarTurnosCriados = (ignorarIndex = null) => dadosEscala.reduce((total, escala, index) => {
+            if (index === ignorarIndex) return total;
+            return total + (parseInt(escala.quantidade, 10) || 0);
+        }, 0);
+
+        const atualizarContadoresHome = () => {
+            const funcionariosNaLoja = funcionariosLojaCache.length;
+            const turnosCriados = contarTurnosCriados();
+            const turnosRestantes = Math.max(funcionariosNaLoja - turnosCriados, 0);
+
+            if (funcionariosLojaCount) funcionariosLojaCount.textContent = funcionariosNaLoja;
+            if (turnosCriadosCount) turnosCriadosCount.textContent = turnosCriados;
+            if (turnosRestantesCount) turnosRestantesCount.textContent = turnosRestantes;
+        };
+
+        const abrirModalTurno = () => {
+            if (turnoModal) turnoModal.classList.remove('hidden');
+            quantidadeInput.focus();
+        };
+
+        const fecharModalTurno = () => {
+            if (turnoModal) turnoModal.classList.add('hidden');
+        };
+
         const validarTurnoSimples = (turno) => {
             return window.EscalaRulesCore.validarTurnoSimples(turno, {
                 minIntervalo: regraMinIntervaloInput.value,
@@ -282,8 +312,8 @@
         const renderizarCorpo = (config, duracaoTotalTimeline, customDadosEscala, targetElementId) => { let bodyHtml = '<div>'; if (customDadosEscala.length === 0) { bodyHtml += `<p class="text-center text-gray-500 mt-4">Nenhum turno adicionado.</p>`; } else { customDadosEscala.forEach((escala, index) => { const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); let barsHtml = ''; const createBar = (startMin, endMin, color) => { if (endMin <= startMin) return ''; const duration = endMin - startMin; const leftPercent = ((startMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (leftPercent < 0 || widthPercent <= 0) return ''; return `<div class="absolute h-full ${color} rounded" style="left: ${leftPercent}%; width: ${widthPercent}%;"></div>`; }; if (inicioIntervaloMin < fimIntervaloMin && inicioIntervaloMin > inicioEscalaMin && fimIntervaloMin < fimEscalaMin) { barsHtml += createBar(inicioEscalaMin, inicioIntervaloMin, 'bg-green-500'); barsHtml += createBar(inicioIntervaloMin, fimIntervaloMin, 'bg-yellow-500'); barsHtml += createBar(fimIntervaloMin, fimEscalaMin, 'bg-green-500'); } else { barsHtml += createBar(inicioEscalaMin, fimEscalaMin, 'bg-green-500'); } let tempoInfoHtml = `<span class="text-xs text-gray-500 block">${escala.inicio} -<span class="text-gray-400"> ${escala.inicioIntervalo} - ${escala.fimIntervalo}</span> - ${escala.fim}</span>`; let actionsHtml = ''; if (targetElementId === 'timeline-content') { actionsHtml = `<div class="row-actions hidden mt-2 space-x-2"><button class="action-btn edit-btn" data-index="${index}">Editar</button><button class="action-btn delete-btn" data-index="${index}">Excluir</button></div>`; } bodyHtml += `<div class="timeline-row flex items-center py-1 ${targetElementId === 'timeline-content' ? 'cursor-pointer' : ''}"><div class="w-48 flex-shrink-0 pr-4 flex flex-col justify-center"><div><span class="font-bold text-gray-700">${escala.quantidade} Colab.</span>${tempoInfoHtml}</div>${actionsHtml}</div><div class="flex-1 h-8 bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${barsHtml}</div></div>`; }); } bodyHtml += `</div>`; return bodyHtml; };
         const renderizarLinhaDeSoma = (config, duracaoTotalTimeline, customDadosEscala) => { if (customDadosEscala.length === 0) return ''; const perfilCarga = new Array(duracaoTotalTimeline + 1).fill(0); customDadosEscala.forEach(escala => { const quantidade = parseInt(escala.quantidade); const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); for (let min = inicioEscalaMin; min < fimEscalaMin; min++) { const isBreak = (inicioIntervaloMin < fimIntervaloMin && min >= inicioIntervaloMin && min < fimIntervaloMin); if (!isBreak) { const index = min - config.inicioTimeline; if (index >= 0 && index < perfilCarga.length) perfilCarga[index] += quantidade; } } }); let summaryHtml = ''; let lastCount = -1; let blockStartMin = config.inicioTimeline; for (let i = 0; i <= duracaoTotalTimeline; i++) { const currentCount = perfilCarga[i] || 0; const currentMin = config.inicioTimeline + i; if (currentCount !== lastCount && i > 0) { const duration = currentMin - blockStartMin; const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (widthPercent > 0) { const color = lastCount > 0 ? 'bg-blue-600' : 'bg-transparent'; summaryHtml += `<div class="absolute h-full ${color} flex items-center justify-center" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount > 0 ? lastCount : ''}</span></div>`; } blockStartMin = currentMin; } lastCount = currentCount; } const duration = (config.inicioTimeline + duracaoTotalTimeline) - blockStartMin; const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (widthPercent > 0) { const color = lastCount > 0 ? 'bg-blue-600' : 'bg-transparent'; summaryHtml += `<div class="absolute h-full ${color} flex items-center justify-center" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount > 0 ? lastCount : ''}</span></div>`; } return `<div class="summary-row border-t-2 border-gray-300 mt-4 pt-4"><div class="flex items-center my-2 h-10"><div class="w-48 flex-shrink-0 text-center pr-4"><span class="font-bold text-lg text-gray-700">Total</span><span class="text-xs text-gray-500 block">Ativos</span></div><div class="flex-1 h-full bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${summaryHtml}</div></div></div>`; };
         
-        const manipularEnvioFormulario = () => { let errors = []; const novaEscala = { quantidade: quantidadeInput.value, inicio: inicioEscalaInput.value, fim: fimEscalaInput.value, inicioIntervalo: inicioIntervaloInput.value, fimIntervalo: fimIntervaloInput.value }; if (!novaEscala.quantidade || !novaEscala.inicio || !novaEscala.fim) errors.push("Preencha Quantidade, Entrada e Saída do Turno."); if (timeToMinutes(novaEscala.fim) <= timeToMinutes(novaEscala.inicio)) errors.push("A saída do turno deve ser maior que a entrada."); errors = errors.concat(validarTurnoSimples(novaEscala)); if (errors.length > 0) { showInfoModal(errors, 'error'); return; } if(modoEdicao.ativo) { dadosEscala[modoEdicao.index] = novaEscala; } else { dadosEscala.push(novaEscala); } dadosEscala.sort((a, b) => timeToMinutes(a.inicio) - timeToMinutes(b.inicio)); cancelarModoEdicao(); renderizarTimelineCompleta('timeline-content'); };
-        const entrarModoEdicao = (index) => { modoEdicao.ativo = true; modoEdicao.index = index; const escala = dadosEscala[index]; quantidadeInput.value = escala.quantidade; inicioEscalaInput.value = escala.inicio; fimEscalaInput.value = escala.fim; inicioIntervaloInput.value = escala.inicioIntervalo; fimIntervaloInput.value = escala.fimIntervalo; formTitle.textContent = "Editando Turno"; addEscalaBtn.textContent = "Salvar Alterações"; cancelEditBtn.classList.remove('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+        const manipularEnvioFormulario = () => { let errors = []; const novaEscala = { quantidade: quantidadeInput.value, inicio: inicioEscalaInput.value, fim: fimEscalaInput.value, inicioIntervalo: inicioIntervaloInput.value, fimIntervalo: fimIntervaloInput.value }; if (!novaEscala.quantidade || !novaEscala.inicio || !novaEscala.fim) errors.push("Preencha Quantidade, Entrada e Saída do Turno."); if (timeToMinutes(novaEscala.fim) <= timeToMinutes(novaEscala.inicio)) errors.push("A saída do turno deve ser maior que a entrada."); const quantidadeNova = parseInt(novaEscala.quantidade, 10) || 0; const totalProjetado = contarTurnosCriados(modoEdicao.ativo ? modoEdicao.index : null) + quantidadeNova; if (funcionariosLojaCache.length > 0 && totalProjetado > funcionariosLojaCache.length) errors.push(`A loja possui ${funcionariosLojaCache.length} funcionário(s) carregado(s). Reduza a quantidade para não ultrapassar o total disponível.`); errors = errors.concat(validarTurnoSimples(novaEscala)); if (errors.length > 0) { showInfoModal(errors, 'error'); return; } if(modoEdicao.ativo) { dadosEscala[modoEdicao.index] = novaEscala; } else { dadosEscala.push(novaEscala); } dadosEscala.sort((a, b) => timeToMinutes(a.inicio) - timeToMinutes(b.inicio)); cancelarModoEdicao(); renderizarTimelineCompleta('timeline-content'); atualizarContadoresHome(); fecharModalTurno(); };
+        const entrarModoEdicao = (index) => { modoEdicao.ativo = true; modoEdicao.index = index; const escala = dadosEscala[index]; quantidadeInput.value = escala.quantidade; inicioEscalaInput.value = escala.inicio; fimEscalaInput.value = escala.fim; inicioIntervaloInput.value = escala.inicioIntervalo; fimIntervaloInput.value = escala.fimIntervalo; formTitle.textContent = "Editando Turno"; addEscalaBtn.textContent = "Salvar Alterações"; cancelEditBtn.classList.remove('hidden'); abrirModalTurno(); };
         const cancelarModoEdicao = () => { modoEdicao.ativo = false; modoEdicao.index = null; formContainer.reset(); formTitle.textContent = "Adicionar Turno"; addEscalaBtn.textContent = "Adicionar"; cancelEditBtn.classList.add('hidden'); };
         const popularSeletoresData = () => { const hoje = new Date(); const anoAtual = hoje.getFullYear(); const mesAtual = hoje.getMonth(); anoSelect.innerHTML = ''; for (let i = anoAtual - 5; i <= anoAtual + 5; i++) { const option = document.createElement('option'); option.value = i; option.textContent = i; if (i === anoAtual) option.selected = true; anoSelect.appendChild(option); } const nomesMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']; mesSelect.innerHTML = ''; nomesMeses.forEach((nome, index) => { const option = document.createElement('option'); option.value = index; option.textContent = nome; if (index === mesAtual) option.selected = true; mesSelect.appendChild(option); }); };
         
@@ -1170,8 +1200,22 @@
             }
         }, true);
 
+        abrirTurnoModalBtn?.addEventListener('click', abrirModalTurno);
+        closeTurnoModalBtn?.addEventListener('click', () => {
+            cancelarModoEdicao();
+            fecharModalTurno();
+        });
+        turnoModal?.addEventListener('click', (event) => {
+            if (event.target === turnoModal) {
+                cancelarModoEdicao();
+                fecharModalTurno();
+            }
+        });
         addEscalaBtn.addEventListener('click', manipularEnvioFormulario);
-        cancelEditBtn.addEventListener('click', cancelarModoEdicao);
+        cancelEditBtn.addEventListener('click', () => {
+            cancelarModoEdicao();
+            fecharModalTurno();
+        });
         carregarFuncionariosBtn.addEventListener('click', () => carregarFuncionariosDaLoja(false));
         lojaEscalaSelect.addEventListener('change', async () => {
             try {
@@ -1580,6 +1624,7 @@
                 funcionariosLojaCache = [];
                 ausenciasLojaCache = [];
                 funcionariosStatus.textContent = 'Nenhuma loja selecionada';
+                atualizarContadoresHome();
                 return [];
             }
 
@@ -1589,6 +1634,7 @@
                 funcionariosLojaCache = data.funcionarios || [];
                 await carregarAusenciasDaLoja();
                 aplicarAusenciasNoEsqueleto();
+                atualizarContadoresHome();
                 funcionariosStatus.textContent = `${funcionariosLojaCache.length} funcionário(s), ${ausenciasLojaCache.length} ausência(s)`;
                 if (!silent) {
                     showInfoModal(`${funcionariosLojaCache.length} funcionário(s) carregado(s) da loja ${loja}.`, 'success');
@@ -1597,6 +1643,7 @@
             } catch (error) {
                 funcionariosLojaCache = [];
                 funcionariosStatus.textContent = 'Erro ao carregar';
+                atualizarContadoresHome();
                 if (!silent) {
                     showInfoModal(error.message, 'error');
                 }
@@ -2012,11 +2059,13 @@
             if (targetButton.classList.contains('load')) {
                 dadosEscala = JSON.parse(JSON.stringify(escalaAlvo.timelineData || []));
                 renderizarTimelineCompleta('timeline-content');
+                atualizarContadoresHome();
                 carregarEscalaDetalhada(escalaAlvo);
             } 
             else if (targetButton.classList.contains('view-skeleton')) {
                 dadosEscala = JSON.parse(JSON.stringify(escalaAlvo.timelineData || []));
                 renderizarTimelineCompleta('timeline-content');
+                atualizarContadoresHome();
                 carregarEsqueletoSalvo(escalaAlvo);
             }
             else if (targetButton.classList.contains('view-timeline')) {
@@ -2109,6 +2158,7 @@
                 if(result) {
                     dadosEscala.splice(parseInt(deleteBtn.dataset.index), 1); 
                     renderizarTimelineCompleta('timeline-content'); 
+                    atualizarContadoresHome();
                 }
                 return;
             }
@@ -2193,11 +2243,12 @@
             carregarConfiguracoes();
             
             if (getEscalasSalvas().length === 0) {
-                 dadosEscala = [ { quantidade: '2', inicio: '06:00', fim: '15:10', inicioIntervalo: '11:00', fimIntervalo: '12:50' }, { quantidade: '3', inicio: '07:00', fim: '16:10', inicioIntervalo: '12:00', fimIntervalo: '13:50' }, { quantidade: '1', inicio: '14:30', fim: '23:40', inicioIntervalo: '19:30', fimIntervalo: '21:20' }, ]; 
+                 dadosEscala = []; 
             }
             mainTimelineZoomLevel = 1.0;
             applyMainTimelineZoom();
             renderizarTimelineCompleta('timeline-content'); 
+            atualizarContadoresHome();
             handleHashNavigation(); 
             renderizarTabelaRegistros();
 
