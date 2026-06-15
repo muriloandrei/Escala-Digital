@@ -83,6 +83,14 @@ Para recriar a base mock:
 npm run mock:reset
 ```
 
+Para gerar uma massa local maior, mais proxima do uso real com 70 lojas:
+
+```bash
+npm run mock:seed-large
+```
+
+Esse comando recria `data/mock-db.json` com 70 lojas, 560 funcionarios, usuarios por loja, funcoes, secoes e ausencias variadas.
+
 Para rodar os testes das APIs principais:
 
 ```bash

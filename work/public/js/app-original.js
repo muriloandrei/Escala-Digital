@@ -2434,24 +2434,6 @@
                     showInfoModal("Senha incorreta. A exclusão foi cancelada.", "error");
                 }
             }
-            else if (targetButton.classList.contains('backup')) {
-                 const backupData = {
-                    version: '1.0-individual',
-                    createdAt: new Date().toISOString(),
-                    data: escalaAlvo
-                };
-                const jsonString = JSON.stringify(backupData, null, 2);
-                const blob = new Blob([jsonString], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `escala_backup_${escalaAlvo.nome.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${new Date().toISOString().slice(0, 10)}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                showInfoModal(`Backup da escala "${escalaAlvo.nome}" gerado com sucesso!`, 'success');
-            }
         });
 
         tabelaBancoBody.addEventListener('click', async (e) => {
@@ -2607,6 +2589,8 @@
             atualizarContadoresHome();
             handleHashNavigation(); 
             renderizarTabelaRegistros();
+            // Fluxos de importacao/backup local ficam desativados: o banco e a origem oficial.
+            return;
 
             // ==========================================================
             // =========== LÓGICA DE BACKUP E RESTAURAÇÃO ================

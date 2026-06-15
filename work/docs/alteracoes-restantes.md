@@ -23,20 +23,14 @@ Concluido:
 - `/api/state` ajustado para nao bloquear a UI em `DB_DRIVER=oracle`.
 - Salvamento Oracle preparado para transacao unica e revisao automatica por funcionario/mes.
 - Escopo de desenvolvimento Savegnago extraido para `docs/escopo-dev-savegnago.md`.
+- Massa mock grande criada com 70 lojas, 560 funcionarios, funcoes, secoes, usuarios e ausencias variadas.
+- Script `npm run mock:seed-large` criado para recriar a massa grande sem editar JSON manualmente.
 
 ## Fase 1. Fechar simulacao local
 
-1. Criar massa mock maior:
-   - 70 lojas.
-   - funcionarios por loja.
-   - secoes.
-   - funcoes.
-   - ausencias variadas.
-   - usuarios com perfis diferentes.
-2. Criar seed ou script para popular massa grande sem editar JSON manualmente.
-3. Testar performance da UI com volume parecido com o real.
-4. Corrigir textos com acentuacao quebrada herdados do arquivo original.
-5. Remover ou empacotar dependencias via CDN se a rede interna nao tiver internet.
+1. Testar performance da UI com volume parecido com o real.
+2. Corrigir textos com acentuacao quebrada herdados do arquivo original.
+3. Remover ou empacotar dependencias via CDN se a rede interna nao tiver internet.
 
 ## Fase 2. Fechar regras de escala
 
