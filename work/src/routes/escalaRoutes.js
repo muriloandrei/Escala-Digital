@@ -13,14 +13,10 @@ const saveSchema = z.object({
   escalaOrigemId: z.number().int().positive().optional(),
   funcionarios: z.array(z.object({
     escfuncId: z.number().int().positive(),
-    
-    // Tornamos tolerante: aceita string, converte pra número, e aceita minúsculo ou maiúsculo
     escsecaoId: z.coerce.number().int().positive().optional(),
     ESCSECAO_ID: z.coerce.number().int().positive().optional(),
-    escfuncaoId: z.coerce.number().int().positive().optional(), // <-- Adicione aqui
-    ESCFUNCAO_ID: z.coerce.number().int().positive().optional(), // <-- Adicione aqui
-    
-    
+    escfuncaoId: z.coerce.number().int().positive().optional(), 
+    ESCFUNCAO_ID: z.coerce.number().int().positive().optional(), 
     chapa: z.string().min(1).max(8),
     escsecaoId: z.number().int().positive().nullable().optional(),
     escfuncaoId: z.number().int().positive().nullable().optional(),
