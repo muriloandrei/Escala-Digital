@@ -79,6 +79,19 @@ async function saveEscala({ lojaId, mesRef, escalaOrigemId, funcionario, dias, o
 }
 
 async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dias, oficializada = 0 }) {
+  // === TRAVA DE SEGURANÇA ===
+  // Se o front-end não enviar a seção, o back-end busca direto do banco!
+  let escsecaoId = funcionario.escsecaoId || funcionario.ESCSECAO_ID;
+  
+  if (!escsecaoId) {
+    const funcResult = await connection.execute(
+      `select escsecao_id from sgn_esc_funcionario where escfunc_id = :id`,
+      { id: funcionario.escfuncId || funcionario.ESCFUNC_ID },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    escsecaoId = funcResult.rows[0]?.ESCSECAO_ID;
+  }
+
   const revisionResult = await connection.execute(
     `select nvl(max(revisao), 0) + 1 as revisao
      from sgn_esc_prog
@@ -108,7 +121,7 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
       chapa: funcionario.chapa || funcionario.CHAPA,
       revisao,
       oficializada,
-      escsecaoId: funcionario.escsecaoId || funcionario.ESCSECAO_ID,
+      escsecaoId: escsecaoId, // Usando a variável blindada que criamos acima
       escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
     },
     { autoCommit: false }
