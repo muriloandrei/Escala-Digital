@@ -68,6 +68,7 @@ router.get('/:escprogId/dias', async (req, res, next) => {
 
 router.post('/', requireLojaAccess, async (req, res, next) => {
   try {
+    console.log("=== DADO BRUTO DO FRONTEND ===", JSON.stringify(req.body.funcionarios[0]));
     const payload = saveSchema.parse(req.body);
     const ruleErrors = validateEscalaPayload(payload);
     if (ruleErrors.length > 0) {
