@@ -35,10 +35,6 @@ async function listEscalas({ lojaId, mesRef }) {
   });
 }
 
-    return result.rows;
-  });
-}
-
 async function getEscalaHeader(escprogId) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
@@ -112,7 +108,6 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
       chapa: funcionario.chapa || funcionario.CHAPA,
       revisao,
       oficializada,
-      // Mapeando a seção para evitar o ORA-01400 (suportando camelCase ou o retorno nativo UPPERCASE do oracledb)
       escsecaoId: funcionario.escsecaoId || funcionario.ESCSECAO_ID,
       escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
     },
