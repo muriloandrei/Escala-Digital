@@ -13,13 +13,11 @@ const saveSchema = z.object({
   escalaOrigemId: z.number().int().positive().optional(),
   funcionarios: z.array(z.object({
     escfuncId: z.number().int().positive(),
-    escsecaoId: z.coerce.number().int().positive().optional(),
-    ESCSECAO_ID: z.coerce.number().int().positive().optional(),
-    escfuncaoId: z.coerce.number().int().positive().optional(), 
-    ESCFUNCAO_ID: z.coerce.number().int().positive().optional(), 
     chapa: z.string().min(1).max(8),
-    escsecaoId: z.number().int().positive().nullable().optional(),
-    escfuncaoId: z.number().int().positive().nullable().optional(),
+    escsecaoId: z.coerce.number().int().positive().nullable().optional(),
+    ESCSECAO_ID: z.coerce.number().int().positive().nullable().optional(),
+    escfuncaoId: z.coerce.number().int().positive().nullable().optional(),
+    ESCFUNCAO_ID: z.coerce.number().int().positive().nullable().optional(),
     dias: z.array(z.object({
       data: z.string().min(10).max(10),
       hrEnt1: z.string().max(5).nullable().optional(),
@@ -31,6 +29,13 @@ const saveSchema = z.object({
   })),
   oficializada: z.number().int().min(0).max(1).optional()
 });
+const diaSchema = z.object({
+  HR_ENT1: z.string().max(5),
+  HR_SAI1: z.string().max(5),
+  HR_ENT2: z.string().max(5),
+  HR_SAI2: z.string().max(5),
+  PROGRAMACAO: z.string().max(3).optional().default('TRB')
+}).strict();
 
 router.use(requireAuth);
 
@@ -47,6 +52,11 @@ async function resolveLojaRequest(req, res, next) {
   } catch (error) {
     return next(error);
   }
+}
+
+function canAccessLoja(req, loja) {
+  const lojas = req.user?.lojas || [];
+  return lojas.includes(Number(loja)) || (req.user?.perfil === 'ADMIN' && lojas.length === 0);
 }
 
 router.get('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
@@ -72,7 +82,7 @@ router.get('/:escprogId/dias', async (req, res, next) => {
     }
 
     const loja = Number(header.LOJA);
-    if (req.user.perfil !== 'ADMIN' && !req.user.lojas.includes(loja)) {
+    if (!canAccessLoja(req, loja)) {
       return res.status(403).json({ error: 'Usuario sem permissao para esta escala.' });
     }
 
@@ -83,9 +93,40 @@ router.get('/:escprogId/dias', async (req, res, next) => {
   }
 });
 
+router.patch('/:escprogId/dias/:escprogdiaId', async (req, res, next) => {
+  try {
+    const header = await escalaService.getEscalaHeader(Number(req.params.escprogId));
+    if (!header) {
+      return res.status(404).json({ error: 'Escala nao encontrada.' });
+    }
+
+    const loja = Number(header.LOJA);
+    if (!canAccessLoja(req, loja)) {
+      return res.status(403).json({ error: 'Usuario sem permissao para esta escala.' });
+    }
+
+    const data = diaSchema.parse(req.body);
+    const dia = await escalaService.updateEscalaDia({
+      escprogId: Number(req.params.escprogId),
+      escprogdiaId: Number(req.params.escprogdiaId),
+      data
+    });
+
+    if (!dia) {
+      return res.status(404).json({ error: 'Dia da escala nao encontrado.' });
+    }
+
+    return res.json({ dia });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos do dia invalidos.', details: error.errors });
+    }
+    return next(error);
+  }
+});
+
 router.post('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
-    console.log("=== DADO BRUTO DO FRONTEND ===", JSON.stringify(req.body.funcionarios[0]));
     const payload = saveSchema.parse(req.body);
     const ruleErrors = validateEscalaPayload(payload);
     if (ruleErrors.length > 0) {

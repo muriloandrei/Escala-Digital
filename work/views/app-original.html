@@ -29,6 +29,7 @@
                     <li><a href="#/home" id="nav-timeline" class="active"><span class="material-symbols-outlined">schedule</span><span class="nav-label">Home</span></a></li>
                     <li><a href="#/escalas" id="nav-registros"><span class="material-symbols-outlined">wysiwyg</span><span class="nav-label">Escalas Geradas</span></a></li>
                     <li><a href="#/funcionarios" id="nav-funcionarios"><span class="material-symbols-outlined">badge</span><span class="nav-label">FuncionÃ¡rios</span></a></li>
+                    <li><a href="#/secoes" id="nav-secoes"><span class="material-symbols-outlined">account_tree</span><span class="nav-label">Seções</span></a></li>
                     <li><a href="#/acessos" id="nav-acessos"><span class="material-symbols-outlined">admin_panel_settings</span><span class="nav-label">Controle de Acesso</span></a></li>
                     <li><a href="#/configuracoes" id="nav-settings"><span class="material-symbols-outlined">settings</span><span class="nav-label">ConfiguraÃ§Ãµes</span></a></li>
                 </ul>
@@ -58,6 +59,9 @@
                 <header class="main-header">
                     <h1>Home</h1>
                     <div class="header-actions">
+                        <input id="homeDataInput" type="date" class="rounded-md border-gray-300 shadow-sm text-sm h-10">
+                        <select id="homeLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                        <input id="homeBuscaChapaInput" type="search" class="rounded-md border-gray-300 shadow-sm text-sm h-10" placeholder="Buscar chapa...">
                         <button id="abrirTurnoModalBtn" type="button" class="action-button secondary">
                             <span class="material-symbols-outlined">add_circle</span>
                             Adicionar Turno
@@ -77,12 +81,14 @@
                                 <button id="closeTurnoModalBtn" type="button" class="text-gray-500 hover:text-gray-800 text-3xl font-bold" title="Fechar" aria-label="Fechar modal">&times;</button>
                             </div>
                             <div class="space-y-4">
-                                <div><label for="quantidade" class="block text-sm font-medium text-gray-700">Quantidade</label><input type="number" id="quantidade" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Ex: 6"></div>
-                                <div><label for="inicioEscala" class="block text-sm font-medium text-gray-700">Entrada do Turno</label><input type="time" id="inicioEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></div>
-                                <div><label for="inicioIntervalo" class="block text-sm font-medium text-gray-700">InÃ­cio do Intervalo</label><input type="time" id="inicioIntervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></div>
-                                <div><label for="fimIntervalo" class="block text-sm font-medium text-gray-700">Fim do Intervalo</label><input type="time" id="fimIntervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></div>
-                                <div><label for="fimEscala" class="block text-sm font-medium text-gray-700">SaÃ­da do Turno</label><input type="time" id="fimEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></div>
-                                <div class="flex space-x-2">
+                                <div><label for="secaoTurnoSelect" class="block text-sm font-medium text-gray-700">Seção</label><select id="secaoTurnoSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select></div>
+                                <div><label for="quantidade" class="block text-sm font-medium text-gray-700">Colaboradores previstos</label><input type="number" id="quantidade" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div><label for="inicioEscala" class="block text-sm font-medium text-gray-700">Entrada 1</label><input type="time" id="inicioEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
+                                    <div><label for="inicioIntervalo" class="block text-sm font-medium text-gray-700">Saída 1</label><input type="time" id="inicioIntervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
+                                    <div><label for="fimIntervalo" class="block text-sm font-medium text-gray-700">Entrada 2</label><input type="time" id="fimIntervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
+                                    <div><label for="fimEscala" class="block text-sm font-medium text-gray-700">Saída 2</label><input type="time" id="fimEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
+                                </div>                                <div class="flex space-x-2">
                                     <button id="addEscalaBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Adicionar</button>
                                     <button id="cancelEditBtn" type="button" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300 hidden">Cancelar EdiÃ§Ã£o</button>
                                 </div>
@@ -250,6 +256,78 @@
                 </div>
             </div>
 
+            <div id="secoes-page" class="hidden">
+                <header class="main-header">
+                    <h1>Seções</h1>
+                    <div class="header-actions">
+                        <select id="secoesLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                        <button class="action-button secondary" id="carregarSecoesBtn">
+                            <span class="material-symbols-outlined">refresh</span>
+                            Carregar
+                        </button>
+                    </div>
+                </header>
+
+                <div class="table-card">
+                    <div class="table-card-header">
+                        <h2 id="secoesTitulo">Seções cadastradas</h2>
+                        <p class="table-card-subtitle">Cada seção pode ter um turno padrão usado pelo gerador de escala.</p>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Descrição</th>
+                                <th>Colaboradores</th>
+                                <th>Entrada 1</th>
+                                <th>Saída 1</th>
+                                <th>Entrada 2</th>
+                                <th>Saída 2</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-secoes-body">
+                            <tr><td colspan="8" class="text-center text-gray-500 py-8">Selecione uma loja e carregue as seções.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="escala-detalhe-page" class="hidden">
+                <header class="main-header">
+                    <h1>Detalhamento da Escala</h1>
+                    <div class="header-actions">
+                        <select id="detalheMesSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                        <button class="action-button secondary" id="voltarEscalasBtn">
+                            <span class="material-symbols-outlined">arrow_back</span>
+                            Voltar
+                        </button>
+                    </div>
+                </header>
+
+                <div class="table-card">
+                    <div class="table-card-header">
+                        <h2 id="escalaDetalheTitulo">Dias da escala</h2>
+                        <p id="escalaDetalheResumo" class="table-card-subtitle">Selecione uma escala no banco para consultar os dias.</p>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Programação</th>
+                                <th>Entrada 1</th>
+                                <th>Saída 1</th>
+                                <th>Entrada 2</th>
+                                <th>Saída 2</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-escala-detalhe-body">
+                            <tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhuma escala selecionada.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
             <div id="settings-page" class="hidden">
                  <header class="main-header"><h1>ConfiguraÃ§Ãµes</h1></header>
                 <div class="bg-white p-6 rounded-xl shadow-md w-full max-w-2xl mx-auto">

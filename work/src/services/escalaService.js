@@ -102,7 +102,7 @@ async function getEscalaDias(escprogId) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
-       from sgn_esc_prog_dia
+       from esc_prog_dia
        where escprog_id = :escprogId
        order by dt`,
       { escprogId },
@@ -110,6 +110,44 @@ async function getEscalaDias(escprogId) {
     );
 
     return result.rows;
+  });
+}
+
+async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `update esc_prog_dia
+       set hr_ent1 = :hrEnt1,
+           hr_sai1 = :hrSai1,
+           hr_ent2 = :hrEnt2,
+           hr_sai2 = :hrSai2,
+           programacao = :programacao
+       where escprogdia_id = :escprogdiaId
+         and escprog_id = :escprogId`,
+      {
+        escprogId,
+        escprogdiaId,
+        hrEnt1: data.HR_ENT1,
+        hrSai1: data.HR_SAI1,
+        hrEnt2: data.HR_ENT2,
+        hrSai2: data.HR_SAI2,
+        programacao: data.PROGRAMACAO
+      },
+      { autoCommit: true }
+    );
+
+    if (result.rowsAffected === 0) return null;
+
+    const updated = await connection.execute(
+      `select escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+       from esc_prog_dia
+       where escprogdia_id = :escprogdiaId
+         and escprog_id = :escprogId`,
+      { escprogId, escprogdiaId },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return updated.rows[0] || null;
   });
 }
 
@@ -178,7 +216,7 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
 
   if (binds.length > 0) {
     await connection.executeMany(
-      `insert into sgn_esc_prog_dia (
+      `insert into esc_prog_dia (
           escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
        ) values (
           sgn_esc_prog_dia_seq.nextval, :escprogId, to_date(:dt, 'YYYY-MM-DD'), :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :programacao
@@ -248,6 +286,7 @@ module.exports = {
   listEscalas,
   getEscalaHeader,
   getEscalaDias,
+  updateEscalaDia,
   saveEscala,
   saveEscalasBatch,
   validateAusencias

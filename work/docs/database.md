@@ -48,6 +48,27 @@ create table SGN_ESC_AUDITORIA (
 );
 ```
 
+## Tabela complementar para turnos por secao
+
+A tabela `SGN_ESC_SECAO` contem o cadastro da secao, mas nao possui os horarios do turno padrao. Para a tela `Secoes` e para o gerador criar turnos por secao, crie a tabela complementar abaixo:
+
+```sql
+create table SGN_ESC_SECAO_TURNO (
+  ESCSECAOTURNO_ID number(15) not null,
+  ESCSECAO_ID number(15) not null,
+  HR_ENT1 varchar2(5) not null,
+  HR_SAI1 varchar2(5) not null,
+  HR_ENT2 varchar2(5) not null,
+  HR_SAI2 varchar2(5) not null,
+  QTDE_COLABORADORES number(5) not null,
+  DT_HR_INCL date default sysdate not null,
+  constraint SGN_ESC_SECAO_TURNO_PK primary key (ESCSECAOTURNO_ID),
+  constraint SGN_ESC_SECAO_TURNO_1_UK unique (ESCSECAO_ID),
+  constraint SGN_ESC_SECAO_TURNO_1_FK foreign key (ESCSECAO_ID)
+    references SGN_ESC_SECAO (ESCSECAO_ID)
+);
+```
+
 ## Sequences esperadas
 
 O backend inicial usa sequences para inserts:
@@ -55,6 +76,7 @@ O backend inicial usa sequences para inserts:
 ```sql
 create sequence SGN_ESC_PROG_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_PROG_DIA_SEQ start with 1 increment by 1 nocache;
+create sequence SGN_ESC_SECAO_TURNO_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_USUARIO_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_AUDITORIA_SEQ start with 1 increment by 1 nocache;
 ```
@@ -92,4 +114,4 @@ from SGN_ESC_USUARIO
 where LOGIN = 'admin';
 ```
 
-Para usuario `ADMIN`, o backend permite acessar todas as lojas mesmo se a tabela de vinculo tiver apenas uma loja. Para perfis nao admin, vincular todas as lojas permitidas em `SGN_ESC_USUARIO_LOJA`.
+Quando o usuario possui lojas em `SGN_ESC_USUARIO_LOJA`, os filtros exibem apenas essas lojas. Para `ADMIN`, o backend so libera todas as lojas quando nao existe nenhum vinculo cadastrado para o usuario.

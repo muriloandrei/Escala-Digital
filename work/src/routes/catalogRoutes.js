@@ -13,6 +13,14 @@ const funcionarioEscalaSchema = z.object({
   HR_SAI2: z.string().max(5).nullable().optional()
 }).strict();
 
+const secaoTurnoSchema = z.object({
+  HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_SAI1: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_SAI2: z.string().regex(/^\d{2}:\d{2}$/),
+  QTDE_COLABORADORES: z.number().int().positive().max(500)
+}).strict();
+
 router.use(requireAuth);
 
 async function resolveLojaParam(req, res, next) {
@@ -29,7 +37,7 @@ router.get('/lojas', async (req, res, next) => {
   try {
     const lojas = await catalogService.listLojas();
     const lojasUsuario = new Set((req.user.lojas || []).map(Number));
-    const allowed = req.user.perfil === 'ADMIN'
+    const allowed = lojasUsuario.size === 0 && req.user.perfil === 'ADMIN'
       ? lojas
       : lojas.filter((loja) => {
         return lojasUsuario.has(Number(loja.LOJA)) || lojasUsuario.has(Number(loja.ESCLOJA_ID));
@@ -47,6 +55,37 @@ router.get('/lojas/:lojaId/funcionarios', resolveLojaParam, requireLojaAccess, a
     res.json({ funcionarios });
   } catch (error) {
     next(error);
+  }
+});
+
+router.get('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+  try {
+    const secoes = await catalogService.listSecoesByLoja(Number(req.params.lojaId));
+    res.json({ secoes });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/lojas/:lojaId/secoes/:escsecaoId/turno', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+  try {
+    const data = secaoTurnoSchema.parse(req.body);
+    const secao = await catalogService.upsertSecaoTurno({
+      lojaId: Number(req.params.lojaId),
+      escsecaoId: Number(req.params.escsecaoId),
+      data
+    });
+
+    if (!secao) {
+      return res.status(404).json({ error: 'Secao nao encontrada para a loja.' });
+    }
+
+    return res.json({ secao });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos de turno da secao invalidos.', details: error.errors });
+    }
+    return next(error);
   }
 });
 

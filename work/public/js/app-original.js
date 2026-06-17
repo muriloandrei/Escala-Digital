@@ -2,12 +2,15 @@
         const timelinePage = document.getElementById('timeline-page');
         const registrosPage = document.getElementById('registros-page');
         const funcionariosPage = document.getElementById('funcionarios-page');
+        const secoesPage = document.getElementById('secoes-page');
+        const escalaDetalhePage = document.getElementById('escala-detalhe-page');
         const acessosPage = document.getElementById('acessos-page');
         const settingsPage = document.getElementById('settings-page');
         
         const navTimeline = document.getElementById('nav-timeline');
         const navRegistros = document.getElementById('nav-registros');
         const navFuncionarios = document.getElementById('nav-funcionarios');
+        const navSecoes = document.getElementById('nav-secoes');
         const navAcessos = document.getElementById('nav-acessos');
         const navSettings = document.getElementById('nav-settings');
         
@@ -22,6 +25,15 @@
         const carregarFuncionariosTelaBtn = document.getElementById('carregarFuncionariosTelaBtn');
         const funcionariosTitulo = document.getElementById('funcionariosTitulo');
         const tabelaFuncionariosBody = document.getElementById('tabela-funcionarios-body');
+        const secoesLojaSelect = document.getElementById('secoesLojaSelect');
+        const carregarSecoesBtn = document.getElementById('carregarSecoesBtn');
+        const secoesTitulo = document.getElementById('secoesTitulo');
+        const tabelaSecoesBody = document.getElementById('tabela-secoes-body');
+        const detalheMesSelect = document.getElementById('detalheMesSelect');
+        const voltarEscalasBtn = document.getElementById('voltarEscalasBtn');
+        const escalaDetalheTitulo = document.getElementById('escalaDetalheTitulo');
+        const escalaDetalheResumo = document.getElementById('escalaDetalheResumo');
+        const tabelaEscalaDetalheBody = document.getElementById('tabela-escala-detalhe-body');
         const carregarAcessosBtn = document.getElementById('carregarAcessosBtn');
         const tabelaAcessosBody = document.getElementById('tabela-acessos-body');
         let novoUsuarioBtn = null;
@@ -32,6 +44,9 @@
         const abrirTurnoModalBtn = document.getElementById('abrirTurnoModalBtn');
         const turnoModal = document.getElementById('turnoModal');
         const closeTurnoModalBtn = document.getElementById('closeTurnoModalBtn');
+        const homeDataInput = document.getElementById('homeDataInput');
+        const homeLojaSelect = document.getElementById('homeLojaSelect');
+        const homeBuscaChapaInput = document.getElementById('homeBuscaChapaInput');
         const funcionariosLojaCount = document.getElementById('funcionariosLojaCount');
         const turnosCriadosCount = document.getElementById('turnosCriadosCount');
         const turnosRestantesCount = document.getElementById('turnosRestantesCount');
@@ -39,9 +54,11 @@
         const pageTitles = {
             home: 'Home',
             escalas: 'Escalas Geradas',
-            funcionarios: 'Funcionários',
+            funcionarios: 'Funcionarios',
+            secoes: 'Secoes',
+            escalaBanco: 'Detalhamento da Escala',
             acessos: 'Controle de Acesso',
-            configuracoes: 'Configurações'
+            configuracoes: 'Configuracoes'
         };
 
         const setCurrentPageTitle = (key) => {
@@ -50,70 +67,83 @@
             }
         };
 
-        function showTimelinePage() {
-            timelinePage.classList.remove('hidden');
+        function hideAllPages() {
+            timelinePage.classList.add('hidden');
             registrosPage.classList.add('hidden');
             funcionariosPage.classList.add('hidden');
+            secoesPage.classList.add('hidden');
+            escalaDetalhePage.classList.add('hidden');
             acessosPage.classList.add('hidden');
             settingsPage.classList.add('hidden');
             navLinks.forEach(link => link.classList.remove('active'));
+        }
+
+        function showTimelinePage() {
+            hideAllPages();
+            timelinePage.classList.remove('hidden');
             navTimeline.classList.add('active');
             setCurrentPageTitle('home');
         }
 
         function showRegistrosPage() {
-            timelinePage.classList.add('hidden');
+            hideAllPages();
             registrosPage.classList.remove('hidden');
-            funcionariosPage.classList.add('hidden');
-            acessosPage.classList.add('hidden');
-            settingsPage.classList.add('hidden');
-            navLinks.forEach(link => link.classList.remove('active'));
             navRegistros.classList.add('active');
             setCurrentPageTitle('escalas');
             renderizarTabelaRegistros();
         }
 
         function showFuncionariosPage() {
-            timelinePage.classList.add('hidden');
-            registrosPage.classList.add('hidden');
+            hideAllPages();
             funcionariosPage.classList.remove('hidden');
-            acessosPage.classList.add('hidden');
-            settingsPage.classList.add('hidden');
-            navLinks.forEach(link => link.classList.remove('active'));
             navFuncionarios.classList.add('active');
             setCurrentPageTitle('funcionarios');
             carregarFuncionariosTela(false).catch(error => showInfoModal(error.message, 'error'));
         }
 
+        function showSecoesPage() {
+            hideAllPages();
+            secoesPage.classList.remove('hidden');
+            navSecoes.classList.add('active');
+            setCurrentPageTitle('secoes');
+            carregarSecoesTela(false).catch(error => showInfoModal(error.message, 'error'));
+        }
+
+        function showEscalaDetalhePage(escprogId) {
+            hideAllPages();
+            escalaDetalhePage.classList.remove('hidden');
+            navRegistros.classList.add('active');
+            setCurrentPageTitle('escalaBanco');
+            carregarDetalheEscalaBanco(escprogId).catch(error => showInfoModal(error.message, 'error'));
+        }
+
         function showAcessosPage() {
-            timelinePage.classList.add('hidden');
-            registrosPage.classList.add('hidden');
-            funcionariosPage.classList.add('hidden');
+            hideAllPages();
             acessosPage.classList.remove('hidden');
-            settingsPage.classList.add('hidden');
-            navLinks.forEach(link => link.classList.remove('active'));
             navAcessos.classList.add('active');
             setCurrentPageTitle('acessos');
             carregarAcessosTela(false);
         }
 
         function showSettingsPage() {
-            timelinePage.classList.add('hidden');
-            registrosPage.classList.add('hidden');
-            funcionariosPage.classList.add('hidden');
-            acessosPage.classList.add('hidden');
+            hideAllPages();
             settingsPage.classList.remove('hidden');
-            navLinks.forEach(link => link.classList.remove('active'));
             navSettings.classList.add('active');
             setCurrentPageTitle('configuracoes');
             renderizarRolesSettings().catch(error => showInfoModal(error.message, 'error'));
         }
 
         function navigateToPage(pageKey) {
+            if (pageKey.startsWith('escala-banco/')) {
+                showEscalaDetalhePage(pageKey.split('/')[1]);
+                return;
+            }
+
             const routes = {
                 home: showTimelinePage,
                 escalas: showRegistrosPage,
                 funcionarios: showFuncionariosPage,
+                secoes: showSecoesPage,
                 acessos: showAcessosPage,
                 configuracoes: showSettingsPage
             };
@@ -129,12 +159,13 @@
         navTimeline.addEventListener('click', () => { window.location.hash = '/home'; });
         navRegistros.addEventListener('click', () => { window.location.hash = '/escalas'; });
         navFuncionarios.addEventListener('click', () => { window.location.hash = '/funcionarios'; });
+        navSecoes.addEventListener('click', () => { window.location.hash = '/secoes'; });
         navAcessos.addEventListener('click', () => { window.location.hash = '/acessos'; });
         navSettings.addEventListener('click', () => { window.location.hash = '/configuracoes'; });
+        voltarEscalasBtn?.addEventListener('click', () => { window.location.hash = '/escalas'; });
         window.addEventListener('hashchange', handleHashNavigation);
         salvarSettingsBtn.addEventListener('click', (e) => { e.preventDefault(); salvarConfiguracoes(); });
-        goToTimelineBtn.addEventListener('click', (e) => { e.preventDefault(); window.location.hash = '/home'; });
-        consultarBancoBtn.addEventListener('click', async (e) => {
+        goToTimelineBtn.addEventListener('click', (e) => { e.preventDefault(); window.location.hash = '/home'; });        consultarBancoBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             try {
                 await consultarEscalasBancoLocal();
@@ -159,6 +190,7 @@
         const horaFimTimelineInput = document.getElementById('horaFimTimeline');
         const intervaloMarcacaoInput = document.getElementById('intervaloMarcacao');
         const quantidadeInput = document.getElementById('quantidade');
+        const secaoTurnoSelect = document.getElementById('secaoTurnoSelect');
         const inicioEscalaInput = document.getElementById('inicioEscala');
         const fimEscalaInput = document.getElementById('fimEscala');
         const inicioIntervaloInput = document.getElementById('inicioIntervalo');
@@ -219,6 +251,8 @@
         let currentLoadedScale = null;
         let funcionariosLojaCache = [];
         let ausenciasLojaCache = [];
+        let secoesLojaCache = [];
+        let escalaDetalheAtual = { escprogId: null, dias: [] };
         let lojasPermitidasCache = [];
         let usuarioSessaoCache = null;
         let usuariosAcessoCache = [];
@@ -262,6 +296,41 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+
+        const getSecaoTurnoPadrao = (secao) => (secao?.TURNOS || [])[0] || null;
+
+        const getSecaoLabel = (secao) => {
+            const codigo = secao?.COD_SECAO ? `${secao.COD_SECAO} - ` : '';
+            return `${codigo}${secao?.DESCR || `Secao ${secao?.ESCSECAO_ID || ''}`}`;
+        };
+
+        const popularSelectSecoesTurno = () => {
+            if (!secaoTurnoSelect) return;
+            secaoTurnoSelect.innerHTML = '<option value="">Selecione uma secao com turno cadastrado</option>';
+            secoesLojaCache.forEach((secao) => {
+                const turno = getSecaoTurnoPadrao(secao);
+                if (!turno) return;
+                const option = document.createElement('option');
+                option.value = secao.ESCSECAO_ID;
+                option.textContent = getSecaoLabel(secao);
+                option.dataset.secaoDescr = secao.DESCR || '';
+                option.dataset.hrEnt1 = turno.HR_ENT1 || '';
+                option.dataset.hrSai1 = turno.HR_SAI1 || '';
+                option.dataset.hrEnt2 = turno.HR_ENT2 || '';
+                option.dataset.hrSai2 = turno.HR_SAI2 || '';
+                option.dataset.qtde = turno.QTDE_COLABORADORES || '';
+                secaoTurnoSelect.appendChild(option);
+            });
+        };
+
+        const aplicarSecaoSelecionadaNoFormulario = () => {
+            const option = secaoTurnoSelect?.selectedOptions?.[0];
+            quantidadeInput.value = option?.dataset.qtde || '';
+            inicioEscalaInput.value = option?.dataset.hrEnt1 || '';
+            inicioIntervaloInput.value = option?.dataset.hrSai1 || '';
+            fimIntervaloInput.value = option?.dataset.hrEnt2 || '';
+            fimEscalaInput.value = option?.dataset.hrSai2 || '';
+        };
 
         const getFuncionarioOptionValue = (funcionario) => String(funcionario?.ESCFUNC_ID || funcionario?.CHAPA || '');
 
@@ -358,13 +427,12 @@
 
 
         const renderizarCabecalho = (config, duracaoTotalTimeline) => { let markersHtml = ''; for (let min = config.inicioTimeline; min <= config.fimTimeline; min += config.intervaloMarcacao) { const percentLeft = ((min - config.inicioTimeline) / duracaoTotalTimeline) * 100; markersHtml += `<div class="absolute text-xs text-gray-500" style="left: ${percentLeft}%;"><span class="transform -translate-x-1/2 inline-block">${minutesToTime(min)}</span></div>`; } return `<div class="relative z-10 mb-3"><div class="flex items-center h-10"><div class="w-48 flex-shrink-0 pr-4"></div><div class="flex-1 h-full relative border-b-2 border-gray-200">${markersHtml}</div></div></div>`; };
-        const renderizarCorpo = (config, duracaoTotalTimeline, customDadosEscala, targetElementId) => { let bodyHtml = '<div>'; if (customDadosEscala.length === 0) { bodyHtml += `<p class="text-center text-gray-500 mt-4">Nenhum turno adicionado.</p>`; } else { customDadosEscala.forEach((escala, index) => { const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); let barsHtml = ''; const createBar = (startMin, endMin, color) => { if (endMin <= startMin) return ''; const duration = endMin - startMin; const leftPercent = ((startMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (leftPercent < 0 || widthPercent <= 0) return ''; return `<div class="absolute h-full ${color} rounded" style="left: ${leftPercent}%; width: ${widthPercent}%;"></div>`; }; if (inicioIntervaloMin < fimIntervaloMin && inicioIntervaloMin > inicioEscalaMin && fimIntervaloMin < fimEscalaMin) { barsHtml += createBar(inicioEscalaMin, inicioIntervaloMin, 'bg-green-500'); barsHtml += createBar(inicioIntervaloMin, fimIntervaloMin, 'bg-yellow-500'); barsHtml += createBar(fimIntervaloMin, fimEscalaMin, 'bg-green-500'); } else { barsHtml += createBar(inicioEscalaMin, fimEscalaMin, 'bg-green-500'); } let tempoInfoHtml = `<span class="text-xs text-gray-500 block">${escala.inicio} -<span class="text-gray-400"> ${escala.inicioIntervalo} - ${escala.fimIntervalo}</span> - ${escala.fim}</span>`; let actionsHtml = ''; if (targetElementId === 'timeline-content') { actionsHtml = `<div class="row-actions hidden mt-2 space-x-2"><button class="action-btn edit-btn" data-index="${index}">Editar</button><button class="action-btn delete-btn" data-index="${index}">Excluir</button></div>`; } bodyHtml += `<div class="timeline-row flex items-center py-1 ${targetElementId === 'timeline-content' ? 'cursor-pointer' : ''}"><div class="w-48 flex-shrink-0 pr-4 flex flex-col justify-center"><div><span class="font-bold text-gray-700">${escala.quantidade} Colab.</span>${tempoInfoHtml}</div>${actionsHtml}</div><div class="flex-1 h-8 bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${barsHtml}</div></div>`; }); } bodyHtml += `</div>`; return bodyHtml; };
+        const renderizarCorpo = (config, duracaoTotalTimeline, customDadosEscala, targetElementId) => { let bodyHtml = '<div>'; if (customDadosEscala.length === 0) { bodyHtml += `<p class="text-center text-gray-500 mt-4">Nenhum turno adicionado.</p>`; } else { customDadosEscala.forEach((escala, index) => { const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); let barsHtml = ''; const createBar = (startMin, endMin, color) => { if (endMin <= startMin) return ''; const duration = endMin - startMin; const leftPercent = ((startMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (leftPercent < 0 || widthPercent <= 0) return ''; return `<div class="absolute h-full ${color} rounded" style="left: ${leftPercent}%; width: ${widthPercent}%;"></div>`; }; if (inicioIntervaloMin < fimIntervaloMin && inicioIntervaloMin > inicioEscalaMin && fimIntervaloMin < fimEscalaMin) { barsHtml += createBar(inicioEscalaMin, inicioIntervaloMin, 'bg-green-500'); barsHtml += createBar(inicioIntervaloMin, fimIntervaloMin, 'bg-yellow-500'); barsHtml += createBar(fimIntervaloMin, fimEscalaMin, 'bg-green-500'); } else { barsHtml += createBar(inicioEscalaMin, fimEscalaMin, 'bg-green-500'); } let tempoInfoHtml = `<span class="text-xs text-gray-500 block">${escala.inicio} -<span class="text-gray-400"> ${escala.inicioIntervalo} - ${escala.fimIntervalo}</span> - ${escala.fim}</span>`; let actionsHtml = ''; if (targetElementId === 'timeline-content') { actionsHtml = `<div class="row-actions hidden mt-2 space-x-2"><button class="action-btn edit-btn" data-index="${index}">Editar</button><button class="action-btn delete-btn" data-index="${index}">Excluir</button></div>`; } bodyHtml += `<div class="timeline-row flex items-center py-1 ${targetElementId === 'timeline-content' ? 'cursor-pointer' : ''}"><div class="w-48 flex-shrink-0 pr-4 flex flex-col justify-center"><div><span class="font-bold text-gray-700">${escala.quantidade} Colab.</span><span class="text-xs text-gray-600 block">${escapeHtml(escala.secaoNome || "Sem secao")}</span>${tempoInfoHtml}</div>${actionsHtml}</div><div class="flex-1 h-8 bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${barsHtml}</div></div>`; }); } bodyHtml += `</div>`; return bodyHtml; };
         const renderizarLinhaDeSoma = (config, duracaoTotalTimeline, customDadosEscala) => { if (customDadosEscala.length === 0) return ''; const perfilCarga = new Array(duracaoTotalTimeline + 1).fill(0); customDadosEscala.forEach(escala => { const quantidade = parseInt(escala.quantidade); const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); for (let min = inicioEscalaMin; min < fimEscalaMin; min++) { const isBreak = (inicioIntervaloMin < fimIntervaloMin && min >= inicioIntervaloMin && min < fimIntervaloMin); if (!isBreak) { const index = min - config.inicioTimeline; if (index >= 0 && index < perfilCarga.length) perfilCarga[index] += quantidade; } } }); let summaryHtml = ''; let lastCount = -1; let blockStartMin = config.inicioTimeline; for (let i = 0; i <= duracaoTotalTimeline; i++) { const currentCount = perfilCarga[i] || 0; const currentMin = config.inicioTimeline + i; if (currentCount !== lastCount && i > 0) { const duration = currentMin - blockStartMin; const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (widthPercent > 0) { const color = lastCount > 0 ? 'bg-blue-600' : 'bg-transparent'; summaryHtml += `<div class="absolute h-full ${color} flex items-center justify-center" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount > 0 ? lastCount : ''}</span></div>`; } blockStartMin = currentMin; } lastCount = currentCount; } const duration = (config.inicioTimeline + duracaoTotalTimeline) - blockStartMin; const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (widthPercent > 0) { const color = lastCount > 0 ? 'bg-blue-600' : 'bg-transparent'; summaryHtml += `<div class="absolute h-full ${color} flex items-center justify-center" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount > 0 ? lastCount : ''}</span></div>`; } return `<div class="summary-row border-t-2 border-gray-300 mt-4 pt-4"><div class="flex items-center my-2 h-10"><div class="w-48 flex-shrink-0 text-center pr-4"><span class="font-bold text-lg text-gray-700">Total</span><span class="text-xs text-gray-500 block">Ativos</span></div><div class="flex-1 h-full bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${summaryHtml}</div></div></div>`; };
         
-        const manipularEnvioFormulario = () => { let errors = []; const novaEscala = { quantidade: quantidadeInput.value, inicio: inicioEscalaInput.value, fim: fimEscalaInput.value, inicioIntervalo: inicioIntervaloInput.value, fimIntervalo: fimIntervaloInput.value }; if (!novaEscala.quantidade || !novaEscala.inicio || !novaEscala.fim) errors.push("Preencha Quantidade, Entrada e Saída do Turno."); if (timeToMinutes(novaEscala.fim) <= timeToMinutes(novaEscala.inicio)) errors.push("A saída do turno deve ser maior que a entrada."); const quantidadeNova = parseInt(novaEscala.quantidade, 10) || 0; const totalProjetado = contarTurnosCriados(modoEdicao.ativo ? modoEdicao.index : null) + quantidadeNova; if (funcionariosLojaCache.length > 0 && totalProjetado > funcionariosLojaCache.length) errors.push(`A loja possui ${funcionariosLojaCache.length} funcionário(s) carregado(s). Reduza a quantidade para não ultrapassar o total disponível.`); errors = errors.concat(validarTurnoSimples(novaEscala)); if (errors.length > 0) { showInfoModal(errors, 'error'); return; } if(modoEdicao.ativo) { dadosEscala[modoEdicao.index] = novaEscala; } else { dadosEscala.push(novaEscala); } dadosEscala.sort((a, b) => timeToMinutes(a.inicio) - timeToMinutes(b.inicio)); cancelarModoEdicao(); renderizarTimelineCompleta('timeline-content'); atualizarContadoresHome(); fecharModalTurno(); };
-        const entrarModoEdicao = (index) => { modoEdicao.ativo = true; modoEdicao.index = index; const escala = dadosEscala[index]; quantidadeInput.value = escala.quantidade; inicioEscalaInput.value = escala.inicio; fimEscalaInput.value = escala.fim; inicioIntervaloInput.value = escala.inicioIntervalo; fimIntervaloInput.value = escala.fimIntervalo; formTitle.textContent = "Editando Turno"; addEscalaBtn.textContent = "Salvar Alterações"; cancelEditBtn.classList.remove('hidden'); abrirModalTurno(); };
-        const cancelarModoEdicao = () => { modoEdicao.ativo = false; modoEdicao.index = null; formContainer.reset(); formTitle.textContent = "Adicionar Turno"; addEscalaBtn.textContent = "Adicionar"; cancelEditBtn.classList.add('hidden'); };
-        const popularSeletoresData = () => { const hoje = new Date(); const anoAtual = hoje.getFullYear(); const mesAtual = hoje.getMonth(); anoSelect.innerHTML = ''; for (let i = anoAtual - 5; i <= anoAtual + 5; i++) { const option = document.createElement('option'); option.value = i; option.textContent = i; if (i === anoAtual) option.selected = true; anoSelect.appendChild(option); } const nomesMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']; mesSelect.innerHTML = ''; nomesMeses.forEach((nome, index) => { const option = document.createElement('option'); option.value = index; option.textContent = nome; if (index === mesAtual) option.selected = true; mesSelect.appendChild(option); }); };
+        const manipularEnvioFormulario = () => { let errors = []; const secaoOption = secaoTurnoSelect?.selectedOptions?.[0]; const novaEscala = { secaoId: secaoTurnoSelect?.value || '', secaoNome: secaoOption?.textContent || '', quantidade: quantidadeInput.value, inicio: inicioEscalaInput.value, fim: fimEscalaInput.value, inicioIntervalo: inicioIntervaloInput.value, fimIntervalo: fimIntervaloInput.value }; if (!novaEscala.secaoId) errors.push("Selecione uma secao com turno cadastrado."); if (!novaEscala.quantidade || !novaEscala.inicio || !novaEscala.fim) errors.push("A secao selecionada precisa ter quantidade, entrada e saida cadastradas."); if (timeToMinutes(novaEscala.fim) <= timeToMinutes(novaEscala.inicio)) errors.push("A saida do turno deve ser maior que a entrada."); const quantidadeNova = parseInt(novaEscala.quantidade, 10) || 0; const totalProjetado = contarTurnosCriados(modoEdicao.ativo ? modoEdicao.index : null) + quantidadeNova; if (funcionariosLojaCache.length > 0 && totalProjetado > funcionariosLojaCache.length) errors.push(`A loja possui ${funcionariosLojaCache.length} funcionario(s) carregado(s). Reduza a quantidade para nao ultrapassar o total disponivel.`); errors = errors.concat(validarTurnoSimples(novaEscala)); if (errors.length > 0) { showInfoModal(errors, 'error'); return; } if(modoEdicao.ativo) { dadosEscala[modoEdicao.index] = novaEscala; } else { dadosEscala.push(novaEscala); } dadosEscala.sort((a, b) => timeToMinutes(a.inicio) - timeToMinutes(b.inicio)); cancelarModoEdicao(); renderizarTimelineCompleta('timeline-content'); atualizarContadoresHome(); fecharModalTurno(); };
+        const entrarModoEdicao = (index) => { modoEdicao.ativo = true; modoEdicao.index = index; const escala = dadosEscala[index]; if (secaoTurnoSelect) secaoTurnoSelect.value = escala.secaoId || ''; quantidadeInput.value = escala.quantidade; inicioEscalaInput.value = escala.inicio; fimEscalaInput.value = escala.fim; inicioIntervaloInput.value = escala.inicioIntervalo; fimIntervaloInput.value = escala.fimIntervalo; formTitle.textContent = "Editando Turno"; addEscalaBtn.textContent = "Salvar Alteracoes"; cancelEditBtn.classList.remove('hidden'); abrirModalTurno(); };
+        const cancelarModoEdicao = () => { modoEdicao.ativo = false; modoEdicao.index = null; formContainer.reset(); if (secaoTurnoSelect) secaoTurnoSelect.value = ''; aplicarSecaoSelecionadaNoFormulario(); formTitle.textContent = "Adicionar Turno"; addEscalaBtn.textContent = "Adicionar"; cancelEditBtn.classList.add('hidden'); };        const popularSeletoresData = () => { const hoje = new Date(); const anoAtual = hoje.getFullYear(); const mesAtual = hoje.getMonth(); anoSelect.innerHTML = ''; for (let i = anoAtual - 5; i <= anoAtual + 5; i++) { const option = document.createElement('option'); option.value = i; option.textContent = i; if (i === anoAtual) option.selected = true; anoSelect.appendChild(option); } const nomesMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']; mesSelect.innerHTML = ''; nomesMeses.forEach((nome, index) => { const option = document.createElement('option'); option.value = index; option.textContent = nome; if (index === mesAtual) option.selected = true; mesSelect.appendChild(option); }); };
         
         const atualizarContagemEsqueleto = () => {
             const skeletonTable = document.getElementById('tabela-esqueleto');
@@ -421,6 +489,27 @@
             }
         };
 
+        const atribuirFuncionariosAosTurnos = () => {
+            const usados = new Set();
+            return colaboradorShifts.map((escala) => {
+                const secaoId = Number(escala.secaoId || 0);
+                let index = funcionariosLojaCache.findIndex((funcionario, funcionarioIndex) => {
+                    return !usados.has(funcionarioIndex) && Number(funcionario.ESCSECAO_ID || 0) === secaoId;
+                });
+
+                if (index < 0) {
+                    index = funcionariosLojaCache.findIndex((funcionario, funcionarioIndex) => !usados.has(funcionarioIndex));
+                }
+
+                if (index >= 0) {
+                    usados.add(index);
+                    return funcionariosLojaCache[index];
+                }
+
+                return null;
+            });
+        };
+
         const gerarTabelaEsqueleto = () => {
             colaboradorShifts = [];
             dadosEscala.forEach(escala => {
@@ -432,6 +521,7 @@
                 tabelaEsqueletoContainer.innerHTML = `<p class="text-center text-gray-600 p-8">Adicione pelo menos um turno com colaboradores na tela principal para gerar a escala.</p>`;
                 return;
             }
+            const funcionariosAtribuidos = atribuirFuncionariosAosTurnos();
             const ano = parseInt(anoSelect.value);
             const mes = parseInt(mesSelect.value);
             const diasNoMes = new Date(ano, mes + 1, 0).getDate();
@@ -445,7 +535,7 @@
             }
             tableHtml += '<th class="bg-gray-200">Dias Trab.</th><th class="bg-gray-200">Folgas</th></tr></thead><tbody>';
             colaboradorShifts.forEach((escala, index) => {
-                const funcionario = funcionariosLojaCache[index];
+                const funcionario = funcionariosAtribuidos[index];
                 const nomeBase = funcionario ? `${funcionario.NOME} (${funcionario.CHAPA})` : `Colaborador ${index + 1}`;
                 const escfuncId = funcionario ? funcionario.ESCFUNC_ID : '';
                 const chapa = funcionario ? funcionario.CHAPA : '';
@@ -1310,6 +1400,7 @@
             }
         });
         addEscalaBtn.addEventListener('click', manipularEnvioFormulario);
+        secaoTurnoSelect?.addEventListener('change', aplicarSecaoSelecionadaNoFormulario);
         cancelEditBtn.addEventListener('click', () => {
             cancelarModoEdicao();
             fecharModalTurno();
@@ -1318,9 +1409,15 @@
         lojaEscalaSelect.addEventListener('change', async () => {
             try {
                 funcionariosLojaSelect.value = lojaEscalaSelect.value;
+                if (homeLojaSelect) homeLojaSelect.value = lojaEscalaSelect.value;
+                if (secoesLojaSelect) secoesLojaSelect.value = lojaEscalaSelect.value;
+                await carregarSecoesDaLoja(true);
                 await carregarFuncionariosDaLoja(true);
                 if (!funcionariosPage.classList.contains('hidden')) {
                     await carregarFuncionariosTela(false);
+                }
+                if (!secoesPage.classList.contains('hidden')) {
+                    await carregarSecoesTela(false);
                 }
             } catch (error) {
                 showInfoModal(error.message, 'error');
@@ -1329,15 +1426,38 @@
         funcionariosLojaSelect.addEventListener('change', async () => {
             try {
                 lojaEscalaSelect.value = funcionariosLojaSelect.value;
+                if (homeLojaSelect) homeLojaSelect.value = funcionariosLojaSelect.value;
+                if (secoesLojaSelect) secoesLojaSelect.value = funcionariosLojaSelect.value;
+                await carregarSecoesDaLoja(true);
                 await carregarFuncionariosTela(false);
                 await carregarFuncionariosDaLoja(false);
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
         });
+        homeLojaSelect?.addEventListener('change', async () => {
+            lojaEscalaSelect.value = homeLojaSelect.value;
+            funcionariosLojaSelect.value = homeLojaSelect.value;
+            if (secoesLojaSelect) secoesLojaSelect.value = homeLojaSelect.value;
+            await carregarSecoesDaLoja(true);
+            await carregarFuncionariosDaLoja(true);
+        });
+        secoesLojaSelect?.addEventListener('change', async () => {
+            lojaEscalaSelect.value = secoesLojaSelect.value;
+            funcionariosLojaSelect.value = secoesLojaSelect.value;
+            if (homeLojaSelect) homeLojaSelect.value = secoesLojaSelect.value;
+            await carregarSecoesTela(false);
+        });
         carregarFuncionariosTelaBtn.addEventListener('click', async () => {
             try {
                 await carregarFuncionariosTela(true);
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+        carregarSecoesBtn?.addEventListener('click', async () => {
+            try {
+                await carregarSecoesTela(true);
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
@@ -1539,6 +1659,8 @@
             lojasPermitidasCache = lojas.map(loja => Number(getLojaCodigo(loja))).filter(Boolean);
             lojaEscalaSelect.innerHTML = '';
             funcionariosLojaSelect.innerHTML = '';
+            if (homeLojaSelect) homeLojaSelect.innerHTML = '';
+            if (secoesLojaSelect) secoesLojaSelect.innerHTML = '';
 
             if (lojas.length === 0) {
                 const option = document.createElement('option');
@@ -1546,8 +1668,12 @@
                 option.textContent = 'Nenhuma loja permitida';
                 lojaEscalaSelect.appendChild(option);
                 funcionariosLojaSelect.appendChild(option.cloneNode(true));
+                homeLojaSelect?.appendChild(option.cloneNode(true));
+                secoesLojaSelect?.appendChild(option.cloneNode(true));
                 lojaEscalaSelect.disabled = true;
                 funcionariosLojaSelect.disabled = true;
+                if (homeLojaSelect) homeLojaSelect.disabled = true;
+                if (secoesLojaSelect) secoesLojaSelect.disabled = true;
                 carregarFuncionariosBtn.disabled = true;
                 carregarFuncionariosTelaBtn.disabled = true;
                 funcionariosStatus.textContent = 'Usuario sem loja permitida';
@@ -1556,6 +1682,8 @@
 
             lojaEscalaSelect.disabled = false;
             funcionariosLojaSelect.disabled = false;
+            if (homeLojaSelect) homeLojaSelect.disabled = false;
+            if (secoesLojaSelect) secoesLojaSelect.disabled = false;
             carregarFuncionariosBtn.disabled = false;
             carregarFuncionariosTelaBtn.disabled = false;
 
@@ -1566,6 +1694,8 @@
                 option.textContent = `Loja ${lojaCodigo}`;
                 lojaEscalaSelect.appendChild(option);
                 funcionariosLojaSelect.appendChild(option.cloneNode(true));
+                homeLojaSelect?.appendChild(option.cloneNode(true));
+                secoesLojaSelect?.appendChild(option.cloneNode(true));
             });
 
             const lojaSelecionada = lojasPermitidasCache.includes(Number(lojaAtual))
@@ -1573,8 +1703,126 @@
                 : String(getLojaCodigo(lojas[0]));
             lojaEscalaSelect.value = lojaSelecionada;
             funcionariosLojaSelect.value = lojaSelecionada;
+            if (homeLojaSelect) homeLojaSelect.value = lojaSelecionada;
+            if (secoesLojaSelect) secoesLojaSelect.value = lojaSelecionada;
             return lojas;
         };
+
+        const carregarSecoesDaLoja = async (silent = false) => {
+            const loja = lojaEscalaSelect.value || secoesLojaSelect?.value;
+            if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
+                secoesLojaCache = [];
+                popularSelectSecoesTurno();
+                return [];
+            }
+
+            try {
+                const data = await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/secoes`);
+                secoesLojaCache = data.secoes || [];
+                popularSelectSecoesTurno();
+                if (!silent && secoesLojaCache.length === 0) {
+                    showInfoModal('Nenhuma secao encontrada para a loja selecionada.', 'info');
+                }
+                return secoesLojaCache;
+            } catch (error) {
+                secoesLojaCache = [];
+                popularSelectSecoesTurno();
+                if (!silent) showInfoModal(error.message, 'error');
+                return [];
+            }
+        };
+
+        const renderizarSecoesTela = (secoes, loja) => {
+            secoesTitulo.textContent = `Secoes cadastradas - Loja ${loja}`;
+            tabelaSecoesBody.innerHTML = '';
+
+            if (!secoes || secoes.length === 0) {
+                tabelaSecoesBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500 py-8">Nenhuma secao encontrada para a loja selecionada.</td></tr>';
+                return;
+            }
+
+            secoes.forEach(secao => {
+                const turno = getSecaoTurnoPadrao(secao) || {};
+                tabelaSecoesBody.innerHTML += `
+                    <tr data-escsecao-id="${escapeHtml(secao.ESCSECAO_ID || '')}">
+                        <td data-label="Codigo">${escapeHtml(secao.COD_SECAO || '')}</td>
+                        <td data-label="Descricao">${escapeHtml(secao.DESCR || '')}</td>
+                        <td data-label="Colaboradores">${escapeHtml(turno.QTDE_COLABORADORES || '')}</td>
+                        <td data-label="Entrada 1">${escapeHtml(turno.HR_ENT1 || '')}</td>
+                        <td data-label="Saida 1">${escapeHtml(turno.HR_SAI1 || '')}</td>
+                        <td data-label="Entrada 2">${escapeHtml(turno.HR_ENT2 || '')}</td>
+                        <td data-label="Saida 2">${escapeHtml(turno.HR_SAI2 || '')}</td>
+                        <td data-label="Acoes">
+                            <button class="action-btn-table edit-secao" data-id="${escapeHtml(secao.ESCSECAO_ID || '')}" title="Editar turno da secao">
+                                <span class="material-symbols-outlined">edit</span>
+                                Editar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        };
+
+        const carregarSecoesTela = async (showSuccess = true) => {
+            const loja = secoesLojaSelect?.value || lojaEscalaSelect.value;
+            if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
+                secoesTitulo.textContent = 'Secoes cadastradas';
+                tabelaSecoesBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500 py-8">Selecione uma loja permitida para carregar as secoes.</td></tr>';
+                return;
+            }
+
+            lojaEscalaSelect.value = loja;
+            funcionariosLojaSelect.value = loja;
+            if (homeLojaSelect) homeLojaSelect.value = loja;
+            const secoes = await carregarSecoesDaLoja(true);
+            renderizarSecoesTela(secoes, loja);
+            if (showSuccess) {
+                showInfoModal(`${secoes.length} secao(oes) carregada(s) da loja ${loja}.`, 'success');
+            }
+        };
+
+        tabelaSecoesBody?.addEventListener('click', async (event) => {
+            const editButton = event.target.closest('.edit-secao');
+            if (!editButton) return;
+
+            const loja = secoesLojaSelect?.value || lojaEscalaSelect.value;
+            const secao = secoesLojaCache.find(item => Number(item.ESCSECAO_ID) === Number(editButton.dataset.id));
+            if (!loja || !secao) {
+                showInfoModal('Secao nao encontrada para edicao.', 'error');
+                return;
+            }
+
+            const turno = getSecaoTurnoPadrao(secao) || {};
+            const values = await showInputModal({
+                title: `Editar turno - ${secao.DESCR || secao.COD_SECAO}`,
+                inputs: [
+                    { label: 'Colaboradores previstos', type: 'number', id: 'QTDE_COLABORADORES', value: turno.QTDE_COLABORADORES || 1, required: true },
+                    { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: turno.HR_ENT1 || '', required: true },
+                    { label: 'Saida 1', type: 'time', id: 'HR_SAI1', value: turno.HR_SAI1 || '', required: true },
+                    { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: turno.HR_ENT2 || '', required: true },
+                    { label: 'Saida 2', type: 'time', id: 'HR_SAI2', value: turno.HR_SAI2 || '', required: true }
+                ],
+                confirmText: 'Salvar'
+            });
+            if (!values) return;
+
+            try {
+                await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/secoes/${encodeURIComponent(secao.ESCSECAO_ID)}/turno`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        QTDE_COLABORADORES: Number(values.QTDE_COLABORADORES),
+                        HR_ENT1: values.HR_ENT1,
+                        HR_SAI1: values.HR_SAI1,
+                        HR_ENT2: values.HR_ENT2,
+                        HR_SAI2: values.HR_SAI2
+                    })
+                });
+                await carregarSecoesTela(false);
+                showInfoModal('Turno da secao atualizado com sucesso.', 'success');
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
 
         const renderizarFuncionariosTela = (funcionarios, loja) => {
             funcionariosTitulo.textContent = `Funcionários cadastrados - Loja ${loja}`;
@@ -2344,6 +2592,92 @@
             renderizarTabelaBanco(data.escalas || []);
         };
 
+        const renderizarDetalheEscalaBanco = (dias) => {
+            tabelaEscalaDetalheBody.innerHTML = '';
+            if (!dias || dias.length === 0) {
+                tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum dia salvo para esta escala.</td></tr>';
+                return;
+            }
+
+            dias.forEach((dia) => {
+                const dataDia = String(dia.DT || '').slice(0, 10);
+                tabelaEscalaDetalheBody.innerHTML += `
+                    <tr data-escprogdia-id="${escapeHtml(dia.ESCPROGDIA_ID || '')}">
+                        <td data-label="Data">${escapeHtml(dataDia)}</td>
+                        <td data-label="Programacao"><input class="detail-input detail-programacao" maxlength="3" value="${escapeHtml(dia.PROGRAMACAO || 'TRB')}"></td>
+                        <td data-label="Entrada 1"><input class="detail-input detail-hr-ent1" type="time" value="${escapeHtml(dia.HR_ENT1 === 'F' ? '' : dia.HR_ENT1 || '')}"></td>
+                        <td data-label="Saida 1"><input class="detail-input detail-hr-sai1" type="time" value="${escapeHtml(dia.HR_SAI1 === 'F' ? '' : dia.HR_SAI1 || '')}"></td>
+                        <td data-label="Entrada 2"><input class="detail-input detail-hr-ent2" type="time" value="${escapeHtml(dia.HR_ENT2 === 'F' ? '' : dia.HR_ENT2 || '')}"></td>
+                        <td data-label="Saida 2"><input class="detail-input detail-hr-sai2" type="time" value="${escapeHtml(dia.HR_SAI2 === 'F' ? '' : dia.HR_SAI2 || '')}"></td>
+                        <td data-label="Acoes">
+                            <button class="action-btn-table save-dia-banco" title="Salvar dia">
+                                <span class="material-symbols-outlined">save</span>
+                                Salvar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        };
+
+        const popularFiltroMesDetalhe = (dias) => {
+            if (!detalheMesSelect) return;
+            const meses = [...new Set((dias || []).map(dia => String(dia.DT || '').slice(0, 7)).filter(Boolean))];
+            detalheMesSelect.innerHTML = '';
+            meses.forEach((mes) => {
+                const option = document.createElement('option');
+                option.value = mes;
+                option.textContent = mes;
+                detalheMesSelect.appendChild(option);
+            });
+        };
+
+        const carregarDetalheEscalaBanco = async (escprogId) => {
+            escalaDetalheAtual.escprogId = escprogId;
+            escalaDetalheTitulo.textContent = `Escala ${escprogId}`;
+            escalaDetalheResumo.textContent = 'Carregando dias da escala...';
+            tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
+            const data = await apiRequest(`/api/escalas/${encodeURIComponent(escprogId)}/dias`);
+            escalaDetalheAtual.dias = data.dias || [];
+            popularFiltroMesDetalhe(escalaDetalheAtual.dias);
+            escalaDetalheResumo.textContent = `${escalaDetalheAtual.dias.length} dia(s) encontrado(s).`;
+            renderizarDetalheEscalaBanco(escalaDetalheAtual.dias);
+        };
+
+        detalheMesSelect?.addEventListener('change', () => {
+            const mes = detalheMesSelect.value;
+            const dias = escalaDetalheAtual.dias.filter(dia => String(dia.DT || '').slice(0, 7) === mes);
+            renderizarDetalheEscalaBanco(dias);
+        });
+
+        tabelaEscalaDetalheBody?.addEventListener('click', async (event) => {
+            const saveButton = event.target.closest('.save-dia-banco');
+            if (!saveButton) return;
+
+            const row = saveButton.closest('tr');
+            const escprogdiaId = row?.dataset.escprogdiaId;
+            if (!escalaDetalheAtual.escprogId || !escprogdiaId) return;
+
+            try {
+                const programacao = row.querySelector('.detail-programacao').value.trim().toUpperCase() || 'TRB';
+                const folga = programacao === 'F';
+                await apiRequest(`/api/escalas/${encodeURIComponent(escalaDetalheAtual.escprogId)}/dias/${encodeURIComponent(escprogdiaId)}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        PROGRAMACAO: programacao,
+                        HR_ENT1: folga ? 'F' : row.querySelector('.detail-hr-ent1').value,
+                        HR_SAI1: folga ? 'F' : row.querySelector('.detail-hr-sai1').value,
+                        HR_ENT2: folga ? 'F' : row.querySelector('.detail-hr-ent2').value,
+                        HR_SAI2: folga ? 'F' : row.querySelector('.detail-hr-sai2').value
+                    })
+                });
+                showInfoModal('Dia atualizado no banco.', 'success');
+                await carregarDetalheEscalaBanco(escalaDetalheAtual.escprogId);
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+
         salvarEscalaBtn.addEventListener('click', async () => {
             if (escalaCarregadaId) {
                 const escalas = getEscalasSalvas();
@@ -2464,20 +2798,7 @@
             const targetButton = e.target.closest('.banco-dias');
             if (!targetButton) return;
 
-            try {
-                const data = await apiRequest(`/api/escalas/${encodeURIComponent(targetButton.dataset.id)}/dias`);
-                const dias = data.dias || [];
-                const resumo = dias.slice(0, 8).map(dia => {
-                    const dataDia = String(dia.DT || '').slice(0, 10);
-                    const programacao = dia.PROGRAMACAO || 'TRB';
-                    const horario = [dia.HR_ENT1, dia.HR_SAI1, dia.HR_ENT2, dia.HR_SAI2].filter(Boolean).join(' - ');
-                    return `${dataDia}: ${programacao}${horario ? ` (${horario})` : ''}`;
-                });
-                const restante = dias.length > resumo.length ? `... mais ${dias.length - resumo.length} dia(s)` : '';
-                showInfoModal([`Total de dias salvos: ${dias.length}`, ...resumo, restante].filter(Boolean), 'info');
-            } catch (error) {
-                showInfoModal(error.message, 'error');
-            }
+            window.location.hash = `/escala-banco/${targetButton.dataset.id}`;
         });
 
         document.getElementById('timeline-content').addEventListener('click', async (e) => {
@@ -2592,10 +2913,12 @@
         window.onload = async () => { 
             try {
                 popularSeletoresData(); 
+                if (homeDataInput) homeDataInput.valueAsDate = new Date();
                 await carregarUsuarioSessao();
                 configurarAcoesAdmin();
                 await carregarEstadoServidor();
                 await carregarLojasEscala();
+                await carregarSecoesDaLoja(true);
                 await carregarFuncionariosDaLoja(true);
             } catch (error) {
                 showInfoModal(`Erro ao carregar dados salvos: ${error.message}`, 'error');
