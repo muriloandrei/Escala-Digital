@@ -158,46 +158,115 @@ async function listSecoesByLoja(lojaId) {
   });
 }
 
+async function findSecaoById(connection, { lojaId, escsecaoId }) {
+  const result = await connection.execute(
+    `select escsecao_id, loja, cod_secao, descr, dt_hr_incl
+     from sgn_esc_secao
+     where escsecao_id = :escsecaoId
+       and loja = :lojaId`,
+    { lojaId, escsecaoId },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+
+  return result.rows[0] || null;
+}
+
+async function createSecao({ lojaId, data }) {
+  const lojaCodigo = await resolveLojaCodigo(lojaId);
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `insert into sgn_esc_secao (
+          escsecao_id, loja, cod_secao, descr, dt_hr_incl
+       ) values (
+          sgn_esc_secao_seq.nextval, :lojaId, :codSecao, :descr, sysdate
+       )
+       returning escsecao_id into :escsecaoId`,
+      {
+        lojaId: lojaCodigo,
+        codSecao: data.COD_SECAO,
+        descr: data.DESCR,
+        escsecaoId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
+      },
+      { autoCommit: false }
+    );
+
+    const escsecaoId = result.outBinds.escsecaoId[0];
+    await upsertSecaoTurnoInConnection(connection, {
+      escsecaoId,
+      data
+    });
+    await connection.commit();
+
+    const secoes = await listSecoesByLoja(lojaCodigo);
+    return secoes.find((secao) => Number(secao.ESCSECAO_ID) === Number(escsecaoId)) || null;
+  });
+}
+
+async function updateSecao({ lojaId, escsecaoId, data }) {
+  const lojaCodigo = await resolveLojaCodigo(lojaId);
+  return withConnection(async (connection) => {
+    const secao = await findSecaoById(connection, { lojaId: lojaCodigo, escsecaoId });
+    if (!secao) return null;
+
+    await connection.execute(
+      `update sgn_esc_secao
+       set cod_secao = :codSecao,
+           descr = :descr
+       where escsecao_id = :escsecaoId
+         and loja = :lojaId`,
+      {
+        lojaId: lojaCodigo,
+        escsecaoId,
+        codSecao: data.COD_SECAO,
+        descr: data.DESCR
+      },
+      { autoCommit: false }
+    );
+
+    await upsertSecaoTurnoInConnection(connection, { escsecaoId, data });
+    await connection.commit();
+
+    const secoes = await listSecoesByLoja(lojaCodigo);
+    return secoes.find((item) => Number(item.ESCSECAO_ID) === Number(escsecaoId)) || null;
+  });
+}
+
+async function upsertSecaoTurnoInConnection(connection, { escsecaoId, data }) {
+  await connection.execute(
+    `merge into sgn_esc_secao_turno t
+     using (select :escsecaoId as escsecao_id from dual) src
+     on (t.escsecao_id = src.escsecao_id)
+     when matched then update set
+       t.hr_ent1 = :hrEnt1,
+       t.hr_sai1 = :hrSai1,
+       t.hr_ent2 = :hrEnt2,
+       t.hr_sai2 = :hrSai2,
+       t.qtde_colaboradores = :qtdeColaboradores
+     when not matched then insert (
+       escsecaoturno_id, escsecao_id, hr_ent1, hr_sai1, hr_ent2, hr_sai2, qtde_colaboradores
+     ) values (
+       sgn_esc_secao_turno_seq.nextval, :escsecaoId, :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :qtdeColaboradores
+     )`,
+    {
+      escsecaoId,
+      hrEnt1: data.HR_ENT1,
+      hrSai1: data.HR_SAI1,
+      hrEnt2: data.HR_ENT2,
+      hrSai2: data.HR_SAI2,
+      qtdeColaboradores: data.QTDE_COLABORADORES
+    },
+    { autoCommit: false }
+  );
+}
+
 async function upsertSecaoTurno({ lojaId, escsecaoId, data }) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
-    const secaoResult = await connection.execute(
-      `select escsecao_id, loja, cod_secao, descr, dt_hr_incl
-       from sgn_esc_secao
-       where escsecao_id = :escsecaoId
-         and loja = :lojaId`,
-      { escsecaoId, lojaId: lojaCodigo },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
+    const secao = await findSecaoById(connection, { lojaId: lojaCodigo, escsecaoId });
+    if (!secao) return null;
 
-    if (!secaoResult.rows[0]) return null;
-
-    await connection.execute(
-      `merge into sgn_esc_secao_turno t
-       using (select :escsecaoId as escsecao_id from dual) src
-       on (t.escsecao_id = src.escsecao_id)
-       when matched then update set
-         t.hr_ent1 = :hrEnt1,
-         t.hr_sai1 = :hrSai1,
-         t.hr_ent2 = :hrEnt2,
-         t.hr_sai2 = :hrSai2,
-         t.qtde_colaboradores = :qtdeColaboradores
-       when not matched then insert (
-         escsecaoturno_id, escsecao_id, hr_ent1, hr_sai1, hr_ent2, hr_sai2, qtde_colaboradores
-       ) values (
-         sgn_esc_secao_turno_seq.nextval, :escsecaoId, :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :qtdeColaboradores
-       )`,
-      {
-        escsecaoId,
-        hrEnt1: data.HR_ENT1,
-        hrSai1: data.HR_SAI1,
-        hrEnt2: data.HR_ENT2,
-        hrSai2: data.HR_SAI2,
-        qtdeColaboradores: data.QTDE_COLABORADORES
-      },
-      { autoCommit: true }
-    );
-
+    await upsertSecaoTurnoInConnection(connection, { escsecaoId, data });
+    await connection.commit();
     const secoes = await listSecoesByLoja(lojaCodigo);
     return secoes.find((secao) => Number(secao.ESCSECAO_ID) === Number(escsecaoId)) || null;
   });
@@ -262,6 +331,8 @@ module.exports = {
   listLojas,
   listFuncionariosByLoja,
   listSecoesByLoja,
+  createSecao,
+  updateSecao,
   listAusenciasByLojaMes,
   updateFuncionarioEscala,
   upsertSecaoTurno,

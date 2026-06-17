@@ -3,15 +3,19 @@
         const registrosPage = document.getElementById('registros-page');
         const funcionariosPage = document.getElementById('funcionarios-page');
         const secoesPage = document.getElementById('secoes-page');
+        const secaoFormPage = document.getElementById('secao-form-page');
         const escalaDetalhePage = document.getElementById('escala-detalhe-page');
         const acessosPage = document.getElementById('acessos-page');
+        const rolesPage = document.getElementById('roles-page');
         const settingsPage = document.getElementById('settings-page');
         
         const navTimeline = document.getElementById('nav-timeline');
+        const navEscalasCriadas = document.getElementById('nav-escalas-criadas');
         const navRegistros = document.getElementById('nav-registros');
         const navFuncionarios = document.getElementById('nav-funcionarios');
         const navSecoes = document.getElementById('nav-secoes');
         const navAcessos = document.getElementById('nav-acessos');
+        const navRoles = document.getElementById('nav-roles');
         const navSettings = document.getElementById('nav-settings');
         
         const salvarSettingsBtn = document.getElementById('salvarSettingsBtn');
@@ -26,9 +30,22 @@
         const funcionariosTitulo = document.getElementById('funcionariosTitulo');
         const tabelaFuncionariosBody = document.getElementById('tabela-funcionarios-body');
         const secoesLojaSelect = document.getElementById('secoesLojaSelect');
+        const novaSecaoBtn = document.getElementById('novaSecaoBtn');
         const carregarSecoesBtn = document.getElementById('carregarSecoesBtn');
         const secoesTitulo = document.getElementById('secoesTitulo');
         const tabelaSecoesBody = document.getElementById('tabela-secoes-body');
+        const secaoFormTitulo = document.getElementById('secaoFormTitulo');
+        const voltarSecoesBtn = document.getElementById('voltarSecoesBtn');
+        const secaoForm = document.getElementById('secaoForm');
+        const secaoFormId = document.getElementById('secaoFormId');
+        const secaoFormLoja = document.getElementById('secaoFormLoja');
+        const secaoFormCodigo = document.getElementById('secaoFormCodigo');
+        const secaoFormDescr = document.getElementById('secaoFormDescr');
+        const secaoFormQtde = document.getElementById('secaoFormQtde');
+        const secaoFormHrEnt1 = document.getElementById('secaoFormHrEnt1');
+        const secaoFormHrSai1 = document.getElementById('secaoFormHrSai1');
+        const secaoFormHrEnt2 = document.getElementById('secaoFormHrEnt2');
+        const secaoFormHrSai2 = document.getElementById('secaoFormHrSai2');
         const detalheMesSelect = document.getElementById('detalheMesSelect');
         const voltarEscalasBtn = document.getElementById('voltarEscalasBtn');
         const escalaDetalheTitulo = document.getElementById('escalaDetalheTitulo');
@@ -44,20 +61,21 @@
         const abrirTurnoModalBtn = document.getElementById('abrirTurnoModalBtn');
         const turnoModal = document.getElementById('turnoModal');
         const closeTurnoModalBtn = document.getElementById('closeTurnoModalBtn');
-        const homeDataInput = document.getElementById('homeDataInput');
         const homeLojaSelect = document.getElementById('homeLojaSelect');
-        const homeBuscaChapaInput = document.getElementById('homeBuscaChapaInput');
         const funcionariosLojaCount = document.getElementById('funcionariosLojaCount');
         const turnosCriadosCount = document.getElementById('turnosCriadosCount');
         const turnosRestantesCount = document.getElementById('turnosRestantesCount');
 
         const pageTitles = {
             home: 'Home',
-            escalas: 'Escalas Geradas',
+            escalasCriadas: 'Escalas Criadas',
+            escalasGeradas: 'Escalas Geradas',
             funcionarios: 'Funcionarios',
             secoes: 'Secoes',
+            secaoForm: 'Cadastro de Secao',
             escalaBanco: 'Detalhamento da Escala',
             acessos: 'Controle de Acesso',
+            roles: 'Roles / Permissao',
             configuracoes: 'Configuracoes'
         };
 
@@ -72,31 +90,59 @@
             registrosPage.classList.add('hidden');
             funcionariosPage.classList.add('hidden');
             secoesPage.classList.add('hidden');
+            secaoFormPage.classList.add('hidden');
             escalaDetalhePage.classList.add('hidden');
             acessosPage.classList.add('hidden');
+            rolesPage.classList.add('hidden');
             settingsPage.classList.add('hidden');
             navLinks.forEach(link => link.classList.remove('active'));
+        }
+
+        function expandActiveNavGroup(activeLink) {
+            document.querySelectorAll('.nav-group').forEach(group => group.classList.remove('open'));
+            const group = activeLink?.closest('.nav-group');
+            if (group) group.classList.add('open');
         }
 
         function showTimelinePage() {
             hideAllPages();
             timelinePage.classList.remove('hidden');
             navTimeline.classList.add('active');
+            expandActiveNavGroup(navTimeline);
             setCurrentPageTitle('home');
         }
 
-        function showRegistrosPage() {
+        function setRegistrosMode(mode) {
+            const cards = registrosPage.querySelectorAll('.table-card');
+            if (cards[0]) cards[0].classList.toggle('hidden', mode === 'geradas');
+            if (cards[1]) cards[1].classList.toggle('hidden', mode === 'criadas');
+        }
+
+        function showEscalasCriadasPage() {
+            hideAllPages();
+            registrosPage.classList.remove('hidden');
+            navEscalasCriadas.classList.add('active');
+            expandActiveNavGroup(navEscalasCriadas);
+            setCurrentPageTitle('escalasCriadas');
+            setRegistrosMode('criadas');
+            renderizarTabelaRegistros();
+        }
+
+        function showEscalasGeradasPage() {
             hideAllPages();
             registrosPage.classList.remove('hidden');
             navRegistros.classList.add('active');
-            setCurrentPageTitle('escalas');
-            renderizarTabelaRegistros();
+            expandActiveNavGroup(navRegistros);
+            setCurrentPageTitle('escalasGeradas');
+            setRegistrosMode('geradas');
+            consultarEscalasBancoLocal().catch(() => {});
         }
 
         function showFuncionariosPage() {
             hideAllPages();
             funcionariosPage.classList.remove('hidden');
             navFuncionarios.classList.add('active');
+            expandActiveNavGroup(navFuncionarios);
             setCurrentPageTitle('funcionarios');
             carregarFuncionariosTela(false).catch(error => showInfoModal(error.message, 'error'));
         }
@@ -105,14 +151,25 @@
             hideAllPages();
             secoesPage.classList.remove('hidden');
             navSecoes.classList.add('active');
+            expandActiveNavGroup(navSecoes);
             setCurrentPageTitle('secoes');
             carregarSecoesTela(false).catch(error => showInfoModal(error.message, 'error'));
+        }
+
+        function showSecaoFormPage(escsecaoId = '') {
+            hideAllPages();
+            secaoFormPage.classList.remove('hidden');
+            navSecoes.classList.add('active');
+            expandActiveNavGroup(navSecoes);
+            setCurrentPageTitle('secaoForm');
+            prepararFormularioSecao(escsecaoId);
         }
 
         function showEscalaDetalhePage(escprogId) {
             hideAllPages();
             escalaDetalhePage.classList.remove('hidden');
             navRegistros.classList.add('active');
+            expandActiveNavGroup(navRegistros);
             setCurrentPageTitle('escalaBanco');
             carregarDetalheEscalaBanco(escprogId).catch(error => showInfoModal(error.message, 'error'));
         }
@@ -121,16 +178,26 @@
             hideAllPages();
             acessosPage.classList.remove('hidden');
             navAcessos.classList.add('active');
+            expandActiveNavGroup(navAcessos);
             setCurrentPageTitle('acessos');
             carregarAcessosTela(false);
+        }
+
+        function showRolesPage() {
+            hideAllPages();
+            rolesPage.classList.remove('hidden');
+            navRoles.classList.add('active');
+            expandActiveNavGroup(navRoles);
+            setCurrentPageTitle('roles');
+            renderizarRolesSettings().catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showSettingsPage() {
             hideAllPages();
             settingsPage.classList.remove('hidden');
             navSettings.classList.add('active');
+            expandActiveNavGroup(navSettings);
             setCurrentPageTitle('configuracoes');
-            renderizarRolesSettings().catch(error => showInfoModal(error.message, 'error'));
         }
 
         function navigateToPage(pageKey) {
@@ -138,13 +205,20 @@
                 showEscalaDetalhePage(pageKey.split('/')[1]);
                 return;
             }
+            if (pageKey.startsWith('secoes/')) {
+                showSecaoFormPage(pageKey.split('/')[1]);
+                return;
+            }
 
             const routes = {
                 home: showTimelinePage,
-                escalas: showRegistrosPage,
+                escalas: showEscalasGeradasPage,
+                'escalas-criadas': showEscalasCriadasPage,
+                'escalas-geradas': showEscalasGeradasPage,
                 funcionarios: showFuncionariosPage,
                 secoes: showSecoesPage,
                 acessos: showAcessosPage,
+                roles: showRolesPage,
                 configuracoes: showSettingsPage
             };
 
@@ -157,11 +231,18 @@
         }
         
         navTimeline.addEventListener('click', () => { window.location.hash = '/home'; });
-        navRegistros.addEventListener('click', () => { window.location.hash = '/escalas'; });
+        navEscalasCriadas.addEventListener('click', () => { window.location.hash = '/escalas-criadas'; });
+        navRegistros.addEventListener('click', () => { window.location.hash = '/escalas-geradas'; });
         navFuncionarios.addEventListener('click', () => { window.location.hash = '/funcionarios'; });
         navSecoes.addEventListener('click', () => { window.location.hash = '/secoes'; });
         navAcessos.addEventListener('click', () => { window.location.hash = '/acessos'; });
+        navRoles.addEventListener('click', () => { window.location.hash = '/roles'; });
         navSettings.addEventListener('click', () => { window.location.hash = '/configuracoes'; });
+        document.querySelectorAll('.nav-parent').forEach(button => {
+            button.addEventListener('click', () => {
+                button.closest('.nav-group')?.classList.toggle('open');
+            });
+        });
         voltarEscalasBtn?.addEventListener('click', () => { window.location.hash = '/escalas'; });
         window.addEventListener('hashchange', handleHashNavigation);
         salvarSettingsBtn.addEventListener('click', (e) => { e.preventDefault(); salvarConfiguracoes(); });
@@ -1439,6 +1520,7 @@
             lojaEscalaSelect.value = homeLojaSelect.value;
             funcionariosLojaSelect.value = homeLojaSelect.value;
             if (secoesLojaSelect) secoesLojaSelect.value = homeLojaSelect.value;
+            if (secaoFormLoja) secaoFormLoja.value = homeLojaSelect.value;
             await carregarSecoesDaLoja(true);
             await carregarFuncionariosDaLoja(true);
         });
@@ -1446,6 +1528,7 @@
             lojaEscalaSelect.value = secoesLojaSelect.value;
             funcionariosLojaSelect.value = secoesLojaSelect.value;
             if (homeLojaSelect) homeLojaSelect.value = secoesLojaSelect.value;
+            if (secaoFormLoja) secaoFormLoja.value = secoesLojaSelect.value;
             await carregarSecoesTela(false);
         });
         carregarFuncionariosTelaBtn.addEventListener('click', async () => {
@@ -1661,6 +1744,7 @@
             funcionariosLojaSelect.innerHTML = '';
             if (homeLojaSelect) homeLojaSelect.innerHTML = '';
             if (secoesLojaSelect) secoesLojaSelect.innerHTML = '';
+            if (secaoFormLoja) secaoFormLoja.innerHTML = '';
 
             if (lojas.length === 0) {
                 const option = document.createElement('option');
@@ -1670,10 +1754,12 @@
                 funcionariosLojaSelect.appendChild(option.cloneNode(true));
                 homeLojaSelect?.appendChild(option.cloneNode(true));
                 secoesLojaSelect?.appendChild(option.cloneNode(true));
+                secaoFormLoja?.appendChild(option.cloneNode(true));
                 lojaEscalaSelect.disabled = true;
                 funcionariosLojaSelect.disabled = true;
                 if (homeLojaSelect) homeLojaSelect.disabled = true;
                 if (secoesLojaSelect) secoesLojaSelect.disabled = true;
+                if (secaoFormLoja) secaoFormLoja.disabled = true;
                 carregarFuncionariosBtn.disabled = true;
                 carregarFuncionariosTelaBtn.disabled = true;
                 funcionariosStatus.textContent = 'Usuario sem loja permitida';
@@ -1684,6 +1770,7 @@
             funcionariosLojaSelect.disabled = false;
             if (homeLojaSelect) homeLojaSelect.disabled = false;
             if (secoesLojaSelect) secoesLojaSelect.disabled = false;
+            if (secaoFormLoja) secaoFormLoja.disabled = false;
             carregarFuncionariosBtn.disabled = false;
             carregarFuncionariosTelaBtn.disabled = false;
 
@@ -1696,6 +1783,7 @@
                 funcionariosLojaSelect.appendChild(option.cloneNode(true));
                 homeLojaSelect?.appendChild(option.cloneNode(true));
                 secoesLojaSelect?.appendChild(option.cloneNode(true));
+                secaoFormLoja?.appendChild(option.cloneNode(true));
             });
 
             const lojaSelecionada = lojasPermitidasCache.includes(Number(lojaAtual))
@@ -1705,6 +1793,7 @@
             funcionariosLojaSelect.value = lojaSelecionada;
             if (homeLojaSelect) homeLojaSelect.value = lojaSelecionada;
             if (secoesLojaSelect) secoesLojaSelect.value = lojaSelecionada;
+            if (secaoFormLoja) secaoFormLoja.value = lojaSelecionada;
             return lojas;
         };
 
@@ -1732,6 +1821,44 @@
             }
         };
 
+        const preencherFormularioSecao = (secao = null) => {
+            const turno = getSecaoTurnoPadrao(secao) || {};
+            secaoFormId.value = secao?.ESCSECAO_ID || '';
+            secaoFormLoja.value = secao?.LOJA || secoesLojaSelect?.value || lojaEscalaSelect.value || '';
+            secaoFormCodigo.value = secao?.COD_SECAO || '';
+            secaoFormDescr.value = secao?.DESCR || '';
+            secaoFormQtde.value = turno.QTDE_COLABORADORES || 1;
+            secaoFormHrEnt1.value = turno.HR_ENT1 || '';
+            secaoFormHrSai1.value = turno.HR_SAI1 || '';
+            secaoFormHrEnt2.value = turno.HR_ENT2 || '';
+            secaoFormHrSai2.value = turno.HR_SAI2 || '';
+        };
+
+        const prepararFormularioSecao = async (escsecaoId = '') => {
+            const loja = secoesLojaSelect?.value || lojaEscalaSelect.value;
+            if (secaoFormLoja && loja) secaoFormLoja.value = loja;
+
+            if (!escsecaoId || escsecaoId === 'nova') {
+                secaoFormTitulo.textContent = 'Nova Seção';
+                preencherFormularioSecao(null);
+                return;
+            }
+
+            if (secoesLojaCache.length === 0) {
+                await carregarSecoesDaLoja(true);
+            }
+
+            const secao = secoesLojaCache.find(item => Number(item.ESCSECAO_ID) === Number(escsecaoId));
+            if (!secao) {
+                showInfoModal('Seção não encontrada para edição.', 'error');
+                window.location.hash = '/secoes';
+                return;
+            }
+
+            secaoFormTitulo.textContent = `Editar Seção - ${secao.DESCR || secao.COD_SECAO}`;
+            preencherFormularioSecao(secao);
+        };
+
         const renderizarSecoesTela = (secoes, loja) => {
             secoesTitulo.textContent = `Secoes cadastradas - Loja ${loja}`;
             tabelaSecoesBody.innerHTML = '';
@@ -1752,8 +1879,8 @@
                         <td data-label="Saida 1">${escapeHtml(turno.HR_SAI1 || '')}</td>
                         <td data-label="Entrada 2">${escapeHtml(turno.HR_ENT2 || '')}</td>
                         <td data-label="Saida 2">${escapeHtml(turno.HR_SAI2 || '')}</td>
-                        <td data-label="Acoes">
-                            <button class="action-btn-table edit-secao" data-id="${escapeHtml(secao.ESCSECAO_ID || '')}" title="Editar turno da secao">
+                        <td data-label="Acoes" class="actions-cell">
+                            <button class="action-btn-table edit-secao" data-id="${escapeHtml(secao.ESCSECAO_ID || '')}" title="Editar secao">
                                 <span class="material-symbols-outlined">edit</span>
                                 Editar
                             </button>
@@ -1785,40 +1912,50 @@
             const editButton = event.target.closest('.edit-secao');
             if (!editButton) return;
 
-            const loja = secoesLojaSelect?.value || lojaEscalaSelect.value;
-            const secao = secoesLojaCache.find(item => Number(item.ESCSECAO_ID) === Number(editButton.dataset.id));
-            if (!loja || !secao) {
-                showInfoModal('Secao nao encontrada para edicao.', 'error');
+            window.location.hash = `/secoes/${editButton.dataset.id}`;
+        });
+
+        novaSecaoBtn?.addEventListener('click', () => {
+            window.location.hash = '/secoes/nova';
+        });
+
+        voltarSecoesBtn?.addEventListener('click', () => {
+            window.location.hash = '/secoes';
+        });
+
+        secaoForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const loja = secaoFormLoja.value;
+            const escsecaoId = secaoFormId.value;
+            if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
+                showInfoModal('Selecione uma loja permitida para salvar a seção.', 'error');
                 return;
             }
 
-            const turno = getSecaoTurnoPadrao(secao) || {};
-            const values = await showInputModal({
-                title: `Editar turno - ${secao.DESCR || secao.COD_SECAO}`,
-                inputs: [
-                    { label: 'Colaboradores previstos', type: 'number', id: 'QTDE_COLABORADORES', value: turno.QTDE_COLABORADORES || 1, required: true },
-                    { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: turno.HR_ENT1 || '', required: true },
-                    { label: 'Saida 1', type: 'time', id: 'HR_SAI1', value: turno.HR_SAI1 || '', required: true },
-                    { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: turno.HR_ENT2 || '', required: true },
-                    { label: 'Saida 2', type: 'time', id: 'HR_SAI2', value: turno.HR_SAI2 || '', required: true }
-                ],
-                confirmText: 'Salvar'
-            });
-            if (!values) return;
-
             try {
-                await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/secoes/${encodeURIComponent(secao.ESCSECAO_ID)}/turno`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({
-                        QTDE_COLABORADORES: Number(values.QTDE_COLABORADORES),
-                        HR_ENT1: values.HR_ENT1,
-                        HR_SAI1: values.HR_SAI1,
-                        HR_ENT2: values.HR_ENT2,
-                        HR_SAI2: values.HR_SAI2
-                    })
+                const payload = {
+                    COD_SECAO: Number(secaoFormCodigo.value),
+                    DESCR: secaoFormDescr.value.trim(),
+                    QTDE_COLABORADORES: Number(secaoFormQtde.value),
+                    HR_ENT1: secaoFormHrEnt1.value,
+                    HR_SAI1: secaoFormHrSai1.value,
+                    HR_ENT2: secaoFormHrEnt2.value,
+                    HR_SAI2: secaoFormHrSai2.value
+                };
+                const url = escsecaoId
+                    ? `/api/catalog/lojas/${encodeURIComponent(loja)}/secoes/${encodeURIComponent(escsecaoId)}`
+                    : `/api/catalog/lojas/${encodeURIComponent(loja)}/secoes`;
+                await apiRequest(url, {
+                    method: escsecaoId ? 'PUT' : 'POST',
+                    body: JSON.stringify(payload)
                 });
+                lojaEscalaSelect.value = loja;
+                funcionariosLojaSelect.value = loja;
+                if (homeLojaSelect) homeLojaSelect.value = loja;
+                if (secoesLojaSelect) secoesLojaSelect.value = loja;
                 await carregarSecoesTela(false);
-                showInfoModal('Turno da secao atualizado com sucesso.', 'success');
+                showInfoModal('Seção salva com sucesso.', 'success');
+                window.location.hash = '/secoes';
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
@@ -2205,13 +2342,8 @@
         const renderizarRolesSettings = async () => {
             if (usuarioSessaoCache?.perfil !== 'ADMIN') return;
 
-            let container = document.getElementById('rolesSettingsContainer');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'rolesSettingsContainer';
-                container.className = 'mt-6 border-t pt-6';
-                settingsPage.querySelector('.bg-white')?.appendChild(container);
-            }
+            const container = document.getElementById('rolesSettingsContainer');
+            if (!container) return;
 
             if (usuariosAcessoCache.length === 0) {
                 const data = await apiRequest('/api/acessos/usuarios');
@@ -2237,8 +2369,7 @@
             `).join('');
 
             container.innerHTML = `
-                <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Roles e Permissões</h4>
-                <table class="data-table mt-4">
+                <table class="data-table">
                     <thead>
                         <tr>
                             <th>Role</th>
@@ -2913,7 +3044,6 @@
         window.onload = async () => { 
             try {
                 popularSeletoresData(); 
-                if (homeDataInput) homeDataInput.valueAsDate = new Date();
                 await carregarUsuarioSessao();
                 configurarAcoesAdmin();
                 await carregarEstadoServidor();

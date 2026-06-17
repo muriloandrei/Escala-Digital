@@ -21,6 +21,11 @@ const secaoTurnoSchema = z.object({
   QTDE_COLABORADORES: z.number().int().positive().max(500)
 }).strict();
 
+const secaoSchema = secaoTurnoSchema.extend({
+  COD_SECAO: z.number().int().positive(),
+  DESCR: z.string().trim().min(1).max(100)
+}).strict();
+
 router.use(requireAuth);
 
 async function resolveLojaParam(req, res, next) {
@@ -64,6 +69,44 @@ router.get('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async (
     res.json({ secoes });
   } catch (error) {
     next(error);
+  }
+});
+
+router.post('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+  try {
+    const data = secaoSchema.parse(req.body);
+    const secao = await catalogService.createSecao({
+      lojaId: Number(req.params.lojaId),
+      data
+    });
+    return res.status(201).json({ secao });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos de secao invalidos.', details: error.errors });
+    }
+    return next(error);
+  }
+});
+
+router.put('/lojas/:lojaId/secoes/:escsecaoId', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+  try {
+    const data = secaoSchema.parse(req.body);
+    const secao = await catalogService.updateSecao({
+      lojaId: Number(req.params.lojaId),
+      escsecaoId: Number(req.params.escsecaoId),
+      data
+    });
+
+    if (!secao) {
+      return res.status(404).json({ error: 'Secao nao encontrada para a loja.' });
+    }
+
+    return res.json({ secao });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos de secao invalidos.', details: error.errors });
+    }
+    return next(error);
   }
 });
 

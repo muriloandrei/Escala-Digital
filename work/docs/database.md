@@ -76,6 +76,7 @@ O backend inicial usa sequences para inserts:
 ```sql
 create sequence SGN_ESC_PROG_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_PROG_DIA_SEQ start with 1 increment by 1 nocache;
+create sequence SGN_ESC_SECAO_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_SECAO_TURNO_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_USUARIO_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_AUDITORIA_SEQ start with 1 increment by 1 nocache;

@@ -17,6 +17,10 @@ Este mapa lista as chamadas HTTP usadas pela UI e as tabelas Oracle consultadas 
 | Select de lojas | `/api/catalog/lojas` | `GET` | `catalogService.listLojas` | Lista lojas e exigencia de brigadistas | `SGN_ESC_LOJA` |
 | Tela Funcionarios | `/api/catalog/lojas/:lojaId/funcionarios` | `GET` | `catalogService.listFuncionariosByLoja` | Lista funcionarios da loja selecionada | `SGN_ESC_FUNCIONARIO` |
 | Editar dados de escala do funcionario | `/api/catalog/lojas/:lojaId/funcionarios/:escfuncId` | `PATCH` | `catalogService.updateFuncionarioEscala` | Atualiza somente campos permitidos de escala | `SGN_ESC_FUNCIONARIO` |
+| Tela Secoes | `/api/catalog/lojas/:lojaId/secoes` | `GET` | `catalogService.listSecoesByLoja` | Lista secoes da loja e seus horarios cadastrados | `SGN_ESC_SECAO`, `SGN_ESC_SECAO_TURNO` |
+| Criar secao | `/api/catalog/lojas/:lojaId/secoes` | `POST` | `catalogService.createSecao` | Insere secao e grava o turno padrao da secao | `SGN_ESC_SECAO`, `SGN_ESC_SECAO_TURNO`, `SGN_ESC_SECAO_SEQ`, `SGN_ESC_SECAO_TURNO_SEQ` |
+| Editar secao | `/api/catalog/lojas/:lojaId/secoes/:escsecaoId` | `PUT` | `catalogService.updateSecao` | Atualiza descricao/codigo da secao e o turno padrao | `SGN_ESC_SECAO`, `SGN_ESC_SECAO_TURNO` |
+| Editar turno da secao | `/api/catalog/lojas/:lojaId/secoes/:escsecaoId/turno` | `PATCH` | `catalogService.upsertSecaoTurno` | Atualiza ou cria o turno padrao usado na geracao de escala | `SGN_ESC_SECAO`, `SGN_ESC_SECAO_TURNO`, `SGN_ESC_SECAO_TURNO_SEQ` |
 | Ausencias do mes | `/api/catalog/lojas/:lojaId/ausencias?inicio=YYYY-MM-DD&fim=YYYY-MM-DD` | `GET` | `catalogService.listAusenciasByLojaMes` | Lista ausencias da loja no periodo | `SGN_ESC_AUSENCIA`, `SGN_ESC_FUNCIONARIO` |
 
 ## Escalas

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -26,12 +26,29 @@
             </div>
             <nav class="sidebar-nav">
                 <ul>
-                    <li><a href="#/home" id="nav-timeline" class="active"><span class="material-symbols-outlined">schedule</span><span class="nav-label">Home</span></a></li>
-                    <li><a href="#/escalas" id="nav-registros"><span class="material-symbols-outlined">wysiwyg</span><span class="nav-label">Escalas Geradas</span></a></li>
-                    <li><a href="#/funcionarios" id="nav-funcionarios"><span class="material-symbols-outlined">badge</span><span class="nav-label">Funcionários</span></a></li>
-                    <li><a href="#/secoes" id="nav-secoes"><span class="material-symbols-outlined">account_tree</span><span class="nav-label">Se��es</span></a></li>
-                    <li><a href="#/acessos" id="nav-acessos"><span class="material-symbols-outlined">admin_panel_settings</span><span class="nav-label">Controle de Acesso</span></a></li>
-                    <li><a href="#/configuracoes" id="nav-settings"><span class="material-symbols-outlined">settings</span><span class="nav-label">Configurações</span></a></li>
+                    <li><a href="#/home" id="nav-timeline" class="active"><span class="material-symbols-outlined">home</span><span class="nav-label">Home</span></a></li>
+                    <li class="nav-group">
+                        <button type="button" class="nav-parent" data-nav-group="escalas"><span class="material-symbols-outlined">event_note</span><span class="nav-label">Escalas</span><span class="material-symbols-outlined nav-chevron">expand_more</span></button>
+                        <div class="nav-children">
+                            <a href="#/escalas-criadas" id="nav-escalas-criadas"><span class="nav-child-dot"></span><span class="nav-label">Escalas Criadas</span></a>
+                            <a href="#/escalas-geradas" id="nav-registros"><span class="nav-child-dot"></span><span class="nav-label">Escalas Geradas</span></a>
+                            <a href="#/secoes" id="nav-secoes"><span class="nav-child-dot"></span><span class="nav-label">Seções</span></a>
+                        </div>
+                    </li>
+                    <li class="nav-group">
+                        <button type="button" class="nav-parent" data-nav-group="funcionarios"><span class="material-symbols-outlined">badge</span><span class="nav-label">Funcionários</span><span class="material-symbols-outlined nav-chevron">expand_more</span></button>
+                        <div class="nav-children">
+                            <a href="#/funcionarios" id="nav-funcionarios"><span class="nav-child-dot"></span><span class="nav-label">Funcionários</span></a>
+                        </div>
+                    </li>
+                    <li class="nav-group">
+                        <button type="button" class="nav-parent" data-nav-group="configuracoes"><span class="material-symbols-outlined">settings</span><span class="nav-label">Configurações</span><span class="material-symbols-outlined nav-chevron">expand_more</span></button>
+                        <div class="nav-children">
+                            <a href="#/acessos" id="nav-acessos"><span class="nav-child-dot"></span><span class="nav-label">Controle de Acesso</span></a>
+                            <a href="#/roles" id="nav-roles"><span class="nav-child-dot"></span><span class="nav-label">Roles / Permissão</span></a>
+                            <a href="#/configuracoes" id="nav-settings"><span class="nav-child-dot"></span><span class="nav-label">Configurações</span></a>
+                        </div>
+                    </li>
                 </ul>
             </nav>
         </aside>
@@ -40,13 +57,12 @@
             <header class="app-topbar no-print">
                 <div>
                     <p class="app-eyebrow">Escala Inteligente Savegnago</p>
-                    <strong id="currentPageTitle">Home</strong>
                 </div>
                 <div class="session-summary">
                     <span class="material-symbols-outlined">account_circle</span>
                     <div>
                         <strong id="loggedUserName">Carregando...</strong>
-                        <span id="loggedUserStores">Loja não carregada</span>
+                        <span id="loggedUserStores">Loja nÃ£o carregada</span>
                     </div>
                     <button id="logoutAppBtn" type="button" class="logout-button">
                         <span class="material-symbols-outlined">logout</span>
@@ -59,9 +75,7 @@
                 <header class="main-header">
                     <h1>Home</h1>
                     <div class="header-actions">
-                        <input id="homeDataInput" type="date" class="rounded-md border-gray-300 shadow-sm text-sm h-10">
                         <select id="homeLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                        <input id="homeBuscaChapaInput" type="search" class="rounded-md border-gray-300 shadow-sm text-sm h-10" placeholder="Buscar chapa...">
                         <button id="abrirTurnoModalBtn" type="button" class="action-button secondary">
                             <span class="material-symbols-outlined">add_circle</span>
                             Adicionar Turno
@@ -69,7 +83,7 @@
                     </div>
                 </header>
                 <div class="timeline-metrics no-print">
-                    <div><span>Funcionários na loja</span><strong id="funcionariosLojaCount">0</strong></div>
+                    <div><span>FuncionÃ¡rios na loja</span><strong id="funcionariosLojaCount">0</strong></div>
                     <div><span>Turnos criados</span><strong id="turnosCriadosCount">0</strong></div>
                     <div><span>Turnos restantes</span><strong id="turnosRestantesCount">0</strong></div>
                 </div>
@@ -81,16 +95,16 @@
                                 <button id="closeTurnoModalBtn" type="button" class="text-gray-500 hover:text-gray-800 text-3xl font-bold" title="Fechar" aria-label="Fechar modal">&times;</button>
                             </div>
                             <div class="space-y-4">
-                                <div><label for="secaoTurnoSelect" class="block text-sm font-medium text-gray-700">Se��o</label><select id="secaoTurnoSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select></div>
+                                <div><label for="secaoTurnoSelect" class="block text-sm font-medium text-gray-700">Selecione uma seção.</label><select id="secaoTurnoSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></select></div>
                                 <div><label for="quantidade" class="block text-sm font-medium text-gray-700">Colaboradores previstos</label><input type="number" id="quantidade" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
-                                <div class="grid grid-cols-2 gap-3">
+                                <div class="grid grid-cols-2 gap-3 hidden">
                                     <div><label for="inicioEscala" class="block text-sm font-medium text-gray-700">Entrada 1</label><input type="time" id="inicioEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
-                                    <div><label for="inicioIntervalo" class="block text-sm font-medium text-gray-700">Sa�da 1</label><input type="time" id="inicioIntervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
+                                    <div><label for="inicioIntervalo" class="block text-sm font-medium text-gray-700">Saída 1</label><input type="time" id="inicioIntervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
                                     <div><label for="fimIntervalo" class="block text-sm font-medium text-gray-700">Entrada 2</label><input type="time" id="fimIntervalo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
-                                    <div><label for="fimEscala" class="block text-sm font-medium text-gray-700">Sa�da 2</label><input type="time" id="fimEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
+                                    <div><label for="fimEscala" class="block text-sm font-medium text-gray-700">Saída 2</label><input type="time" id="fimEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
                                 </div>                                <div class="flex space-x-2">
                                     <button id="addEscalaBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Adicionar</button>
-                                    <button id="cancelEditBtn" type="button" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300 hidden">Cancelar Edição</button>
+                                    <button id="cancelEditBtn" type="button" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300 hidden">Cancelar EdiÃ§Ã£o</button>
                                 </div>
                             </div>
                         </form>
@@ -153,7 +167,7 @@
                                 <th>Data</th>
                                 <th>Nome</th>
                                 <th>Setor</th>
-                                <th>Ações</th>
+                                <th>AÃ§Ãµes</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-registros-body">
@@ -171,12 +185,12 @@
                         <thead>
                             <tr>
                                 <th>ID</th>
-                                <th>Mês</th>
+                                <th>MÃªs</th>
                                 <th>Loja</th>
                                 <th>Chapa</th>
-                                <th>Funcionário</th>
-                                <th>Revisão</th>
-                                <th>Ações</th>
+                                <th>FuncionÃ¡rio</th>
+                                <th>RevisÃ£o</th>
+                                <th>AÃ§Ãµes</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-banco-body">
@@ -200,7 +214,7 @@
 
                 <div class="table-card">
                     <div class="table-card-header">
-                        <h2 id="funcionariosTitulo">Funcionários cadastrados</h2>
+                        <h2 id="funcionariosTitulo">FuncionÃ¡rios cadastrados</h2>
                     </div>
                     <table class="data-table">
                         <thead>
@@ -208,17 +222,17 @@
                                 <th>Chapa</th>
                                 <th>Nome</th>
                                 <th>Loja</th>
-                                <th>Seção</th>
-                                <th>Função</th>
+                                <th>SeÃ§Ã£o</th>
+                                <th>FunÃ§Ã£o</th>
                                 <th>Brigadista</th>
                                 <th>Entrada 1</th>
-                                <th>Saída 1</th>
+                                <th>SaÃ­da 1</th>
                                 <th>Entrada 2</th>
-                                <th>Saída 2</th>
+                                <th>SaÃ­da 2</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-funcionarios-body">
-                            <tr><td colspan="10" class="text-center text-gray-500 py-8">Selecione uma loja e carregue os funcionários.</td></tr>
+                            <tr><td colspan="10" class="text-center text-gray-500 py-8">Selecione uma loja e carregue os funcionÃ¡rios.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -237,7 +251,7 @@
 
                 <div class="table-card">
                     <div class="table-card-header">
-                        <h2>Usuários com acesso à escala</h2>
+                        <h2>UsuÃ¡rios com acesso Ã  escala</h2>
                     </div>
                     <table class="data-table">
                         <thead>
@@ -250,7 +264,7 @@
                             </tr>
                         </thead>
                         <tbody id="tabela-acessos-body">
-                            <tr><td colspan="5" class="text-center text-gray-500 py-8">Carregue os usuários com acesso à escala.</td></tr>
+                            <tr><td colspan="5" class="text-center text-gray-500 py-8">Carregue os usuÃ¡rios com acesso Ã  escala.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -258,9 +272,13 @@
 
             <div id="secoes-page" class="hidden">
                 <header class="main-header">
-                    <h1>Se��es</h1>
+                    <h1>Seções</h1>
                     <div class="header-actions">
                         <select id="secoesLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                        <button class="action-button" id="novaSecaoBtn">
+                            <span class="material-symbols-outlined">add</span>
+                            Criar Nova Seção
+                        </button>
                         <button class="action-button secondary" id="carregarSecoesBtn">
                             <span class="material-symbols-outlined">refresh</span>
                             Carregar
@@ -270,29 +288,52 @@
 
                 <div class="table-card">
                     <div class="table-card-header">
-                        <h2 id="secoesTitulo">Se��es cadastradas</h2>
-                        <p class="table-card-subtitle">Cada se��o pode ter um turno padr�o usado pelo gerador de escala.</p>
+                        <h2 id="secoesTitulo">Seções cadastradas</h2>
+                        <p class="table-card-subtitle">Cada seção pode ter um turno padrão usado pelo gerador de escala.</p>
                     </div>
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>C�digo</th>
-                                <th>Descri��o</th>
+                                <th>Código</th>
+                                <th>Descrição</th>
                                 <th>Colaboradores</th>
                                 <th>Entrada 1</th>
-                                <th>Sa�da 1</th>
+                                <th>Saída 1</th>
                                 <th>Entrada 2</th>
-                                <th>Sa�da 2</th>
-                                <th>A��es</th>
+                                <th>Saída 2</th>
+                                <th>Ações</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-secoes-body">
-                            <tr><td colspan="8" class="text-center text-gray-500 py-8">Selecione uma loja e carregue as se��es.</td></tr>
+                            <tr><td colspan="8" class="text-center text-gray-500 py-8">Selecione uma loja e carregue as seções.</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
+            <div id="secao-form-page" class="hidden">
+                <header class="main-header">
+                    <h1 id="secaoFormTitulo">Nova Seção</h1>
+                    <div class="header-actions">
+                        <button class="action-button secondary" id="voltarSecoesBtn"><span class="material-symbols-outlined">arrow_back</span>Voltar</button>
+                    </div>
+                </header>
+                <div class="table-card form-card">
+                    <div class="table-card-header"><h2>Dados da seção</h2><p class="table-card-subtitle">Cadastre a seção e o turno padrão usado pelo gerador de escala.</p></div>
+                    <form id="secaoForm" class="dashboard-form">
+                        <input type="hidden" id="secaoFormId">
+                        <div><label for="secaoFormLoja">Loja</label><select id="secaoFormLoja" required></select></div>
+                        <div><label for="secaoFormCodigo">Código da seção</label><input id="secaoFormCodigo" type="number" min="1" required></div>
+                        <div class="form-span-2"><label for="secaoFormDescr">Descrição</label><input id="secaoFormDescr" type="text" maxlength="100" required></div>
+                        <div><label for="secaoFormQtde">Colaboradores previstos</label><input id="secaoFormQtde" type="number" min="1" max="500" required></div>
+                        <div><label for="secaoFormHrEnt1">Entrada 1</label><input id="secaoFormHrEnt1" type="time" required></div>
+                        <div><label for="secaoFormHrSai1">Saída 1</label><input id="secaoFormHrSai1" type="time" required></div>
+                        <div><label for="secaoFormHrEnt2">Entrada 2</label><input id="secaoFormHrEnt2" type="time" required></div>
+                        <div><label for="secaoFormHrSai2">Saída 2</label><input id="secaoFormHrSai2" type="time" required></div>
+                        <div class="form-actions form-span-2"><button type="submit" class="action-button"><span class="material-symbols-outlined">save</span>Salvar Seção</button></div>
+                    </form>
+                </div>
+            </div>
             <div id="escala-detalhe-page" class="hidden">
                 <header class="main-header">
                     <h1>Detalhamento da Escala</h1>
@@ -314,12 +355,12 @@
                         <thead>
                             <tr>
                                 <th>Data</th>
-                                <th>Programa��o</th>
+                                <th>Programação</th>
                                 <th>Entrada 1</th>
-                                <th>Sa�da 1</th>
+                                <th>Saída 1</th>
                                 <th>Entrada 2</th>
-                                <th>Sa�da 2</th>
-                                <th>A��es</th>
+                                <th>Saída 2</th>
+                                <th>Ações</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-escala-detalhe-body">
@@ -328,33 +369,40 @@
                     </table>
                 </div>
             </div>
+            <div id="roles-page" class="hidden">
+                <header class="main-header"><h1>Roles / Permissão</h1></header>
+                <div class="table-card">
+                    <div class="table-card-header"><h2>Roles e permissões</h2><p class="table-card-subtitle">Resumo dos perfis cadastrados e lojas associadas.</p></div>
+                    <div id="rolesSettingsContainer"></div>
+                </div>
+            </div>
             <div id="settings-page" class="hidden">
-                 <header class="main-header"><h1>Configurações</h1></header>
+                 <header class="main-header"><h1>ConfiguraÃ§Ãµes</h1></header>
                 <div class="bg-white p-6 rounded-xl shadow-md w-full max-w-2xl mx-auto">
                     
                         <hr class="my-6">
                         <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Linha do Tempo</h4>
-                        <div><label for="horaInicioTimeline" class="block text-sm font-medium text-gray-700">Hora Início</label><input type="time" id="horaInicioTimeline" value="05:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="horaInicioTimeline" class="block text-sm font-medium text-gray-700">Hora InÃ­cio</label><input type="time" id="horaInicioTimeline" value="05:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
                         <div><label for="horaFimTimeline" class="block text-sm font-medium text-gray-700">Hora Fim</label><input type="time" id="horaFimTimeline" value="23:30" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
                         <div><label for="intervaloMarcacao" class="block text-sm font-medium text-gray-700">Intervalo (minutos)</label><input type="number" id="intervaloMarcacao" value="30" min="5" step="5" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
                         <hr class="my-6">
                         <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Regras de Turno</h4>
-                        <div><label for="regraJornadaTrabalho" class="block text-sm font-medium text-gray-700">Jornada de Trabalho Padrão</label><input type="time" id="regraJornadaTrabalho" value="07:20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxHoraExtra" class="block text-sm font-medium text-gray-700">Máximo de Hora Extra Diária</label><input type="time" id="regraMaxHoraExtra" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraJornadaTrabalho" class="block text-sm font-medium text-gray-700">Jornada de Trabalho PadrÃ£o</label><input type="time" id="regraJornadaTrabalho" value="07:20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxHoraExtra" class="block text-sm font-medium text-gray-700">MÃ¡ximo de Hora Extra DiÃ¡ria</label><input type="time" id="regraMaxHoraExtra" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
                         <hr>
-                        <div><label for="regraMinIntervalo" class="block text-sm font-medium text-gray-700">Duração Mínima Intervalo</label><input type="time" id="regraMinIntervalo" value="01:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxIntervalo" class="block text-sm font-medium text-gray-700">Duração Máxima Intervalo</label><input type="time" id="regraMaxIntervalo" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxJornadaContinua" class="block text-sm font-medium text-gray-700">Jornada Máxima Contínua</label><input type="time" id="regraMaxJornadaContinua" value="06:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraDescansoEntreTurnos" class="block text-sm font-medium text-gray-700">Descanso Mínimo Entre Turnos</label><input type="time" id="regraDescansoEntreTurnos" value="11:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraDescansoPosFolga" class="block text-sm font-medium text-gray-700">Descanso Mínimo Pós-Folga (horas)</label><input type="number" id="regraDescansoPosFolga" value="35" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxDiasConsecutivos" class="block text-sm font-medium text-gray-700">Máximo de Dias de Trabalho Consecutivos</label><input type="number" id="regraMaxDiasConsecutivos" value="7" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMinIntervalo" class="block text-sm font-medium text-gray-700">DuraÃ§Ã£o MÃ­nima Intervalo</label><input type="time" id="regraMinIntervalo" value="01:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxIntervalo" class="block text-sm font-medium text-gray-700">DuraÃ§Ã£o MÃ¡xima Intervalo</label><input type="time" id="regraMaxIntervalo" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxJornadaContinua" class="block text-sm font-medium text-gray-700">Jornada MÃ¡xima ContÃ­nua</label><input type="time" id="regraMaxJornadaContinua" value="06:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraDescansoEntreTurnos" class="block text-sm font-medium text-gray-700">Descanso MÃ­nimo Entre Turnos</label><input type="time" id="regraDescansoEntreTurnos" value="11:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraDescansoPosFolga" class="block text-sm font-medium text-gray-700">Descanso MÃ­nimo PÃ³s-Folga (horas)</label><input type="number" id="regraDescansoPosFolga" value="35" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxDiasConsecutivos" class="block text-sm font-medium text-gray-700">MÃ¡ximo de Dias de Trabalho Consecutivos</label><input type="number" id="regraMaxDiasConsecutivos" value="7" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
                         
                         <hr class="my-6">
-                        <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Backup e Restauração de TUDO</h4>
+                        <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Backup e RestauraÃ§Ã£o de TUDO</h4>
                         <div class="space-y-3">
                             <p class="text-sm text-gray-600">
-                                Salve um arquivo de backup com TODAS as suas escalas e configurações. 
-                                Use a opção de carregar para restaurar TODOS os dados a partir de um backup.
+                                Salve um arquivo de backup com TODAS as suas escalas e configuraÃ§Ãµes.
+                                Use a opÃ§Ã£o de carregar para restaurar TODOS os dados a partir de um backup.
                             </p>
                             <div class="flex gap-4">
                                 <button id="salvarBackupBtn" type="button" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Salvar Backup Total</button>
@@ -364,7 +412,7 @@
                         <input type="file" id="backupFileInput" class="hidden" accept=".json">
                         </div>
                     <div class="pt-6 border-t mt-6">
-                        <button id="salvarSettingsBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Salvar Alterações</button>
+                        <button id="salvarSettingsBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Salvar AlteraÃ§Ãµes</button>
                     </div>
                 </div>
             </div>
@@ -375,30 +423,30 @@
 <div id="esqueletoModal" class="modal-overlay hidden no-print">
     <div id="esqueleto-modal-content" class="bg-white rounded-lg shadow-xl w-11/12 h-[95vh] max-w-none flex flex-col modal-content">
         
-        <!-- CABEÇALHO COM TODOS OS BOTÕES EM UMA LINHA -->
+        <!-- CABEÃ‡ALHO COM TODOS OS BOTÃ•ES EM UMA LINHA -->
         <div id="esqueleto-modal-header" class="flex items-center justify-between p-4 border-b overflow-x-auto overflow-y-hidden no-scrollbar" style="-ms-overflow-style: none; scrollbar-width: none;">
             <h3 class="text-lg font-bold text-gray-800 whitespace-nowrap mr-6">Escala</h3>
             
             <div class="flex items-center gap-2 no-print flex-nowrap">
                 <!-- Seletores de Data -->
                 <select id="lojaEscalaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10" title="Loja"></select>
-                <button id="carregarFuncionariosBtn" class="whitespace-nowrap text-sm bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Carregar Funcionários</button>
+                <button id="carregarFuncionariosBtn" class="whitespace-nowrap text-sm bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Carregar FuncionÃ¡rios</button>
                 <span id="funcionariosStatus" class="text-xs text-gray-600 whitespace-nowrap"></span>
                 <select id="mesSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
                 <select id="anoSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                  <!-- Regra e Distribuição Automática -->
+                  <!-- Regra e DistribuiÃ§Ã£o AutomÃ¡tica -->
                 <select id="regraDomingoSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10" title="Regra de Domingo">
-                    <option value="3">Dom. 2×1</option>
-                    <option value="2">Dom. 1×1</option>
+                    <option value="3">Dom. 2Ã—1</option>
+                    <option value="2">Dom. 1Ã—1</option>
                 </select>
-                <button id="autoDistribuirFolgasBtn" class="whitespace-nowrap text-sm bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Distribuir Folgas 5×2</button>
-                <!-- Botões de Visualização -->
+                <button id="autoDistribuirFolgasBtn" class="whitespace-nowrap text-sm bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Distribuir Folgas 5Ã—2</button>
+                <!-- BotÃµes de VisualizaÃ§Ã£o -->
                 <button id="visualizarTimelineBtn" class="whitespace-nowrap text-sm bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Visualizar Timeline</button>
                 <button id="gerarEscalaDetalhadaBtn" class="whitespace-nowrap text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Gerar Escala Detalhada</button>
                 
               
                 
-                <!-- Ações e Utilidades -->
+                <!-- AÃ§Ãµes e Utilidades -->
                 <button id="imprimirEsqueletoBtn" class="whitespace-nowrap text-sm bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Imprimir Esqueleto</button>
                 
                 <!-- Controles de Zoom -->
@@ -408,7 +456,7 @@
                     <span id="zoomInBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Aumentar Zoom">zoom_in</span>
                 </div>
                 
-                <!-- Botão Fechar -->
+                <!-- BotÃ£o Fechar -->
                 <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-3xl font-bold" title="Fechar" aria-label="Fechar modal">&times;</button>
             </div>
         </div>
@@ -456,7 +504,7 @@
     <div id="infoModal" class="modal-overlay hidden no-print" style="z-index: 1070;">
         <div class="bg-white rounded-lg shadow-xl w-11/12 max-w-md flex flex-col modal-content">
             <div id="infoModalHeader" class="flex justify-between items-center p-4 text-white rounded-t-lg">
-                <h3 id="infoModalTitle" class="text-lg font-bold">Atenção</h3>
+                <h3 id="infoModalTitle" class="text-lg font-bold">AtenÃ§Ã£o</h3>
                 <button id="closeInfoModalBtn" class="text-white hover:text-gray-200 text-2xl font-bold">&times;</button>
             </div>
             <div id="infoModalBody" class="p-6">
@@ -467,7 +515,7 @@
 
     <div id="inputModal" class="modal-overlay hidden no-print" style="z-index: 1080;">
         <div class="bg-white rounded-lg shadow-xl w-11/12 max-w-sm flex flex-col">
-            <h3 id="inputModalTitle" class="text-lg font-bold p-4 border-b text-gray-800">Título do Modal</h3>
+            <h3 id="inputModalTitle" class="text-lg font-bold p-4 border-b text-gray-800">TÃ­tulo do Modal</h3>
             <div id="inputModalBody" class="p-6 space-y-4">
                 </div>
             <div class="p-4 bg-gray-50 rounded-b-lg flex justify-end gap-3">
