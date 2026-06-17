@@ -79,17 +79,18 @@ async function saveEscala({ lojaId, mesRef, escalaOrigemId, funcionario, dias, o
 }
 
 async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dias, oficializada = 0 }) {
-  // === TRAVA DE SEGURANÇA ===
-  // Se o front-end não enviar a seção, o back-end busca direto do banco!
+  // === TRAVA DE SEGURANÇA DUPLA ===
   let escsecaoId = funcionario.escsecaoId || funcionario.ESCSECAO_ID;
+  let escfuncaoId = funcionario.escfuncaoId || funcionario.ESCFUNCAO_ID;
   
-  if (!escsecaoId) {
+  if (!escsecaoId || !escfuncaoId) {
     const funcResult = await connection.execute(
-      `select escsecao_id from sgn_esc_funcionario where escfunc_id = :id`,
+      `select escsecao_id, escfuncao_id from sgn_esc_funcionario where escfunc_id = :id`,
       { id: funcionario.escfuncId || funcionario.ESCFUNC_ID },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-    escsecaoId = funcResult.rows[0]?.ESCSECAO_ID;
+    escsecaoId = escsecaoId || funcResult.rows[0]?.ESCSECAO_ID;
+    escfuncaoId = escfuncaoId || funcResult.rows[0]?.ESCFUNCAO_ID;
   }
 
   const revisionResult = await connection.execute(
@@ -109,9 +110,9 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
   const revisao = Number(revisionResult.rows[0]?.REVISAO || 1);
   const header = await connection.execute(
     `insert into sgn_esc_prog (
-        escprog_id, mes_ref, escfunc_id, loja, chapa, revisao, oficializada, escsecao_id
+        escprog_id, mes_ref, escfunc_id, loja, chapa, revisao, oficializada, escsecao_id, escfuncao_id
      ) values (
-        sgn_esc_prog_seq.nextval, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :lojaId, :chapa, :revisao, :oficializada, :escsecaoId
+        sgn_esc_prog_seq.nextval, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :lojaId, :chapa, :revisao, :oficializada, :escsecaoId, :escfuncaoId
      )
      returning escprog_id into :escprogId`,
     {
@@ -121,7 +122,8 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
       chapa: funcionario.chapa || funcionario.CHAPA,
       revisao,
       oficializada,
-      escsecaoId: escsecaoId, // Usando a variável blindada que criamos acima
+      escsecaoId: escsecaoId,
+      escfuncaoId: escfuncaoId, // Inserindo a função obrigatória
       escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
     },
     { autoCommit: false }
