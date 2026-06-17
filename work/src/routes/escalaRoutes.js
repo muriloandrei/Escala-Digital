@@ -16,6 +16,9 @@ const saveSchema = z.object({
     // Tornamos tolerante: aceita string, converte pra número, e aceita minúsculo ou maiúsculo
     escsecaoId: z.coerce.number().int().positive().optional(),
     ESCSECAO_ID: z.coerce.number().int().positive().optional(),
+    escfuncaoId: z.coerce.number().int().positive().optional(), // <-- Adicione aqui
+    ESCFUNCAO_ID: z.coerce.number().int().positive().optional(), // <-- Adicione aqui
+    
     
     chapa: z.string().min(1).max(8),
     dias: z.array(z.object({
