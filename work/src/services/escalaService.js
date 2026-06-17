@@ -6,20 +6,34 @@ async function listEscalas({ lojaId, mesRef }) {
       `select
           p.escprog_id,
           p.mes_ref,
-          p.escfunc_id,
-          p.loja,
-          p.chapa,
-          f.nome,
           p.revisao,
-          p.oficializada
+          p.oficializada,
+          f.escfunc_id,
+          f.codcoligada,
+          f.loja,
+          f.chapa,
+          f.nome,
+          f.dt_admiss,
+          f.brigadista,
+          f.escsecao_id,
+          f.escfuncao_id,
+          f.hr_ent1,
+          f.hr_sai1,
+          f.hr_ent2,
+          f.hr_sai2,
+          f.dt_hr_incl
        from sgn_esc_prog p
        left join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-       order by p.chapa, p.revisao desc`,
+       order by f.chapa, p.revisao desc`,
       { lojaId, mesRef },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
+
+    return result.rows;
+  });
+}
 
     return result.rows;
   });
@@ -77,7 +91,7 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
        and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')`,
     {
       lojaId,
-      escfuncId: funcionario.escfuncId,
+      escfuncId: funcionario.escfuncId || funcionario.ESCFUNC_ID,
       mesRef
     },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -86,18 +100,20 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
   const revisao = Number(revisionResult.rows[0]?.REVISAO || 1);
   const header = await connection.execute(
     `insert into sgn_esc_prog (
-        escprog_id, mes_ref, escfunc_id, loja, chapa, revisao, oficializada
+        escprog_id, mes_ref, escfunc_id, loja, chapa, revisao, oficializada, escsecao_id
      ) values (
-        sgn_esc_prog_seq.nextval, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :lojaId, :chapa, :revisao, :oficializada
+        sgn_esc_prog_seq.nextval, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :lojaId, :chapa, :revisao, :oficializada, :escsecaoId
      )
      returning escprog_id into :escprogId`,
     {
       mesRef,
-      escfuncId: funcionario.escfuncId,
+      escfuncId: funcionario.escfuncId || funcionario.ESCFUNC_ID,
       lojaId,
-      chapa: funcionario.chapa,
+      chapa: funcionario.chapa || funcionario.CHAPA,
       revisao,
       oficializada,
+      // Mapeando a seção para evitar o ORA-01400 (suportando camelCase ou o retorno nativo UPPERCASE do oracledb)
+      escsecaoId: funcionario.escsecaoId || funcionario.ESCSECAO_ID,
       escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
     },
     { autoCommit: false }
