@@ -23,6 +23,8 @@ Este mapa lista as chamadas HTTP usadas pela UI e as tabelas Oracle consultadas 
 | Editar turno da secao | `/api/catalog/lojas/:lojaId/secoes/:escsecaoId/turno` | `PATCH` | `catalogService.upsertSecaoTurno` | Atualiza ou cria o turno padrao usado na geracao de escala | `SGN_ESC_SECAO`, `SGN_ESC_SECAO_TURNO`, `SGN_ESC_SECAO_TURNO_SEQ` |
 | Ausencias do mes | `/api/catalog/lojas/:lojaId/ausencias?inicio=YYYY-MM-DD&fim=YYYY-MM-DD` | `GET` | `catalogService.listAusenciasByLojaMes` | Lista ausencias da loja no periodo | `SGN_ESC_AUSENCIA`, `SGN_ESC_FUNCIONARIO` |
 
+Observacao: quando `SGN_ESC_SECAO` nao possui coluna `LOJA`, o backend trata secoes como globais e usa `:lojaId` somente para permissao do usuario e contexto da tela.
+
 ## Escalas
 
 | Tela/fluxo | Endpoint | Metodo | Servico | Operacao no banco | Tabelas |

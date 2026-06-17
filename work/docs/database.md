@@ -52,6 +52,11 @@ create table SGN_ESC_AUDITORIA (
 
 A tabela `SGN_ESC_SECAO` contem o cadastro da secao, mas nao possui os horarios do turno padrao. Para a tela `Secoes` e para o gerador criar turnos por secao, crie a tabela complementar abaixo:
 
+O backend aceita dois desenhos para `SGN_ESC_SECAO`:
+
+- com coluna `LOJA`: as secoes ficam separadas por loja;
+- sem coluna `LOJA`: as secoes ficam globais, e a loja e usada apenas para permissao do usuario e filtro da tela.
+
 ```sql
 create table SGN_ESC_SECAO_TURNO (
   ESCSECAOTURNO_ID number(15) not null,

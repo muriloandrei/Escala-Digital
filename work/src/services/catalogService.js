@@ -62,6 +62,24 @@ function isMissingObjectError(error) {
   return error?.errorNum === 942 || error?.code === 'ORA-00942';
 }
 
+let secaoHasLojaColumnCache = null;
+
+async function secaoHasLojaColumn(connection) {
+  if (secaoHasLojaColumnCache !== null) return secaoHasLojaColumnCache;
+
+  const result = await connection.execute(
+    `select column_name
+     from user_tab_columns
+     where table_name = 'SGN_ESC_SECAO'
+       and column_name = 'LOJA'`,
+    {},
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+
+  secaoHasLojaColumnCache = result.rows.length > 0;
+  return secaoHasLojaColumnCache;
+}
+
 async function listLojas() {
   return withConnection(async (connection) => {
     const result = await connection.execute(
@@ -116,27 +134,40 @@ async function listFuncionariosByLoja(lojaId) {
 async function listSecoesByLoja(lojaId) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
+    const hasLojaColumn = await secaoHasLojaColumn(connection);
+    const secoesSql = hasLojaColumn
+      ? `select escsecao_id, loja, cod_secao, descr, dt_hr_incl
+         from sgn_esc_secao
+         where loja = :lojaId
+         order by descr`
+      : `select escsecao_id, :lojaId as loja, cod_secao, descr, dt_hr_incl
+         from sgn_esc_secao
+         order by descr`;
+
     const secoesResult = await connection.execute(
-      `select escsecao_id, loja, cod_secao, descr, dt_hr_incl
-       from sgn_esc_secao
-       where loja = :lojaId
-       order by descr`,
+      secoesSql,
       { lojaId: lojaCodigo },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
     let turnos = [];
     try {
+      const turnosSql = hasLojaColumn
+        ? `select escsecaoturno_id, escsecao_id, hr_ent1, hr_sai1, hr_ent2, hr_sai2, qtde_colaboradores
+           from sgn_esc_secao_turno
+           where escsecao_id in (
+             select escsecao_id
+             from sgn_esc_secao
+             where loja = :lojaId
+           )
+           order by escsecao_id, hr_ent1`
+        : `select escsecaoturno_id, escsecao_id, hr_ent1, hr_sai1, hr_ent2, hr_sai2, qtde_colaboradores
+           from sgn_esc_secao_turno
+           order by escsecao_id, hr_ent1`;
+
       const turnosResult = await connection.execute(
-        `select escsecaoturno_id, escsecao_id, hr_ent1, hr_sai1, hr_ent2, hr_sai2, qtde_colaboradores
-         from sgn_esc_secao_turno
-         where escsecao_id in (
-           select escsecao_id
-           from sgn_esc_secao
-           where loja = :lojaId
-         )
-         order by escsecao_id, hr_ent1`,
-        { lojaId: lojaCodigo },
+        turnosSql,
+        hasLojaColumn ? { lojaId: lojaCodigo } : {},
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
       turnos = turnosResult.rows.map(normalizeSecaoTurno);
@@ -159,11 +190,18 @@ async function listSecoesByLoja(lojaId) {
 }
 
 async function findSecaoById(connection, { lojaId, escsecaoId }) {
+  const hasLojaColumn = await secaoHasLojaColumn(connection);
+  const secaoSql = hasLojaColumn
+    ? `select escsecao_id, loja, cod_secao, descr, dt_hr_incl
+       from sgn_esc_secao
+       where escsecao_id = :escsecaoId
+         and loja = :lojaId`
+    : `select escsecao_id, :lojaId as loja, cod_secao, descr, dt_hr_incl
+       from sgn_esc_secao
+       where escsecao_id = :escsecaoId`;
+
   const result = await connection.execute(
-    `select escsecao_id, loja, cod_secao, descr, dt_hr_incl
-     from sgn_esc_secao
-     where escsecao_id = :escsecaoId
-       and loja = :lojaId`,
+    secaoSql,
     { lojaId, escsecaoId },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
@@ -174,19 +212,31 @@ async function findSecaoById(connection, { lojaId, escsecaoId }) {
 async function createSecao({ lojaId, data }) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
-    const result = await connection.execute(
-      `insert into sgn_esc_secao (
-          escsecao_id, loja, cod_secao, descr, dt_hr_incl
-       ) values (
-          sgn_esc_secao_seq.nextval, :lojaId, :codSecao, :descr, sysdate
-       )
-       returning escsecao_id into :escsecaoId`,
-      {
-        lojaId: lojaCodigo,
+    const hasLojaColumn = await secaoHasLojaColumn(connection);
+    const insertSql = hasLojaColumn
+      ? `insert into sgn_esc_secao (
+           escsecao_id, loja, cod_secao, descr, dt_hr_incl
+         ) values (
+           sgn_esc_secao_seq.nextval, :lojaId, :codSecao, :descr, sysdate
+         )
+         returning escsecao_id into :escsecaoId`
+      : `insert into sgn_esc_secao (
+           escsecao_id, cod_secao, descr, dt_hr_incl
+         ) values (
+           sgn_esc_secao_seq.nextval, :codSecao, :descr, sysdate
+         )
+         returning escsecao_id into :escsecaoId`;
+
+    const insertBinds = {
         codSecao: data.COD_SECAO,
         descr: data.DESCR,
         escsecaoId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
-      },
+    };
+    if (hasLojaColumn) insertBinds.lojaId = lojaCodigo;
+
+    const result = await connection.execute(
+      insertSql,
+      insertBinds,
       { autoCommit: false }
     );
 
@@ -208,18 +258,28 @@ async function updateSecao({ lojaId, escsecaoId, data }) {
     const secao = await findSecaoById(connection, { lojaId: lojaCodigo, escsecaoId });
     if (!secao) return null;
 
-    await connection.execute(
-      `update sgn_esc_secao
-       set cod_secao = :codSecao,
-           descr = :descr
-       where escsecao_id = :escsecaoId
-         and loja = :lojaId`,
-      {
-        lojaId: lojaCodigo,
+    const hasLojaColumn = await secaoHasLojaColumn(connection);
+    const updateSql = hasLojaColumn
+      ? `update sgn_esc_secao
+         set cod_secao = :codSecao,
+             descr = :descr
+         where escsecao_id = :escsecaoId
+           and loja = :lojaId`
+      : `update sgn_esc_secao
+         set cod_secao = :codSecao,
+             descr = :descr
+         where escsecao_id = :escsecaoId`;
+
+    const updateBinds = {
         escsecaoId,
         codSecao: data.COD_SECAO,
         descr: data.DESCR
-      },
+    };
+    if (hasLojaColumn) updateBinds.lojaId = lojaCodigo;
+
+    await connection.execute(
+      updateSql,
+      updateBinds,
       { autoCommit: false }
     );
 
