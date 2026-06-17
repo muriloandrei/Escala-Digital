@@ -449,15 +449,17 @@
                 const nomeBase = funcionario ? `${funcionario.NOME} (${funcionario.CHAPA})` : `Colaborador ${index + 1}`;
                 const escfuncId = funcionario ? funcionario.ESCFUNC_ID : '';
                 const chapa = funcionario ? funcionario.CHAPA : '';
+                const escsecaoId = funcionario ? funcionario.ESCSECAO_ID : '';
+                const escfuncaoId = funcionario ? funcionario.ESCFUNCAO_ID : '';
                 const selectedFuncionarioValue = funcionario ? getFuncionarioOptionValue(funcionario) : '';
                 const funcionarioOptions = funcionariosLojaCache.map(item => {
                     const value = getFuncionarioOptionValue(item);
                     const label = `${item.NOME} (${item.CHAPA})`;
                     const selected = value === selectedFuncionarioValue ? 'selected' : '';
-                    return `<option value="${escapeHtml(value)}" data-escfunc-id="${escapeHtml(item.ESCFUNC_ID)}" data-chapa="${escapeHtml(item.CHAPA)}" data-name="${escapeHtml(label)}" ${selected}>${escapeHtml(label)}</option>`;
+                    return `<option value="${escapeHtml(value)}" data-escfunc-id="${escapeHtml(item.ESCFUNC_ID)}" data-chapa="${escapeHtml(item.CHAPA)}" data-escsecao-id="${escapeHtml(item.ESCSECAO_ID || '')}" data-escfuncao-id="${escapeHtml(item.ESCFUNCAO_ID || '')}" data-name="${escapeHtml(label)}" ${selected}>${escapeHtml(label)}</option>`;
                 }).join('');
                 const horarios = ` ${escala.inicio} - ${escala.inicioIntervalo} - ${escala.fimIntervalo} - ${escala.fim}`;
-                tableHtml += `<tr data-colab-index="${index}" data-escfunc-id="${escapeHtml(escfuncId)}" data-chapa="${escapeHtml(chapa)}"><td data-name="${escapeHtml(nomeBase)}" class="sticky left-0 bg-white font-semibold z-10"><select class="collaborator-select" aria-label="Selecionar colaborador"><option value="">Colaborador ${index + 1}</option>${funcionarioOptions}</select><span class="collaborator-name-span hidden">${escapeHtml(nomeBase)}</span><span class="collaborator-time-span text-gray-500">${escapeHtml(horarios)}</span></td>`;
+                tableHtml += `<tr data-colab-index="${index}" data-escfunc-id="${escapeHtml(escfuncId)}" data-chapa="${escapeHtml(chapa)}" data-escsecao-id="${escapeHtml(escsecaoId)}" data-escfuncao-id="${escapeHtml(escfuncaoId)}"><td data-name="${escapeHtml(nomeBase)}" class="sticky left-0 bg-white font-semibold z-10"><select class="collaborator-select" aria-label="Selecionar colaborador"><option value="">Colaborador ${index + 1}</option>${funcionarioOptions}</select><span class="collaborator-name-span hidden">${escapeHtml(nomeBase)}</span><span class="collaborator-time-span text-gray-500">${escapeHtml(horarios)}</span></td>`;
                 for (let dia = 1; dia <= diasNoMes; dia++) {
                     const data = new Date(ano, mes, dia);
                     tableHtml += `<td class="escala-cell ${data.getDay() === 0 ? 'bg-yellow-100' : ''}" data-dia="${dia}"></td>`;
@@ -486,7 +488,7 @@
             atualizarContagemEsqueleto();
         };
         
-        const gerarEscalaDetalhada = () => { escalaCarregadaId = null; const skeletonRows = document.querySelectorAll('#tabela-esqueleto tbody tr'); if (skeletonRows.length === 0) { showInfoModal("Gere o esqueleto da escala primeiro.", "error"); return; } const ano = parseInt(anoSelect.value); const mes = parseInt(mesSelect.value); const diasNoMes = new Date(ano, mes + 1, 0).getDate(); const diasDaSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']; let allDetailsHtml = ''; skeletonRows.forEach(row => { const colabIndex = parseInt(row.dataset.colabIndex); const escfuncId = row.dataset.escfuncId || ''; const chapa = row.dataset.chapa || ''; const colaboradorNome = row.querySelector('td[data-name]').dataset.name; const escala = colaboradorShifts[colabIndex]; if (!escala) return; const folgas = new Set(); row.querySelectorAll('.escala-cell').forEach(cell => { if (cell.textContent.toUpperCase() === 'F') { folgas.add(parseInt(cell.dataset.dia)); } }); const intervaloMin = timeToMinutes(escala.fimIntervalo) - timeToMinutes(escala.inicioIntervalo); const hIntervalo = minutesToTime(intervaloMin); const hTrabalhadasMin = (timeToMinutes(escala.fim) - timeToMinutes(escala.inicio)) - intervaloMin; const hTrabalhadas = minutesToTime(hTrabalhadasMin); let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${colabIndex}" data-escfunc-id="${escfuncId}" data-chapa="${chapa}"><div class="header-info"><h3 class="font-bold text-lg" contenteditable="true">${colaboradorNome}</h3></div><table class="w-full"><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}">${i + 1}</th>`).join('')}</tr></thead><tbody>`; const fields = [ { label: 'ENT.', value: escala.inicio, key: 'inicio', editable: true }, { label: 'SAÍ.INT.', value: escala.inicioIntervalo, key: 'inicioIntervalo', editable: true }, { label: 'INTER.', value: hIntervalo, key: 'intervalo', editable: false }, { label: 'RET.INT.', value: escala.fimIntervalo, key: 'fimIntervalo', editable: true }, { label: 'SAÍ.', value: escala.fim, key: 'fim', editable: true }, { label: 'H.TRAB', value: hTrabalhadas, key: 'trabalhadas', bold: true, editable: false }, ]; fields.forEach(field => { detailTable += `<tr class="${field.bold ? 'font-bold bg-gray-50' : ''}" data-key="${field.key}"><td>${field.label}</td>`; for (let dia = 1; dia <= diasNoMes; dia++) { const isDomingo = new Date(ano, mes, dia).getDay() === 0; const isFolga = folgas.has(dia); const cellContent = isFolga ? 'F' : field.value; const isEditable = field.editable && !isFolga; const editableAttribute = isEditable ? 'contenteditable="true"' : ''; let bgColor = ''; if (isFolga) { bgColor = isDomingo ? 'bg-orange-500 text-white' : 'bg-red-100'; } else if (isDomingo) { bgColor = 'bg-yellow-100'; } detailTable += `<td class="${bgColor}" ${editableAttribute}>${cellContent}</td>`; } detailTable += `</tr>`; }); detailTable += `</tbody></table></div>`; allDetailsHtml += detailTable; }); detalhadaModalBody.innerHTML = allDetailsHtml; detalhadaMesAno.textContent = `${mesSelect.options[mesSelect.selectedIndex].text} / ${ano}`; if (detalhadaModal.classList.contains('hidden')) { detalhadaModal.classList.remove('hidden'); } detailedScaleHasBeenGenerated = true; gerarEscalaDetalhadaBtn.textContent = 'Ver Escala Detalhada'; };
+        const gerarEscalaDetalhada = () => { escalaCarregadaId = null; const skeletonRows = document.querySelectorAll('#tabela-esqueleto tbody tr'); if (skeletonRows.length === 0) { showInfoModal("Gere o esqueleto da escala primeiro.", "error"); return; } const ano = parseInt(anoSelect.value); const mes = parseInt(mesSelect.value); const diasNoMes = new Date(ano, mes + 1, 0).getDate(); const diasDaSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']; let allDetailsHtml = ''; skeletonRows.forEach(row => { const colabIndex = parseInt(row.dataset.colabIndex); const escfuncId = row.dataset.escfuncId || ''; const chapa = row.dataset.chapa || ''; const escsecaoId = row.dataset.escsecaoId || ''; const escfuncaoId = row.dataset.escfuncaoId || ''; const colaboradorNome = row.querySelector('td[data-name]').dataset.name; const escala = colaboradorShifts[colabIndex]; if (!escala) return; const folgas = new Set(); row.querySelectorAll('.escala-cell').forEach(cell => { if (cell.textContent.toUpperCase() === 'F') { folgas.add(parseInt(cell.dataset.dia)); } }); const intervaloMin = timeToMinutes(escala.fimIntervalo) - timeToMinutes(escala.inicioIntervalo); const hIntervalo = minutesToTime(intervaloMin); const hTrabalhadasMin = (timeToMinutes(escala.fim) - timeToMinutes(escala.inicio)) - intervaloMin; const hTrabalhadas = minutesToTime(hTrabalhadasMin); let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${colabIndex}" data-escfunc-id="${escfuncId}" data-chapa="${chapa}" data-escsecao-id="${escsecaoId}" data-escfuncao-id="${escfuncaoId}"><div class="header-info"><h3 class="font-bold text-lg" contenteditable="true">${colaboradorNome}</h3></div><table class="w-full"><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}">${i + 1}</th>`).join('')}</tr></thead><tbody>`; const fields = [ { label: 'ENT.', value: escala.inicio, key: 'inicio', editable: true }, { label: 'SAÍ.INT.', value: escala.inicioIntervalo, key: 'inicioIntervalo', editable: true }, { label: 'INTER.', value: hIntervalo, key: 'intervalo', editable: false }, { label: 'RET.INT.', value: escala.fimIntervalo, key: 'fimIntervalo', editable: true }, { label: 'SAÍ.', value: escala.fim, key: 'fim', editable: true }, { label: 'H.TRAB', value: hTrabalhadas, key: 'trabalhadas', bold: true, editable: false }, ]; fields.forEach(field => { detailTable += `<tr class="${field.bold ? 'font-bold bg-gray-50' : ''}" data-key="${field.key}"><td>${field.label}</td>`; for (let dia = 1; dia <= diasNoMes; dia++) { const isDomingo = new Date(ano, mes, dia).getDay() === 0; const isFolga = folgas.has(dia); const cellContent = isFolga ? 'F' : field.value; const isEditable = field.editable && !isFolga; const editableAttribute = isEditable ? 'contenteditable="true"' : ''; let bgColor = ''; if (isFolga) { bgColor = isDomingo ? 'bg-orange-500 text-white' : 'bg-red-100'; } else if (isDomingo) { bgColor = 'bg-yellow-100'; } detailTable += `<td class="${bgColor}" ${editableAttribute}>${cellContent}</td>`; } detailTable += `</tr>`; }); detailTable += `</tbody></table></div>`; allDetailsHtml += detailTable; }); detalhadaModalBody.innerHTML = allDetailsHtml; detalhadaMesAno.textContent = `${mesSelect.options[mesSelect.selectedIndex].text} / ${ano}`; if (detalhadaModal.classList.contains('hidden')) { detalhadaModal.classList.remove('hidden'); } detailedScaleHasBeenGenerated = true; gerarEscalaDetalhadaBtn.textContent = 'Ver Escala Detalhada'; };
         
         // =========================================================================
         // FUNÇÃO DE IMPRESSÃO DA TIMELINE (VERSÃO CORRIGIDA E MELHORADA)
@@ -1154,6 +1156,8 @@
 
             row.dataset.escfuncId = selectedOption?.dataset.escfuncId || '';
             row.dataset.chapa = selectedOption?.dataset.chapa || '';
+            row.dataset.escsecaoId = selectedOption?.dataset.escsecaoId || '';
+            row.dataset.escfuncaoId = selectedOption?.dataset.escfuncaoId || '';
             nameCell.dataset.name = nomeSelecionado;
             const hiddenName = nameCell.querySelector('.collaborator-name-span');
             if (hiddenName) hiddenName.textContent = nomeSelecionado;
@@ -1165,6 +1169,8 @@
                 if (detailedContainer) {
                     detailedContainer.dataset.escfuncId = row.dataset.escfuncId;
                     detailedContainer.dataset.chapa = row.dataset.chapa;
+                    detailedContainer.dataset.escsecaoId = row.dataset.escsecaoId;
+                    detailedContainer.dataset.escfuncaoId = row.dataset.escfuncaoId;
                 }
             }
 
@@ -2053,7 +2059,7 @@
             let allDetailsHtml = '';
 
             dados.forEach((colaborador, index) => {
-                let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${index}" data-escfunc-id="${colaborador.escfuncId || ''}" data-chapa="${colaborador.chapa || ''}"><div class="header-info"><h3 class="font-bold text-lg" contenteditable="true">${colaborador.nome}</h3></div><table><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}">${i + 1}</th>`).join('')}</tr></thead><tbody>`;
+                let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${index}" data-escfunc-id="${colaborador.escfuncId || ''}" data-chapa="${colaborador.chapa || ''}" data-escsecao-id="${colaborador.escsecaoId || ''}" data-escfuncao-id="${colaborador.escfuncaoId || ''}"><div class="header-info"><h3 class="font-bold text-lg" contenteditable="true">${colaborador.nome}</h3></div><table><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}">${i + 1}</th>`).join('')}</tr></thead><tbody>`;
                 const fields = [ 'inicio', 'inicioIntervalo', 'intervalo', 'fimIntervalo', 'fim', 'trabalhadas' ];
                 const labels = { inicio: 'ENT.', inicioIntervalo: 'SAÍ.INT.', intervalo: 'INTER.', fimIntervalo: 'RET.INT.', fim: 'SAÍ.', trabalhadas: 'H.TRAB' };
                 const isBold = { trabalhadas: true };
@@ -2174,6 +2180,8 @@
                     nome: div.querySelector('h3').textContent,
                     escfuncId: div.dataset.escfuncId ? parseInt(div.dataset.escfuncId, 10) : null,
                     chapa: div.dataset.chapa || '',
+                    escsecaoId: div.dataset.escsecaoId ? parseInt(div.dataset.escsecaoId, 10) : null,
+                    escfuncaoId: div.dataset.escfuncaoId ? parseInt(div.dataset.escfuncaoId, 10) : null,
                     turnos: {}
                 };
                 div.querySelectorAll('tbody tr').forEach(row => {
@@ -2201,6 +2209,8 @@
                 .map(colaborador => ({
                     escfuncId: colaborador.escfuncId,
                     chapa: colaborador.chapa,
+                    escsecaoId: colaborador.escsecaoId || null,
+                    escfuncaoId: colaborador.escfuncaoId || null,
                     dias: Object.keys(colaborador.turnos || {}).map(dia => {
                         const turno = colaborador.turnos[dia] || {};
                         const isFolga = String(turno.inicio || '').trim().toUpperCase() === 'F';

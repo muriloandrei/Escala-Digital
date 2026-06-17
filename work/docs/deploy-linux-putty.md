@@ -247,7 +247,7 @@ Com `COOKIE_SECURE=true` em HTTP direto, o navegador ignora o cookie de login e 
 7. Consulta de funcionarios funciona.
 8. Consulta de ausencias funciona.
 9. Geracao de escala funciona.
-10. Salvamento no Oracle grava `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA`.
+10. Salvamento no Oracle grava `SGN_ESC_PROG` e `ESC_PROG_DIA`.
 11. Validacao bloqueia funcionario ausente em dia trabalhado.
 12. Logs nao mostram senha, token ou dados sensiveis.
 

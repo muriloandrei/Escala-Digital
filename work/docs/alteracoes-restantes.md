@@ -11,7 +11,7 @@ Concluido:
 - Consulta Oracle de lojas, funcionarios, ausencias e usuarios.
 - Tela de funcionarios por loja.
 - Tela de usuarios/acessos.
-- Salvamento estruturado no Oracle em `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA`.
+- Salvamento estruturado no Oracle em `SGN_ESC_PROG` e `ESC_PROG_DIA`.
 - Consulta das escalas salvas diretamente no Oracle.
 - Validacao de ausencia no backend antes de salvar.
 - Aplicacao de ausencia/ferias como folga obrigatoria no frontend.
@@ -48,7 +48,7 @@ Concluido:
 ## Fase 3. Oracle real
 
 1. Confirmar nomes finais das tabelas, sequences, triggers e constraints.
-2. Confirmar se `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA` aceitam o modelo atual.
+2. Confirmar se `SGN_ESC_PROG` e `ESC_PROG_DIA` aceitam o modelo atual.
 3. Ajustar SQLs do backend para o padrao real do banco.
 4. Validar tabela real de usuarios:
    - `SGN_ESC_USUARIO`.

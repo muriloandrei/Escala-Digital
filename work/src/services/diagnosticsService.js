@@ -1,12 +1,12 @@
 const { withConnection, oracledb } = require('../db/oracle');
 const REQUIRED_TABLES = [
-  'SGN_ESC_FUNC',
+  'SGN_ESC_FUNCIONARIO',
   'SGN_ESC_AUSENCIA',
   'SGN_ESC_LOJA',
   'SGN_ESC_FUNCAO',
   'SGN_ESC_SECAO',
   'SGN_ESC_PROG',
-  'SGN_ESC_PROG_DIA',
+  'ESC_PROG_DIA',
   'SGN_ESC_USUARIO',
   'SGN_ESC_USUARIO_LOJA'
 ];

@@ -2,13 +2,13 @@
 
 ## Tabelas existentes esperadas
 
-- `SGN_ESC_FUNC`: funcionarios.
+- `SGN_ESC_FUNCIONARIO`: funcionarios.
 - `SGN_ESC_AUSENCIA`: ausencias.
 - `SGN_ESC_LOJA`: lojas.
 - `SGN_ESC_FUNCAO`: funcoes.
 - `SGN_ESC_SECAO`: secoes.
 - `SGN_ESC_PROG`: cabecalho da escala/programacao.
-- `SGN_ESC_PROG_DIA`: dias da escala/programacao.
+- `ESC_PROG_DIA`: dias da escala/programacao.
 
 ## Tabelas recomendadas para autenticacao
 

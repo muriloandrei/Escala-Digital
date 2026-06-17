@@ -15,17 +15,17 @@ Este mapa lista as chamadas HTTP usadas pela UI e as tabelas Oracle consultadas 
 | Tela/fluxo | Endpoint | Metodo | Servico | Operacao no banco | Tabelas |
 | --- | --- | --- | --- | --- | --- |
 | Select de lojas | `/api/catalog/lojas` | `GET` | `catalogService.listLojas` | Lista lojas e exigencia de brigadistas | `SGN_ESC_LOJA` |
-| Tela Funcionarios | `/api/catalog/lojas/:lojaId/funcionarios` | `GET` | `catalogService.listFuncionariosByLoja` | Lista funcionarios da loja selecionada | `SGN_ESC_FUNC` |
-| Editar dados de escala do funcionario | `/api/catalog/lojas/:lojaId/funcionarios/:escfuncId` | `PATCH` | `catalogService.updateFuncionarioEscala` | Atualiza somente campos permitidos de escala | `SGN_ESC_FUNC` |
-| Ausencias do mes | `/api/catalog/lojas/:lojaId/ausencias?inicio=YYYY-MM-DD&fim=YYYY-MM-DD` | `GET` | `catalogService.listAusenciasByLojaMes` | Lista ausencias da loja no periodo | `SGN_ESC_AUSENCIA`, `SGN_ESC_FUNC` |
+| Tela Funcionarios | `/api/catalog/lojas/:lojaId/funcionarios` | `GET` | `catalogService.listFuncionariosByLoja` | Lista funcionarios da loja selecionada | `SGN_ESC_FUNCIONARIO` |
+| Editar dados de escala do funcionario | `/api/catalog/lojas/:lojaId/funcionarios/:escfuncId` | `PATCH` | `catalogService.updateFuncionarioEscala` | Atualiza somente campos permitidos de escala | `SGN_ESC_FUNCIONARIO` |
+| Ausencias do mes | `/api/catalog/lojas/:lojaId/ausencias?inicio=YYYY-MM-DD&fim=YYYY-MM-DD` | `GET` | `catalogService.listAusenciasByLojaMes` | Lista ausencias da loja no periodo | `SGN_ESC_AUSENCIA`, `SGN_ESC_FUNCIONARIO` |
 
 ## Escalas
 
 | Tela/fluxo | Endpoint | Metodo | Servico | Operacao no banco | Tabelas |
 | --- | --- | --- | --- | --- | --- |
-| Consultar Banco Local/Oracle | `/api/escalas?lojaId=:lojaId&mesRef=:mesRef` | `GET` | `escalaService.listEscalas` | Lista cabecalhos de escala por loja e mes | `SGN_ESC_PROG`, `SGN_ESC_FUNC` |
-| Ver dias da escala salva | `/api/escalas/:escprogId/dias` | `GET` | `escalaService.getEscalaHeader` e `getEscalaDias` | Busca cabecalho, valida permissao de loja e lista dias | `SGN_ESC_PROG`, `SGN_ESC_PROG_DIA` |
-| Salvar escala gerada | `/api/escalas` | `POST` | `escalaService.validateAusencias` e `saveEscalasBatch` | Valida ausencia, calcula revisao, grava cabecalho e dias em transacao | `SGN_ESC_AUSENCIA`, `SGN_ESC_PROG`, `SGN_ESC_PROG_DIA` |
+| Consultar Banco Local/Oracle | `/api/escalas?lojaId=:lojaId&mesRef=:mesRef` | `GET` | `escalaService.listEscalas` | Lista cabecalhos de escala por loja e mes | `SGN_ESC_PROG`, `SGN_ESC_FUNCIONARIO` |
+| Ver dias da escala salva | `/api/escalas/:escprogId/dias` | `GET` | `escalaService.getEscalaHeader` e `getEscalaDias` | Busca cabecalho, valida permissao de loja e lista dias | `SGN_ESC_PROG`, `ESC_PROG_DIA` |
+| Salvar escala gerada | `/api/escalas` | `POST` | `escalaService.validateAusencias` e `saveEscalasBatch` | Valida ausencia, calcula revisao, grava cabecalho e dias em transacao | `SGN_ESC_AUSENCIA`, `SGN_ESC_PROG`, `ESC_PROG_DIA` |
 
 ## Controle de acesso
 
@@ -45,7 +45,7 @@ Este mapa lista as chamadas HTTP usadas pela UI e as tabelas Oracle consultadas 
 
 | Tela/fluxo | Endpoint | Metodo | Observacao |
 | --- | --- | --- | --- |
-| Estado de tela | `/api/state` | `GET` | Em Oracle retorna estado vazio e mensagem de que a persistencia oficial fica em `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA`. |
+| Estado de tela | `/api/state` | `GET` | Em Oracle retorna estado vazio e mensagem de que a persistencia oficial fica em `SGN_ESC_PROG` e `ESC_PROG_DIA`. |
 | Escalas temporarias da UI | `/api/state/escalas` | `PUT` | Em Oracle nao persiste dados oficiais. |
 | Configuracoes da UI | `/api/state/config` | `PUT` | Em Oracle nao persiste configuracao nesta versao. |
 

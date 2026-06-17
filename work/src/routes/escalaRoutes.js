@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { requireAuth, requireLojaAccess } = require('../middleware/auth');
 const escalaService = require('../services/escalaService');
+const catalogService = require('../services/catalogService');
 const { validateEscalaPayload } = require('../rules/escalaRules');
 
 const router = express.Router();
@@ -21,6 +22,8 @@ const saveSchema = z.object({
     
     
     chapa: z.string().min(1).max(8),
+    escsecaoId: z.number().int().positive().nullable().optional(),
+    escfuncaoId: z.number().int().positive().nullable().optional(),
     dias: z.array(z.object({
       data: z.string().min(10).max(10),
       hrEnt1: z.string().max(5).nullable().optional(),
@@ -35,7 +38,22 @@ const saveSchema = z.object({
 
 router.use(requireAuth);
 
-router.get('/', requireLojaAccess, async (req, res, next) => {
+async function resolveLojaRequest(req, res, next) {
+  try {
+    const rawLojaId = Number(req.params.lojaId || req.query.lojaId || req.body.lojaId);
+    if (rawLojaId) {
+      const lojaCodigo = await catalogService.resolveLojaCodigo(rawLojaId);
+      if (req.params.lojaId) req.params.lojaId = String(lojaCodigo);
+      if (req.query.lojaId) req.query.lojaId = String(lojaCodigo);
+      if (req.body.lojaId) req.body.lojaId = lojaCodigo;
+    }
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
+
+router.get('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = Number(req.query.lojaId);
     const mesRef = req.query.mesRef;
@@ -69,7 +87,7 @@ router.get('/:escprogId/dias', async (req, res, next) => {
   }
 });
 
-router.post('/', requireLojaAccess, async (req, res, next) => {
+router.post('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     console.log("=== DADO BRUTO DO FRONTEND ===", JSON.stringify(req.body.funcionarios[0]));
     const payload = saveSchema.parse(req.body);

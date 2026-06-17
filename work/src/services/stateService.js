@@ -3,7 +3,7 @@ async function getState() {
     escalasSalvas: [],
     escalaConfig: {},
     mode: 'oracle',
-    message: 'Estado local desativado. As escalas oficiais devem ser consultadas em SGN_ESC_PROG e SGN_ESC_PROG_DIA.'
+    message: 'Estado local desativado. As escalas oficiais devem ser consultadas em SGN_ESC_PROG e ESC_PROG_DIA.'
   };
 }
 

@@ -1,5 +1,54 @@
 const { withConnection, oracledb } = require('../db/oracle');
 
+function pick(row, ...keys) {
+  for (const key of keys) {
+    if (row?.[key] !== undefined) return row[key];
+  }
+  return undefined;
+}
+
+async function getFuncionarioEscala(connection, escfuncId) {
+  const result = await connection.execute(
+    `select escfunc_id, loja, chapa, escsecao_id, escfuncao_id
+     from sgn_esc_funcionario
+     where escfunc_id = :escfuncId`,
+    { escfuncId },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    ESCFUNC_ID: pick(row, 'ESCFUNC_ID', 'escfunc_id'),
+    LOJA: pick(row, 'LOJA', 'loja'),
+    CHAPA: pick(row, 'CHAPA', 'chapa'),
+    ESCSECAO_ID: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
+    ESCFUNCAO_ID: pick(row, 'ESCFUNCAO_ID', 'escfuncao_id')
+  };
+}
+
+function normalizeHorario(value, fallback) {
+  const text = String(value || '').trim();
+  return text || fallback;
+}
+
+function normalizeDiaBind(escprogId, dia) {
+  const programacao = String(dia.programacao || '').trim().toUpperCase() || 'TRB';
+  const folga = programacao === 'F';
+  const fallback = folga ? 'F' : '00:00';
+
+  return {
+    escprogId,
+    dt: dia.data,
+    hrEnt1: normalizeHorario(dia.hrEnt1, fallback),
+    hrSai1: normalizeHorario(dia.hrSai1, fallback),
+    hrEnt2: normalizeHorario(dia.hrEnt2, fallback),
+    hrSai2: normalizeHorario(dia.hrSai2, fallback),
+    programacao
+  };
+}
+
 async function listEscalas({ lojaId, mesRef }) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
@@ -53,7 +102,7 @@ async function getEscalaDias(escprogId) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
-       from sgn_esc_prog_dia
+       from esc_prog_dia
        where escprog_id = :escprogId
        order by dt`,
       { escprogId },
@@ -64,7 +113,7 @@ async function getEscalaDias(escprogId) {
   });
 }
 
-async function saveEscala({ lojaId, mesRef, escalaOrigemId, funcionario, dias, oficializada = 0 }) {
+async function saveEscala({ lojaId, mesRef, funcionario, dias, oficializada = 0 }) {
   return withConnection(async (connection) => {
     const result = await insertEscalaOracle(connection, {
       lojaId,
@@ -79,19 +128,18 @@ async function saveEscala({ lojaId, mesRef, escalaOrigemId, funcionario, dias, o
 }
 
 async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dias, oficializada = 0 }) {
-  // === TRAVA DE SEGURANÇA DUPLA ===
-  let escsecaoId = funcionario.escsecaoId || funcionario.ESCSECAO_ID;
-  let escfuncaoId = funcionario.escfuncaoId || funcionario.ESCFUNCAO_ID;
-  
-  if (!escsecaoId || !escfuncaoId) {
-    const funcResult = await connection.execute(
-      `select escsecao_id, escfuncao_id from sgn_esc_funcionario where escfunc_id = :id`,
-      { id: funcionario.escfuncId || funcionario.ESCFUNC_ID },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    escsecaoId = escsecaoId || funcResult.rows[0]?.ESCSECAO_ID;
-    escfuncaoId = escfuncaoId || funcResult.rows[0]?.ESCFUNCAO_ID;
+  const escfuncId = funcionario.escfuncId || funcionario.ESCFUNC_ID;
+  const funcionarioDb = await getFuncionarioEscala(connection, escfuncId);
+  if (!funcionarioDb) {
+    const error = new Error(`Funcionario ${escfuncId} nao encontrado em SGN_ESC_FUNCIONARIO.`);
+    error.statusCode = 422;
+    throw error;
   }
+
+  const escsecaoId = funcionario.escsecaoId || funcionario.ESCSECAO_ID || funcionarioDb.ESCSECAO_ID;
+  const escfuncaoId = funcionario.escfuncaoId || funcionario.ESCFUNCAO_ID || funcionarioDb.ESCFUNCAO_ID;
+  const lojaFuncionario = Number(funcionarioDb.LOJA) || Number(lojaId);
+  const chapa = funcionario.chapa || funcionario.CHAPA || funcionarioDb.CHAPA;
 
   const revisionResult = await connection.execute(
     `select nvl(max(revisao), 0) + 1 as revisao
@@ -99,50 +147,38 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
      where loja = :lojaId
        and escfunc_id = :escfuncId
        and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')`,
-    {
-      lojaId,
-      escfuncId: funcionario.escfuncId || funcionario.ESCFUNC_ID,
-      mesRef
-    },
+    { lojaId: lojaFuncionario, escfuncId, mesRef },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
 
   const revisao = Number(revisionResult.rows[0]?.REVISAO || 1);
   const header = await connection.execute(
     `insert into sgn_esc_prog (
-        escprog_id, mes_ref, escfunc_id, loja, chapa, revisao, oficializada, escsecao_id, escfuncao_id
+        escprog_id, mes_ref, escfunc_id, escsecao_id, escfuncao_id, loja, chapa, revisao, oficializada, dt_hr_incl
      ) values (
-        sgn_esc_prog_seq.nextval, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :lojaId, :chapa, :revisao, :oficializada, :escsecaoId, :escfuncaoId
+        sgn_esc_prog_seq.nextval, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :escsecaoId, :escfuncaoId, :lojaId, :chapa, :revisao, :oficializada, sysdate
      )
      returning escprog_id into :escprogId`,
     {
       mesRef,
-      escfuncId: funcionario.escfuncId || funcionario.ESCFUNC_ID,
-      lojaId,
-      chapa: funcionario.chapa || funcionario.CHAPA,
+      escfuncId,
+      escsecaoId,
+      escfuncaoId,
+      lojaId: lojaFuncionario,
+      chapa,
       revisao,
       oficializada,
-      escsecaoId: escsecaoId,
-      escfuncaoId: escfuncaoId, // Inserindo a função obrigatória
       escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
     },
     { autoCommit: false }
   );
 
   const escprogId = header.outBinds.escprogId[0];
-  const binds = dias.map((dia) => ({
-    escprogId,
-    dt: dia.data,
-    hrEnt1: dia.hrEnt1 || null,
-    hrSai1: dia.hrSai1 || null,
-    hrEnt2: dia.hrEnt2 || null,
-    hrSai2: dia.hrSai2 || null,
-    programacao: dia.programacao || null
-  }));
+  const binds = (dias || []).map((dia) => normalizeDiaBind(escprogId, dia));
 
   if (binds.length > 0) {
     await connection.executeMany(
-      `insert into sgn_esc_prog_dia (
+      `insert into esc_prog_dia (
           escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
        ) values (
           sgn_esc_prog_dia_seq.nextval, :escprogId, to_date(:dt, 'YYYY-MM-DD'), :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :programacao
@@ -155,7 +191,7 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
   return { escprogId, revisao };
 }
 
-async function saveEscalasBatch({ lojaId, mesRef, escalaOrigemId, funcionarios, oficializada = 0 }) {
+async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0 }) {
   return withConnection(async (connection) => {
     try {
       const saved = [];
@@ -178,7 +214,7 @@ async function saveEscalasBatch({ lojaId, mesRef, escalaOrigemId, funcionarios, 
   });
 }
 
-async function validateAusencias({ lojaId, funcionarios }) {
+async function validateAusencias({ funcionarios }) {
   return withConnection(async (connection) => {
     const errors = [];
 
@@ -194,12 +230,12 @@ async function validateAusencias({ lojaId, funcionarios }) {
              and dt_inic <= to_date(:data, 'YYYY-MM-DD')
              and nvl(dt_fim, dt_inic) >= to_date(:data, 'YYYY-MM-DD')
              and rownum = 1`,
-          { escfuncId: funcionario.escfuncId, data: dia.data },
+          { escfuncId: funcionario.escfuncId || funcionario.ESCFUNC_ID, data: dia.data },
           { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
         if (result.rows[0]) {
-          errors.push(`Funcionario ${funcionario.chapa} possui ausencia em ${dia.data}: ${result.rows[0].MOTIVO || 'ausencia'}.`);
+          errors.push(`Funcionario ${funcionario.chapa || funcionario.CHAPA} possui ausencia em ${dia.data}: ${result.rows[0].MOTIVO || 'ausencia'}.`);
         }
       }
     }

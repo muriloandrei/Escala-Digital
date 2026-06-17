@@ -68,7 +68,7 @@ Documento baseado no arquivo `escopo_dev.odt`.
 - Também deve ser salva a escala individual de cada funcionário.
 - Persistência:
   - cabeçalho/topo em `SGN_ESC_PROG`;
-  - dias/itens em `SGN_ESC_PROG_DIA`.
+  - dias/itens em `ESC_PROG_DIA`.
 
 ## Registros Atuais
 
