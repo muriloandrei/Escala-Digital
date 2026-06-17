@@ -44,7 +44,7 @@ O acesso passa pelo login em:
 - `escalaConfig`
 - `genericAppLicenseKey`
 
-`genericAppLicenseKey` deixou de ser necessario no fluxo novo. `escalasSalvas` e `escalaConfig` nao representam persistencia oficial no Oracle; a persistencia oficial da escala fica em `SGN_ESC_PROG` e `ESC_PROG_DIA`.
+`genericAppLicenseKey` deixou de ser necessario no fluxo novo. `escalasSalvas` e `escalaConfig` nao representam persistencia oficial no Oracle; a persistencia oficial da escala fica em `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA`.
 
 ## Progresso da persistencia
 
@@ -52,7 +52,7 @@ O acesso passa pelo login em:
 - Funcionarios carregam de `/api/catalog/lojas/:lojaId/funcionarios` e preenchem os nomes do esqueleto.
 - Ausencias carregam de `/api/catalog/lojas/:lojaId/ausencias`.
 - Usuarios carregam e salvam por `/api/acessos/usuarios`.
-- Ao salvar uma escala detalhada com funcionarios vinculados, a UI sincroniza com `/api/escalas`, preenchendo `SGN_ESC_PROG` e `ESC_PROG_DIA`.
+- Ao salvar uma escala detalhada com funcionarios vinculados, a UI sincroniza com `/api/escalas`, preenchendo `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA`.
 - A UI manteve os nomes das funcoes principais para reduzir risco de alterar regras.
 
 ## Observacao sobre funcionarios

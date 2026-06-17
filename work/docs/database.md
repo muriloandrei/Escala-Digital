@@ -8,7 +8,7 @@
 - `SGN_ESC_FUNCAO`: funcoes.
 - `SGN_ESC_SECAO`: secoes.
 - `SGN_ESC_PROG`: cabecalho da escala/programacao.
-- `ESC_PROG_DIA`: dias da escala/programacao.
+- `SGN_ESC_PROG_DIA`: dias da escala/programacao.
 
 ## Tabelas recomendadas para autenticacao
 

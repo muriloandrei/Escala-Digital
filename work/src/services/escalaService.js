@@ -102,7 +102,7 @@ async function getEscalaDias(escprogId) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
-       from esc_prog_dia
+       from sgn_esc_prog_dia
        where escprog_id = :escprogId
        order by dt`,
       { escprogId },
@@ -116,7 +116,7 @@ async function getEscalaDias(escprogId) {
 async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
-      `update esc_prog_dia
+      `update sgn_esc_prog_dia
        set hr_ent1 = :hrEnt1,
            hr_sai1 = :hrSai1,
            hr_ent2 = :hrEnt2,
@@ -140,7 +140,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
 
     const updated = await connection.execute(
       `select escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
-       from esc_prog_dia
+       from sgn_esc_prog_dia
        where escprogdia_id = :escprogdiaId
          and escprog_id = :escprogId`,
       { escprogId, escprogdiaId },
@@ -216,7 +216,7 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
 
   if (binds.length > 0) {
     await connection.executeMany(
-      `insert into esc_prog_dia (
+      `insert into sgn_esc_prog_dia (
           escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
        ) values (
           sgn_esc_prog_dia_seq.nextval, :escprogId, to_date(:dt, 'YYYY-MM-DD'), :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :programacao
