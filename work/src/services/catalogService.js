@@ -75,7 +75,7 @@ async function listFuncionariosByLoja(lojaId) {
           f.hr_ent2,
           f.hr_sai2,
           f.dt_hr_incl
-       from sgn_esc_func f
+       from sgn_esc_funcionario f
        where f.loja = :lojaId
        order by f.nome`,
       { lojaId: lojaCodigo },
@@ -99,7 +99,7 @@ async function listAusenciasByLojaMes(lojaId, inicio, fim) {
           a.motivo,
           a.dt_hr_incl
        from sgn_esc_ausencia a
-       join sgn_esc_func f on f.escfunc_id = a.escfunc_id
+       join sgn_esc_funcionario f on f.escfunc_id = a.escfunc_id
        where f.loja = :lojaId
          and a.dt_inic <= to_date(:fim, 'YYYY-MM-DD')
          and nvl(a.dt_fim, a.dt_inic) >= to_date(:inicio, 'YYYY-MM-DD')
@@ -126,7 +126,7 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
   return withConnection(async (connection) => {
     const assignments = Object.keys(updates).map((field) => `${field.toLowerCase()} = :${field}`).join(', ');
     const result = await connection.execute(
-      `update sgn_esc_func
+      `update sgn_esc_funcionario
        set ${assignments}
        where escfunc_id = :escfuncId
          and loja = :lojaId`,
