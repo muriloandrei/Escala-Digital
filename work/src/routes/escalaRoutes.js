@@ -12,6 +12,7 @@ const saveSchema = z.object({
   escalaOrigemId: z.number().int().positive().optional(),
   funcionarios: z.array(z.object({
     escfuncId: z.number().int().positive(),
+    escsecaoId: z.number().int().positive(), // <-- ADICIONE ESTA LINHA AQUI
     chapa: z.string().min(1).max(8),
     dias: z.array(z.object({
       data: z.string().min(10).max(10),
