@@ -1941,6 +1941,14 @@
             turnoSecaoFormHrEnt2.value = turno?.HR_ENT2 || '';
             turnoSecaoFormHrSai2.value = turno?.HR_SAI2 || '';
             turnoSecaoFormTitulo.textContent = turno ? 'Editar Turno' : 'Novo Turno';
+
+            // Scroll form into view and focus the first field
+            if (turnoSecaoForm) {
+                turnoSecaoForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            if (turnoSecaoFormSecao) {
+                turnoSecaoFormSecao.focus();
+            }
         };
 
         const aplicarSecaoSelecionadaNoCadastro = () => {
@@ -2228,8 +2236,8 @@
             try {
                 data = await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios`);
             } catch (error) {
-                funcionariosTitulo.textContent = `FuncionÃ¡rios cadastrados - Loja ${loja}`;
-                tabelaFuncionariosBody.innerHTML = `<tr><td colspan="11" class="text-center text-red-600 py-8">Erro ao carregar funcionÃ¡rios: ${escapeHtml(error.message)}</td></tr>`;
+                funcionariosTitulo.textContent = `Funcionários cadastrados - Loja ${loja}`;
+                tabelaFuncionariosBody.innerHTML = `<tr><td colspan="11" class="text-center text-red-600 py-8">Erro ao carregar funcionários: ${escapeHtml(error.message)}</td></tr>`;
                 throw error;
             }
             renderizarFuncionariosTela(data.funcionarios || [], loja);

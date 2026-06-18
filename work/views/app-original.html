@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -63,7 +63,7 @@
                     <span class="material-symbols-outlined">account_circle</span>
                     <div>
                         <strong id="loggedUserName">Carregando...</strong>
-                        <span id="loggedUserStores">Loja nÃ£o carregada</span>
+                        <span id="loggedUserStores">Loja não carregada</span>
                     </div>
                     <button id="logoutAppBtn" type="button" class="logout-button">
                         <span class="material-symbols-outlined">logout</span>
@@ -84,7 +84,7 @@
                     </div>
                 </header>
                 <div class="timeline-metrics no-print">
-                    <div><span>FuncionÃ¡rios na loja</span><strong id="funcionariosLojaCount">0</strong></div>
+                    <div><span>Funcionários na loja</span><strong id="funcionariosLojaCount">0</strong></div>
                     <div><span>Turnos criados</span><strong id="turnosCriadosCount">0</strong></div>
                     <div><span>Turnos restantes</span><strong id="turnosRestantesCount">0</strong></div>
                 </div>
@@ -105,7 +105,7 @@
                                     <div><label for="fimEscala" class="block text-sm font-medium text-gray-700">Saída 2</label><input type="time" id="fimEscala" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 sm:text-sm" readonly></div>
                                 </div>                                <div class="flex space-x-2">
                                     <button id="addEscalaBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Adicionar</button>
-                                    <button id="cancelEditBtn" type="button" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300 hidden">Cancelar EdiÃ§Ã£o</button>
+                                    <button id="cancelEditBtn" type="button" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300 hidden">Cancelar Edição</button>
                                 </div>
                             </div>
                         </form>
@@ -168,7 +168,7 @@
                                 <th>Data</th>
                                 <th>Nome</th>
                                 <th>Setor</th>
-                                <th>AÃ§Ãµes</th>
+                                <th>Ações</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-registros-body">
@@ -186,12 +186,12 @@
                         <thead>
                             <tr>
                                 <th>ID</th>
-                                <th>MÃªs</th>
+                                <th>Mês</th>
                                 <th>Loja</th>
                                 <th>Chapa</th>
-                                <th>FuncionÃ¡rio</th>
-                                <th>RevisÃ£o</th>
-                                <th>AÃ§Ãµes</th>
+                                <th>Funcionário</th>
+                                <th>Revisão</th>
+                                <th>Ações</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-banco-body">
@@ -215,7 +215,7 @@
 
                 <div class="table-card">
                     <div class="table-card-header">
-                        <h2 id="funcionariosTitulo">FuncionÃ¡rios cadastrados</h2>
+                        <h2 id="funcionariosTitulo">Funcionários cadastrados</h2>
                     </div>
                     <table class="data-table">
                         <thead>
@@ -223,17 +223,17 @@
                                 <th>Chapa</th>
                                 <th>Nome</th>
                                 <th>Loja</th>
-                                <th>SeÃ§Ã£o</th>
-                                <th>FunÃ§Ã£o</th>
+                                <th>Seção</th>
+                                <th>Função</th>
                                 <th>Brigadista</th>
                                 <th>Entrada 1</th>
-                                <th>SaÃ­da 1</th>
+                                <th>Saída 1</th>
                                 <th>Entrada 2</th>
-                                <th>SaÃ­da 2</th>
+                                <th>Saída 2</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-funcionarios-body">
-                            <tr><td colspan="10" class="text-center text-gray-500 py-8">Selecione uma loja e carregue os funcionÃ¡rios.</td></tr>
+                            <tr><td colspan="10" class="text-center text-gray-500 py-8">Selecione uma loja e carregue os funcionários.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -252,7 +252,7 @@
 
                 <div class="table-card">
                     <div class="table-card-header">
-                        <h2>UsuÃ¡rios com acesso Ã  escala</h2>
+                        <h2>Usuários com acesso Ã  escala</h2>
                     </div>
                     <table class="data-table">
                         <thead>
@@ -265,7 +265,7 @@
                             </tr>
                         </thead>
                         <tbody id="tabela-acessos-body">
-                            <tr><td colspan="5" class="text-center text-gray-500 py-8">Carregue os usuÃ¡rios com acesso Ã  escala.</td></tr>
+                            <tr><td colspan="5" class="text-center text-gray-500 py-8">Carregue os usuários com acesso Ã  escala.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -332,7 +332,7 @@
                     <h1>Turnos por Seção</h1>
                     <div class="header-actions">
                         <select id="turnosSecaoLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                        <button class="action-button" id="novoTurnoSecaoBtn">
+                        <button type="button" class="action-button" id="novoTurnoSecaoBtn">
                             <span class="material-symbols-outlined">add</span>
                             Novo Turno
                         </button>
@@ -421,32 +421,32 @@
                 </div>
             </div>
             <div id="settings-page" class="hidden">
-                 <header class="main-header"><h1>ConfiguraÃ§Ãµes</h1></header>
+                 <header class="main-header"><h1>Configurações</h1></header>
                 <div class="bg-white p-6 rounded-xl shadow-md w-full max-w-2xl mx-auto">
                     
                         <hr class="my-6">
                         <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Linha do Tempo</h4>
-                        <div><label for="horaInicioTimeline" class="block text-sm font-medium text-gray-700">Hora InÃ­cio</label><input type="time" id="horaInicioTimeline" value="05:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="horaInicioTimeline" class="block text-sm font-medium text-gray-700">Hora Início</label><input type="time" id="horaInicioTimeline" value="05:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
                         <div><label for="horaFimTimeline" class="block text-sm font-medium text-gray-700">Hora Fim</label><input type="time" id="horaFimTimeline" value="23:30" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
                         <div><label for="intervaloMarcacao" class="block text-sm font-medium text-gray-700">Intervalo (minutos)</label><input type="number" id="intervaloMarcacao" value="30" min="5" step="5" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
                         <hr class="my-6">
                         <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Regras de Turno</h4>
-                        <div><label for="regraJornadaTrabalho" class="block text-sm font-medium text-gray-700">Jornada de Trabalho PadrÃ£o</label><input type="time" id="regraJornadaTrabalho" value="07:20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxHoraExtra" class="block text-sm font-medium text-gray-700">MÃ¡ximo de Hora Extra DiÃ¡ria</label><input type="time" id="regraMaxHoraExtra" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraJornadaTrabalho" class="block text-sm font-medium text-gray-700">Jornada de Trabalho Padrão</label><input type="time" id="regraJornadaTrabalho" value="07:20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxHoraExtra" class="block text-sm font-medium text-gray-700">Máximo de Hora Extra Diária</label><input type="time" id="regraMaxHoraExtra" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
                         <hr>
-                        <div><label for="regraMinIntervalo" class="block text-sm font-medium text-gray-700">DuraÃ§Ã£o MÃ­nima Intervalo</label><input type="time" id="regraMinIntervalo" value="01:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxIntervalo" class="block text-sm font-medium text-gray-700">DuraÃ§Ã£o MÃ¡xima Intervalo</label><input type="time" id="regraMaxIntervalo" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxJornadaContinua" class="block text-sm font-medium text-gray-700">Jornada MÃ¡xima ContÃ­nua</label><input type="time" id="regraMaxJornadaContinua" value="06:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraDescansoEntreTurnos" class="block text-sm font-medium text-gray-700">Descanso MÃ­nimo Entre Turnos</label><input type="time" id="regraDescansoEntreTurnos" value="11:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraDescansoPosFolga" class="block text-sm font-medium text-gray-700">Descanso MÃ­nimo PÃ³s-Folga (horas)</label><input type="number" id="regraDescansoPosFolga" value="35" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxDiasConsecutivos" class="block text-sm font-medium text-gray-700">MÃ¡ximo de Dias de Trabalho Consecutivos</label><input type="number" id="regraMaxDiasConsecutivos" value="7" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMinIntervalo" class="block text-sm font-medium text-gray-700">Duração Mínima Intervalo</label><input type="time" id="regraMinIntervalo" value="01:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxIntervalo" class="block text-sm font-medium text-gray-700">Duração Máxima Intervalo</label><input type="time" id="regraMaxIntervalo" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxJornadaContinua" class="block text-sm font-medium text-gray-700">Jornada Máxima Contínua</label><input type="time" id="regraMaxJornadaContinua" value="06:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraDescansoEntreTurnos" class="block text-sm font-medium text-gray-700">Descanso Mínimo Entre Turnos</label><input type="time" id="regraDescansoEntreTurnos" value="11:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraDescansoPosFolga" class="block text-sm font-medium text-gray-700">Descanso Mínimo Pós-Folga (horas)</label><input type="number" id="regraDescansoPosFolga" value="35" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                        <div><label for="regraMaxDiasConsecutivos" class="block text-sm font-medium text-gray-700">Máximo de Dias de Trabalho Consecutivos</label><input type="number" id="regraMaxDiasConsecutivos" value="7" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
                         
                         <hr class="my-6">
-                        <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Backup e RestauraÃ§Ã£o de TUDO</h4>
+                        <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Backup e Restauração de TUDO</h4>
                         <div class="space-y-3">
                             <p class="text-sm text-gray-600">
-                                Salve um arquivo de backup com TODAS as suas escalas e configuraÃ§Ãµes.
-                                Use a opÃ§Ã£o de carregar para restaurar TODOS os dados a partir de um backup.
+                                Salve um arquivo de backup com TODAS as suas escalas e configurações.
+                                Use a opção de carregar para restaurar TODOS os dados a partir de um backup.
                             </p>
                             <div class="flex gap-4">
                                 <button id="salvarBackupBtn" type="button" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Salvar Backup Total</button>
@@ -456,7 +456,7 @@
                         <input type="file" id="backupFileInput" class="hidden" accept=".json">
                         </div>
                     <div class="pt-6 border-t mt-6">
-                        <button id="salvarSettingsBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Salvar AlteraÃ§Ãµes</button>
+                        <button id="salvarSettingsBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Salvar Alterações</button>
                     </div>
                 </div>
             </div>
@@ -467,30 +467,30 @@
 <div id="esqueletoModal" class="modal-overlay hidden no-print">
     <div id="esqueleto-modal-content" class="bg-white rounded-lg shadow-xl w-11/12 h-[95vh] max-w-none flex flex-col modal-content">
         
-        <!-- CABEÃ‡ALHO COM TODOS OS BOTÃ•ES EM UMA LINHA -->
+        <!-- CABEÇALHO COM TODOS OS BOTÕES EM UMA LINHA -->
         <div id="esqueleto-modal-header" class="flex items-center justify-between p-4 border-b overflow-x-auto overflow-y-hidden no-scrollbar" style="-ms-overflow-style: none; scrollbar-width: none;">
             <h3 class="text-lg font-bold text-gray-800 whitespace-nowrap mr-6">Escala</h3>
             
             <div class="flex items-center gap-2 no-print flex-nowrap">
                 <!-- Seletores de Data -->
                 <select id="lojaEscalaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10" title="Loja"></select>
-                <button id="carregarFuncionariosBtn" class="whitespace-nowrap text-sm bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Carregar FuncionÃ¡rios</button>
+                <button id="carregarFuncionariosBtn" class="whitespace-nowrap text-sm bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Carregar Funcionários</button>
                 <span id="funcionariosStatus" class="text-xs text-gray-600 whitespace-nowrap"></span>
                 <select id="mesSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
                 <select id="anoSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                  <!-- Regra e DistribuiÃ§Ã£o AutomÃ¡tica -->
+                  <!-- Regra e Distribuição Automática -->
                 <select id="regraDomingoSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10" title="Regra de Domingo">
-                    <option value="3">Dom. 2Ã—1</option>
-                    <option value="2">Dom. 1Ã—1</option>
+                    <option value="3">Dom. 2×1</option>
+                    <option value="2">Dom. 1×1</option>
                 </select>
-                <button id="autoDistribuirFolgasBtn" class="whitespace-nowrap text-sm bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Distribuir Folgas 5Ã—2</button>
-                <!-- BotÃµes de VisualizaÃ§Ã£o -->
+                <button id="autoDistribuirFolgasBtn" class="whitespace-nowrap text-sm bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Distribuir Folgas 5×2</button>
+                <!-- Botões de Visualização -->
                 <button id="visualizarTimelineBtn" class="whitespace-nowrap text-sm bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Visualizar Timeline</button>
                 <button id="gerarEscalaDetalhadaBtn" class="whitespace-nowrap text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Gerar Escala Detalhada</button>
                 
               
                 
-                <!-- AÃ§Ãµes e Utilidades -->
+                <!-- Ações e Utilidades -->
                 <button id="imprimirEsqueletoBtn" class="whitespace-nowrap text-sm bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Imprimir Esqueleto</button>
                 
                 <!-- Controles de Zoom -->
@@ -500,7 +500,7 @@
                     <span id="zoomInBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Aumentar Zoom">zoom_in</span>
                 </div>
                 
-                <!-- BotÃ£o Fechar -->
+                <!-- Botão Fechar -->
                 <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-3xl font-bold" title="Fechar" aria-label="Fechar modal">&times;</button>
             </div>
         </div>
@@ -548,7 +548,7 @@
     <div id="infoModal" class="modal-overlay hidden no-print" style="z-index: 1070;">
         <div class="bg-white rounded-lg shadow-xl w-11/12 max-w-md flex flex-col modal-content">
             <div id="infoModalHeader" class="flex justify-between items-center p-4 text-white rounded-t-lg">
-                <h3 id="infoModalTitle" class="text-lg font-bold">AtenÃ§Ã£o</h3>
+                <h3 id="infoModalTitle" class="text-lg font-bold">Atenção</h3>
                 <button id="closeInfoModalBtn" class="text-white hover:text-gray-200 text-2xl font-bold">&times;</button>
             </div>
             <div id="infoModalBody" class="p-6">
@@ -559,7 +559,7 @@
 
     <div id="inputModal" class="modal-overlay hidden no-print" style="z-index: 1080;">
         <div class="bg-white rounded-lg shadow-xl w-11/12 max-w-sm flex flex-col">
-            <h3 id="inputModalTitle" class="text-lg font-bold p-4 border-b text-gray-800">TÃ­tulo do Modal</h3>
+            <h3 id="inputModalTitle" class="text-lg font-bold p-4 border-b text-gray-800">Título do Modal</h3>
             <div id="inputModalBody" class="p-6 space-y-4">
                 </div>
             <div class="p-4 bg-gray-50 rounded-b-lg flex justify-end gap-3">
