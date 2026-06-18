@@ -49,7 +49,8 @@
         const turnosSecaoTitulo = document.getElementById('turnosSecaoTitulo');
         const tabelaTurnosSecaoBody = document.getElementById('tabela-turnos-secao-body');
         const turnoSecaoForm = document.getElementById('turnoSecaoForm');
-        const turnoSecaoFormCard = document.getElementById('turnoSecaoFormCard');
+        const turnoSecaoFormPage = document.getElementById('turno-secao-form-page');
+        const voltarTurnosSecaoBtn = document.getElementById('voltarTurnosSecaoBtn');
         const turnoSecaoFormTitulo = document.getElementById('turnoSecaoFormTitulo');
         const turnoSecaoFormId = document.getElementById('turnoSecaoFormId');
         const turnoSecaoFormSecao = document.getElementById('turnoSecaoFormSecao');
@@ -86,6 +87,7 @@
             secoes: 'Secoes',
             secaoForm: 'Cadastro de Secao',
             turnosSecao: 'Turnos por Secao',
+            turnoSecaoForm: 'Cadastro de Turno',
             escalaBanco: 'Detalhamento da Escala',
             acessos: 'Controle de Acesso',
             roles: 'Roles / Permissao',
@@ -105,6 +107,7 @@
             secoesPage.classList.add('hidden');
             secaoFormPage.classList.add('hidden');
             turnosSecaoPage.classList.add('hidden');
+            turnoSecaoFormPage.classList.add('hidden');
             escalaDetalhePage.classList.add('hidden');
             acessosPage.classList.add('hidden');
             rolesPage.classList.add('hidden');
@@ -188,6 +191,40 @@
             carregarTurnosSecaoTela(false).catch(error => showInfoModal(error.message, 'error'));
         }
 
+        async function showTurnoSecaoFormPage(escsecaoturnoId = '') {
+            hideAllPages();
+            turnoSecaoFormPage.classList.remove('hidden');
+            navTurnosSecao.classList.add('active');
+            expandActiveNavGroup(navTurnosSecao);
+            setCurrentPageTitle('turnoSecaoForm');
+
+            const loja = turnosSecaoLojaSelect?.value || lojaEscalaSelect.value;
+            if (loja) {
+                if (secoesLojaCache.length === 0 || String(secoesLojaCache[0]?.LOJA || '') !== String(loja)) {
+                    await carregarSecoesDaLoja(true);
+                }
+                if (turnosSecaoCache.length === 0 || String(turnosSecaoCache[0]?.LOJA || '') !== String(loja) || !turnosSecaoCache.some(item => String(item.LOJA) === String(loja))) {
+                    await carregarTurnosSecaoDaLoja(true);
+                }
+            }
+
+            if (!escsecaoturnoId || escsecaoturnoId === 'novo') {
+                turnoSecaoFormTitulo.textContent = 'Novo Turno';
+                preencherFormularioTurnoSecao(null);
+                return;
+            }
+
+            const turno = turnosSecaoCache.find(item => Number(item.ESCSECAOTURNO_ID) === Number(escsecaoturnoId));
+            if (!turno) {
+                showInfoModal('Turno não encontrado para edição.', 'error');
+                window.location.hash = '/turnos-secao';
+                return;
+            }
+
+            turnoSecaoFormTitulo.textContent = 'Editar Turno';
+            preencherFormularioTurnoSecao(turno);
+        }
+
         function showEscalaDetalhePage(escprogId) {
             hideAllPages();
             escalaDetalhePage.classList.remove('hidden');
@@ -232,6 +269,10 @@
                 showSecaoFormPage(pageKey.split('/')[1]);
                 return;
             }
+            if (pageKey.startsWith('turnos-secao/')) {
+                showTurnoSecaoFormPage(pageKey.split('/')[1]);
+                return;
+            }
 
             const routes = {
                 home: showTimelinePage,
@@ -269,6 +310,7 @@
             });
         });
         voltarEscalasBtn?.addEventListener('click', () => { window.location.hash = '/escalas'; });
+        voltarTurnosSecaoBtn?.addEventListener('click', () => { window.location.hash = '/turnos-secao'; });
         window.addEventListener('hashchange', handleHashNavigation);
         salvarSettingsBtn.addEventListener('click', (e) => { e.preventDefault(); salvarConfiguracoes(); });
         goToTimelineBtn.addEventListener('click', (e) => { e.preventDefault(); window.location.hash = '/home'; });        consultarBancoBtn.addEventListener('click', async (e) => {
@@ -1933,21 +1975,7 @@
             secaoFormDescr.value = secao?.DESCR || '';
         };
 
-        const esconderFormularioTurnoSecao = () => {
-            if (turnoSecaoFormCard) {
-                turnoSecaoFormCard.classList.add('hidden');
-            }
-        };
-
-        const mostrarFormularioTurnoSecao = () => {
-            if (turnoSecaoFormCard) {
-                turnoSecaoFormCard.classList.remove('hidden');
-                turnoSecaoFormCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-            if (turnoSecaoFormSecao) {
-                turnoSecaoFormSecao.focus();
-            }
-        };
+        // esconderFormularioTurnoSecao and mostrarFormularioTurnoSecao removed as form is on a separate page
 
         const preencherFormularioTurnoSecao = (turno = null) => {
             turnoSecaoFormId.value = turno?.ESCSECAOTURNO_ID || '';
@@ -2135,8 +2163,6 @@
             await carregarSecoesDaLoja(true);
             const turnos = await carregarTurnosSecaoDaLoja(true);
             renderizarTurnosSecaoTela(turnos, loja);
-            preencherFormularioTurnoSecao(null);
-            esconderFormularioTurnoSecao();
             if (showSuccess) {
                 showInfoModal(`${turnos.length} turno(s) carregado(s) da loja ${loja}.`, 'success');
             }
@@ -2145,18 +2171,11 @@
         tabelaTurnosSecaoBody?.addEventListener('click', (event) => {
             const editButton = event.target.closest('.edit-turno-secao');
             if (!editButton) return;
-            const turno = turnosSecaoCache.find(item => Number(item.ESCSECAOTURNO_ID) === Number(editButton.dataset.id));
-            if (!turno) {
-                showInfoModal('Turno não encontrado para edição.', 'error');
-                return;
-            }
-            preencherFormularioTurnoSecao(turno);
-            mostrarFormularioTurnoSecao();
+            window.location.hash = `/turnos-secao/${editButton.dataset.id}`;
         });
 
         novoTurnoSecaoBtn?.addEventListener('click', () => {
-            preencherFormularioTurnoSecao(null);
-            mostrarFormularioTurnoSecao();
+            window.location.hash = '/turnos-secao/novo';
         });
 
         carregarTurnosSecaoBtn?.addEventListener('click', async () => {
@@ -2199,7 +2218,7 @@
                 });
                 await carregarTurnosSecaoTela(false);
                 showInfoModal('Turno salvo com sucesso.', 'success');
-                esconderFormularioTurnoSecao();
+                window.location.hash = '/turnos-secao';
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }

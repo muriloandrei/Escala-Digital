@@ -364,8 +364,22 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="table-card form-card hidden" id="turnoSecaoFormCard">
-                    <div class="table-card-header"><h2 id="turnoSecaoFormTitulo">Novo Turno</h2><p class="table-card-subtitle">Selecione a seção e informe os horários usados no gerador de escala.</p></div>
+            </div>
+            <div id="turno-secao-form-page" class="hidden">
+                <header class="main-header">
+                    <h1 id="turnoSecaoFormTitulo">Novo Turno</h1>
+                    <div class="header-actions">
+                        <button type="button" class="action-button secondary" id="voltarTurnosSecaoBtn">
+                            <span class="material-symbols-outlined">arrow_back</span>
+                            Voltar
+                        </button>
+                    </div>
+                </header>
+                <div class="table-card form-card">
+                    <div class="table-card-header">
+                        <h2>Dados do turno</h2>
+                        <p class="table-card-subtitle">Selecione a seção e informe os horários usados no gerador de escala.</p>
+                    </div>
                     <form id="turnoSecaoForm" class="dashboard-form">
                         <input type="hidden" id="turnoSecaoFormId">
                         <div><label for="turnoSecaoFormSecao">Seção</label><select id="turnoSecaoFormSecao" required></select></div>
@@ -374,7 +388,12 @@
                         <div><label for="turnoSecaoFormHrSai1">Saída 1</label><input id="turnoSecaoFormHrSai1" type="time" required></div>
                         <div><label for="turnoSecaoFormHrEnt2">Entrada 2</label><input id="turnoSecaoFormHrEnt2" type="time" required></div>
                         <div><label for="turnoSecaoFormHrSai2">Saída 2</label><input id="turnoSecaoFormHrSai2" type="time" required></div>
-                        <div class="form-actions form-span-2"><button type="submit" class="action-button"><span class="material-symbols-outlined">save</span>Salvar Turno</button></div>
+                        <div class="form-actions form-span-2">
+                            <button type="submit" class="action-button">
+                                <span class="material-symbols-outlined">save</span>
+                                Salvar Turno
+                            </button>
+                        </div>
                     </form>
                 </div>
             </div>
