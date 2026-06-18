@@ -385,6 +385,11 @@
             width: 100%;
         }
 
+        .dashboard-form input[readonly] {
+            background: #f8fafc;
+            color: var(--cor-texto-leve);
+        }
+
         .form-span-2 {
             grid-column: span 2;
         }

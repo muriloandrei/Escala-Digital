@@ -385,6 +385,20 @@
             return `${codigo}${secao?.DESCR || `Secao ${secao?.ESCSECAO_ID || ''}`}`;
         };
 
+        const popularSelectSecaoFormulario = (selectedId = '') => {
+            if (!secaoFormDescr) return;
+            secaoFormDescr.innerHTML = '<option value="">Selecione uma seção</option>';
+            secoesLojaCache.forEach((secao) => {
+                const option = document.createElement('option');
+                option.value = secao.ESCSECAO_ID || '';
+                option.textContent = secao.DESCR || getSecaoLabel(secao);
+                option.dataset.codigo = secao.COD_SECAO || '';
+                option.dataset.descr = secao.DESCR || '';
+                secaoFormDescr.appendChild(option);
+            });
+            secaoFormDescr.value = selectedId ? String(selectedId) : '';
+        };
+
         const popularSelectSecoesTurno = () => {
             if (!secaoTurnoSelect) return;
             secaoTurnoSelect.innerHTML = '<option value="">Selecione uma secao com turno cadastrado</option>';
@@ -1531,6 +1545,18 @@
             if (secaoFormLoja) secaoFormLoja.value = secoesLojaSelect.value;
             await carregarSecoesTela(false);
         });
+        secaoFormLoja?.addEventListener('change', async () => {
+            const loja = secaoFormLoja.value;
+            lojaEscalaSelect.value = loja;
+            funcionariosLojaSelect.value = loja;
+            if (homeLojaSelect) homeLojaSelect.value = loja;
+            if (secoesLojaSelect) secoesLojaSelect.value = loja;
+            secaoFormId.value = '';
+            secaoFormCodigo.value = '';
+            await carregarSecoesDaLoja(true);
+            popularSelectSecaoFormulario('');
+        });
+        secaoFormDescr?.addEventListener('change', () => aplicarSecaoSelecionadaNoCadastro());
         carregarFuncionariosTelaBtn.addEventListener('click', async () => {
             try {
                 await carregarFuncionariosTela(true);
@@ -1813,6 +1839,7 @@
             if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
                 secoesLojaCache = [];
                 popularSelectSecoesTurno();
+                popularSelectSecaoFormulario('');
                 return [];
             }
 
@@ -1820,6 +1847,7 @@
                 const data = await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/secoes`);
                 secoesLojaCache = data.secoes || [];
                 popularSelectSecoesTurno();
+                popularSelectSecaoFormulario(secaoFormId?.value || '');
                 if (!silent && secoesLojaCache.length === 0) {
                     showInfoModal('Nenhuma secao encontrada para a loja selecionada.', 'info');
                 }
@@ -1827,6 +1855,7 @@
             } catch (error) {
                 secoesLojaCache = [];
                 popularSelectSecoesTurno();
+                popularSelectSecaoFormulario('');
                 if (!silent) showInfoModal(error.message, 'error');
                 return [];
             }
@@ -1837,7 +1866,7 @@
             secaoFormId.value = secao?.ESCSECAO_ID || '';
             secaoFormLoja.value = secao?.LOJA || secoesLojaSelect?.value || lojaEscalaSelect.value || '';
             secaoFormCodigo.value = secao?.COD_SECAO || '';
-            secaoFormDescr.value = secao?.DESCR || '';
+            popularSelectSecaoFormulario(secao?.ESCSECAO_ID || '');
             secaoFormQtde.value = turno.QTDE_COLABORADORES || 1;
             secaoFormHrEnt1.value = turno.HR_ENT1 || '';
             secaoFormHrSai1.value = turno.HR_SAI1 || '';
@@ -1845,18 +1874,27 @@
             secaoFormHrSai2.value = turno.HR_SAI2 || '';
         };
 
+        const aplicarSecaoSelecionadaNoCadastro = () => {
+            const escsecaoId = secaoFormDescr?.value || '';
+            const secao = secoesLojaCache.find(item => Number(item.ESCSECAO_ID) === Number(escsecaoId));
+            if (!secao) {
+                preencherFormularioSecao(null);
+                return;
+            }
+            preencherFormularioSecao(secao);
+        };
+
         const prepararFormularioSecao = async (escsecaoId = '') => {
             const loja = secoesLojaSelect?.value || lojaEscalaSelect.value;
             if (secaoFormLoja && loja) secaoFormLoja.value = loja;
+            if (loja && (secoesLojaCache.length === 0 || String(secoesLojaCache[0]?.LOJA || '') !== String(loja))) {
+                await carregarSecoesDaLoja(true);
+            }
 
             if (!escsecaoId || escsecaoId === 'nova') {
                 secaoFormTitulo.textContent = 'Nova Seção';
                 preencherFormularioSecao(null);
                 return;
-            }
-
-            if (secoesLojaCache.length === 0) {
-                await carregarSecoesDaLoja(true);
             }
 
             const secao = secoesLojaCache.find(item => Number(item.ESCSECAO_ID) === Number(escsecaoId));
@@ -1944,6 +1982,10 @@
             event.preventDefault();
             const loja = secaoFormLoja.value;
             const escsecaoId = secaoFormId.value;
+            if (!escsecaoId) {
+                showInfoModal('Selecione uma seção cadastrada para salvar o turno.', 'error');
+                return;
+            }
             if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
                 showInfoModal('Selecione uma loja permitida para salvar a seção.', 'error');
                 return;
@@ -1951,19 +1993,17 @@
 
             try {
                 const payload = {
-                    COD_SECAO: Number(secaoFormCodigo.value),
-                    DESCR: secaoFormDescr.value.trim(),
+                    COD_SECAO: secaoFormCodigo.value.trim(),
+                    DESCR: secoesLojaCache.find(item => Number(item.ESCSECAO_ID) === Number(escsecaoId))?.DESCR || secaoFormDescr.selectedOptions?.[0]?.dataset.descr || '',
                     QTDE_COLABORADORES: Number(secaoFormQtde.value),
                     HR_ENT1: secaoFormHrEnt1.value,
                     HR_SAI1: secaoFormHrSai1.value,
                     HR_ENT2: secaoFormHrEnt2.value,
                     HR_SAI2: secaoFormHrSai2.value
                 };
-                const url = escsecaoId
-                    ? `/api/catalog/lojas/${encodeURIComponent(loja)}/secoes/${encodeURIComponent(escsecaoId)}`
-                    : `/api/catalog/lojas/${encodeURIComponent(loja)}/secoes`;
+                const url = `/api/catalog/lojas/${encodeURIComponent(loja)}/secoes/${encodeURIComponent(escsecaoId)}`;
                 await apiRequest(url, {
-                    method: escsecaoId ? 'PUT' : 'POST',
+                    method: 'PUT',
                     body: JSON.stringify(payload)
                 });
                 lojaEscalaSelect.value = loja;

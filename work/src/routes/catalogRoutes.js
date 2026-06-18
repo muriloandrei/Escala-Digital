@@ -22,7 +22,7 @@ const secaoTurnoSchema = z.object({
 }).strict();
 
 const secaoSchema = secaoTurnoSchema.extend({
-  COD_SECAO: z.number().int().positive(),
+  COD_SECAO: z.string().trim().min(1).max(10),
   DESCR: z.string().trim().min(1).max(100)
 }).strict();
 
