@@ -1,11 +1,12 @@
 :root {
-  --bg: #f5f7fb;
+  --bg: #f6f8fb;
   --panel: #ffffff;
   --text: #1f2937;
   --muted: #667085;
   --line: #d9e0ea;
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
+  --primary: #28358f;
+  --primary-dark: #1f286f;
+  --accent: #e30613;
   --danger: #b42318;
   --success: #067647;
 }
@@ -45,13 +46,16 @@ button:hover {
   display: grid;
   place-items: center;
   padding: 24px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(40, 53, 143, 0.08), transparent 30%),
+    linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
 }
 
 .login-panel {
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  width: min(920px, 100%);
-  min-height: 420px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+  width: min(980px, 100%);
+  min-height: 500px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -63,15 +67,26 @@ button:hover {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 48px;
-  background: #102a43;
-  color: #fff;
+  align-items: center;
+  gap: 24px;
+  padding: 56px;
+  background: #fff;
+  color: var(--primary);
+  border-right: 1px solid var(--line);
+  text-align: center;
 }
 
-.login-copy p {
-  max-width: 520px;
-  color: #d7e4f2;
-  line-height: 1.6;
+.login-logo {
+  width: min(360px, 100%);
+  height: auto;
+  display: block;
+}
+
+.login-copy h1 {
+  margin: 0;
+  color: var(--primary);
+  font-size: 30px;
+  line-height: 1.15;
 }
 
 .eyebrow {
@@ -83,16 +98,28 @@ button:hover {
   text-transform: uppercase;
 }
 
-.login-copy .eyebrow {
-  color: #8ecae6;
-}
-
 .login-form {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 10px;
-  padding: 48px;
+  gap: 12px;
+  padding: 56px;
+}
+
+.login-form-header {
+  margin-bottom: 14px;
+}
+
+.login-form-header h2 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 24px;
+}
+
+.login-form-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .login-form label,
@@ -108,7 +135,18 @@ button:hover {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 10px 12px;
+  padding: 11px 12px;
+}
+
+.login-form button {
+  margin-top: 8px;
+  min-height: 44px;
+  font-weight: 700;
+  background: var(--primary);
+}
+
+.login-form button:hover {
+  background: var(--primary-dark);
 }
 
 .form-message {
@@ -262,6 +300,28 @@ th {
   .login-panel,
   .status-grid {
     grid-template-columns: 1fr;
+  }
+
+  .login-panel {
+    min-height: auto;
+  }
+
+  .login-copy {
+    padding: 32px 24px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .login-copy h1 {
+    font-size: 24px;
+  }
+
+  .login-logo {
+    width: min(260px, 100%);
+  }
+
+  .login-form {
+    padding: 32px 24px;
   }
 
   .sidebar {

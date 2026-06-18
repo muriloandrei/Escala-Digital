@@ -1671,11 +1671,22 @@
         let escalaConfigCache = {};
 
         const apiRequest = async (url, options = {}) => {
+            const { timeoutMs = 20000, signal, ...fetchOptions } = options;
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
             const response = await fetch(url, {
                 credentials: 'include',
-                headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-                ...options
-            });
+                headers: { 'Content-Type': 'application/json', ...(fetchOptions.headers || {}) },
+                ...fetchOptions,
+                signal: signal || controller.signal
+            }).catch((error) => {
+                if (error.name === 'AbortError') {
+                    throw new Error('Tempo limite excedido ao comunicar com o servidor.');
+                }
+                throw error;
+            }).finally(() => clearTimeout(timeout));
+
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
                 const error = new Error(data.error || 'Erro ao comunicar com o servidor.');
@@ -1798,7 +1809,7 @@
         };
 
         const carregarSecoesDaLoja = async (silent = false) => {
-            const loja = lojaEscalaSelect.value || secoesLojaSelect?.value;
+            const loja = secoesLojaSelect?.value || lojaEscalaSelect.value;
             if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
                 secoesLojaCache = [];
                 popularSelectSecoesTurno();
@@ -1901,10 +1912,16 @@
             lojaEscalaSelect.value = loja;
             funcionariosLojaSelect.value = loja;
             if (homeLojaSelect) homeLojaSelect.value = loja;
-            const secoes = await carregarSecoesDaLoja(true);
-            renderizarSecoesTela(secoes, loja);
-            if (showSuccess) {
-                showInfoModal(`${secoes.length} secao(oes) carregada(s) da loja ${loja}.`, 'success');
+            try {
+                const secoes = await carregarSecoesDaLoja(true);
+                renderizarSecoesTela(secoes, loja);
+                if (showSuccess) {
+                    showInfoModal(`${secoes.length} seção(ões) carregada(s) da loja ${loja}.`, 'success');
+                }
+            } catch (error) {
+                secoesTitulo.textContent = `Seções cadastradas - Loja ${loja}`;
+                tabelaSecoesBody.innerHTML = `<tr><td colspan="8" class="text-center text-red-600 py-8">Erro ao carregar seções: ${escapeHtml(error.message)}</td></tr>`;
+                if (showSuccess) showInfoModal(error.message, 'error');
             }
         };
 
