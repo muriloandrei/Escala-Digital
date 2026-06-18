@@ -49,6 +49,7 @@
         const turnosSecaoTitulo = document.getElementById('turnosSecaoTitulo');
         const tabelaTurnosSecaoBody = document.getElementById('tabela-turnos-secao-body');
         const turnoSecaoForm = document.getElementById('turnoSecaoForm');
+        const turnoSecaoFormCard = document.getElementById('turnoSecaoFormCard');
         const turnoSecaoFormTitulo = document.getElementById('turnoSecaoFormTitulo');
         const turnoSecaoFormId = document.getElementById('turnoSecaoFormId');
         const turnoSecaoFormSecao = document.getElementById('turnoSecaoFormSecao');
@@ -1932,6 +1933,22 @@
             secaoFormDescr.value = secao?.DESCR || '';
         };
 
+        const esconderFormularioTurnoSecao = () => {
+            if (turnoSecaoFormCard) {
+                turnoSecaoFormCard.classList.add('hidden');
+            }
+        };
+
+        const mostrarFormularioTurnoSecao = () => {
+            if (turnoSecaoFormCard) {
+                turnoSecaoFormCard.classList.remove('hidden');
+                turnoSecaoFormCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            if (turnoSecaoFormSecao) {
+                turnoSecaoFormSecao.focus();
+            }
+        };
+
         const preencherFormularioTurnoSecao = (turno = null) => {
             turnoSecaoFormId.value = turno?.ESCSECAOTURNO_ID || '';
             popularSelectSecaoFormulario(turno?.ESCSECAO_ID || '');
@@ -1941,14 +1958,6 @@
             turnoSecaoFormHrEnt2.value = turno?.HR_ENT2 || '';
             turnoSecaoFormHrSai2.value = turno?.HR_SAI2 || '';
             turnoSecaoFormTitulo.textContent = turno ? 'Editar Turno' : 'Novo Turno';
-
-            // Scroll form into view and focus the first field
-            if (turnoSecaoForm) {
-                turnoSecaoForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-            if (turnoSecaoFormSecao) {
-                turnoSecaoFormSecao.focus();
-            }
         };
 
         const aplicarSecaoSelecionadaNoCadastro = () => {
@@ -2127,6 +2136,7 @@
             const turnos = await carregarTurnosSecaoDaLoja(true);
             renderizarTurnosSecaoTela(turnos, loja);
             preencherFormularioTurnoSecao(null);
+            esconderFormularioTurnoSecao();
             if (showSuccess) {
                 showInfoModal(`${turnos.length} turno(s) carregado(s) da loja ${loja}.`, 'success');
             }
@@ -2141,9 +2151,13 @@
                 return;
             }
             preencherFormularioTurnoSecao(turno);
+            mostrarFormularioTurnoSecao();
         });
 
-        novoTurnoSecaoBtn?.addEventListener('click', () => preencherFormularioTurnoSecao(null));
+        novoTurnoSecaoBtn?.addEventListener('click', () => {
+            preencherFormularioTurnoSecao(null);
+            mostrarFormularioTurnoSecao();
+        });
 
         carregarTurnosSecaoBtn?.addEventListener('click', async () => {
             try {
@@ -2185,6 +2199,7 @@
                 });
                 await carregarTurnosSecaoTela(false);
                 showInfoModal('Turno salvo com sucesso.', 'success');
+                esconderFormularioTurnoSecao();
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
