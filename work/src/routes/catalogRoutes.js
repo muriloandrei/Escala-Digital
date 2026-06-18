@@ -26,6 +26,15 @@ const secaoSchema = secaoTurnoSchema.extend({
   DESCR: z.string().trim().min(1).max(100)
 }).strict();
 
+const secaoCadastroSchema = z.object({
+  COD_SECAO: z.string().trim().min(1).max(10),
+  DESCR: z.string().trim().min(1).max(100)
+}).strict();
+
+const turnoSecaoSchema = secaoTurnoSchema.extend({
+  ESCSECAO_ID: z.number().int().positive()
+}).strict();
+
 router.use(requireAuth);
 
 async function resolveLojaParam(req, res, next) {
@@ -74,7 +83,7 @@ router.get('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async (
 
 router.post('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
-    const data = secaoSchema.parse(req.body);
+    const data = secaoCadastroSchema.parse(req.body);
     const secao = await catalogService.createSecao({
       lojaId: Number(req.params.lojaId),
       data
@@ -90,7 +99,7 @@ router.post('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async 
 
 router.put('/lojas/:lojaId/secoes/:escsecaoId', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
-    const data = secaoSchema.parse(req.body);
+    const data = secaoCadastroSchema.parse(req.body);
     const secao = await catalogService.updateSecao({
       lojaId: Number(req.params.lojaId),
       escsecaoId: Number(req.params.escsecaoId),
@@ -110,20 +119,74 @@ router.put('/lojas/:lojaId/secoes/:escsecaoId', resolveLojaParam, requireLojaAcc
   }
 });
 
+router.get('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+  try {
+    const turnos = await catalogService.listTurnosByLoja(Number(req.params.lojaId));
+    return res.json({ turnos });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+  try {
+    const data = turnoSecaoSchema.parse(req.body);
+    const turno = await catalogService.saveSecaoTurno({
+      lojaId: Number(req.params.lojaId),
+      escsecaoId: data.ESCSECAO_ID,
+      data
+    });
+
+    if (!turno) {
+      return res.status(404).json({ error: 'Secao nao encontrada para a loja.' });
+    }
+
+    return res.status(201).json({ turno });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos de turno da secao invalidos.', details: error.errors });
+    }
+    return next(error);
+  }
+});
+
+router.put('/lojas/:lojaId/turnos-secao/:escsecaoTurnoId', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+  try {
+    const data = turnoSecaoSchema.parse(req.body);
+    const turno = await catalogService.saveSecaoTurno({
+      lojaId: Number(req.params.lojaId),
+      escsecaoTurnoId: Number(req.params.escsecaoTurnoId),
+      escsecaoId: data.ESCSECAO_ID,
+      data
+    });
+
+    if (!turno) {
+      return res.status(404).json({ error: 'Turno da secao nao encontrado para a loja.' });
+    }
+
+    return res.json({ turno });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos de turno da secao invalidos.', details: error.errors });
+    }
+    return next(error);
+  }
+});
+
 router.patch('/lojas/:lojaId/secoes/:escsecaoId/turno', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
     const data = secaoTurnoSchema.parse(req.body);
-    const secao = await catalogService.upsertSecaoTurno({
+    const turno = await catalogService.saveSecaoTurno({
       lojaId: Number(req.params.lojaId),
       escsecaoId: Number(req.params.escsecaoId),
       data
     });
 
-    if (!secao) {
+    if (!turno) {
       return res.status(404).json({ error: 'Secao nao encontrada para a loja.' });
     }
 
-    return res.json({ secao });
+    return res.json({ turno });
   } catch (error) {
     if (error.name === 'ZodError') {
       return res.status(400).json({ error: 'Campos de turno da secao invalidos.', details: error.errors });

@@ -26,7 +26,9 @@ function normalizeFuncionario(row) {
     DT_ADMISS: pick(row, 'DT_ADMISS', 'dt_admiss'),
     BRIGADISTA: pick(row, 'BRIGADISTA', 'brigadista'),
     ESCSECAO_ID: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
+    SECAO_DESCR: pick(row, 'SECAO_DESCR', 'secao_descr'),
     ESCFUNCAO_ID: pick(row, 'ESCFUNCAO_ID', 'escfuncao_id'),
+    FUNCAO_DESCR: pick(row, 'FUNCAO_DESCR', 'funcao_descr'),
     HR_ENT1: pick(row, 'HR_ENT1', 'hr_ent1'),
     HR_SAI1: pick(row, 'HR_SAI1', 'hr_sai1'),
     HR_ENT2: pick(row, 'HR_ENT2', 'hr_ent2'),
@@ -53,6 +55,9 @@ function normalizeSecaoTurno(row) {
   return {
     ESCSECAOTURNO_ID: pick(row, 'ESCSECAOTURNO_ID', 'escsecaoturno_id'),
     ESCSECAO_ID: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
+    COD_SECAO: pick(row, 'COD_SECAO', 'cod_secao'),
+    DESCR: pick(row, 'DESCR', 'descr'),
+    LOJA: pick(row, 'LOJA', 'loja'),
     HR_ENT1: pick(row, 'HR_ENT1', 'hr_ent1'),
     HR_SAI1: pick(row, 'HR_SAI1', 'hr_sai1'),
     HR_ENT2: pick(row, 'HR_ENT2', 'hr_ent2'),
@@ -181,6 +186,10 @@ async function resolveLojaCodigo(lojaId) {
 async function listFuncionariosByLoja(lojaId) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
+    const secaoLojaColumn = await getSecaoLojaColumn(connection);
+    const secaoJoinLoja = secaoLojaColumn
+      ? `and s.${secaoLojaColumn.toLowerCase()} = f.loja`
+      : '';
     const result = await connection.execute(
       `select
           f.escfunc_id,
@@ -191,13 +200,17 @@ async function listFuncionariosByLoja(lojaId) {
           f.dt_admiss,
           f.brigadista,
           f.escsecao_id,
+          s.descr as secao_descr,
           f.escfuncao_id,
+          fu.descr as funcao_descr,
           f.hr_ent1,
           f.hr_sai1,
           f.hr_ent2,
           f.hr_sai2,
           f.dt_hr_incl
        from sgn_esc_funcionario f
+       left join sgn_esc_secao s on s.escsecao_id = f.escsecao_id ${secaoJoinLoja}
+       left join sgn_esc_funcao fu on fu.escfuncao_id = f.escfuncao_id
        where f.loja = :lojaId
        order by f.nome`,
       { lojaId: lojaCodigo },
@@ -228,49 +241,43 @@ async function listSecoesByLoja(lojaId) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    let turnos = [];
-    try {
-      const canUseTurnos = await secaoTurnoSupportsSchedule(connection);
-      if (canUseTurnos) {
-        const turnosColumns = await getTableColumns(connection, 'SGN_ESC_SECAO_TURNO');
-        const turnoIdSelect = turnosColumns.has('ESCSECAOTURNO_ID')
-          ? 'escsecaoturno_id'
-          : 'cast(null as number) as escsecaoturno_id';
-        const turnosSql = lojaColumn
-          ? `select ${turnoIdSelect}, escsecao_id, hr_ent1, hr_sai1, hr_ent2, hr_sai2, qtde_colaboradores
-           from sgn_esc_secao_turno
-           where escsecao_id in (
-             select escsecao_id
-             from sgn_esc_secao
-             where ${lojaColumn.toLowerCase()} = :lojaId
-           )
-           order by escsecao_id, hr_ent1`
-          : `select ${turnoIdSelect}, escsecao_id, hr_ent1, hr_sai1, hr_ent2, hr_sai2, qtde_colaboradores
-           from sgn_esc_secao_turno
-           order by escsecao_id, hr_ent1`;
+    return secoesResult.rows.map((row) => normalizeSecao(row, []));
+  });
+}
 
-        const turnosResult = await connection.execute(
-          turnosSql,
-          lojaColumn ? { lojaId: lojaCodigo } : {},
-          { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-        turnos = turnosResult.rows.map(normalizeSecaoTurno);
-      }
-    } catch (error) {
-      if (!isMissingObjectError(error) && !isInvalidIdentifierError(error)) throw error;
-    }
+async function listTurnosByLoja(lojaId) {
+  const lojaCodigo = await resolveLojaCodigo(lojaId);
+  return withConnection(async (connection) => {
+    const canUseTurnos = await secaoTurnoSupportsSchedule(connection);
+    if (!canUseTurnos) return [];
 
-    const turnosBySecao = new Map();
-    turnos.forEach((turno) => {
-      const key = Number(turno.ESCSECAO_ID);
-      if (!turnosBySecao.has(key)) turnosBySecao.set(key, []);
-      turnosBySecao.get(key).push(turno);
-    });
+    const lojaColumn = await getSecaoLojaColumn(connection);
+    const turnosColumns = await getTableColumns(connection, 'SGN_ESC_SECAO_TURNO');
+    const turnoIdSelect = turnosColumns.has('ESCSECAOTURNO_ID')
+      ? 't.escsecaoturno_id'
+      : 'cast(null as number) as escsecaoturno_id';
+    const whereSql = lojaColumn ? `where s.${lojaColumn.toLowerCase()} = :lojaId` : '';
+    const result = await connection.execute(
+      `select
+          ${turnoIdSelect},
+          t.escsecao_id,
+          s.cod_secao,
+          s.descr,
+          ${lojaColumn ? `s.${lojaColumn.toLowerCase()}` : ':lojaId'} as loja,
+          t.hr_ent1,
+          t.hr_sai1,
+          t.hr_ent2,
+          t.hr_sai2,
+          t.qtde_colaboradores
+       from sgn_esc_secao_turno t
+       join sgn_esc_secao s on s.escsecao_id = t.escsecao_id
+       ${whereSql}
+       order by s.descr, t.hr_ent1, t.hr_sai1`,
+      { lojaId: lojaCodigo },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
 
-    return secoesResult.rows.map((row) => {
-      const escsecaoId = Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'));
-      return normalizeSecao(row, turnosBySecao.get(escsecaoId) || []);
-    });
+    return result.rows.map(normalizeSecaoTurno);
   });
 }
 
@@ -341,10 +348,6 @@ async function createSecao({ lojaId, data }) {
     );
 
     const escsecaoId = result.outBinds.escsecaoId[0];
-    await upsertSecaoTurnoInConnection(connection, {
-      escsecaoId,
-      data
-    });
     await connection.commit();
 
     const secoes = await listSecoesByLoja(lojaCodigo);
@@ -383,7 +386,6 @@ async function updateSecao({ lojaId, escsecaoId, data }) {
       { autoCommit: false }
     );
 
-    await upsertSecaoTurnoInConnection(connection, { escsecaoId, data });
     await connection.commit();
 
     const secoes = await listSecoesByLoja(lojaCodigo);
@@ -391,23 +393,39 @@ async function updateSecao({ lojaId, escsecaoId, data }) {
   });
 }
 
-async function upsertSecaoTurnoInConnection(connection, { escsecaoId, data }) {
+async function upsertSecaoTurnoInConnection(connection, { escsecaoTurnoId, escsecaoId, data }) {
   const canUseTurnos = await secaoTurnoSupportsSchedule(connection);
   if (!canUseTurnos) return;
   const turnosColumns = await getTableColumns(connection, 'SGN_ESC_SECAO_TURNO');
   const hasDtHrIncl = turnosColumns.has('DT_HR_INCL');
+  const hasId = turnosColumns.has('ESCSECAOTURNO_ID');
+
+  if (escsecaoTurnoId && hasId) {
+    await connection.execute(
+      `update sgn_esc_secao_turno
+       set escsecao_id = :escsecaoId,
+           hr_ent1 = :hrEnt1,
+           hr_sai1 = :hrSai1,
+           hr_ent2 = :hrEnt2,
+           hr_sai2 = :hrSai2,
+           qtde_colaboradores = :qtdeColaboradores
+       where escsecaoturno_id = :escsecaoTurnoId`,
+      {
+        escsecaoTurnoId,
+        escsecaoId,
+        hrEnt1: data.HR_ENT1,
+        hrSai1: data.HR_SAI1,
+        hrEnt2: data.HR_ENT2,
+        hrSai2: data.HR_SAI2,
+        qtdeColaboradores: data.QTDE_COLABORADORES
+      },
+      { autoCommit: false }
+    );
+    return;
+  }
 
   await connection.execute(
-    `merge into sgn_esc_secao_turno t
-     using (select :escsecaoId as escsecao_id from dual) src
-     on (t.escsecao_id = src.escsecao_id)
-     when matched then update set
-       t.hr_ent1 = :hrEnt1,
-       t.hr_sai1 = :hrSai1,
-       t.hr_ent2 = :hrEnt2,
-       t.hr_sai2 = :hrSai2,
-       t.qtde_colaboradores = :qtdeColaboradores
-     when not matched then insert (
+    `insert into sgn_esc_secao_turno (
        escsecaoturno_id, escsecao_id, hr_ent1, hr_sai1, hr_ent2, hr_sai2, qtde_colaboradores${hasDtHrIncl ? ', dt_hr_incl' : ''}
      ) values (
        sgn_esc_secao_turno_seq.nextval, :escsecaoId, :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :qtdeColaboradores${hasDtHrIncl ? ', sysdate' : ''}
@@ -424,16 +442,21 @@ async function upsertSecaoTurnoInConnection(connection, { escsecaoId, data }) {
   );
 }
 
-async function upsertSecaoTurno({ lojaId, escsecaoId, data }) {
+async function saveSecaoTurno({ lojaId, escsecaoTurnoId, escsecaoId, data }) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
     const secao = await findSecaoById(connection, { lojaId: lojaCodigo, escsecaoId });
     if (!secao) return null;
 
-    await upsertSecaoTurnoInConnection(connection, { escsecaoId, data });
+    await upsertSecaoTurnoInConnection(connection, { escsecaoTurnoId, escsecaoId, data });
     await connection.commit();
-    const secoes = await listSecoesByLoja(lojaCodigo);
-    return secoes.find((secao) => Number(secao.ESCSECAO_ID) === Number(escsecaoId)) || null;
+    const turnos = await listTurnosByLoja(lojaCodigo);
+    if (escsecaoTurnoId) {
+      return turnos.find((turno) => Number(turno.ESCSECAOTURNO_ID) === Number(escsecaoTurnoId)) || null;
+    }
+    return turnos.findLast
+      ? turnos.findLast((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId)) || null
+      : turnos.reverse().find((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId)) || null;
   });
 }
 
@@ -496,10 +519,11 @@ module.exports = {
   listLojas,
   listFuncionariosByLoja,
   listSecoesByLoja,
+  listTurnosByLoja,
   createSecao,
   updateSecao,
   listAusenciasByLojaMes,
   updateFuncionarioEscala,
-  upsertSecaoTurno,
+  saveSecaoTurno,
   resolveLojaCodigo
 };

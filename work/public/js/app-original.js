@@ -4,6 +4,7 @@
         const funcionariosPage = document.getElementById('funcionarios-page');
         const secoesPage = document.getElementById('secoes-page');
         const secaoFormPage = document.getElementById('secao-form-page');
+        const turnosSecaoPage = document.getElementById('turnos-secao-page');
         const escalaDetalhePage = document.getElementById('escala-detalhe-page');
         const acessosPage = document.getElementById('acessos-page');
         const rolesPage = document.getElementById('roles-page');
@@ -14,6 +15,7 @@
         const navRegistros = document.getElementById('nav-registros');
         const navFuncionarios = document.getElementById('nav-funcionarios');
         const navSecoes = document.getElementById('nav-secoes');
+        const navTurnosSecao = document.getElementById('nav-turnos-secao');
         const navAcessos = document.getElementById('nav-acessos');
         const navRoles = document.getElementById('nav-roles');
         const navSettings = document.getElementById('nav-settings');
@@ -41,11 +43,20 @@
         const secaoFormLoja = document.getElementById('secaoFormLoja');
         const secaoFormCodigo = document.getElementById('secaoFormCodigo');
         const secaoFormDescr = document.getElementById('secaoFormDescr');
-        const secaoFormQtde = document.getElementById('secaoFormQtde');
-        const secaoFormHrEnt1 = document.getElementById('secaoFormHrEnt1');
-        const secaoFormHrSai1 = document.getElementById('secaoFormHrSai1');
-        const secaoFormHrEnt2 = document.getElementById('secaoFormHrEnt2');
-        const secaoFormHrSai2 = document.getElementById('secaoFormHrSai2');
+        const turnosSecaoLojaSelect = document.getElementById('turnosSecaoLojaSelect');
+        const novoTurnoSecaoBtn = document.getElementById('novoTurnoSecaoBtn');
+        const carregarTurnosSecaoBtn = document.getElementById('carregarTurnosSecaoBtn');
+        const turnosSecaoTitulo = document.getElementById('turnosSecaoTitulo');
+        const tabelaTurnosSecaoBody = document.getElementById('tabela-turnos-secao-body');
+        const turnoSecaoForm = document.getElementById('turnoSecaoForm');
+        const turnoSecaoFormTitulo = document.getElementById('turnoSecaoFormTitulo');
+        const turnoSecaoFormId = document.getElementById('turnoSecaoFormId');
+        const turnoSecaoFormSecao = document.getElementById('turnoSecaoFormSecao');
+        const turnoSecaoFormQtde = document.getElementById('turnoSecaoFormQtde');
+        const turnoSecaoFormHrEnt1 = document.getElementById('turnoSecaoFormHrEnt1');
+        const turnoSecaoFormHrSai1 = document.getElementById('turnoSecaoFormHrSai1');
+        const turnoSecaoFormHrEnt2 = document.getElementById('turnoSecaoFormHrEnt2');
+        const turnoSecaoFormHrSai2 = document.getElementById('turnoSecaoFormHrSai2');
         const detalheMesSelect = document.getElementById('detalheMesSelect');
         const voltarEscalasBtn = document.getElementById('voltarEscalasBtn');
         const escalaDetalheTitulo = document.getElementById('escalaDetalheTitulo');
@@ -73,6 +84,7 @@
             funcionarios: 'Funcionarios',
             secoes: 'Secoes',
             secaoForm: 'Cadastro de Secao',
+            turnosSecao: 'Turnos por Secao',
             escalaBanco: 'Detalhamento da Escala',
             acessos: 'Controle de Acesso',
             roles: 'Roles / Permissao',
@@ -91,6 +103,7 @@
             funcionariosPage.classList.add('hidden');
             secoesPage.classList.add('hidden');
             secaoFormPage.classList.add('hidden');
+            turnosSecaoPage.classList.add('hidden');
             escalaDetalhePage.classList.add('hidden');
             acessosPage.classList.add('hidden');
             rolesPage.classList.add('hidden');
@@ -165,6 +178,15 @@
             prepararFormularioSecao(escsecaoId);
         }
 
+        function showTurnosSecaoPage() {
+            hideAllPages();
+            turnosSecaoPage.classList.remove('hidden');
+            navTurnosSecao.classList.add('active');
+            expandActiveNavGroup(navTurnosSecao);
+            setCurrentPageTitle('turnosSecao');
+            carregarTurnosSecaoTela(false).catch(error => showInfoModal(error.message, 'error'));
+        }
+
         function showEscalaDetalhePage(escprogId) {
             hideAllPages();
             escalaDetalhePage.classList.remove('hidden');
@@ -217,6 +239,7 @@
                 'escalas-geradas': showEscalasGeradasPage,
                 funcionarios: showFuncionariosPage,
                 secoes: showSecoesPage,
+                'turnos-secao': showTurnosSecaoPage,
                 acessos: showAcessosPage,
                 roles: showRolesPage,
                 configuracoes: showSettingsPage
@@ -235,6 +258,7 @@
         navRegistros.addEventListener('click', () => { window.location.hash = '/escalas-geradas'; });
         navFuncionarios.addEventListener('click', () => { window.location.hash = '/funcionarios'; });
         navSecoes.addEventListener('click', () => { window.location.hash = '/secoes'; });
+        navTurnosSecao.addEventListener('click', () => { window.location.hash = '/turnos-secao'; });
         navAcessos.addEventListener('click', () => { window.location.hash = '/acessos'; });
         navRoles.addEventListener('click', () => { window.location.hash = '/roles'; });
         navSettings.addEventListener('click', () => { window.location.hash = '/configuracoes'; });
@@ -333,6 +357,7 @@
         let funcionariosLojaCache = [];
         let ausenciasLojaCache = [];
         let secoesLojaCache = [];
+        let turnosSecaoCache = [];
         let escalaDetalheAtual = { escprogId: null, dias: [] };
         let lojasPermitidasCache = [];
         let usuarioSessaoCache = null;
@@ -386,29 +411,28 @@
         };
 
         const popularSelectSecaoFormulario = (selectedId = '') => {
-            if (!secaoFormDescr) return;
-            secaoFormDescr.innerHTML = '<option value="">Selecione uma seção</option>';
+            if (!turnoSecaoFormSecao) return;
+            turnoSecaoFormSecao.innerHTML = '<option value="">Selecione uma seção</option>';
             secoesLojaCache.forEach((secao) => {
                 const option = document.createElement('option');
                 option.value = secao.ESCSECAO_ID || '';
-                option.textContent = secao.DESCR || getSecaoLabel(secao);
+                option.textContent = getSecaoLabel(secao);
                 option.dataset.codigo = secao.COD_SECAO || '';
                 option.dataset.descr = secao.DESCR || '';
-                secaoFormDescr.appendChild(option);
+                turnoSecaoFormSecao.appendChild(option);
             });
-            secaoFormDescr.value = selectedId ? String(selectedId) : '';
+            turnoSecaoFormSecao.value = selectedId ? String(selectedId) : '';
         };
 
         const popularSelectSecoesTurno = () => {
             if (!secaoTurnoSelect) return;
             secaoTurnoSelect.innerHTML = '<option value="">Selecione uma secao com turno cadastrado</option>';
-            secoesLojaCache.forEach((secao) => {
-                const turno = getSecaoTurnoPadrao(secao);
-                if (!turno) return;
+            turnosSecaoCache.forEach((turno) => {
                 const option = document.createElement('option');
-                option.value = secao.ESCSECAO_ID;
-                option.textContent = getSecaoLabel(secao);
-                option.dataset.secaoDescr = secao.DESCR || '';
+                option.value = turno.ESCSECAO_ID;
+                option.textContent = `${turno.COD_SECAO ? `${turno.COD_SECAO} - ` : ''}${turno.DESCR || 'Seção'} | ${turno.HR_ENT1} - ${turno.HR_SAI1} / ${turno.HR_ENT2} - ${turno.HR_SAI2}`;
+                option.dataset.turnoId = turno.ESCSECAOTURNO_ID || '';
+                option.dataset.secaoDescr = turno.DESCR || '';
                 option.dataset.hrEnt1 = turno.HR_ENT1 || '';
                 option.dataset.hrSai1 = turno.HR_SAI1 || '';
                 option.dataset.hrEnt2 = turno.HR_ENT2 || '';
@@ -1506,7 +1530,9 @@
                 funcionariosLojaSelect.value = lojaEscalaSelect.value;
                 if (homeLojaSelect) homeLojaSelect.value = lojaEscalaSelect.value;
                 if (secoesLojaSelect) secoesLojaSelect.value = lojaEscalaSelect.value;
+                if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = lojaEscalaSelect.value;
                 await carregarSecoesDaLoja(true);
+                await carregarTurnosSecaoDaLoja(true);
                 await carregarFuncionariosDaLoja(true);
                 if (!funcionariosPage.classList.contains('hidden')) {
                     await carregarFuncionariosTela(false);
@@ -1523,7 +1549,9 @@
                 lojaEscalaSelect.value = funcionariosLojaSelect.value;
                 if (homeLojaSelect) homeLojaSelect.value = funcionariosLojaSelect.value;
                 if (secoesLojaSelect) secoesLojaSelect.value = funcionariosLojaSelect.value;
+                if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = funcionariosLojaSelect.value;
                 await carregarSecoesDaLoja(true);
+                await carregarTurnosSecaoDaLoja(true);
                 await carregarFuncionariosTela(false);
                 await carregarFuncionariosDaLoja(false);
             } catch (error) {
@@ -1535,7 +1563,9 @@
             funcionariosLojaSelect.value = homeLojaSelect.value;
             if (secoesLojaSelect) secoesLojaSelect.value = homeLojaSelect.value;
             if (secaoFormLoja) secaoFormLoja.value = homeLojaSelect.value;
+            if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = homeLojaSelect.value;
             await carregarSecoesDaLoja(true);
+            await carregarTurnosSecaoDaLoja(true);
             await carregarFuncionariosDaLoja(true);
         });
         secoesLojaSelect?.addEventListener('change', async () => {
@@ -1543,6 +1573,7 @@
             funcionariosLojaSelect.value = secoesLojaSelect.value;
             if (homeLojaSelect) homeLojaSelect.value = secoesLojaSelect.value;
             if (secaoFormLoja) secaoFormLoja.value = secoesLojaSelect.value;
+            if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = secoesLojaSelect.value;
             await carregarSecoesTela(false);
         });
         secaoFormLoja?.addEventListener('change', async () => {
@@ -1551,10 +1582,20 @@
             funcionariosLojaSelect.value = loja;
             if (homeLojaSelect) homeLojaSelect.value = loja;
             if (secoesLojaSelect) secoesLojaSelect.value = loja;
+            if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = loja;
             secaoFormId.value = '';
             secaoFormCodigo.value = '';
             await carregarSecoesDaLoja(true);
             popularSelectSecaoFormulario('');
+        });
+        turnosSecaoLojaSelect?.addEventListener('change', async () => {
+            const loja = turnosSecaoLojaSelect.value;
+            lojaEscalaSelect.value = loja;
+            funcionariosLojaSelect.value = loja;
+            if (homeLojaSelect) homeLojaSelect.value = loja;
+            if (secoesLojaSelect) secoesLojaSelect.value = loja;
+            if (secaoFormLoja) secaoFormLoja.value = loja;
+            await carregarTurnosSecaoTela(false);
         });
         secaoFormDescr?.addEventListener('change', () => aplicarSecaoSelecionadaNoCadastro());
         carregarFuncionariosTelaBtn.addEventListener('click', async () => {
@@ -1792,6 +1833,7 @@
                 homeLojaSelect?.appendChild(option.cloneNode(true));
                 secoesLojaSelect?.appendChild(option.cloneNode(true));
                 secaoFormLoja?.appendChild(option.cloneNode(true));
+                turnosSecaoLojaSelect?.appendChild(option.cloneNode(true));
                 lojaEscalaSelect.disabled = true;
                 funcionariosLojaSelect.disabled = true;
                 if (homeLojaSelect) homeLojaSelect.disabled = true;
@@ -1831,6 +1873,7 @@
             if (homeLojaSelect) homeLojaSelect.value = lojaSelecionada;
             if (secoesLojaSelect) secoesLojaSelect.value = lojaSelecionada;
             if (secaoFormLoja) secaoFormLoja.value = lojaSelecionada;
+            if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = lojaSelecionada;
             return lojas;
         };
 
@@ -1838,7 +1881,6 @@
             const loja = secoesLojaSelect?.value || lojaEscalaSelect.value;
             if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
                 secoesLojaCache = [];
-                popularSelectSecoesTurno();
                 popularSelectSecaoFormulario('');
                 return [];
             }
@@ -1846,7 +1888,6 @@
             try {
                 const data = await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/secoes`);
                 secoesLojaCache = data.secoes || [];
-                popularSelectSecoesTurno();
                 popularSelectSecaoFormulario(secaoFormId?.value || '');
                 if (!silent && secoesLojaCache.length === 0) {
                     showInfoModal('Nenhuma secao encontrada para a loja selecionada.', 'info');
@@ -1854,34 +1895,61 @@
                 return secoesLojaCache;
             } catch (error) {
                 secoesLojaCache = [];
-                popularSelectSecoesTurno();
                 popularSelectSecaoFormulario('');
                 if (!silent) showInfoModal(error.message, 'error');
                 return [];
             }
         };
 
+        const carregarTurnosSecaoDaLoja = async (silent = false) => {
+            const loja = turnosSecaoLojaSelect?.value || lojaEscalaSelect.value;
+            if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
+                turnosSecaoCache = [];
+                popularSelectSecoesTurno();
+                return [];
+            }
+
+            try {
+                const data = await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/turnos-secao`);
+                turnosSecaoCache = data.turnos || [];
+                popularSelectSecoesTurno();
+                if (!silent && turnosSecaoCache.length === 0) {
+                    showInfoModal('Nenhum turno encontrado para a loja selecionada.', 'info');
+                }
+                return turnosSecaoCache;
+            } catch (error) {
+                turnosSecaoCache = [];
+                popularSelectSecoesTurno();
+                if (!silent) showInfoModal(error.message, 'error');
+                return [];
+            }
+        };
+
         const preencherFormularioSecao = (secao = null) => {
-            const turno = getSecaoTurnoPadrao(secao) || {};
             secaoFormId.value = secao?.ESCSECAO_ID || '';
             secaoFormLoja.value = secao?.LOJA || secoesLojaSelect?.value || lojaEscalaSelect.value || '';
             secaoFormCodigo.value = secao?.COD_SECAO || '';
-            popularSelectSecaoFormulario(secao?.ESCSECAO_ID || '');
-            secaoFormQtde.value = turno.QTDE_COLABORADORES || 1;
-            secaoFormHrEnt1.value = turno.HR_ENT1 || '';
-            secaoFormHrSai1.value = turno.HR_SAI1 || '';
-            secaoFormHrEnt2.value = turno.HR_ENT2 || '';
-            secaoFormHrSai2.value = turno.HR_SAI2 || '';
+            secaoFormDescr.value = secao?.DESCR || '';
+        };
+
+        const preencherFormularioTurnoSecao = (turno = null) => {
+            turnoSecaoFormId.value = turno?.ESCSECAOTURNO_ID || '';
+            popularSelectSecaoFormulario(turno?.ESCSECAO_ID || '');
+            turnoSecaoFormQtde.value = turno?.QTDE_COLABORADORES || 1;
+            turnoSecaoFormHrEnt1.value = turno?.HR_ENT1 || '';
+            turnoSecaoFormHrSai1.value = turno?.HR_SAI1 || '';
+            turnoSecaoFormHrEnt2.value = turno?.HR_ENT2 || '';
+            turnoSecaoFormHrSai2.value = turno?.HR_SAI2 || '';
+            turnoSecaoFormTitulo.textContent = turno ? 'Editar Turno' : 'Novo Turno';
         };
 
         const aplicarSecaoSelecionadaNoCadastro = () => {
-            const escsecaoId = secaoFormDescr?.value || '';
+            const escsecaoId = turnoSecaoFormSecao?.value || '';
             const secao = secoesLojaCache.find(item => Number(item.ESCSECAO_ID) === Number(escsecaoId));
             if (!secao) {
-                preencherFormularioSecao(null);
+                turnoSecaoFormSecao.value = '';
                 return;
             }
-            preencherFormularioSecao(secao);
         };
 
         const prepararFormularioSecao = async (escsecaoId = '') => {
@@ -1913,21 +1981,17 @@
             tabelaSecoesBody.innerHTML = '';
 
             if (!secoes || secoes.length === 0) {
-                tabelaSecoesBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500 py-8">Nenhuma secao encontrada para a loja selecionada.</td></tr>';
+                tabelaSecoesBody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 py-8">Nenhuma secao encontrada para a loja selecionada.</td></tr>';
                 return;
             }
 
             secoes.forEach(secao => {
-                const turno = getSecaoTurnoPadrao(secao) || {};
                 tabelaSecoesBody.innerHTML += `
                     <tr data-escsecao-id="${escapeHtml(secao.ESCSECAO_ID || '')}">
                         <td data-label="Codigo">${escapeHtml(secao.COD_SECAO || '')}</td>
                         <td data-label="Descricao">${escapeHtml(secao.DESCR || '')}</td>
-                        <td data-label="Colaboradores">${escapeHtml(turno.QTDE_COLABORADORES || '')}</td>
-                        <td data-label="Entrada 1">${escapeHtml(turno.HR_ENT1 || '')}</td>
-                        <td data-label="Saida 1">${escapeHtml(turno.HR_SAI1 || '')}</td>
-                        <td data-label="Entrada 2">${escapeHtml(turno.HR_ENT2 || '')}</td>
-                        <td data-label="Saida 2">${escapeHtml(turno.HR_SAI2 || '')}</td>
+                        <td data-label="Codfilial">${escapeHtml(secao.CODFILIAL || secao.LOJA || '')}</td>
+                        <td data-label="Codcoligada">${escapeHtml(secao.CODCOLIGADA || '')}</td>
                         <td data-label="Acoes" class="actions-cell">
                             <button class="action-btn-table edit-secao" data-id="${escapeHtml(secao.ESCSECAO_ID || '')}" title="Editar secao">
                                 <span class="material-symbols-outlined">edit</span>
@@ -1943,7 +2007,7 @@
             const loja = secoesLojaSelect?.value || lojaEscalaSelect.value;
             if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
                 secoesTitulo.textContent = 'Secoes cadastradas';
-                tabelaSecoesBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500 py-8">Selecione uma loja permitida para carregar as secoes.</td></tr>';
+                tabelaSecoesBody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 py-8">Selecione uma loja permitida para carregar as secoes.</td></tr>';
                 return;
             }
 
@@ -1958,7 +2022,7 @@
                 }
             } catch (error) {
                 secoesTitulo.textContent = `Seções cadastradas - Loja ${loja}`;
-                tabelaSecoesBody.innerHTML = `<tr><td colspan="8" class="text-center text-red-600 py-8">Erro ao carregar seções: ${escapeHtml(error.message)}</td></tr>`;
+                tabelaSecoesBody.innerHTML = `<tr><td colspan="5" class="text-center text-red-600 py-8">Erro ao carregar seções: ${escapeHtml(error.message)}</td></tr>`;
                 if (showSuccess) showInfoModal(error.message, 'error');
             }
         };
@@ -1982,10 +2046,6 @@
             event.preventDefault();
             const loja = secaoFormLoja.value;
             const escsecaoId = secaoFormId.value;
-            if (!escsecaoId) {
-                showInfoModal('Selecione uma seção cadastrada para salvar o turno.', 'error');
-                return;
-            }
             if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
                 showInfoModal('Selecione uma loja permitida para salvar a seção.', 'error');
                 return;
@@ -1994,16 +2054,13 @@
             try {
                 const payload = {
                     COD_SECAO: secaoFormCodigo.value.trim(),
-                    DESCR: secoesLojaCache.find(item => Number(item.ESCSECAO_ID) === Number(escsecaoId))?.DESCR || secaoFormDescr.selectedOptions?.[0]?.dataset.descr || '',
-                    QTDE_COLABORADORES: Number(secaoFormQtde.value),
-                    HR_ENT1: secaoFormHrEnt1.value,
-                    HR_SAI1: secaoFormHrSai1.value,
-                    HR_ENT2: secaoFormHrEnt2.value,
-                    HR_SAI2: secaoFormHrSai2.value
+                    DESCR: secaoFormDescr.value.trim()
                 };
-                const url = `/api/catalog/lojas/${encodeURIComponent(loja)}/secoes/${encodeURIComponent(escsecaoId)}`;
+                const url = escsecaoId
+                    ? `/api/catalog/lojas/${encodeURIComponent(loja)}/secoes/${encodeURIComponent(escsecaoId)}`
+                    : `/api/catalog/lojas/${encodeURIComponent(loja)}/secoes`;
                 await apiRequest(url, {
-                    method: 'PUT',
+                    method: escsecaoId ? 'PUT' : 'POST',
                     body: JSON.stringify(payload)
                 });
                 lojaEscalaSelect.value = loja;
@@ -2013,6 +2070,113 @@
                 await carregarSecoesTela(false);
                 showInfoModal('Seção salva com sucesso.', 'success');
                 window.location.hash = '/secoes';
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+
+        const renderizarTurnosSecaoTela = (turnos, loja) => {
+            turnosSecaoTitulo.textContent = `Turnos cadastrados - Loja ${loja}`;
+            tabelaTurnosSecaoBody.innerHTML = '';
+
+            if (!turnos || turnos.length === 0) {
+                tabelaTurnosSecaoBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum turno encontrado para a loja selecionada.</td></tr>';
+                return;
+            }
+
+            turnos.forEach(turno => {
+                tabelaTurnosSecaoBody.innerHTML += `
+                    <tr data-turno-id="${escapeHtml(turno.ESCSECAOTURNO_ID || '')}">
+                        <td data-label="Seção">${escapeHtml(`${turno.COD_SECAO ? `${turno.COD_SECAO} - ` : ''}${turno.DESCR || ''}`)}</td>
+                        <td data-label="Colaboradores">${escapeHtml(turno.QTDE_COLABORADORES || '')}</td>
+                        <td data-label="Entrada 1">${escapeHtml(turno.HR_ENT1 || '')}</td>
+                        <td data-label="Saida 1">${escapeHtml(turno.HR_SAI1 || '')}</td>
+                        <td data-label="Entrada 2">${escapeHtml(turno.HR_ENT2 || '')}</td>
+                        <td data-label="Saida 2">${escapeHtml(turno.HR_SAI2 || '')}</td>
+                        <td data-label="Acoes" class="actions-cell">
+                            <button class="action-btn-table edit-turno-secao" data-id="${escapeHtml(turno.ESCSECAOTURNO_ID || '')}" title="Editar turno">
+                                <span class="material-symbols-outlined">edit</span>
+                                Editar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        };
+
+        const carregarTurnosSecaoTela = async (showSuccess = true) => {
+            const loja = turnosSecaoLojaSelect?.value || lojaEscalaSelect.value;
+            if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
+                turnosSecaoTitulo.textContent = 'Turnos cadastrados';
+                tabelaTurnosSecaoBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">Selecione uma loja permitida para carregar os turnos.</td></tr>';
+                return;
+            }
+
+            lojaEscalaSelect.value = loja;
+            if (homeLojaSelect) homeLojaSelect.value = loja;
+            if (secoesLojaSelect) secoesLojaSelect.value = loja;
+            await carregarSecoesDaLoja(true);
+            const turnos = await carregarTurnosSecaoDaLoja(true);
+            renderizarTurnosSecaoTela(turnos, loja);
+            preencherFormularioTurnoSecao(null);
+            if (showSuccess) {
+                showInfoModal(`${turnos.length} turno(s) carregado(s) da loja ${loja}.`, 'success');
+            }
+        };
+
+        tabelaTurnosSecaoBody?.addEventListener('click', (event) => {
+            const editButton = event.target.closest('.edit-turno-secao');
+            if (!editButton) return;
+            const turno = turnosSecaoCache.find(item => Number(item.ESCSECAOTURNO_ID) === Number(editButton.dataset.id));
+            if (!turno) {
+                showInfoModal('Turno não encontrado para edição.', 'error');
+                return;
+            }
+            preencherFormularioTurnoSecao(turno);
+        });
+
+        novoTurnoSecaoBtn?.addEventListener('click', () => preencherFormularioTurnoSecao(null));
+
+        carregarTurnosSecaoBtn?.addEventListener('click', async () => {
+            try {
+                await carregarTurnosSecaoTela(true);
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+
+        turnoSecaoForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const loja = turnosSecaoLojaSelect?.value || lojaEscalaSelect.value;
+            const turnoId = turnoSecaoFormId.value;
+            const escsecaoId = turnoSecaoFormSecao.value;
+            if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
+                showInfoModal('Selecione uma loja permitida para salvar o turno.', 'error');
+                return;
+            }
+            if (!escsecaoId) {
+                showInfoModal('Selecione uma seção para salvar o turno.', 'error');
+                return;
+            }
+
+            try {
+                const payload = {
+                    ESCSECAO_ID: Number(escsecaoId),
+                    QTDE_COLABORADORES: Number(turnoSecaoFormQtde.value),
+                    HR_ENT1: turnoSecaoFormHrEnt1.value,
+                    HR_SAI1: turnoSecaoFormHrSai1.value,
+                    HR_ENT2: turnoSecaoFormHrEnt2.value,
+                    HR_SAI2: turnoSecaoFormHrSai2.value
+                };
+                const url = turnoId
+                    ? `/api/catalog/lojas/${encodeURIComponent(loja)}/turnos-secao/${encodeURIComponent(turnoId)}`
+                    : `/api/catalog/lojas/${encodeURIComponent(loja)}/turnos-secao`;
+                await apiRequest(url, {
+                    method: turnoId ? 'PUT' : 'POST',
+                    body: JSON.stringify(payload)
+                });
+                await carregarTurnosSecaoTela(false);
+                showInfoModal('Turno salvo com sucesso.', 'success');
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
@@ -2033,8 +2197,8 @@
                         <td data-label="Chapa">${funcionario.CHAPA || ''}</td>
                         <td data-label="Nome">${funcionario.NOME || ''}</td>
                         <td data-label="Loja">${funcionario.LOJA || ''}</td>
-                        <td data-label="Seção">${funcionario.ESCSECAO_ID || ''}</td>
-                        <td data-label="Função">${funcionario.ESCFUNCAO_ID || ''}</td>
+                        <td data-label="Seção">${escapeHtml(funcionario.SECAO_DESCR || funcionario.ESCSECAO_ID || '')}</td>
+                        <td data-label="Função">${escapeHtml(funcionario.FUNCAO_DESCR || funcionario.ESCFUNCAO_ID || '')}</td>
                         <td data-label="Brigadista">${funcionario.BRIGADISTA || ''}</td>
                         <td data-label="Entrada 1">${funcionario.HR_ENT1 || ''}</td>
                         <td data-label="Saída 1">${funcionario.HR_SAI1 || ''}</td>
@@ -3106,6 +3270,7 @@
                 await carregarEstadoServidor();
                 await carregarLojasEscala();
                 await carregarSecoesDaLoja(true);
+                await carregarTurnosSecaoDaLoja(true);
                 await carregarFuncionariosDaLoja(true);
             } catch (error) {
                 showInfoModal(`Erro ao carregar dados salvos: ${error.message}`, 'error');

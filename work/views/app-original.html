@@ -33,6 +33,7 @@
                             <a href="#/escalas-criadas" id="nav-escalas-criadas"><span class="nav-child-dot"></span><span class="nav-label">Escalas Criadas</span></a>
                             <a href="#/escalas-geradas" id="nav-registros"><span class="nav-child-dot"></span><span class="nav-label">Escalas Geradas</span></a>
                             <a href="#/secoes" id="nav-secoes"><span class="nav-child-dot"></span><span class="nav-label">Seções</span></a>
+                            <a href="#/turnos-secao" id="nav-turnos-secao"><span class="nav-child-dot"></span><span class="nav-label">Turnos por Seção</span></a>
                         </div>
                     </li>
                     <li class="nav-group">
@@ -289,23 +290,20 @@
                 <div class="table-card">
                     <div class="table-card-header">
                         <h2 id="secoesTitulo">Seções cadastradas</h2>
-                        <p class="table-card-subtitle">Cada seção pode ter um turno padrão usado pelo gerador de escala.</p>
+                        <p class="table-card-subtitle">Cadastro das seções disponíveis por loja.</p>
                     </div>
                     <table class="data-table">
                         <thead>
                             <tr>
                                 <th>Código</th>
                                 <th>Descrição</th>
-                                <th>Colaboradores</th>
-                                <th>Entrada 1</th>
-                                <th>Saída 1</th>
-                                <th>Entrada 2</th>
-                                <th>Saída 2</th>
+                                <th>Codfilial</th>
+                                <th>Codcoligada</th>
                                 <th>Ações</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-secoes-body">
-                            <tr><td colspan="8" class="text-center text-gray-500 py-8">Selecione uma loja e carregue as seções.</td></tr>
+                            <tr><td colspan="5" class="text-center text-gray-500 py-8">Selecione uma loja e carregue as seções.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -319,18 +317,64 @@
                     </div>
                 </header>
                 <div class="table-card form-card">
-                    <div class="table-card-header"><h2>Dados da seção</h2><p class="table-card-subtitle">Cadastre a seção e o turno padrão usado pelo gerador de escala.</p></div>
+                    <div class="table-card-header"><h2>Dados da seção</h2><p class="table-card-subtitle">Cadastre apenas os dados da tabela SGN_ESC_SECAO.</p></div>
                     <form id="secaoForm" class="dashboard-form">
                         <input type="hidden" id="secaoFormId">
                         <div><label for="secaoFormLoja">Loja</label><select id="secaoFormLoja" required></select></div>
-                        <div><label for="secaoFormCodigo">Código da seção</label><input id="secaoFormCodigo" type="text" maxlength="10" readonly required></div>
-                        <div class="form-span-2"><label for="secaoFormDescr">Descrição</label><select id="secaoFormDescr" required></select></div>
-                        <div><label for="secaoFormQtde">Colaboradores previstos</label><input id="secaoFormQtde" type="number" min="1" max="500" required></div>
-                        <div><label for="secaoFormHrEnt1">Entrada 1</label><input id="secaoFormHrEnt1" type="time" required></div>
-                        <div><label for="secaoFormHrSai1">Saída 1</label><input id="secaoFormHrSai1" type="time" required></div>
-                        <div><label for="secaoFormHrEnt2">Entrada 2</label><input id="secaoFormHrEnt2" type="time" required></div>
-                        <div><label for="secaoFormHrSai2">Saída 2</label><input id="secaoFormHrSai2" type="time" required></div>
+                        <div><label for="secaoFormCodigo">Código da seção</label><input id="secaoFormCodigo" type="text" maxlength="10" required></div>
+                        <div class="form-span-2"><label for="secaoFormDescr">Descrição</label><input id="secaoFormDescr" type="text" maxlength="100" required></div>
                         <div class="form-actions form-span-2"><button type="submit" class="action-button"><span class="material-symbols-outlined">save</span>Salvar Seção</button></div>
+                    </form>
+                </div>
+            </div>
+            <div id="turnos-secao-page" class="hidden">
+                <header class="main-header">
+                    <h1>Turnos por Seção</h1>
+                    <div class="header-actions">
+                        <select id="turnosSecaoLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                        <button class="action-button" id="novoTurnoSecaoBtn">
+                            <span class="material-symbols-outlined">add</span>
+                            Novo Turno
+                        </button>
+                        <button class="action-button secondary" id="carregarTurnosSecaoBtn">
+                            <span class="material-symbols-outlined">refresh</span>
+                            Carregar
+                        </button>
+                    </div>
+                </header>
+                <div class="table-card">
+                    <div class="table-card-header">
+                        <h2 id="turnosSecaoTitulo">Turnos cadastrados</h2>
+                        <p class="table-card-subtitle">Cadastro dos horários da tabela SGN_ESC_SECAO_TURNO.</p>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Seção</th>
+                                <th>Colaboradores</th>
+                                <th>Entrada 1</th>
+                                <th>Saída 1</th>
+                                <th>Entrada 2</th>
+                                <th>Saída 2</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-turnos-secao-body">
+                            <tr><td colspan="7" class="text-center text-gray-500 py-8">Selecione uma loja e carregue os turnos.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-card form-card">
+                    <div class="table-card-header"><h2 id="turnoSecaoFormTitulo">Novo Turno</h2><p class="table-card-subtitle">Selecione a seção e informe os horários usados no gerador de escala.</p></div>
+                    <form id="turnoSecaoForm" class="dashboard-form">
+                        <input type="hidden" id="turnoSecaoFormId">
+                        <div><label for="turnoSecaoFormSecao">Seção</label><select id="turnoSecaoFormSecao" required></select></div>
+                        <div><label for="turnoSecaoFormQtde">Colaboradores previstos</label><input id="turnoSecaoFormQtde" type="number" min="1" max="500" required></div>
+                        <div><label for="turnoSecaoFormHrEnt1">Entrada 1</label><input id="turnoSecaoFormHrEnt1" type="time" required></div>
+                        <div><label for="turnoSecaoFormHrSai1">Saída 1</label><input id="turnoSecaoFormHrSai1" type="time" required></div>
+                        <div><label for="turnoSecaoFormHrEnt2">Entrada 2</label><input id="turnoSecaoFormHrEnt2" type="time" required></div>
+                        <div><label for="turnoSecaoFormHrSai2">Saída 2</label><input id="turnoSecaoFormHrSai2" type="time" required></div>
+                        <div class="form-actions form-span-2"><button type="submit" class="action-button"><span class="material-symbols-outlined">save</span>Salvar Turno</button></div>
                     </form>
                 </div>
             </div>
