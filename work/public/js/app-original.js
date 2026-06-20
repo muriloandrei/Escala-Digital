@@ -3131,6 +3131,8 @@
 
         const renderizarDetalheEscalaBanco = (dias) => {
             tabelaEscalaDetalheBody.innerHTML = '';
+            const somenteLeitura = escalaDetalheAtual.status === 'FINALIZADA';
+            const disabledAttr = somenteLeitura ? ' disabled' : '';
             if (!dias || dias.length === 0) {
                 tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Nenhum dia salvo para esta escala.</td></tr>';
                 return;
@@ -3147,12 +3149,12 @@
                     '<td data-label="Secao">' + escapeHtml(secao) + '</td>',
                     '<td data-label="Funcao">' + escapeHtml(funcao) + '</td>',
                     '<td data-label="Data">' + escapeHtml(dataDia) + '</td>',
-                    '<td data-label="Programacao"><input class="detail-input detail-programacao" maxlength="3" value="' + escapeHtml(dia.PROGRAMACAO || 'TRB') + '"></td>',
-                    '<td data-label="Entrada 1"><input class="detail-input detail-hr-ent1" type="time" value="' + escapeHtml(dia.HR_ENT1 === 'F' ? '' : dia.HR_ENT1 || '') + '"></td>',
-                    '<td data-label="Saida 1"><input class="detail-input detail-hr-sai1" type="time" value="' + escapeHtml(dia.HR_SAI1 === 'F' ? '' : dia.HR_SAI1 || '') + '"></td>',
-                    '<td data-label="Entrada 2"><input class="detail-input detail-hr-ent2" type="time" value="' + escapeHtml(dia.HR_ENT2 === 'F' ? '' : dia.HR_ENT2 || '') + '"></td>',
-                    '<td data-label="Saida 2"><input class="detail-input detail-hr-sai2" type="time" value="' + escapeHtml(dia.HR_SAI2 === 'F' ? '' : dia.HR_SAI2 || '') + '"></td>',
-                    '<td data-label="Acoes"><button class="action-btn-table save-dia-banco" title="Salvar dia"><span class="material-symbols-outlined">save</span>Salvar</button></td>',
+                    '<td data-label="Programacao"><input class="detail-input detail-programacao" maxlength="3" value="' + escapeHtml(dia.PROGRAMACAO || 'TRB') + '"' + disabledAttr + '></td>',
+                    '<td data-label="Entrada 1"><input class="detail-input detail-hr-ent1" type="time" value="' + escapeHtml(dia.HR_ENT1 === 'F' ? '' : dia.HR_ENT1 || '') + '"' + disabledAttr + '></td>',
+                    '<td data-label="Saida 1"><input class="detail-input detail-hr-sai1" type="time" value="' + escapeHtml(dia.HR_SAI1 === 'F' ? '' : dia.HR_SAI1 || '') + '"' + disabledAttr + '></td>',
+                    '<td data-label="Entrada 2"><input class="detail-input detail-hr-ent2" type="time" value="' + escapeHtml(dia.HR_ENT2 === 'F' ? '' : dia.HR_ENT2 || '') + '"' + disabledAttr + '></td>',
+                    '<td data-label="Saida 2"><input class="detail-input detail-hr-sai2" type="time" value="' + escapeHtml(dia.HR_SAI2 === 'F' ? '' : dia.HR_SAI2 || '') + '"' + disabledAttr + '></td>',
+                    '<td data-label="Acoes">' + (somenteLeitura ? '<span class="text-gray-500 text-xs font-semibold">Finalizada</span>' : '<button class="action-btn-table save-dia-banco" title="Salvar dia"><span class="material-symbols-outlined">save</span>Salvar</button>') + '</td>',
                     '</tr>'
                 ].join('');
                 tabelaEscalaDetalheBody.innerHTML += row;
@@ -3171,7 +3173,7 @@
         };
 
         const carregarDetalheEscalaBanco = async (escprogId) => {
-            escalaDetalheAtual = { escprogId, lojaId: null, mesRef: null, modo: 'individual', dias: [] };
+            escalaDetalheAtual = { escprogId, lojaId: null, mesRef: null, modo: 'individual', status: null, dias: [] };
             escalaDetalheTitulo.textContent = `Escala ${escprogId}`;
             escalaDetalheResumo.textContent = 'Carregando dias da escala...';
             tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
@@ -3183,13 +3185,14 @@
         };
 
         const carregarDetalheEscalaMensal = async (lojaId, mesRef) => {
-            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', dias: [] };
+            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', status: null, dias: [] };
             escalaDetalheTitulo.textContent = 'Escala Loja ' + lojaId + ' - ' + formatarMesTabela(mesRef);
             escalaDetalheResumo.textContent = 'Carregando escala mensal...';
             tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
             const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
             const escala = data.escala || {};
             escalaDetalheAtual.dias = escala.dias || [];
+            escalaDetalheAtual.status = escala.status || null;
             popularFiltroMesDetalhe(escalaDetalheAtual.dias);
             escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s), revisao ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
             renderizarDetalheEscalaBanco(escalaDetalheAtual.dias);
@@ -3203,6 +3206,11 @@
         tabelaEscalaDetalheBody?.addEventListener('click', async (event) => {
             const saveButton = event.target.closest('.save-dia-banco');
             if (!saveButton) return;
+
+            if (escalaDetalheAtual.status === 'FINALIZADA') {
+                showInfoModal('Escala finalizada nao pode ser editada.', 'info');
+                return;
+            }
 
             const row = saveButton.closest('tr');
             const escprogdiaId = row?.dataset.escprogdiaId;
