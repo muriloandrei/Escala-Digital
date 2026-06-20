@@ -168,6 +168,33 @@ async function listEscalasResumo({ lojaId, mesRef }) {
   });
 }
 
+async function listEscalaRevisoes({ lojaId, mesRef }) {
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select
+          revisao,
+          min(dt_hr_incl) as criada_em,
+          max(dt_hr_incl) as modificada_em,
+          max(oficializada) as oficializada,
+          count(distinct escsecao_id) as secoes,
+          count(distinct escfunc_id) as funcionarios,
+          case
+            when last_day(mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when revisao > 1 then 'MODIFICADA'
+            else 'ATIVA'
+          end as status
+          from sgn_esc_prog
+       where loja = :lojaId
+         and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+       group by mes_ref, revisao
+       order by revisao desc`,
+      { lojaId, mesRef },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return result.rows;
+  });
+}
 async function getEscalaMensal({ lojaId, mesRef }) {
   return withConnection(async (connection) => {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
@@ -587,6 +614,7 @@ async function validateAusencias({ funcionarios }) {
 module.exports = {
   listEscalas,
   listEscalasResumo,
+  listEscalaRevisoes,
   getEscalaMensal,
   getEscalaHeader,
   getEscalaDias,

@@ -71,6 +71,21 @@ router.get('/resumo', resolveLojaRequest, requireLojaAccess, async (req, res, ne
   }
 });
 
+router.get('/revisoes', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const lojaId = Number(req.query.lojaId);
+    const mesRef = req.query.mesRef;
+    if (!lojaId || !mesRef) {
+      return res.status(400).json({ error: 'lojaId e mesRef sao obrigatorios.' });
+    }
+
+    const revisoes = await escalaService.listEscalaRevisoes({ lojaId, mesRef });
+    return res.json({ revisoes });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get('/mensal', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = Number(req.query.lojaId);

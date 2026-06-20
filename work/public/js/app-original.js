@@ -3090,11 +3090,28 @@
                     '<td data-label="Ações" class="actions-cell">',
                     '<button class="action-btn-table load banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
                     '<button class="action-btn-table view-timeline banco-criar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Criar ou revisar escala"><span class="material-symbols-outlined">add</span>Criar Escala</button>',
+                    '<button class="action-btn-table view-skeleton banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver historico de revisoes"><span class="material-symbols-outlined">history</span>Historico</button>',
                     '</td>',
                     '</tr>'
                 ].join('');
                 tabelaBancoBody.innerHTML += row;
             });
+        };
+
+        const carregarHistoricoRevisoesBanco = async (loja, mesRef) => {
+            const data = await apiRequest('/api/escalas/revisoes?lojaId=' + encodeURIComponent(loja) + '&mesRef=' + encodeURIComponent(mesRef));
+            const revisoes = data.revisoes || [];
+            if (!revisoes.length) {
+                showInfoModal('Nenhuma revisao encontrada para esta escala.', 'info');
+                return;
+            }
+
+            const mensagens = revisoes.map(revisao => {
+                const criada = formatarDataTabela(revisao.CRIADA_EM);
+                const modificada = formatarDataTabela(revisao.MODIFICADA_EM);
+                return 'Revisao ' + (revisao.REVISAO || '-') + ' | ' + (revisao.STATUS || '-') + ' | ' + (revisao.SECOES || 0) + ' secao(oes), ' + (revisao.FUNCIONARIOS || 0) + ' funcionario(s) | criada ' + criada + ' | modificada ' + modificada;
+            });
+            showInfoModal(mensagens, 'info');
         };
 
         const consultarEscalasBancoLocal = async () => {
@@ -3459,9 +3476,10 @@
         tabelaBancoBody.addEventListener('click', async (e) => {
             const abrirButton = e.target.closest('.banco-abrir');
             const criarButton = e.target.closest('.banco-criar');
-            if (!abrirButton && !criarButton) return;
+            const historicoButton = e.target.closest('.banco-historico');
+            if (!abrirButton && !criarButton && !historicoButton) return;
 
-            const button = abrirButton || criarButton;
+            const button = abrirButton || criarButton || historicoButton;
             const loja = button.dataset.loja;
             const mesRef = button.dataset.mesRef;
             if (loja) {
@@ -3479,6 +3497,11 @@
 
             if (criarButton) {
                 await iniciarNovaEscalaRascunho({ loja, mesRef });
+                return;
+            }
+
+            if (historicoButton) {
+                await carregarHistoricoRevisoesBanco(loja, mesRef);
                 return;
             }
 
