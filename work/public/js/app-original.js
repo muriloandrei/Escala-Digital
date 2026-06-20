@@ -63,6 +63,7 @@
         const turnoSecaoFormHrEnt2 = document.getElementById('turnoSecaoFormHrEnt2');
         const turnoSecaoFormHrSai2 = document.getElementById('turnoSecaoFormHrSai2');
         const detalheMesSelect = document.getElementById('detalheMesSelect');
+        const detalheFuncionarioSelect = document.getElementById('detalheFuncionarioSelect');
         const voltarEscalasBtn = document.getElementById('voltarEscalasBtn');
         const escalaDetalheTitulo = document.getElementById('escalaDetalheTitulo');
         const escalaDetalheResumo = document.getElementById('escalaDetalheResumo');
@@ -3192,6 +3193,37 @@
                 tabelaEscalaDetalheBody.innerHTML += row;
             });
         };
+        const getFuncionarioDetalheKey = (dia) => String(dia.ESCFUNC_ID || dia.CHAPA || dia.NOME || '');
+
+        const getDiasDetalheFiltrados = () => {
+            const mes = detalheMesSelect?.value || '';
+            const funcionario = detalheFuncionarioSelect?.value || '';
+            return (escalaDetalheAtual.dias || []).filter((dia) => {
+                const mesDia = String(dia.DT || '').slice(0, 7);
+                const funcionarioDia = getFuncionarioDetalheKey(dia);
+                return (!mes || mesDia === mes) && (!funcionario || funcionarioDia === funcionario);
+            });
+        };
+
+        const popularFiltroFuncionarioDetalhe = (dias) => {
+            if (!detalheFuncionarioSelect) return;
+            const atual = detalheFuncionarioSelect.value;
+            const map = new Map();
+            (dias || []).forEach((dia) => {
+                const key = getFuncionarioDetalheKey(dia);
+                if (!key || map.has(key)) return;
+                map.set(key, dia.NOME || dia.CHAPA || key);
+            });
+            detalheFuncionarioSelect.innerHTML = '<option value="">Todos os funcionarios</option>';
+            [...map.entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]))).forEach(([key, nome]) => {
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = nome;
+                detalheFuncionarioSelect.appendChild(option);
+            });
+            if ([...map.keys()].includes(atual)) detalheFuncionarioSelect.value = atual;
+        };
+
         const popularFiltroMesDetalhe = (dias) => {
             if (!detalheMesSelect) return;
             const meses = [...new Set((dias || []).map(dia => String(dia.DT || '').slice(0, 7)).filter(Boolean))];
@@ -3212,8 +3244,9 @@
             const data = await apiRequest(`/api/escalas/${encodeURIComponent(escprogId)}/dias`);
             escalaDetalheAtual.dias = data.dias || [];
             popularFiltroMesDetalhe(escalaDetalheAtual.dias);
+            popularFiltroFuncionarioDetalhe(escalaDetalheAtual.dias);
             escalaDetalheResumo.textContent = `${escalaDetalheAtual.dias.length} dia(s) encontrado(s).`;
-            renderizarDetalheEscalaBanco(escalaDetalheAtual.dias);
+            renderizarDetalheEscalaBanco(getDiasDetalheFiltrados());
         };
 
         const carregarDetalheEscalaMensal = async (lojaId, mesRef) => {
@@ -3226,13 +3259,15 @@
             escalaDetalheAtual.dias = escala.dias || [];
             escalaDetalheAtual.status = escala.status || null;
             popularFiltroMesDetalhe(escalaDetalheAtual.dias);
+            popularFiltroFuncionarioDetalhe(escalaDetalheAtual.dias);
             escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s), revisao ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
-            renderizarDetalheEscalaBanco(escalaDetalheAtual.dias);
+            renderizarDetalheEscalaBanco(getDiasDetalheFiltrados());
         };
         detalheMesSelect?.addEventListener('change', () => {
-            const mes = detalheMesSelect.value;
-            const dias = escalaDetalheAtual.dias.filter(dia => String(dia.DT || '').slice(0, 7) === mes);
-            renderizarDetalheEscalaBanco(dias);
+            renderizarDetalheEscalaBanco(getDiasDetalheFiltrados());
+        });
+        detalheFuncionarioSelect?.addEventListener('change', () => {
+            renderizarDetalheEscalaBanco(getDiasDetalheFiltrados());
         });
 
         tabelaEscalaDetalheBody?.addEventListener('click', async (event) => {
