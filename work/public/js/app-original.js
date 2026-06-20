@@ -27,6 +27,9 @@
         const sincronizarBancoBtn = document.getElementById('sincronizarBancoBtn');
         const tabelaBancoBody = document.getElementById('tabela-banco-body');
         const bancoResumo = document.getElementById('bancoResumo');
+        const escalasFiltroLoja = document.getElementById('escalasFiltroLoja');
+        const escalasFiltroMes = document.getElementById('escalasFiltroMes');
+        const escalasFiltroAno = document.getElementById('escalasFiltroAno');
         const funcionariosLojaSelect = document.getElementById('funcionariosLojaSelect');
         const carregarFuncionariosTelaBtn = document.getElementById('carregarFuncionariosTelaBtn');
         const funcionariosTitulo = document.getElementById('funcionariosTitulo');
@@ -313,7 +316,15 @@
         voltarTurnosSecaoBtn?.addEventListener('click', () => { window.location.hash = '/turnos-secao'; });
         window.addEventListener('hashchange', handleHashNavigation);
         salvarSettingsBtn.addEventListener('click', (e) => { e.preventDefault(); salvarConfiguracoes(); });
-        goToTimelineBtn.addEventListener('click', (e) => { e.preventDefault(); window.location.hash = '/home'; });        consultarBancoBtn.addEventListener('click', async (e) => {
+        goToTimelineBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            try {
+                await iniciarNovaEscalaRascunho();
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+        consultarBancoBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             try {
                 await consultarEscalasBancoLocal();
@@ -1563,6 +1574,19 @@
         });
         addEscalaBtn.addEventListener('click', manipularEnvioFormulario);
         secaoTurnoSelect?.addEventListener('change', aplicarSecaoSelecionadaNoFormulario);
+        escalasFiltroLoja?.addEventListener('change', async () => {
+            sincronizarFiltrosEscalasComGerador();
+            await consultarEscalasBancoLocal().catch(error => showInfoModal(error.message, 'error'));
+        });
+        escalasFiltroMes?.addEventListener('change', async () => {
+            sincronizarFiltrosEscalasComGerador();
+            await consultarEscalasBancoLocal().catch(error => showInfoModal(error.message, 'error'));
+        });
+        escalasFiltroAno?.addEventListener('change', async () => {
+            sincronizarFiltrosEscalasComGerador();
+            await consultarEscalasBancoLocal().catch(error => showInfoModal(error.message, 'error'));
+        });
+
         cancelEditBtn.addEventListener('click', () => {
             cancelarModoEdicao();
             fecharModalTurno();
@@ -1723,19 +1747,38 @@
                         p.textContent = input.text;
                         p.className = 'text-gray-700';
                         inputModalBody.appendChild(p);
-                    } else {
-                        const label = document.createElement('label');
-                        label.className = 'block text-sm font-medium text-gray-700';
-                        label.textContent = input.label;
-                        const inputEl = document.createElement('input');
-                        inputEl.type = input.type;
-                        inputEl.id = input.id;
-                        inputEl.required = input.required;
-                        inputEl.value = input.value || '';
-                        inputEl.className = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
-                        inputModalBody.appendChild(label);
-                        inputModalBody.appendChild(inputEl);
+                        return;
                     }
+
+                    const label = document.createElement('label');
+                    label.className = 'block text-sm font-medium text-gray-700';
+                    label.textContent = input.label;
+
+                    if (input.type === 'select') {
+                        const selectEl = document.createElement('select');
+                        selectEl.id = input.id;
+                        selectEl.required = input.required;
+                        selectEl.className = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
+                        (input.options || []).forEach(option => {
+                            const optionEl = document.createElement('option');
+                            optionEl.value = option.value;
+                            optionEl.textContent = option.label;
+                            if (String(option.value) === String(input.value || '')) optionEl.selected = true;
+                            selectEl.appendChild(optionEl);
+                        });
+                        inputModalBody.appendChild(label);
+                        inputModalBody.appendChild(selectEl);
+                        return;
+                    }
+
+                    const inputEl = document.createElement('input');
+                    inputEl.type = input.type;
+                    inputEl.id = input.id;
+                    inputEl.required = input.required;
+                    inputEl.value = input.value || '';
+                    inputEl.className = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
+                    inputModalBody.appendChild(label);
+                    inputModalBody.appendChild(inputEl);
                 });
 
                 const hideModal = () => {
@@ -1748,13 +1791,13 @@
                     const values = {};
                     let allValid = true;
                     config.inputs.forEach(input => {
-                        if (input.type !== 'message') {
-                            const inputEl = document.getElementById(input.id);
-                            if (inputEl.required && !inputEl.value) {
-                                allValid = false;
-                            }
-                            values[input.id] = inputEl.value;
+                        if (input.type === 'message') return;
+                        const inputEl = document.getElementById(input.id);
+                        if (!inputEl) return;
+                        if (inputEl.required && !inputEl.value) {
+                            allValid = false;
                         }
+                        values[input.id] = inputEl.value;
                     });
 
                     if (allValid) {
@@ -1779,6 +1822,8 @@
         const tabelaRegistrosBody = document.getElementById('tabela-registros-body');
         let escalasSalvasCache = [];
         let escalaConfigCache = {};
+        let escalaRascunhoAtivo = false;
+        let escalaRascunhoContexto = null;
 
         const apiRequest = async (url, options = {}) => {
             const { timeoutMs = 20000, signal, ...fetchOptions } = options;
@@ -1859,11 +1904,12 @@
         const carregarLojasEscala = async () => {
             const data = await apiRequest('/api/catalog/lojas');
             const lojas = data.lojas || [];
-            const lojaAtual = lojaEscalaSelect.value || funcionariosLojaSelect.value;
+            const lojaAtual = lojaEscalaSelect.value || funcionariosLojaSelect.value || escalasFiltroLoja?.value;
             lojasPermitidasCache = lojas.map(loja => Number(getLojaCodigo(loja))).filter(Boolean);
             lojaEscalaSelect.innerHTML = '';
             funcionariosLojaSelect.innerHTML = '';
             if (homeLojaSelect) homeLojaSelect.innerHTML = '';
+            if (escalasFiltroLoja) escalasFiltroLoja.innerHTML = '';
             if (secoesLojaSelect) secoesLojaSelect.innerHTML = '';
             if (secaoFormLoja) secaoFormLoja.innerHTML = '';
 
@@ -1874,12 +1920,14 @@
                 lojaEscalaSelect.appendChild(option);
                 funcionariosLojaSelect.appendChild(option.cloneNode(true));
                 homeLojaSelect?.appendChild(option.cloneNode(true));
+                escalasFiltroLoja?.appendChild(option.cloneNode(true));
                 secoesLojaSelect?.appendChild(option.cloneNode(true));
                 secaoFormLoja?.appendChild(option.cloneNode(true));
                 turnosSecaoLojaSelect?.appendChild(option.cloneNode(true));
                 lojaEscalaSelect.disabled = true;
                 funcionariosLojaSelect.disabled = true;
                 if (homeLojaSelect) homeLojaSelect.disabled = true;
+                if (escalasFiltroLoja) escalasFiltroLoja.disabled = true;
                 if (secoesLojaSelect) secoesLojaSelect.disabled = true;
                 if (secaoFormLoja) secaoFormLoja.disabled = true;
                 carregarFuncionariosBtn.disabled = true;
@@ -1891,6 +1939,7 @@
             lojaEscalaSelect.disabled = false;
             funcionariosLojaSelect.disabled = false;
             if (homeLojaSelect) homeLojaSelect.disabled = false;
+            if (escalasFiltroLoja) escalasFiltroLoja.disabled = false;
             if (secoesLojaSelect) secoesLojaSelect.disabled = false;
             if (secaoFormLoja) secaoFormLoja.disabled = false;
             carregarFuncionariosBtn.disabled = false;
@@ -1904,6 +1953,7 @@
                 lojaEscalaSelect.appendChild(option);
                 funcionariosLojaSelect.appendChild(option.cloneNode(true));
                 homeLojaSelect?.appendChild(option.cloneNode(true));
+                escalasFiltroLoja?.appendChild(option.cloneNode(true));
                 secoesLojaSelect?.appendChild(option.cloneNode(true));
                 secaoFormLoja?.appendChild(option.cloneNode(true));
             });
@@ -1914,6 +1964,7 @@
             lojaEscalaSelect.value = lojaSelecionada;
             funcionariosLojaSelect.value = lojaSelecionada;
             if (homeLojaSelect) homeLojaSelect.value = lojaSelecionada;
+            if (escalasFiltroLoja) escalasFiltroLoja.value = lojaSelecionada;
             if (secoesLojaSelect) secoesLojaSelect.value = lojaSelecionada;
             if (secaoFormLoja) secaoFormLoja.value = lojaSelecionada;
             if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = lojaSelecionada;
@@ -2246,7 +2297,7 @@
                         <td data-label="Saída 1">${funcionario.HR_SAI1 || ''}</td>
                         <td data-label="Entrada 2">${funcionario.HR_ENT2 || ''}</td>
                         <td data-label="Saída 2">${funcionario.HR_SAI2 || ''}</td>
-                        <td data-label="A??es">
+                        <td data-label="Ações">
                             <button class="action-btn-table edit-funcionario" data-id="${funcionario.ESCFUNC_ID || ''}" title="Editar dados de escala">
                                 <span class="material-symbols-outlined">edit</span>
                                 Editar
@@ -2933,56 +2984,85 @@
             showInfoModal(mensagens, hasError ? 'error' : 'success');
         };
 
+        const formatarDataTabela = (value) => {
+            const iso = String(value || '').slice(0, 10);
+            if (!iso) return '-';
+            const partes = iso.split('-');
+            return partes.length >= 3 ? partes[2] + '/' + partes[1] + '/' + partes[0] : iso;
+        };
+
+        const formatarMesTabela = (value) => {
+            const iso = String(value || '').slice(0, 10);
+            if (!iso) return '-';
+            const partes = iso.split('-');
+            return partes.length >= 2 ? partes[1] + '/' + partes[0] : iso;
+        };
+
+        const popularFiltrosEscalas = () => {
+            if (!escalasFiltroMes || !escalasFiltroAno) return;
+            const mesAtual = String(mesSelect.value || new Date().getMonth());
+            const anoAtual = String(anoSelect.value || new Date().getFullYear());
+            escalasFiltroMes.innerHTML = Array.from(mesSelect.options || []).map(option => '<option value="' + escapeHtml(option.value) + '">' + escapeHtml(option.textContent) + '</option>').join('');
+            escalasFiltroMes.value = mesAtual;
+            escalasFiltroAno.innerHTML = Array.from(anoSelect.options || []).map(option => '<option value="' + escapeHtml(option.value) + '">' + escapeHtml(option.textContent) + '</option>').join('');
+            escalasFiltroAno.value = anoAtual;
+        };
+
+        const sincronizarFiltrosEscalasComGerador = () => {
+            if (escalasFiltroLoja?.value) lojaEscalaSelect.value = escalasFiltroLoja.value;
+            if (escalasFiltroMes?.value) mesSelect.value = escalasFiltroMes.value;
+            if (escalasFiltroAno?.value) anoSelect.value = escalasFiltroAno.value;
+        };
+
         const renderizarTabelaBanco = (escalas) => {
             tabelaBancoBody.innerHTML = '';
 
             if (!escalas || escalas.length === 0) {
                 if (bancoResumo) bancoResumo.textContent = 'Nenhuma escala estruturada encontrada para a loja e mês selecionados.';
-                tabelaBancoBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhuma escala estruturada encontrada para a loja e mês selecionados.</td></tr>';
+                tabelaBancoBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500 py-8">Nenhuma escala estruturada encontrada para a loja e mês selecionados.</td></tr>';
                 return;
             }
 
             if (bancoResumo) {
-                const funcionarios = new Set(escalas.map(escala => escala.CHAPA).filter(Boolean));
-                const maiorRevisao = escalas.reduce((max, escala) => Math.max(max, Number(escala.REVISAO || 0)), 0);
-                bancoResumo.textContent = `${funcionarios.size} funcionário(s) com escala no banco. Maior revisão: ${maiorRevisao || '-'}.`;
+                const lojas = new Set(escalas.map(escala => escala.LOJA).filter(Boolean));
+                const secoes = escalas.reduce((total, escala) => total + Number(escala.SECOES || 0), 0);
+                bancoResumo.textContent = escalas.length + ' escala(s) mensal(is), ' + lojas.size + ' loja(s), ' + secoes + ' seção(ões) cadastrada(s).';
             }
 
             escalas.forEach(escala => {
-                const id = escala.ESCPROG_ID;
                 const mesRef = String(escala.MES_REF || '').slice(0, 10);
-                const row = `
-                    <tr>
-                        <td data-label="ID">${id}</td>
-                        <td data-label="Mês">${mesRef}</td>
-                        <td data-label="Loja">${escala.LOJA || ''}</td>
-                        <td data-label="Chapa">${escala.CHAPA || ''}</td>
-                        <td data-label="Funcionário">${escala.NOME || ''}</td>
-                        <td data-label="Revisão">${escala.REVISAO || ''}</td>
-                        <td data-label="Ações" class="actions-cell">
-                            <button class="action-btn-table load banco-dias" data-id="${id}" title="Consultar dias salvos">
-                                <span class="material-symbols-outlined">event_note</span>
-                                Dias
-                            </button>
-                        </td>
-                    </tr>
-                `;
+                const loja = escala.LOJA || '';
+                const row = [
+                    '<tr>',
+                    '<td data-label="Mês">' + formatarMesTabela(escala.MES_REF) + '</td>',
+                    '<td data-label="Loja">' + escapeHtml(loja) + '</td>',
+                    '<td data-label="Status">' + escapeHtml(escala.STATUS || '-') + '</td>',
+                    '<td data-label="Revisão">' + escapeHtml(escala.REVISAO || '') + '</td>',
+                    '<td data-label="Seções">' + escapeHtml(escala.SECOES || 0) + '</td>',
+                    '<td data-label="Funcionários">' + escapeHtml(escala.FUNCIONARIOS || 0) + '</td>',
+                    '<td data-label="Modificada em">' + formatarDataTabela(escala.MODIFICADA_EM) + '</td>',
+                    '<td data-label="Ações" class="actions-cell">',
+                    '<button class="action-btn-table load banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
+                    '<button class="action-btn-table view-timeline banco-criar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Criar ou revisar escala"><span class="material-symbols-outlined">add</span>Criar Escala</button>',
+                    '</td>',
+                    '</tr>'
+                ].join('');
                 tabelaBancoBody.innerHTML += row;
             });
         };
 
         const consultarEscalasBancoLocal = async () => {
-            const lojaId = parseInt(lojaEscalaSelect.value, 10);
-            const ano = parseInt(anoSelect.value, 10);
-            const mes = parseInt(mesSelect.value, 10);
+            const lojaId = parseInt(escalasFiltroLoja?.value || lojaEscalaSelect.value, 10);
+            const ano = parseInt(escalasFiltroAno?.value || anoSelect.value, 10);
+            const mes = parseInt(escalasFiltroMes?.value || mesSelect.value, 10);
 
             if (!lojaId || Number.isNaN(ano) || Number.isNaN(mes)) {
-                showInfoModal('Selecione loja, mês e ano no Gerador de Escala antes de consultar o banco.', 'info');
+                showInfoModal('Selecione loja, mês e ano antes de consultar o banco.', 'info');
                 return;
             }
 
             const mesRef = formatDateForDb(ano, mes, 1);
-            const data = await apiRequest(`/api/escalas?lojaId=${encodeURIComponent(lojaId)}&mesRef=${encodeURIComponent(mesRef)}`);
+            const data = await apiRequest('/api/escalas/resumo?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
             renderizarTabelaBanco(data.escalas || []);
         };
 
@@ -3072,6 +3152,79 @@
             }
         });
 
+        const iniciarNovaEscalaRascunho = async (opcoes = {}) => {
+            const lojaPadrao = opcoes.loja || escalasFiltroLoja?.value || lojaEscalaSelect.value;
+            const dataPadrao = opcoes.mesRef ? new Date(opcoes.mesRef + 'T00:00:00') : null;
+            const mesPadrao = dataPadrao ? String(dataPadrao.getMonth()) : String(escalasFiltroMes?.value || mesSelect.value);
+            const anoPadrao = dataPadrao ? String(dataPadrao.getFullYear()) : String(escalasFiltroAno?.value || anoSelect.value);
+            const lojaOptions = Array.from(lojaEscalaSelect.options || []).map(option => ({ value: option.value, label: option.textContent }));
+            const mesOptions = Array.from(mesSelect.options || []).map(option => ({ value: option.value, label: option.textContent }));
+            const anoOptions = Array.from(anoSelect.options || []).map(option => ({ value: option.value, label: option.textContent }));
+
+            const values = await showInputModal({
+                title: 'Criar Escala',
+                inputs: [
+                    { type: 'message', text: 'A nova escala será criada como rascunho em memória. Se você sair da tela antes de salvar, o progresso será perdido.' },
+                    { label: 'Loja', type: 'select', id: 'nova-escala-loja', value: lojaPadrao, options: lojaOptions, required: true },
+                    { label: 'Mês', type: 'select', id: 'nova-escala-mes', value: mesPadrao, options: mesOptions, required: true },
+                    { label: 'Ano', type: 'select', id: 'nova-escala-ano', value: anoPadrao, options: anoOptions, required: true }
+                ],
+                confirmText: 'Criar Rascunho'
+            });
+            if (!values) return;
+
+            const loja = values['nova-escala-loja'];
+            const mes = Number(values['nova-escala-mes']);
+            const ano = Number(values['nova-escala-ano']);
+            const mesRef = formatDateForDb(ano, mes, 1);
+
+            lojaEscalaSelect.value = loja;
+            funcionariosLojaSelect.value = loja;
+            if (homeLojaSelect) homeLojaSelect.value = loja;
+            if (escalasFiltroLoja) escalasFiltroLoja.value = loja;
+            mesSelect.value = String(mes);
+            anoSelect.value = String(ano);
+            if (escalasFiltroMes) escalasFiltroMes.value = String(mes);
+            if (escalasFiltroAno) escalasFiltroAno.value = String(ano);
+
+            let resumoExistente = [];
+            try {
+                const data = await apiRequest('/api/escalas/resumo?lojaId=' + encodeURIComponent(loja) + '&mesRef=' + encodeURIComponent(mesRef));
+                resumoExistente = data.escalas || [];
+            } catch (error) {
+                showInfoModal('Não foi possível validar escala existente: ' + error.message, 'error');
+                return;
+            }
+
+            if (resumoExistente.length > 0) {
+                const confirmacao = await showInputModal({
+                    title: 'Escala existente',
+                    inputs: [{ type: 'message', text: 'Já existe uma escala para esta loja e mês. Ao salvar, será criada uma nova revisão mantendo o histórico anterior.' }],
+                    confirmText: 'Continuar'
+                });
+                if (!confirmacao) return;
+            }
+
+            dadosEscala = [];
+            escalaCarregadaId = null;
+            currentLoadedScale = null;
+            escalaRascunhoAtivo = true;
+            escalaRascunhoContexto = { loja, mesRef, criadoEm: new Date().toISOString() };
+            await carregarSecoesDaLoja(true);
+            await carregarTurnosSecaoDaLoja(true);
+            await carregarFuncionariosDaLoja(true);
+            renderizarTimelineCompleta('timeline-content');
+            atualizarContadoresHome();
+            window.location.hash = '/home';
+            showInfoModal('Rascunho criado. Adicione os turnos por seção e salve a escala quando finalizar.', 'success');
+        };
+
+        window.addEventListener('beforeunload', (event) => {
+            if (!escalaRascunhoAtivo) return;
+            event.preventDefault();
+            event.returnValue = '';
+        });
+
         salvarEscalaBtn.addEventListener('click', async () => {
             if (escalaCarregadaId) {
                 const escalas = getEscalasSalvas();
@@ -3090,6 +3243,8 @@
                     escalaParaAtualizar.dataSalva = new Date().toLocaleDateString('pt-BR');
                     await salvarEscalasNoStorage(escalas);
                     const syncResult = await tentarSincronizarEscalaComBanco(escalaParaAtualizar);
+                    escalaRascunhoAtivo = false;
+                    escalaRascunhoContexto = null;
                     showInfoModal(syncResult.ok && syncResult.count > 0 ? 'Escala atualizada e sincronizada com o banco!' : `Escala atualizada, mas não sincronizada com o banco: ${syncResult.message || 'carregue funcionários da loja antes de gerar a escala.'}`, syncResult.ok && syncResult.count > 0 ? 'success' : 'error');
                     renderizarTabelaRegistros();
                 } else if(values) {
@@ -3129,6 +3284,8 @@
                 escalas.push(novaEscala);
                 await salvarEscalasNoStorage(escalas);
                 const syncResult = await tentarSincronizarEscalaComBanco(novaEscala);
+                escalaRascunhoAtivo = false;
+                escalaRascunhoContexto = null;
                 escalaCarregadaId = novaEscala.id;
                 currentLoadedScale = novaEscala;
                 showInfoModal(syncResult.ok && syncResult.count > 0 ? "Escala salva e sincronizada com o banco! Agora você pode continuar editando e salvar as alterações." : `Escala salva, mas não sincronizada com o banco: ${syncResult.message || 'carregue funcionários da loja antes de gerar a escala.'}`, syncResult.ok && syncResult.count > 0 ? "success" : "error");
@@ -3189,10 +3346,42 @@
         });
 
         tabelaBancoBody.addEventListener('click', async (e) => {
-            const targetButton = e.target.closest('.banco-dias');
-            if (!targetButton) return;
+            const abrirButton = e.target.closest('.banco-abrir');
+            const criarButton = e.target.closest('.banco-criar');
+            if (!abrirButton && !criarButton) return;
 
-            window.location.hash = `/escala-banco/${targetButton.dataset.id}`;
+            const button = abrirButton || criarButton;
+            const loja = button.dataset.loja;
+            const mesRef = button.dataset.mesRef;
+            if (loja) {
+                lojaEscalaSelect.value = loja;
+                if (homeLojaSelect) homeLojaSelect.value = loja;
+                if (escalasFiltroLoja) escalasFiltroLoja.value = loja;
+            }
+            if (mesRef) {
+                const dataRef = new Date(mesRef + 'T00:00:00');
+                mesSelect.value = String(dataRef.getMonth());
+                anoSelect.value = String(dataRef.getFullYear());
+                if (escalasFiltroMes) escalasFiltroMes.value = String(dataRef.getMonth());
+                if (escalasFiltroAno) escalasFiltroAno.value = String(dataRef.getFullYear());
+            }
+
+            if (criarButton) {
+                await iniciarNovaEscalaRascunho({ loja, mesRef });
+                return;
+            }
+
+            try {
+                const data = await apiRequest('/api/escalas?lojaId=' + encodeURIComponent(loja) + '&mesRef=' + encodeURIComponent(mesRef));
+                const primeiraEscala = (data.escalas || [])[0];
+                if (!primeiraEscala?.ESCPROG_ID) {
+                    showInfoModal('Nenhum detalhamento encontrado para esta escala.', 'info');
+                    return;
+                }
+                window.location.hash = '/escala-banco/' + primeiraEscala.ESCPROG_ID;
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
         });
 
         document.getElementById('timeline-content').addEventListener('click', async (e) => {
@@ -3306,7 +3495,8 @@
         // --- INICIALIZAÇÃO ---
         window.onload = async () => { 
             try {
-                popularSeletoresData(); 
+                popularSeletoresData();
+                popularFiltrosEscalas();
                 await carregarUsuarioSessao();
                 configurarAcoesAdmin();
                 await carregarEstadoServidor();

@@ -178,24 +178,32 @@
 
                 <div class="table-card mt-6">
                     <div class="table-card-header">
-                        <h2>Escalas no Banco</h2>
-                        <p id="bancoResumo" class="table-card-subtitle">Consulte o banco para visualizar as escalas sincronizadas.</p>
+                        <div>
+                            <h2>Escalas no Banco</h2>
+                            <p id="bancoResumo" class="table-card-subtitle">Consulte o banco para visualizar as escalas sincronizadas.</p>
+                        </div>
+                        <div class="header-actions">
+                            <select id="escalasFiltroLoja" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                            <select id="escalasFiltroMes" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                            <select id="escalasFiltroAno" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
+                        </div>
                     </div>
                     
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Mês</th>
+                                <th>M&ecirc;s</th>
                                 <th>Loja</th>
-                                <th>Chapa</th>
-                                <th>Funcionário</th>
-                                <th>Revisão</th>
-                                <th>Ações</th>
+                                <th>Status</th>
+                                <th>Revis&atilde;o</th>
+                                <th>Se&ccedil;&otilde;es</th>
+                                <th>Funcion&aacute;rios</th>
+                                <th>Modificada em</th>
+                                <th>A&ccedil;&otilde;es</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-banco-body">
-                            <tr><td colspan="7" class="text-center text-gray-500 py-8">Consulte o banco para visualizar as escalas sincronizadas.</td></tr>
+                            <tr><td colspan="8" class="text-center text-gray-500 py-8">Consulte o banco para visualizar as escalas sincronizadas.</td></tr>
                         </tbody>
                     </table>
                 </div>

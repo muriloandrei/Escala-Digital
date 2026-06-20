@@ -59,6 +59,17 @@ function canAccessLoja(req, loja) {
   return lojas.includes(Number(loja)) || (req.user?.perfil === 'ADMIN' && lojas.length === 0);
 }
 
+router.get('/resumo', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
+    const mesRef = req.query.mesRef || null;
+    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef });
+    return res.json({ escalas });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = Number(req.query.lojaId);
