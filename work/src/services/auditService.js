@@ -74,7 +74,7 @@ async function registerAudit({ action, entity = 'ESCALA', user, lojaId, mesRef, 
       addColumn(insert, columns, ['PERFIL'], user?.perfil || null);
       addColumn(insert, columns, ['ACAO', 'TIPO_ACAO'], action);
       addColumn(insert, columns, ['ENTIDADE', 'OBJETO'], entity);
-      addColumn(insert, columns, ['REFERENCIA_ID', 'ESCPROG_ID'], referenceId || null);
+      addColumn(insert, columns, ['REFERENCIA_ID', 'ESCPROG_ID', 'ENTIDADE_ID'], referenceId || null);
       addColumn(insert, columns, ['LOJA'], lojaId ? Number(lojaId) : null);
       if (columns.has('MES_REF')) {
         insert.columns.push('mes_ref');

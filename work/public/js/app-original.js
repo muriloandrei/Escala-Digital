@@ -3092,7 +3092,7 @@
 
             if (!escalas || escalas.length === 0) {
                 if (bancoResumo) bancoResumo.textContent = 'Nenhuma escala estruturada encontrada para a loja e mês selecionados.';
-                tabelaBancoBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500 py-8">Nenhuma escala estruturada encontrada para a loja e mês selecionados.</td></tr>';
+                tabelaBancoBody.innerHTML = '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhuma escala estruturada encontrada para a loja e mês selecionados.</td></tr>';
                 return;
             }
 
@@ -3114,6 +3114,7 @@
                     '<td data-label="Seções">' + escapeHtml(escala.SECOES || 0) + '</td>',
                     '<td data-label="Funcionários">' + escapeHtml(escala.FUNCIONARIOS || 0) + '</td>',
                     '<td data-label="Modificada em">' + formatarDataTabela(escala.MODIFICADA_EM) + '</td>',
+                    '<td data-label="Modificada por">' + escapeHtml(escala.MODIFICADO_POR || 'Sistema') + '</td>',
                     '<td data-label="Ações" class="actions-cell">',
                     '<button class="action-btn-table load banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
                     '<button class="action-btn-table view-timeline banco-criar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Criar ou revisar escala"><span class="material-symbols-outlined">add</span>Criar Escala</button>',
@@ -3136,7 +3137,7 @@
             const mensagens = revisoes.map(revisao => {
                 const criada = formatarDataTabela(revisao.CRIADA_EM);
                 const modificada = formatarDataTabela(revisao.MODIFICADA_EM);
-                return 'Revisao ' + (revisao.REVISAO || '-') + ' | ' + (revisao.STATUS || '-') + ' | ' + (revisao.SECOES || 0) + ' secao(oes), ' + (revisao.FUNCIONARIOS || 0) + ' funcionario(s) | criada ' + criada + ' | modificada ' + modificada;
+                return 'Revisao ' + (revisao.REVISAO || '-') + ' | ' + (revisao.STATUS || '-') + ' | ' + (revisao.SECOES || 0) + ' secao(oes), ' + (revisao.FUNCIONARIOS || 0) + ' funcionario(s) | criada ' + criada + ' | modificada ' + modificada + ' por ' + (revisao.MODIFICADO_POR || 'Sistema');
             });
             showInfoModal(mensagens, 'info');
         };

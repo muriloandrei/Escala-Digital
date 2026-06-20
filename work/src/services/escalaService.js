@@ -17,6 +17,55 @@ function formatDateValue(value) {
   return String(value || '').slice(0, 10);
 }
 
+async function getTableColumns(connection, tableName) {
+  const result = await connection.execute(
+    `select column_name from user_tab_columns where table_name = :tableName`,
+    { tableName },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  return new Set(result.rows.map((row) => pick(row, 'COLUMN_NAME', 'column_name')));
+}
+
+async function getAuditJoinSql(connection, programAlias = 'p') {
+  const columns = await getTableColumns(connection, 'SGN_ESC_AUDITORIA');
+  const referenceColumn = ['REFERENCIA_ID', 'ESCPROG_ID', 'ENTIDADE_ID'].find((column) => columns.has(column));
+  if (!referenceColumn || !columns.has('DT_HR_INCL')) {
+    return {
+      selectSql: `'Sistema' as modificado_por,`,
+      joinSql: ''
+    };
+  }
+
+  const auditUserExpr = columns.has('NOME_USUARIO')
+    ? 'a.nome_usuario'
+    : columns.has('LOGIN')
+      ? 'a.login'
+      : columns.has('USUARIO')
+        ? 'a.usuario'
+        : columns.has('USUARIO_LOGIN')
+          ? 'a.usuario_login'
+          : 'cast(null as varchar2(100))';
+
+  const auditUserSelect = columns.has('USUARIO_ID') ? 'a.usuario_id,' : 'cast(null as number) as usuario_id,';
+  const entityFilter = columns.has('ENTIDADE') ? "where upper(a.entidade) = 'ESCALA'" : '';
+
+  return {
+    selectSql: `nvl(max(coalesce(au.modificador, u.nome, u.login)) keep (dense_rank last order by au.dt_hr_incl nulls first), 'Sistema') as modificado_por,`,
+    joinSql: `
+       left join (
+         select
+            a.${referenceColumn.toLowerCase()} as escprog_id,
+            ${auditUserSelect}
+            ${auditUserExpr} as modificador,
+            a.dt_hr_incl,
+            row_number() over (partition by a.${referenceColumn.toLowerCase()} order by a.dt_hr_incl desc) as rn
+         from sgn_esc_auditoria a
+         ${entityFilter}
+       ) au on au.escprog_id = ${programAlias}.escprog_id and au.rn = 1
+       left join sgn_esc_usuario u on u.usuario_id = au.usuario_id`
+  };
+}
+
 async function getFuncionarioEscala(connection, escfuncId) {
   const result = await connection.execute(
     `select escfunc_id, loja, chapa, escsecao_id, escfuncao_id
@@ -134,32 +183,35 @@ async function listEscalasResumo({ lojaId, mesRef }) {
     const filters = [];
     if (lojaId) {
       binds.lojaId = lojaId;
-      filters.push('loja = :lojaId');
+      filters.push('p.loja = :lojaId');
     }
     if (mesRef) {
       binds.mesRef = mesRef;
-      filters.push(`mes_ref = to_date(:mesRef, 'YYYY-MM-DD')`);
+      filters.push(`p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')`);
     }
 
     const whereSql = filters.length ? `where ${filters.join(' and ')}` : '';
+    const auditJoin = await getAuditJoinSql(connection, 'p');
     const result = await connection.execute(
       `select
-          mes_ref,
-          loja,
-          min(dt_hr_incl) as data_inicio,
-          max(dt_hr_incl) as modificada_em,
-          max(revisao) as revisao,
-          count(distinct escsecao_id) as secoes,
-          count(distinct escfunc_id) as funcionarios,
+          p.mes_ref,
+          p.loja,
+          min(p.dt_hr_incl) as data_inicio,
+          max(p.dt_hr_incl) as modificada_em,
+          max(p.revisao) as revisao,
+          count(distinct p.escsecao_id) as secoes,
+          count(distinct p.escfunc_id) as funcionarios,
+          ${auditJoin.selectSql}
           case
-            when last_day(mes_ref) < trunc(sysdate) then 'FINALIZADA'
-            when max(revisao) > 1 then 'MODIFICADA'
+            when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when max(p.revisao) > 1 then 'MODIFICADA'
             else 'ATIVA'
           end as status
-       from sgn_esc_prog
+       from sgn_esc_prog p
+       ${auditJoin.joinSql}
        ${whereSql}
-       group by mes_ref, loja
-       order by mes_ref desc, loja`,
+       group by p.mes_ref, p.loja
+       order by p.mes_ref desc, p.loja`,
       binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -170,24 +222,27 @@ async function listEscalasResumo({ lojaId, mesRef }) {
 
 async function listEscalaRevisoes({ lojaId, mesRef }) {
   return withConnection(async (connection) => {
+    const auditJoin = await getAuditJoinSql(connection, 'p');
     const result = await connection.execute(
       `select
-          revisao,
-          min(dt_hr_incl) as criada_em,
-          max(dt_hr_incl) as modificada_em,
-          max(oficializada) as oficializada,
-          count(distinct escsecao_id) as secoes,
-          count(distinct escfunc_id) as funcionarios,
+          p.revisao,
+          min(p.dt_hr_incl) as criada_em,
+          max(p.dt_hr_incl) as modificada_em,
+          max(p.oficializada) as oficializada,
+          count(distinct p.escsecao_id) as secoes,
+          count(distinct p.escfunc_id) as funcionarios,
+          ${auditJoin.selectSql}
           case
-            when last_day(mes_ref) < trunc(sysdate) then 'FINALIZADA'
-            when revisao > 1 then 'MODIFICADA'
+            when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when p.revisao > 1 then 'MODIFICADA'
             else 'ATIVA'
           end as status
-          from sgn_esc_prog
-       where loja = :lojaId
-         and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-       group by mes_ref, revisao
-       order by revisao desc`,
+          from sgn_esc_prog p
+       ${auditJoin.joinSql}
+       where p.loja = :lojaId
+         and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+       group by p.mes_ref, p.revisao
+       order by p.revisao desc`,
       { lojaId, mesRef },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
