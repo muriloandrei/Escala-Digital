@@ -3105,6 +3105,10 @@
             escalas.forEach(escala => {
                 const mesRef = String(escala.MES_REF || '').slice(0, 10);
                 const loja = escala.LOJA || '';
+                const finalizada = String(escala.STATUS || '').toUpperCase() === 'FINALIZADA';
+                const criarEscalaAction = finalizada
+                    ? '<button class="action-btn-table view-timeline" disabled title="Escala finalizada"><span class="material-symbols-outlined">lock</span>Finalizada</button>'
+                    : '<button class="action-btn-table view-timeline banco-criar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Criar ou revisar escala"><span class="material-symbols-outlined">add</span>Criar Escala</button>';
                 const row = [
                     '<tr>',
                     '<td data-label="Mês">' + formatarMesTabela(escala.MES_REF) + '</td>',
@@ -3117,7 +3121,7 @@
                     '<td data-label="Modificada por">' + escapeHtml(escala.MODIFICADO_POR || 'Sistema') + '</td>',
                     '<td data-label="Ações" class="actions-cell">',
                     '<button class="action-btn-table load banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
-                    '<button class="action-btn-table view-timeline banco-criar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Criar ou revisar escala"><span class="material-symbols-outlined">add</span>Criar Escala</button>',
+                    criarEscalaAction,
                     '<button class="action-btn-table view-skeleton banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver historico de revisoes"><span class="material-symbols-outlined">history</span>Historico</button>',
                     '</td>',
                     '</tr>'
