@@ -228,13 +228,22 @@
             preencherFormularioTurnoSecao(turno);
         }
 
-        function showEscalaDetalhePage(escprogId) {
+        function abrirPaginaDetalheEscala() {
             hideAllPages();
             escalaDetalhePage.classList.remove('hidden');
             navRegistros.classList.add('active');
             expandActiveNavGroup(navRegistros);
             setCurrentPageTitle('escalaBanco');
+        }
+
+        function showEscalaDetalhePage(escprogId) {
+            abrirPaginaDetalheEscala();
             carregarDetalheEscalaBanco(escprogId).catch(error => showInfoModal(error.message, 'error'));
+        }
+
+        function showEscalaDetalheMensalPage(lojaId, mesRef) {
+            abrirPaginaDetalheEscala();
+            carregarDetalheEscalaMensal(lojaId, mesRef).catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showAcessosPage() {
@@ -264,6 +273,11 @@
         }
 
         function navigateToPage(pageKey) {
+            if (pageKey.startsWith('escala-banco-mensal/')) {
+                const [, lojaId, mesRef] = pageKey.split('/');
+                showEscalaDetalheMensalPage(lojaId, mesRef);
+                return;
+            }
             if (pageKey.startsWith('escala-banco/')) {
                 showEscalaDetalhePage(pageKey.split('/')[1]);
                 return;
@@ -412,7 +426,7 @@
         let ausenciasLojaCache = [];
         let secoesLojaCache = [];
         let turnosSecaoCache = [];
-        let escalaDetalheAtual = { escprogId: null, dias: [] };
+        let escalaDetalheAtual = { escprogId: null, lojaId: null, mesRef: null, modo: 'individual', dias: [] };
         let lojasPermitidasCache = [];
         let usuarioSessaoCache = null;
         let usuariosAcessoCache = [];
@@ -3069,31 +3083,32 @@
         const renderizarDetalheEscalaBanco = (dias) => {
             tabelaEscalaDetalheBody.innerHTML = '';
             if (!dias || dias.length === 0) {
-                tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum dia salvo para esta escala.</td></tr>';
+                tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Nenhum dia salvo para esta escala.</td></tr>';
                 return;
             }
 
             dias.forEach((dia) => {
                 const dataDia = String(dia.DT || '').slice(0, 10);
-                tabelaEscalaDetalheBody.innerHTML += `
-                    <tr data-escprogdia-id="${escapeHtml(dia.ESCPROGDIA_ID || '')}">
-                        <td data-label="Data">${escapeHtml(dataDia)}</td>
-                        <td data-label="Programacao"><input class="detail-input detail-programacao" maxlength="3" value="${escapeHtml(dia.PROGRAMACAO || 'TRB')}"></td>
-                        <td data-label="Entrada 1"><input class="detail-input detail-hr-ent1" type="time" value="${escapeHtml(dia.HR_ENT1 === 'F' ? '' : dia.HR_ENT1 || '')}"></td>
-                        <td data-label="Saida 1"><input class="detail-input detail-hr-sai1" type="time" value="${escapeHtml(dia.HR_SAI1 === 'F' ? '' : dia.HR_SAI1 || '')}"></td>
-                        <td data-label="Entrada 2"><input class="detail-input detail-hr-ent2" type="time" value="${escapeHtml(dia.HR_ENT2 === 'F' ? '' : dia.HR_ENT2 || '')}"></td>
-                        <td data-label="Saida 2"><input class="detail-input detail-hr-sai2" type="time" value="${escapeHtml(dia.HR_SAI2 === 'F' ? '' : dia.HR_SAI2 || '')}"></td>
-                        <td data-label="Acoes">
-                            <button class="action-btn-table save-dia-banco" title="Salvar dia">
-                                <span class="material-symbols-outlined">save</span>
-                                Salvar
-                            </button>
-                        </td>
-                    </tr>
-                `;
+                const nome = dia.NOME || dia.CHAPA || '';
+                const secao = dia.SECAO_DESCR || dia.COD_SECAO || '';
+                const funcao = dia.FUNCAO_DESCR || '';
+                const row = [
+                    '<tr data-escprog-id="' + escapeHtml(dia.ESCPROG_ID || escalaDetalheAtual.escprogId || '') + '" data-escprogdia-id="' + escapeHtml(dia.ESCPROGDIA_ID || '') + '">',
+                    '<td data-label="Funcionario">' + escapeHtml(nome) + '</td>',
+                    '<td data-label="Secao">' + escapeHtml(secao) + '</td>',
+                    '<td data-label="Funcao">' + escapeHtml(funcao) + '</td>',
+                    '<td data-label="Data">' + escapeHtml(dataDia) + '</td>',
+                    '<td data-label="Programacao"><input class="detail-input detail-programacao" maxlength="3" value="' + escapeHtml(dia.PROGRAMACAO || 'TRB') + '"></td>',
+                    '<td data-label="Entrada 1"><input class="detail-input detail-hr-ent1" type="time" value="' + escapeHtml(dia.HR_ENT1 === 'F' ? '' : dia.HR_ENT1 || '') + '"></td>',
+                    '<td data-label="Saida 1"><input class="detail-input detail-hr-sai1" type="time" value="' + escapeHtml(dia.HR_SAI1 === 'F' ? '' : dia.HR_SAI1 || '') + '"></td>',
+                    '<td data-label="Entrada 2"><input class="detail-input detail-hr-ent2" type="time" value="' + escapeHtml(dia.HR_ENT2 === 'F' ? '' : dia.HR_ENT2 || '') + '"></td>',
+                    '<td data-label="Saida 2"><input class="detail-input detail-hr-sai2" type="time" value="' + escapeHtml(dia.HR_SAI2 === 'F' ? '' : dia.HR_SAI2 || '') + '"></td>',
+                    '<td data-label="Acoes"><button class="action-btn-table save-dia-banco" title="Salvar dia"><span class="material-symbols-outlined">save</span>Salvar</button></td>',
+                    '</tr>'
+                ].join('');
+                tabelaEscalaDetalheBody.innerHTML += row;
             });
         };
-
         const popularFiltroMesDetalhe = (dias) => {
             if (!detalheMesSelect) return;
             const meses = [...new Set((dias || []).map(dia => String(dia.DT || '').slice(0, 7)).filter(Boolean))];
@@ -3107,10 +3122,10 @@
         };
 
         const carregarDetalheEscalaBanco = async (escprogId) => {
-            escalaDetalheAtual.escprogId = escprogId;
+            escalaDetalheAtual = { escprogId, lojaId: null, mesRef: null, modo: 'individual', dias: [] };
             escalaDetalheTitulo.textContent = `Escala ${escprogId}`;
             escalaDetalheResumo.textContent = 'Carregando dias da escala...';
-            tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
+            tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
             const data = await apiRequest(`/api/escalas/${encodeURIComponent(escprogId)}/dias`);
             escalaDetalheAtual.dias = data.dias || [];
             popularFiltroMesDetalhe(escalaDetalheAtual.dias);
@@ -3118,6 +3133,18 @@
             renderizarDetalheEscalaBanco(escalaDetalheAtual.dias);
         };
 
+        const carregarDetalheEscalaMensal = async (lojaId, mesRef) => {
+            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', dias: [] };
+            escalaDetalheTitulo.textContent = 'Escala Loja ' + lojaId + ' - ' + formatarMesTabela(mesRef);
+            escalaDetalheResumo.textContent = 'Carregando escala mensal...';
+            tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
+            const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
+            const escala = data.escala || {};
+            escalaDetalheAtual.dias = escala.dias || [];
+            popularFiltroMesDetalhe(escalaDetalheAtual.dias);
+            escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s), revisao ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
+            renderizarDetalheEscalaBanco(escalaDetalheAtual.dias);
+        };
         detalheMesSelect?.addEventListener('change', () => {
             const mes = detalheMesSelect.value;
             const dias = escalaDetalheAtual.dias.filter(dia => String(dia.DT || '').slice(0, 7) === mes);
@@ -3130,12 +3157,13 @@
 
             const row = saveButton.closest('tr');
             const escprogdiaId = row?.dataset.escprogdiaId;
-            if (!escalaDetalheAtual.escprogId || !escprogdiaId) return;
+            const escprogId = row?.dataset.escprogId || escalaDetalheAtual.escprogId;
+            if (!escprogId || !escprogdiaId) return;
 
             try {
                 const programacao = row.querySelector('.detail-programacao').value.trim().toUpperCase() || 'TRB';
                 const folga = programacao === 'F';
-                await apiRequest(`/api/escalas/${encodeURIComponent(escalaDetalheAtual.escprogId)}/dias/${encodeURIComponent(escprogdiaId)}`, {
+                await apiRequest('/api/escalas/' + encodeURIComponent(escprogId) + '/dias/' + encodeURIComponent(escprogdiaId), {
                     method: 'PATCH',
                     body: JSON.stringify({
                         PROGRAMACAO: programacao,
@@ -3146,7 +3174,11 @@
                     })
                 });
                 showInfoModal('Dia atualizado no banco.', 'success');
-                await carregarDetalheEscalaBanco(escalaDetalheAtual.escprogId);
+                if (escalaDetalheAtual.modo === 'mensal') {
+                    await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
+                } else {
+                    await carregarDetalheEscalaBanco(escprogId);
+                }
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
@@ -3378,7 +3410,7 @@
                     showInfoModal('Nenhum detalhamento encontrado para esta escala.', 'info');
                     return;
                 }
-                window.location.hash = '/escala-banco/' + primeiraEscala.ESCPROG_ID;
+                window.location.hash = '/escala-banco-mensal/' + loja + '/' + mesRef;
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
