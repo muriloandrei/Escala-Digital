@@ -3,6 +3,7 @@ const { z } = require('zod');
 const { requireAuth, requireLojaAccess } = require('../middleware/auth');
 const escalaService = require('../services/escalaService');
 const catalogService = require('../services/catalogService');
+const auditService = require('../services/auditService');
 const { validateEscalaPayload } = require('../rules/escalaRules');
 
 const router = express.Router();
@@ -141,6 +142,20 @@ router.patch('/:escprogId/dias/:escprogdiaId', async (req, res, next) => {
       return res.status(404).json({ error: 'Dia da escala nao encontrado.' });
     }
 
+    await auditService.registerAudit({
+      action: 'EDITAR_DIA_ESCALA',
+      user: req.user,
+      lojaId: loja,
+      mesRef: header.MES_REF,
+      revisao: dia.REVISAO || header.REVISAO,
+      referenceId: dia.NEW_ESCPROG_ID || Number(req.params.escprogId),
+      details: {
+        escprogId: Number(req.params.escprogId),
+        escprogdiaId: Number(req.params.escprogdiaId),
+        programacao: data.PROGRAMACAO
+      }
+    });
+
     return res.json({ dia });
   } catch (error) {
     if (error.name === 'ZodError') {
@@ -172,6 +187,20 @@ router.post('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) =
       escalaOrigemId: payload.escalaOrigemId,
       funcionarios: payload.funcionarios,
       oficializada: payload.oficializada || 0
+    });
+
+    await auditService.registerAudit({
+      action: 'SALVAR_ESCALA',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      revisao: saved[0]?.revisao,
+      referenceId: saved[0]?.escprogId,
+      details: {
+        funcionarios: payload.funcionarios.length,
+        secoes: new Set(payload.funcionarios.map((funcionario) => funcionario.escsecaoId || funcionario.ESCSECAO_ID).filter(Boolean)).size,
+        oficializada: payload.oficializada || 0
+      }
     });
 
     return res.status(201).json({ saved });
