@@ -307,11 +307,38 @@
             (routes[pageKey] || routes.home)();
         }
 
-        function handleHashNavigation() {
+        let hashNavigationLock = false;
+        let currentHashRoute = (window.location.hash || '#/home').replace(/^#\/?/, '') || 'home';
+
+        async function handleHashNavigation() {
             const pageKey = (window.location.hash || '#/home').replace(/^#\/?/, '') || 'home';
+            if (hashNavigationLock) {
+                currentHashRoute = pageKey;
+                navigateToPage(pageKey);
+                hashNavigationLock = false;
+                return;
+            }
+
+            if (escalaRascunhoAtivo && pageKey !== 'home') {
+                const confirmacao = await showInputModal({
+                    title: 'Descartar rascunho?',
+                    inputs: [{ type: 'message', text: 'Existe uma escala em rascunho. Se voce sair desta tela antes de salvar, o progresso sera perdido.' }],
+                    confirmText: 'Sair mesmo assim'
+                });
+
+                if (!confirmacao) {
+                    hashNavigationLock = true;
+                    window.location.hash = '/' + currentHashRoute;
+                    return;
+                }
+
+                escalaRascunhoAtivo = false;
+                escalaRascunhoContexto = null;
+            }
+
+            currentHashRoute = pageKey;
             navigateToPage(pageKey);
         }
-        
         navTimeline.addEventListener('click', () => { window.location.hash = '/home'; });
         navEscalasCriadas.addEventListener('click', () => { window.location.hash = '/escalas-criadas'; });
         navRegistros.addEventListener('click', () => { window.location.hash = '/escalas-geradas'; });
