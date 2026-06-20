@@ -1785,6 +1785,30 @@
                         return;
                     }
 
+                    if (input.type === 'checkbox-group') {
+                        const wrapper = document.createElement('div');
+                        wrapper.id = input.id;
+                        wrapper.dataset.inputType = 'checkbox-group';
+                        wrapper.className = 'mt-2 max-h-64 overflow-auto rounded-md border border-gray-200 bg-white p-3 space-y-2';
+                        (input.options || []).forEach(option => {
+                            const row = document.createElement('label');
+                            row.className = 'flex items-start gap-2 text-sm text-gray-700';
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.value = option.value;
+                            checkbox.checked = input.value ? input.value.map(String).includes(String(option.value)) : option.checked !== false;
+                            checkbox.className = 'mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500';
+                            const span = document.createElement('span');
+                            span.textContent = option.label;
+                            row.appendChild(checkbox);
+                            row.appendChild(span);
+                            wrapper.appendChild(row);
+                        });
+                        inputModalBody.appendChild(label);
+                        inputModalBody.appendChild(wrapper);
+                        return;
+                    }
+
                     const inputEl = document.createElement('input');
                     inputEl.type = input.type;
                     inputEl.id = input.id;
@@ -1808,6 +1832,14 @@
                         if (input.type === 'message') return;
                         const inputEl = document.getElementById(input.id);
                         if (!inputEl) return;
+                        if (input.type === 'checkbox-group') {
+                            const checked = Array.from(inputEl.querySelectorAll('input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
+                            if (input.required && checked.length === 0) {
+                                allValid = false;
+                            }
+                            values[input.id] = checked;
+                            return;
+                        }
                         if (inputEl.required && !inputEl.value) {
                             allValid = false;
                         }
@@ -3184,6 +3216,50 @@
             }
         });
 
+        const criarTimelineTurnosSelecionados = (turnosSelecionados) => {
+            return turnosSelecionados.map(turno => {
+                const codigo = turno.COD_SECAO ? turno.COD_SECAO + ' - ' : '';
+                return {
+                    secaoId: String(turno.ESCSECAO_ID || ''),
+                    secaoNome: codigo + (turno.DESCR || 'Secao'),
+                    quantidade: String(turno.QTDE_COLABORADORES || 1),
+                    inicio: turno.HR_ENT1 || '',
+                    fim: turno.HR_SAI2 || turno.HR_SAI1 || '',
+                    inicioIntervalo: turno.HR_SAI1 || '',
+                    fimIntervalo: turno.HR_ENT2 || ''
+                };
+            }).filter(turno => turno.secaoId && turno.quantidade && turno.inicio && turno.fim);
+        };
+
+        const selecionarTurnosRascunhoEscala = async () => {
+            if (!turnosSecaoCache || turnosSecaoCache.length === 0) {
+                showInfoModal('Nenhum turno por secao cadastrado para esta loja. Cadastre os turnos antes de gerar a timeline.', 'info');
+                return [];
+            }
+
+            const options = turnosSecaoCache.map(turno => {
+                const codigo = turno.COD_SECAO ? turno.COD_SECAO + ' - ' : '';
+                const periodo = (turno.HR_ENT1 || '') + ' - ' + (turno.HR_SAI1 || '') + ' / ' + (turno.HR_ENT2 || '') + ' - ' + (turno.HR_SAI2 || '');
+                return {
+                    value: String(turno.ESCSECAOTURNO_ID || turno.ESCSECAO_ID),
+                    label: codigo + (turno.DESCR || 'Secao') + ' | ' + periodo + ' | ' + (turno.QTDE_COLABORADORES || 1) + ' colaborador(es)',
+                    checked: true
+                };
+            });
+
+            const values = await showInputModal({
+                title: 'Gerar Timeline',
+                inputs: [
+                    { type: 'message', text: 'Selecione os turnos por secao que entrarao nesta escala.' },
+                    { label: 'Turnos cadastrados', type: 'checkbox-group', id: 'turnos-rascunho', options, required: true }
+                ],
+                confirmText: 'Gerar Timeline'
+            });
+            if (!values) return null;
+
+            const selecionados = new Set((values['turnos-rascunho'] || []).map(String));
+            return turnosSecaoCache.filter(turno => selecionados.has(String(turno.ESCSECAOTURNO_ID || turno.ESCSECAO_ID)));
+        };
         const iniciarNovaEscalaRascunho = async (opcoes = {}) => {
             const lojaPadrao = opcoes.loja || escalasFiltroLoja?.value || lojaEscalaSelect.value;
             const dataPadrao = opcoes.mesRef ? new Date(opcoes.mesRef + 'T00:00:00') : null;
@@ -3244,11 +3320,14 @@
             escalaRascunhoContexto = { loja, mesRef, criadoEm: new Date().toISOString() };
             await carregarSecoesDaLoja(true);
             await carregarTurnosSecaoDaLoja(true);
+            const turnosSelecionados = await selecionarTurnosRascunhoEscala();
+            if (turnosSelecionados === null) return;
+            dadosEscala = criarTimelineTurnosSelecionados(turnosSelecionados);
             await carregarFuncionariosDaLoja(true);
             renderizarTimelineCompleta('timeline-content');
             atualizarContadoresHome();
             window.location.hash = '/home';
-            showInfoModal('Rascunho criado. Adicione os turnos por seção e salve a escala quando finalizar.', 'success');
+            showInfoModal(dadosEscala.length > 0 ? 'Timeline gerada a partir dos turnos por secao. Carregue os funcionarios e gere a escala detalhada quando finalizar.' : 'Rascunho criado, mas nenhum turno valido foi encontrado para montar a timeline.', dadosEscala.length > 0 ? 'success' : 'info');
         };
 
         window.addEventListener('beforeunload', (event) => {
