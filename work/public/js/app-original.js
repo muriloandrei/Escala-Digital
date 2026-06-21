@@ -1792,6 +1792,13 @@
                         return;
                     }
 
+                    if (input.type === 'html') {
+                        const wrapper = document.createElement('div');
+                        wrapper.innerHTML = input.html || '';
+                        inputModalBody.appendChild(wrapper);
+                        return;
+                    }
+
                     const label = document.createElement('label');
                     label.className = 'block text-sm font-medium text-gray-700';
                     label.textContent = input.label;
@@ -3139,12 +3146,27 @@
                 return;
             }
 
-            const mensagens = revisoes.map(revisao => {
-                const criada = formatarDataTabela(revisao.CRIADA_EM);
-                const modificada = formatarDataTabela(revisao.MODIFICADA_EM);
-                return 'Revisao ' + (revisao.REVISAO || '-') + ' | ' + (revisao.STATUS || '-') + ' | ' + (revisao.SECOES || 0) + ' secao(oes), ' + (revisao.FUNCIONARIOS || 0) + ' funcionario(s) | criada ' + criada + ' | modificada ' + modificada + ' por ' + (revisao.MODIFICADO_POR || 'Sistema');
+            const rows = revisoes.map(revisao => [
+                '<tr>',
+                '<td>' + escapeHtml(revisao.REVISAO || '-') + '</td>',
+                '<td>' + escapeHtml(revisao.STATUS || '-') + '</td>',
+                '<td>' + escapeHtml(revisao.SECOES || 0) + '</td>',
+                '<td>' + escapeHtml(revisao.FUNCIONARIOS || 0) + '</td>',
+                '<td>' + formatarDataTabela(revisao.CRIADA_EM) + '</td>',
+                '<td>' + formatarDataTabela(revisao.MODIFICADA_EM) + '</td>',
+                '<td>' + escapeHtml(revisao.MODIFICADO_POR || 'Sistema') + '</td>',
+                '</tr>'
+            ].join('')).join('');
+
+            await showInputModal({
+                title: 'Historico de revisoes - Loja ' + loja + ' - ' + formatarMesTabela(mesRef),
+                inputs: [{
+                    type: 'html',
+                    html: '<div class="revision-history-modal"><table class="data-table compact-table"><thead><tr><th>Revisao</th><th>Status</th><th>Secoes</th><th>Funcionarios</th><th>Criada em</th><th>Modificada em</th><th>Modificada por</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+                }],
+                confirmText: 'Fechar',
+                cancelText: ''
             });
-            showInfoModal(mensagens, 'info');
         };
 
         const consultarEscalasBancoLocal = async () => {
@@ -3163,31 +3185,69 @@
         };
 
         const renderizarDetalheEscalaBanco = (dias) => {
+            const table = tabelaEscalaDetalheBody.closest('table');
+            const thead = table?.querySelector('thead');
             tabelaEscalaDetalheBody.innerHTML = '';
             const somenteLeitura = escalaDetalheAtual.status === 'FINALIZADA';
-            const disabledAttr = somenteLeitura ? ' disabled' : '';
-            if (!dias || dias.length === 0) {
-                tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Nenhum dia salvo para esta escala.</td></tr>';
+            const lista = dias || [];
+            const mesBase = detalheMesSelect?.value || String(lista[0]?.DT || '').slice(0, 7);
+            const [anoTexto, mesTexto] = String(mesBase || '').split('-');
+            const ano = Number(anoTexto);
+            const mesIndex = Number(mesTexto) - 1;
+            const diasNoMes = ano && mesTexto ? new Date(ano, mesIndex + 1, 0).getDate() : 31;
+
+            if (thead) {
+                const diasHeader = Array.from({ length: diasNoMes }, (_, index) => '<th class="day-column">' + (index + 1) + '</th>').join('');
+                thead.innerHTML = '<tr><th>Funcionario</th><th>Secao</th><th>Funcao</th>' + diasHeader + '<th>Folgas</th></tr>';
+            }
+
+            if (!lista.length) {
+                tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="' + (diasNoMes + 4) + '" class="text-center text-gray-500 py-8">Nenhum dia encontrado para os filtros selecionados.</td></tr>';
                 return;
             }
 
-            dias.forEach((dia) => {
+            const grupos = new Map();
+            lista.forEach((dia) => {
+                const key = getFuncionarioDetalheKey(dia);
+                if (!grupos.has(key)) {
+                    grupos.set(key, {
+                        nome: dia.NOME || dia.CHAPA || key,
+                        secao: dia.SECAO_DESCR || dia.COD_SECAO || '',
+                        funcao: dia.FUNCAO_DESCR || '',
+                        dias: new Map(),
+                        folgas: 0
+                    });
+                }
+                const grupo = grupos.get(key);
                 const dataDia = String(dia.DT || '').slice(0, 10);
-                const nome = dia.NOME || dia.CHAPA || '';
-                const secao = dia.SECAO_DESCR || dia.COD_SECAO || '';
-                const funcao = dia.FUNCAO_DESCR || '';
+                const numeroDia = Number(dataDia.slice(8, 10));
+                grupo.dias.set(numeroDia, dia);
+                if (String(dia.PROGRAMACAO || '').toUpperCase() === 'F') grupo.folgas += 1;
+            });
+
+            [...grupos.values()].sort((a, b) => String(a.nome).localeCompare(String(b.nome))).forEach((grupo) => {
+                const cells = [];
+                for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                    const registro = grupo.dias.get(dia);
+                    if (!registro) {
+                        cells.push('<td class="scale-day-cell empty">-</td>');
+                        continue;
+                    }
+
+                    const programacao = String(registro.PROGRAMACAO || 'TRB').toUpperCase();
+                    const folga = programacao === 'F';
+                    const label = folga ? 'F' : (registro.HR_ENT1 || '--') + '-' + (registro.HR_SAI2 || registro.HR_SAI1 || '--');
+                    const button = '<button class="scale-day-button edit-dia-banco ' + (folga ? 'day-off' : '') + '" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || escalaDetalheAtual.escprogId || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" data-dia-index="' + escapeHtml(dia) + '" title="Editar dia ' + escapeHtml(dia) + '"' + (somenteLeitura ? ' disabled' : '') + '>' + escapeHtml(label) + '</button>';
+                    cells.push('<td class="scale-day-cell">' + button + '</td>');
+                }
+
                 const row = [
-                    '<tr data-escprog-id="' + escapeHtml(dia.ESCPROG_ID || escalaDetalheAtual.escprogId || '') + '" data-escprogdia-id="' + escapeHtml(dia.ESCPROGDIA_ID || '') + '">',
-                    '<td data-label="Funcionario">' + escapeHtml(nome) + '</td>',
-                    '<td data-label="Secao">' + escapeHtml(secao) + '</td>',
-                    '<td data-label="Funcao">' + escapeHtml(funcao) + '</td>',
-                    '<td data-label="Data">' + escapeHtml(dataDia) + '</td>',
-                    '<td data-label="Programacao"><input class="detail-input detail-programacao" maxlength="3" value="' + escapeHtml(dia.PROGRAMACAO || 'TRB') + '"' + disabledAttr + '></td>',
-                    '<td data-label="Entrada 1"><input class="detail-input detail-hr-ent1" type="time" value="' + escapeHtml(dia.HR_ENT1 === 'F' ? '' : dia.HR_ENT1 || '') + '"' + disabledAttr + '></td>',
-                    '<td data-label="Saida 1"><input class="detail-input detail-hr-sai1" type="time" value="' + escapeHtml(dia.HR_SAI1 === 'F' ? '' : dia.HR_SAI1 || '') + '"' + disabledAttr + '></td>',
-                    '<td data-label="Entrada 2"><input class="detail-input detail-hr-ent2" type="time" value="' + escapeHtml(dia.HR_ENT2 === 'F' ? '' : dia.HR_ENT2 || '') + '"' + disabledAttr + '></td>',
-                    '<td data-label="Saida 2"><input class="detail-input detail-hr-sai2" type="time" value="' + escapeHtml(dia.HR_SAI2 === 'F' ? '' : dia.HR_SAI2 || '') + '"' + disabledAttr + '></td>',
-                    '<td data-label="Acoes">' + (somenteLeitura ? '<span class="text-gray-500 text-xs font-semibold">Finalizada</span>' : '<button class="action-btn-table save-dia-banco" title="Salvar dia"><span class="material-symbols-outlined">save</span>Salvar</button>') + '</td>',
+                    '<tr>',
+                    '<td data-label="Funcionario" class="sticky-detail-col">' + escapeHtml(grupo.nome) + '</td>',
+                    '<td data-label="Secao">' + escapeHtml(grupo.secao) + '</td>',
+                    '<td data-label="Funcao">' + escapeHtml(grupo.funcao) + '</td>',
+                    cells.join(''),
+                    '<td data-label="Folgas">' + grupo.folgas + '</td>',
                     '</tr>'
                 ].join('');
                 tabelaEscalaDetalheBody.innerHTML += row;
@@ -3271,6 +3331,59 @@
         });
 
         tabelaEscalaDetalheBody?.addEventListener('click', async (event) => {
+            const editDayButton = event.target.closest('.edit-dia-banco');
+            if (editDayButton) {
+                if (escalaDetalheAtual.status === 'FINALIZADA') {
+                    showInfoModal('Escala finalizada nao pode ser editada.', 'info');
+                    return;
+                }
+
+                const escprogId = editDayButton.dataset.escprogId || escalaDetalheAtual.escprogId;
+                const escprogdiaId = editDayButton.dataset.escprogdiaId;
+                const dia = (escalaDetalheAtual.dias || []).find(item => String(item.ESCPROGDIA_ID || '') === String(escprogdiaId));
+                if (!escprogId || !escprogdiaId || !dia) return;
+
+                const values = await showInputModal({
+                    title: 'Editar dia ' + formatarDataTabela(dia.DT),
+                    inputs: [
+                        { label: 'Programacao', type: 'select', id: 'PROGRAMACAO', value: dia.PROGRAMACAO || 'TRB', options: [
+                            { value: 'TRB', label: 'Trabalho' },
+                            { value: 'F', label: 'Folga' }
+                        ], required: true },
+                        { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: dia.HR_ENT1 === 'F' ? '' : dia.HR_ENT1 || '' },
+                        { label: 'Saida 1', type: 'time', id: 'HR_SAI1', value: dia.HR_SAI1 === 'F' ? '' : dia.HR_SAI1 || '' },
+                        { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: dia.HR_ENT2 === 'F' ? '' : dia.HR_ENT2 || '' },
+                        { label: 'Saida 2', type: 'time', id: 'HR_SAI2', value: dia.HR_SAI2 === 'F' ? '' : dia.HR_SAI2 || '' }
+                    ],
+                    confirmText: 'Salvar dia'
+                });
+                if (!values) return;
+
+                try {
+                    const programacao = String(values.PROGRAMACAO || 'TRB').trim().toUpperCase();
+                    const folga = programacao === 'F';
+                    await apiRequest('/api/escalas/' + encodeURIComponent(escprogId) + '/dias/' + encodeURIComponent(escprogdiaId), {
+                        method: 'PATCH',
+                        body: JSON.stringify({
+                            PROGRAMACAO: programacao,
+                            HR_ENT1: folga ? 'F' : values.HR_ENT1 || dia.HR_ENT1 || '00:00',
+                            HR_SAI1: folga ? 'F' : values.HR_SAI1 || dia.HR_SAI1 || '00:00',
+                            HR_ENT2: folga ? 'F' : values.HR_ENT2 || dia.HR_ENT2 || '00:00',
+                            HR_SAI2: folga ? 'F' : values.HR_SAI2 || dia.HR_SAI2 || '00:00'
+                        })
+                    });
+                    showInfoModal('Dia atualizado no banco.', 'success');
+                    if (escalaDetalheAtual.modo === 'mensal') {
+                        await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
+                    } else {
+                        await carregarDetalheEscalaBanco(escprogId);
+                    }
+                } catch (error) {
+                    showInfoModal(error.message, 'error');
+                }
+                return;
+            }
+
             const saveButton = event.target.closest('.save-dia-banco');
             if (!saveButton) return;
 
