@@ -3169,6 +3169,41 @@
             });
         };
 
+        const montarResumoEscalasFallback = (escalas, lojaId, mesRef) => {
+            const rows = escalas || [];
+            if (!rows.length) return [];
+
+            const revisao = Math.max(...rows.map(row => Number(row.REVISAO || 0)));
+            const rowsRevisao = rows.filter(row => Number(row.REVISAO || 0) === revisao);
+            const base = rowsRevisao[0] || rows[0] || {};
+            const secoes = new Set(rowsRevisao.map(row => row.ESCSECAO_ID || row.COD_SECAO).filter(Boolean));
+            const funcionarios = new Set(rowsRevisao.map(row => row.ESCFUNC_ID || row.CHAPA).filter(Boolean));
+
+            return [{
+                MES_REF: base.MES_REF || mesRef,
+                LOJA: base.LOJA || lojaId,
+                STATUS: base.STATUS || (revisao > 1 ? 'MODIFICADA' : 'ATIVA'),
+                REVISAO: revisao || base.REVISAO || 1,
+                SECOES: secoes.size,
+                FUNCIONARIOS: funcionarios.size || rowsRevisao.length,
+                MODIFICADA_EM: base.DT_HR_INCL || base.MES_REF || mesRef,
+                MODIFICADO_POR: base.MODIFICADO_POR || 'Sistema'
+            }];
+        };
+
+        const carregarResumoEscalas = async (lojaId, mesRef) => {
+            try {
+                const data = await apiRequest('/api/escalas/resumo?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
+                return data.escalas || [];
+            } catch (error) {
+                const notFound = error.status === 404 || /nao encontrado|not found|recurso/i.test(error.message || '');
+                if (!notFound) throw error;
+
+                const data = await apiRequest('/api/escalas?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
+                return montarResumoEscalasFallback(data.escalas || [], lojaId, mesRef);
+            }
+        };
+
         const consultarEscalasBancoLocal = async () => {
             const lojaId = parseInt(escalasFiltroLoja?.value || lojaEscalaSelect.value, 10);
             const ano = parseInt(escalasFiltroAno?.value || anoSelect.value, 10);
@@ -3180,8 +3215,8 @@
             }
 
             const mesRef = formatDateForDb(ano, mes, 1);
-            const data = await apiRequest('/api/escalas/resumo?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
-            renderizarTabelaBanco(data.escalas || []);
+            const escalas = await carregarResumoEscalas(lojaId, mesRef);
+            renderizarTabelaBanco(escalas);
         };
 
         const renderizarDetalheEscalaBanco = (dias) => {
@@ -3502,8 +3537,7 @@
 
             let resumoExistente = [];
             try {
-                const data = await apiRequest('/api/escalas/resumo?lojaId=' + encodeURIComponent(loja) + '&mesRef=' + encodeURIComponent(mesRef));
-                resumoExistente = data.escalas || [];
+                resumoExistente = await carregarResumoEscalas(loja, mesRef);
             } catch (error) {
                 showInfoModal('Não foi possível validar escala existente: ' + error.message, 'error');
                 return;
