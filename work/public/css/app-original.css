@@ -511,6 +511,41 @@
         }
 
 
+        .section-choice-grid {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        }
+
+        .section-choice-card {
+            align-items: flex-start;
+            background: #f8fafc;
+            border: 1px solid var(--cor-borda);
+            border-radius: 8px;
+            cursor: pointer;
+            display: grid;
+            gap: 4px;
+            grid-template-columns: auto minmax(0, 1fr);
+            padding: 12px;
+        }
+
+        .section-choice-card input {
+            grid-row: span 3;
+            margin-top: 4px;
+        }
+
+        .section-choice-card strong,
+        .section-choice-card span,
+        .section-choice-card small {
+            min-width: 0;
+        }
+
+        .section-choice-card span,
+        .section-choice-card small {
+            color: var(--cor-texto-leve);
+            font-size: 0.85rem;
+        }
+
         .revision-history-modal {
             max-height: 60vh;
             overflow: auto;

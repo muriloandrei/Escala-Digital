@@ -26,12 +26,10 @@
             </div>
             <nav class="sidebar-nav">
                 <ul>
-                    <li><a href="#/home" id="nav-timeline" class="active"><span class="material-symbols-outlined">home</span><span class="nav-label">Home</span></a></li>
                     <li class="nav-group">
                         <button type="button" class="nav-parent" data-nav-group="escalas"><span class="material-symbols-outlined">event_note</span><span class="nav-label">Escalas</span><span class="material-symbols-outlined nav-chevron">expand_more</span></button>
                         <div class="nav-children">
-                            <a href="#/escalas-criadas" id="nav-escalas-criadas"><span class="nav-child-dot"></span><span class="nav-label">Escalas Criadas</span></a>
-                            <a href="#/escalas-geradas" id="nav-registros"><span class="nav-child-dot"></span><span class="nav-label">Escalas Geradas</span></a>
+                            <a href="#/escalas-geradas" id="nav-registros"><span class="nav-child-dot"></span><span class="nav-label">Escalas</span></a>
                             <a href="#/secoes" id="nav-secoes"><span class="nav-child-dot"></span><span class="nav-label">Seções</span></a>
                             <a href="#/turnos-secao" id="nav-turnos-secao"><span class="nav-child-dot"></span><span class="nav-label">Turnos por Seção</span></a>
                         </div>
@@ -207,6 +205,55 @@
                             <tr><td colspan="9" class="text-center text-gray-500 py-8">Consulte o banco para visualizar as escalas sincronizadas.</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <div id="escala-criacao-page" class="hidden">
+                <header class="main-header">
+                    <h1>Nova Escala</h1>
+                    <div class="header-actions">
+                        <button class="action-button secondary" id="voltarEscalasCriacaoBtn">
+                            <span class="material-symbols-outlined">arrow_back</span>
+                            Voltar
+                        </button>
+                    </div>
+                </header>
+
+                <div class="table-card form-card">
+                    <div class="table-card-header">
+                        <h2>Dados da escala</h2>
+                        <p class="table-card-subtitle">Selecione loja e mes. Se ja existir escala para o periodo, a criacao sera bloqueada.</p>
+                    </div>
+                    <div class="dashboard-form">
+                        <div><label for="criacaoEscalaLoja">Loja</label><select id="criacaoEscalaLoja" required></select></div>
+                        <div><label for="criacaoEscalaMes">Mes</label><select id="criacaoEscalaMes" required></select></div>
+                        <div><label for="criacaoEscalaAno">Ano</label><select id="criacaoEscalaAno" required></select></div>
+                        <div class="form-actions"><button type="button" class="action-button" id="iniciarCriacaoEscalaBtn"><span class="material-symbols-outlined">play_arrow</span>Iniciar criacao</button></div>
+                    </div>
+                    <p id="criacaoEscalaStatus" class="table-card-subtitle mt-4">Informe os dados para carregar as secoes e montar a timeline.</p>
+                </div>
+
+                <div class="table-card mt-6 hidden" id="criacaoSecoesCard">
+                    <div class="table-card-header">
+                        <h2>Secoes da escala</h2>
+                        <p class="table-card-subtitle">Selecione as secoes e turnos que devem entrar na geracao.</p>
+                    </div>
+                    <div id="criacaoSecoesLista" class="section-choice-grid"></div>
+                    <div class="form-actions mt-4"><button type="button" class="action-button" id="gerarTimelineCriacaoBtn"><span class="material-symbols-outlined">timeline</span>Gerar Timeline</button></div>
+                </div>
+
+                <div class="table-card mt-6 hidden" id="criacaoTimelineCard">
+                    <div class="table-card-header">
+                        <h2>Timeline da escala</h2>
+                        <p class="table-card-subtitle">A timeline e montada a partir dos turnos selecionados. Depois carregue os funcionarios e gere a escala detalhada.</p>
+                    </div>
+                    <div class="timeline-scroll-container overflow-x-auto pb-4">
+                        <div id="criacaoTimelineContent" style="min-width: 1200px; position: relative;"></div>
+                    </div>
+                    <div class="form-actions mt-4 flex gap-2 justify-end">
+                        <button type="button" class="action-button secondary" id="carregarFuncionariosCriacaoBtn"><span class="material-symbols-outlined">groups</span>Carregar Funcionarios</button>
+                        <button type="button" class="action-button" id="gerarDetalhadaCriacaoBtn"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala Detalhada</button>
+                    </div>
                 </div>
             </div>
 

@@ -2,6 +2,7 @@
         const timelinePage = document.getElementById('timeline-page');
         const registrosPage = document.getElementById('registros-page');
         const funcionariosPage = document.getElementById('funcionarios-page');
+        const escalaCriacaoPage = document.getElementById('escala-criacao-page');
         const secoesPage = document.getElementById('secoes-page');
         const secaoFormPage = document.getElementById('secao-form-page');
         const turnosSecaoPage = document.getElementById('turnos-secao-page');
@@ -23,6 +24,18 @@
         const salvarSettingsBtn = document.getElementById('salvarSettingsBtn');
         const navLinks = document.querySelectorAll('.sidebar-nav a');
         const goToTimelineBtn = document.getElementById('goToTimelineBtn');
+        const voltarEscalasCriacaoBtn = document.getElementById('voltarEscalasCriacaoBtn');
+        const criacaoEscalaLoja = document.getElementById('criacaoEscalaLoja');
+        const criacaoEscalaMes = document.getElementById('criacaoEscalaMes');
+        const criacaoEscalaAno = document.getElementById('criacaoEscalaAno');
+        const iniciarCriacaoEscalaBtn = document.getElementById('iniciarCriacaoEscalaBtn');
+        const criacaoEscalaStatus = document.getElementById('criacaoEscalaStatus');
+        const criacaoSecoesCard = document.getElementById('criacaoSecoesCard');
+        const criacaoSecoesLista = document.getElementById('criacaoSecoesLista');
+        const gerarTimelineCriacaoBtn = document.getElementById('gerarTimelineCriacaoBtn');
+        const criacaoTimelineCard = document.getElementById('criacaoTimelineCard');
+        const carregarFuncionariosCriacaoBtn = document.getElementById('carregarFuncionariosCriacaoBtn');
+        const gerarDetalhadaCriacaoBtn = document.getElementById('gerarDetalhadaCriacaoBtn');
         const consultarBancoBtn = document.getElementById('consultarBancoBtn');
         const sincronizarBancoBtn = document.getElementById('sincronizarBancoBtn');
         const tabelaBancoBody = document.getElementById('tabela-banco-body');
@@ -108,6 +121,7 @@
             timelinePage.classList.add('hidden');
             registrosPage.classList.add('hidden');
             funcionariosPage.classList.add('hidden');
+            escalaCriacaoPage?.classList.add('hidden');
             secoesPage.classList.add('hidden');
             secaoFormPage.classList.add('hidden');
             turnosSecaoPage.classList.add('hidden');
@@ -128,7 +142,7 @@
         function showTimelinePage() {
             hideAllPages();
             timelinePage.classList.remove('hidden');
-            navTimeline.classList.add('active');
+            navTimeline?.classList.add('active');
             expandActiveNavGroup(navTimeline);
             setCurrentPageTitle('home');
         }
@@ -157,6 +171,33 @@
             setCurrentPageTitle('escalasGeradas');
             setRegistrosMode('geradas');
             consultarEscalasBancoLocal().catch(() => {});
+        }
+
+        function copiarOptionsSelect(origem, destino, selectedValue = '') {
+            if (!origem || !destino) return;
+            destino.innerHTML = Array.from(origem.options || []).map(option => '<option value="' + escapeHtml(option.value) + '">' + escapeHtml(option.textContent) + '</option>').join('');
+            if (selectedValue !== '') destino.value = String(selectedValue);
+        }
+
+        function prepararPaginaCriacaoEscala(params = {}) {
+            copiarOptionsSelect(lojaEscalaSelect, criacaoEscalaLoja, params.loja || escalasFiltroLoja?.value || lojaEscalaSelect.value);
+            copiarOptionsSelect(mesSelect, criacaoEscalaMes, params.mes ?? escalasFiltroMes?.value ?? mesSelect.value);
+            copiarOptionsSelect(anoSelect, criacaoEscalaAno, params.ano || escalasFiltroAno?.value || anoSelect.value);
+            if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Informe os dados para carregar as secoes e montar a timeline.';
+            criacaoSecoesCard?.classList.add('hidden');
+            criacaoTimelineCard?.classList.add('hidden');
+            if (criacaoSecoesLista) criacaoSecoesLista.innerHTML = '';
+            const timeline = document.getElementById('criacaoTimelineContent');
+            if (timeline) timeline.innerHTML = '';
+        }
+
+        function showEscalaCriacaoPage(params = {}) {
+            hideAllPages();
+            escalaCriacaoPage?.classList.remove('hidden');
+            navRegistros.classList.add('active');
+            expandActiveNavGroup(navRegistros);
+            setCurrentPageTitle('escalasGeradas');
+            prepararPaginaCriacaoEscala(params);
         }
 
         function showFuncionariosPage() {
@@ -274,6 +315,16 @@
         }
 
         function navigateToPage(pageKey) {
+            if (pageKey.startsWith('escalas/nova/')) {
+                const [, , loja, mesRef] = pageKey.split('/');
+                const dataRef = mesRef ? new Date(mesRef + 'T00:00:00') : null;
+                showEscalaCriacaoPage({ loja, mes: dataRef ? String(dataRef.getMonth()) : '', ano: dataRef ? String(dataRef.getFullYear()) : '' });
+                return;
+            }
+            if (pageKey === 'escalas/nova') {
+                showEscalaCriacaoPage();
+                return;
+            }
             if (pageKey.startsWith('escala-banco-mensal/')) {
                 const [, lojaId, mesRef] = pageKey.split('/');
                 showEscalaDetalheMensalPage(lojaId, mesRef);
@@ -293,9 +344,9 @@
             }
 
             const routes = {
-                home: showTimelinePage,
+                home: showEscalasGeradasPage,
                 escalas: showEscalasGeradasPage,
-                'escalas-criadas': showEscalasCriadasPage,
+                'escalas-criadas': showEscalasGeradasPage,
                 'escalas-geradas': showEscalasGeradasPage,
                 funcionarios: showFuncionariosPage,
                 secoes: showSecoesPage,
@@ -340,8 +391,8 @@
             currentHashRoute = pageKey;
             navigateToPage(pageKey);
         }
-        navTimeline.addEventListener('click', () => { window.location.hash = '/home'; });
-        navEscalasCriadas.addEventListener('click', () => { window.location.hash = '/escalas-criadas'; });
+        navTimeline?.addEventListener('click', () => { window.location.hash = '/escalas-geradas'; });
+        navEscalasCriadas?.addEventListener('click', () => { window.location.hash = '/escalas-geradas'; });
         navRegistros.addEventListener('click', () => { window.location.hash = '/escalas-geradas'; });
         navFuncionarios.addEventListener('click', () => { window.location.hash = '/funcionarios'; });
         navSecoes.addEventListener('click', () => { window.location.hash = '/secoes'; });
@@ -355,17 +406,23 @@
             });
         });
         voltarEscalasBtn?.addEventListener('click', () => { window.location.hash = '/escalas'; });
+        voltarEscalasCriacaoBtn?.addEventListener('click', () => { window.location.hash = '/escalas-geradas'; });
         voltarTurnosSecaoBtn?.addEventListener('click', () => { window.location.hash = '/turnos-secao'; });
         window.addEventListener('hashchange', handleHashNavigation);
         salvarSettingsBtn.addEventListener('click', (e) => { e.preventDefault(); salvarConfiguracoes(); });
         goToTimelineBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             try {
-                await iniciarNovaEscalaRascunho();
+                window.location.hash = '/escalas/nova';
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
         });
+        iniciarCriacaoEscalaBtn?.addEventListener('click', async (e) => { e.preventDefault(); iniciarCriacaoEscalaPagina().catch(error => showInfoModal(error.message, 'error')); });
+        gerarTimelineCriacaoBtn?.addEventListener('click', async (e) => { e.preventDefault(); gerarTimelineCriacaoPagina().catch(error => showInfoModal(error.message, 'error')); });
+        carregarFuncionariosCriacaoBtn?.addEventListener('click', async (e) => { e.preventDefault(); await carregarFuncionariosDaLoja(true).catch(error => showInfoModal(error.message, 'error')); });
+        gerarDetalhadaCriacaoBtn?.addEventListener('click', (e) => { e.preventDefault(); abrirModalEscalaBtn.click(); });
+
         consultarBancoBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             try {
@@ -3116,7 +3173,7 @@
                 const finalizada = String(escala.STATUS || '').toUpperCase() === 'FINALIZADA';
                 const criarEscalaAction = finalizada
                     ? '<button class="action-btn-table view-timeline" disabled title="Escala finalizada"><span class="material-symbols-outlined">lock</span>Finalizada</button>'
-                    : '<button class="action-btn-table view-timeline banco-criar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Criar ou revisar escala"><span class="material-symbols-outlined">add</span>Criar Escala</button>';
+                    : '<button class="action-btn-table view-timeline banco-criar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Criar escala"><span class="material-symbols-outlined">add</span>Criar Escala</button>';
                 const row = [
                     '<tr>',
                     '<td data-label="Mês">' + formatarMesTabela(escala.MES_REF) + '</td>',
@@ -3500,6 +3557,78 @@
             const selecionados = new Set((values['turnos-rascunho'] || []).map(String));
             return turnosSecaoCache.filter(turno => selecionados.has(String(turno.ESCSECAOTURNO_ID || turno.ESCSECAO_ID)));
         };
+        const renderizarSecoesCriacao = () => {
+            if (!criacaoSecoesLista) return;
+            criacaoSecoesLista.innerHTML = '';
+            if (!turnosSecaoCache.length) {
+                criacaoSecoesLista.innerHTML = '<p class="table-card-subtitle">Nenhum turno por secao cadastrado para esta loja.</p>';
+                return;
+            }
+            turnosSecaoCache.forEach((turno) => {
+                const id = String(turno.ESCSECAOTURNO_ID || turno.ESCSECAO_ID || '');
+                const codigo = turno.COD_SECAO ? turno.COD_SECAO + ' - ' : '';
+                const periodo = (turno.HR_ENT1 || '') + ' - ' + (turno.HR_SAI1 || '') + ' / ' + (turno.HR_ENT2 || '') + ' - ' + (turno.HR_SAI2 || '');
+                const label = document.createElement('label');
+                label.className = 'section-choice-card';
+                label.innerHTML = '<input type="checkbox" value="' + escapeHtml(id) + '" checked><strong>' + escapeHtml(codigo + (turno.DESCR || 'Secao')) + '</strong><span>' + escapeHtml(periodo) + '</span><small>' + escapeHtml(turno.QTDE_COLABORADORES || 1) + ' colaborador(es)</small>';
+                criacaoSecoesLista.appendChild(label);
+            });
+        };
+
+        const iniciarCriacaoEscalaPagina = async () => {
+            const loja = criacaoEscalaLoja?.value;
+            const mes = Number(criacaoEscalaMes?.value);
+            const ano = Number(criacaoEscalaAno?.value);
+            if (!loja || Number.isNaN(mes) || Number.isNaN(ano)) {
+                if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Selecione loja, mes e ano para iniciar a criacao.';
+                return;
+            }
+            const mesRef = formatDateForDb(ano, mes, 1);
+            lojaEscalaSelect.value = loja;
+            funcionariosLojaSelect.value = loja;
+            if (homeLojaSelect) homeLojaSelect.value = loja;
+            if (escalasFiltroLoja) escalasFiltroLoja.value = loja;
+            mesSelect.value = String(mes);
+            anoSelect.value = String(ano);
+            if (escalasFiltroMes) escalasFiltroMes.value = String(mes);
+            if (escalasFiltroAno) escalasFiltroAno.value = String(ano);
+
+            const existentes = await carregarResumoEscalas(loja, mesRef);
+            if (existentes.length > 0) {
+                criacaoSecoesCard?.classList.add('hidden');
+                criacaoTimelineCard?.classList.add('hidden');
+                if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Ja existe uma escala para esta loja e mes. Abra a escala existente; nao sera criada outra escala.';
+                return;
+            }
+
+            dadosEscala = [];
+            escalaCarregadaId = null;
+            currentLoadedScale = null;
+            escalaRascunhoAtivo = true;
+            escalaRascunhoContexto = { loja, mesRef, criadoEm: new Date().toISOString() };
+            await carregarSecoesDaLoja(true);
+            await carregarTurnosSecaoDaLoja(true);
+            renderizarSecoesCriacao();
+            criacaoSecoesCard?.classList.remove('hidden');
+            criacaoTimelineCard?.classList.add('hidden');
+            if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Selecione as secoes e gere a timeline.';
+        };
+
+        const gerarTimelineCriacaoPagina = async () => {
+            const selecionados = new Set(Array.from(criacaoSecoesLista?.querySelectorAll('input[type="checkbox"]:checked') || []).map(input => input.value));
+            const turnosSelecionados = turnosSecaoCache.filter(turno => selecionados.has(String(turno.ESCSECAOTURNO_ID || turno.ESCSECAO_ID)));
+            if (!turnosSelecionados.length) {
+                if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Selecione ao menos uma secao para gerar a timeline.';
+                return;
+            }
+            dadosEscala = criarTimelineTurnosSelecionados(turnosSelecionados);
+            renderizarTimelineCompleta('criacaoTimelineContent', dadosEscala);
+            renderizarTimelineCompleta('timeline-content', dadosEscala);
+            atualizarContadoresHome();
+            criacaoTimelineCard?.classList.remove('hidden');
+            if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Timeline gerada. Carregue funcionarios e gere a escala detalhada para salvar.';
+        };
+
         const iniciarNovaEscalaRascunho = async (opcoes = {}) => {
             const lojaPadrao = opcoes.loja || escalasFiltroLoja?.value || lojaEscalaSelect.value;
             const dataPadrao = opcoes.mesRef ? new Date(opcoes.mesRef + 'T00:00:00') : null;
@@ -3718,7 +3847,7 @@
             }
 
             if (criarButton) {
-                await iniciarNovaEscalaRascunho({ loja, mesRef });
+                window.location.hash = '/escalas/nova/' + loja + '/' + mesRef;
                 return;
             }
 
