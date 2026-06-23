@@ -139,14 +139,6 @@
                             <span class="material-symbols-outlined">upload_file</span>
                             Importar Escala
                         </button>
-                        <button class="action-button secondary" id="consultarBancoBtn">
-                            <span class="material-symbols-outlined">database</span>
-                            Consultar Banco
-                        </button>
-                        <button class="action-button secondary" id="sincronizarBancoBtn">
-                            <span class="material-symbols-outlined">sync</span>
-                            Sincronizar Banco
-                        </button>
                         <input type="file" id="importarEscalaInput" class="hidden" accept=".json">
                         <button class="action-button" id="goToTimelineBtn">
                             <span class="material-symbols-outlined">add</span>
@@ -175,16 +167,20 @@
                 </div>
 
                 <div class="table-card mt-6">
-                    <div class="table-card-header">
-                        <div>
-                            <h2>Escalas no Banco</h2>
-                            <p id="bancoResumo" class="table-card-subtitle">Consulte o banco para visualizar as escalas sincronizadas.</p>
-                        </div>
-                        <div class="header-actions">
-                            <select id="escalasFiltroLoja" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                            <select id="escalasFiltroMes" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                            <select id="escalasFiltroAno" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                        </div>
+                    <div class="escala-filter-bar" aria-label="Filtros de escalas geradas">
+                        <label class="escala-search-field" for="escalasPesquisaInput">
+                            <span class="material-symbols-outlined">search</span>
+                            <input id="escalasPesquisaInput" type="search" placeholder="Buscar m&ecirc;s ou loja" autocomplete="off">
+                        </label>
+                        <select id="escalasFiltroLoja" class="escala-filter-select" aria-label="Filtrar por loja"></select>
+                        <select id="escalasFiltroMes" class="escala-filter-select" aria-label="Filtrar por m&ecirc;s"></select>
+                        <select id="escalasFiltroAno" class="escala-filter-select" aria-label="Filtrar por ano"></select>
+                        <select id="escalasFiltroStatus" class="escala-filter-select" aria-label="Filtrar por status">
+                            <option value="all">Todos os status</option>
+                            <option value="ATIVA">Ativa</option>
+                            <option value="MODIFICADA">Modificada</option>
+                            <option value="FINALIZADA">Finalizada</option>
+                        </select>
                     </div>
                     
                     <table class="data-table">
@@ -202,7 +198,7 @@
                             </tr>
                         </thead>
                         <tbody id="tabela-banco-body">
-                            <tr><td colspan="9" class="text-center text-gray-500 py-8">Consulte o banco para visualizar as escalas sincronizadas.</td></tr>
+                            <tr><td colspan="9" class="text-center text-gray-500 py-8">Carregando escalas do banco...</td></tr>
                         </tbody>
                     </table>
                 </div>

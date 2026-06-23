@@ -40,9 +40,11 @@
         const sincronizarBancoBtn = document.getElementById('sincronizarBancoBtn');
         const tabelaBancoBody = document.getElementById('tabela-banco-body');
         const bancoResumo = document.getElementById('bancoResumo');
+        const escalasPesquisaInput = document.getElementById('escalasPesquisaInput');
         const escalasFiltroLoja = document.getElementById('escalasFiltroLoja');
         const escalasFiltroMes = document.getElementById('escalasFiltroMes');
         const escalasFiltroAno = document.getElementById('escalasFiltroAno');
+        const escalasFiltroStatus = document.getElementById('escalasFiltroStatus');
         const funcionariosLojaSelect = document.getElementById('funcionariosLojaSelect');
         const carregarFuncionariosTelaBtn = document.getElementById('carregarFuncionariosTelaBtn');
         const funcionariosTitulo = document.getElementById('funcionariosTitulo');
@@ -423,7 +425,7 @@
         carregarFuncionariosCriacaoBtn?.addEventListener('click', async (e) => { e.preventDefault(); await carregarFuncionariosDaLoja(true).catch(error => showInfoModal(error.message, 'error')); });
         gerarDetalhadaCriacaoBtn?.addEventListener('click', (e) => { e.preventDefault(); abrirModalEscalaBtn.click(); });
 
-        consultarBancoBtn.addEventListener('click', async (e) => {
+        consultarBancoBtn?.addEventListener('click', async (e) => {
             e.preventDefault();
             try {
                 await consultarEscalasBancoLocal();
@@ -431,7 +433,7 @@
                 showInfoModal(error.message, 'error');
             }
         });
-        sincronizarBancoBtn.addEventListener('click', async (e) => {
+        sincronizarBancoBtn?.addEventListener('click', async (e) => {
             e.preventDefault();
             try {
                 await sincronizarEscalasSalvasComBanco();
@@ -1673,17 +1675,17 @@
         });
         addEscalaBtn.addEventListener('click', manipularEnvioFormulario);
         secaoTurnoSelect?.addEventListener('change', aplicarSecaoSelecionadaNoFormulario);
-        escalasFiltroLoja?.addEventListener('change', async () => {
+        const recarregarEscalasComFiltro = async () => {
             sincronizarFiltrosEscalasComGerador();
             await consultarEscalasBancoLocal().catch(error => showInfoModal(error.message, 'error'));
-        });
-        escalasFiltroMes?.addEventListener('change', async () => {
-            sincronizarFiltrosEscalasComGerador();
-            await consultarEscalasBancoLocal().catch(error => showInfoModal(error.message, 'error'));
-        });
-        escalasFiltroAno?.addEventListener('change', async () => {
-            sincronizarFiltrosEscalasComGerador();
-            await consultarEscalasBancoLocal().catch(error => showInfoModal(error.message, 'error'));
+        };
+        escalasFiltroLoja?.addEventListener('change', recarregarEscalasComFiltro);
+        escalasFiltroMes?.addEventListener('change', recarregarEscalasComFiltro);
+        escalasFiltroAno?.addEventListener('change', recarregarEscalasComFiltro);
+        escalasFiltroStatus?.addEventListener('change', recarregarEscalasComFiltro);
+        escalasPesquisaInput?.addEventListener('input', () => {
+            clearTimeout(escalasPesquisaInput._filterTimer);
+            escalasPesquisaInput._filterTimer = setTimeout(() => consultarEscalasBancoLocal().catch(error => showInfoModal(error.message, 'error')), 180);
         });
 
         cancelEditBtn.addEventListener('click', () => {
@@ -2083,6 +2085,13 @@
             carregarFuncionariosBtn.disabled = false;
             carregarFuncionariosTelaBtn.disabled = false;
 
+            if (escalasFiltroLoja) {
+                const todasOption = document.createElement('option');
+                todasOption.value = 'all';
+                todasOption.textContent = 'Todas as lojas';
+                escalasFiltroLoja.appendChild(todasOption);
+            }
+
             lojas.forEach(loja => {
                 const lojaCodigo = getLojaCodigo(loja);
                 const option = document.createElement('option');
@@ -2102,7 +2111,7 @@
             lojaEscalaSelect.value = lojaSelecionada;
             funcionariosLojaSelect.value = lojaSelecionada;
             if (homeLojaSelect) homeLojaSelect.value = lojaSelecionada;
-            if (escalasFiltroLoja) escalasFiltroLoja.value = lojaSelecionada;
+            if (escalasFiltroLoja) escalasFiltroLoja.value = lojasPermitidasCache.length > 1 ? 'all' : lojaSelecionada;
             if (secoesLojaSelect) secoesLojaSelect.value = lojaSelecionada;
             if (secaoFormLoja) secaoFormLoja.value = lojaSelecionada;
             if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = lojaSelecionada;
@@ -3138,56 +3147,105 @@
 
         const popularFiltrosEscalas = () => {
             if (!escalasFiltroMes || !escalasFiltroAno) return;
-            const mesAtual = String(mesSelect.value || new Date().getMonth());
-            const anoAtual = String(anoSelect.value || new Date().getFullYear());
-            escalasFiltroMes.innerHTML = Array.from(mesSelect.options || []).map(option => '<option value="' + escapeHtml(option.value) + '">' + escapeHtml(option.textContent) + '</option>').join('');
-            escalasFiltroMes.value = mesAtual;
-            escalasFiltroAno.innerHTML = Array.from(anoSelect.options || []).map(option => '<option value="' + escapeHtml(option.value) + '">' + escapeHtml(option.textContent) + '</option>').join('');
-            escalasFiltroAno.value = anoAtual;
+            const mesAtual = escalasFiltroMes.value || 'all';
+            const anoAtual = escalasFiltroAno.value || String(anoSelect.value || new Date().getFullYear());
+            const mesOptions = ['<option value="all">Todos os meses</option>'].concat(
+                Array.from(mesSelect.options || []).map(option => '<option value="' + escapeHtml(option.value) + '">' + escapeHtml(option.textContent) + '</option>')
+            );
+            escalasFiltroMes.innerHTML = mesOptions.join('');
+            escalasFiltroMes.value = Array.from(escalasFiltroMes.options).some(option => option.value === mesAtual) ? mesAtual : 'all';
+
+            const anoOptions = ['<option value="all">Todos os anos</option>'].concat(
+                Array.from(anoSelect.options || []).map(option => '<option value="' + escapeHtml(option.value) + '">' + escapeHtml(option.textContent) + '</option>')
+            );
+            escalasFiltroAno.innerHTML = anoOptions.join('');
+            escalasFiltroAno.value = Array.from(escalasFiltroAno.options).some(option => option.value === anoAtual) ? anoAtual : 'all';
+        };
+
+        const getEscalasFiltroLojasSelecionadas = () => {
+            const filtro = escalasFiltroLoja?.value || 'all';
+            if (filtro !== 'all') return [Number(filtro)].filter(Boolean);
+            return lojasPermitidasCache.length ? [...lojasPermitidasCache] : Array.from(lojaEscalaSelect.options || []).map(option => Number(option.value)).filter(Boolean);
+        };
+
+        const normalizarTextoFiltro = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+        const getNomeMesTabela = (value) => {
+            const iso = String(value || '').slice(0, 10);
+            const partes = iso.split('-');
+            if (partes.length < 2) return '';
+            const data = new Date(Number(partes[0]), Number(partes[1]) - 1, 1);
+            return data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        };
+
+        const aplicarFiltrosEscalasBanco = (escalas) => {
+            const termo = normalizarTextoFiltro(escalasPesquisaInput?.value);
+            const statusFiltro = String(escalasFiltroStatus?.value || 'all').toUpperCase();
+            const anoFiltro = String(escalasFiltroAno?.value || 'all');
+            const mesFiltro = String(escalasFiltroMes?.value || 'all');
+            return (escalas || []).filter((escala) => {
+                const mesRef = String(escala.MES_REF || '').slice(0, 10);
+                const [ano, mesNumero] = mesRef.split('-');
+                const status = String(escala.STATUS || '').toUpperCase();
+                if (statusFiltro !== 'ALL' && status !== statusFiltro) return false;
+                if (anoFiltro !== 'all' && ano !== anoFiltro) return false;
+                if (mesFiltro !== 'all' && String(Number(mesNumero) - 1) !== mesFiltro) return false;
+                if (!termo) return true;
+                const busca = normalizarTextoFiltro([
+                    escala.LOJA ? 'Loja ' + escala.LOJA : '',
+                    escala.LOJA,
+                    formatarMesTabela(escala.MES_REF),
+                    getNomeMesTabela(escala.MES_REF),
+                    status
+                ].join(' '));
+                return busca.includes(termo);
+            });
         };
 
         const sincronizarFiltrosEscalasComGerador = () => {
-            if (escalasFiltroLoja?.value) lojaEscalaSelect.value = escalasFiltroLoja.value;
-            if (escalasFiltroMes?.value) mesSelect.value = escalasFiltroMes.value;
-            if (escalasFiltroAno?.value) anoSelect.value = escalasFiltroAno.value;
+            if (escalasFiltroLoja?.value && escalasFiltroLoja.value !== 'all') lojaEscalaSelect.value = escalasFiltroLoja.value;
+            if (escalasFiltroMes?.value && escalasFiltroMes.value !== 'all') mesSelect.value = escalasFiltroMes.value;
+            if (escalasFiltroAno?.value && escalasFiltroAno.value !== 'all') anoSelect.value = escalasFiltroAno.value;
+        };
+
+        const getStatusClassEscala = (status) => {
+            const normalized = String(status || '').toUpperCase();
+            if (normalized === 'FINALIZADA') return 'status-finalizada';
+            if (normalized === 'MODIFICADA') return 'status-modificada';
+            if (normalized === 'ATIVA') return 'status-ativa';
+            return 'status-neutro';
         };
 
         const renderizarTabelaBanco = (escalas) => {
             tabelaBancoBody.innerHTML = '';
 
             if (!escalas || escalas.length === 0) {
-                if (bancoResumo) bancoResumo.textContent = 'Nenhuma escala estruturada encontrada para a loja e mês selecionados.';
-                tabelaBancoBody.innerHTML = '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhuma escala estruturada encontrada para a loja e mês selecionados.</td></tr>';
+                tabelaBancoBody.innerHTML = '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhuma escala encontrada para os filtros selecionados.</td></tr>';
                 return;
-            }
-
-            if (bancoResumo) {
-                const lojas = new Set(escalas.map(escala => escala.LOJA).filter(Boolean));
-                const secoes = escalas.reduce((total, escala) => total + Number(escala.SECOES || 0), 0);
-                bancoResumo.textContent = escalas.length + ' escala(s) mensal(is), ' + lojas.size + ' loja(s), ' + secoes + ' seção(ões) cadastrada(s).';
             }
 
             escalas.forEach(escala => {
                 const mesRef = String(escala.MES_REF || '').slice(0, 10);
                 const loja = escala.LOJA || '';
-                const finalizada = String(escala.STATUS || '').toUpperCase() === 'FINALIZADA';
+                const status = String(escala.STATUS || '-').toUpperCase();
+                const finalizada = status === 'FINALIZADA';
                 const criarEscalaAction = finalizada
-                    ? '<button class="action-btn-table view-timeline" disabled title="Escala finalizada"><span class="material-symbols-outlined">lock</span>Finalizada</button>'
-                    : '<button class="action-btn-table view-timeline banco-criar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Criar escala"><span class="material-symbols-outlined">add</span>Criar Escala</button>';
+                    ? '<button class="action-btn-table banco-action" disabled title="Escala finalizada"><span class="material-symbols-outlined">lock</span>Finalizada</button>'
+                    : '<button class="action-btn-table banco-action banco-criar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Criar escala"><span class="material-symbols-outlined">add</span>Criar Escala</button>';
                 const row = [
                     '<tr>',
-                    '<td data-label="Mês">' + formatarMesTabela(escala.MES_REF) + '</td>',
-                    '<td data-label="Loja">' + escapeHtml(loja) + '</td>',
-                    '<td data-label="Status">' + escapeHtml(escala.STATUS || '-') + '</td>',
-                    '<td data-label="Revisão">' + escapeHtml(escala.REVISAO || '') + '</td>',
-                    '<td data-label="Seções">' + escapeHtml(escala.SECOES || 0) + '</td>',
-                    '<td data-label="Funcionários">' + escapeHtml(escala.FUNCIONARIOS || 0) + '</td>',
+                    '<td data-label="Mes">' + formatarMesTabela(escala.MES_REF) + '</td>',
+                    '<td data-label="Loja">Loja ' + escapeHtml(loja) + '</td>',
+                    '<td data-label="Status"><span class="escala-status-chip ' + getStatusClassEscala(status) + '">' + escapeHtml(status || '-') + '</span></td>',
+                    '<td data-label="Revisao">' + escapeHtml(escala.REVISAO || '') + '</td>',
+                    '<td data-label="Secoes">' + escapeHtml(escala.SECOES || 0) + '</td>',
+                    '<td data-label="Funcionarios">' + escapeHtml(escala.FUNCIONARIOS || 0) + '</td>',
                     '<td data-label="Modificada em">' + formatarDataTabela(escala.MODIFICADA_EM) + '</td>',
                     '<td data-label="Modificada por">' + escapeHtml(escala.MODIFICADO_POR || 'Sistema') + '</td>',
-                    '<td data-label="Ações" class="actions-cell">',
-                    '<button class="action-btn-table load banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
+                    '<td data-label="Acoes" class="actions-cell">',
+                    '<button class="action-btn-table banco-action banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
                     criarEscalaAction,
-                    '<button class="action-btn-table view-skeleton banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver historico de revisoes"><span class="material-symbols-outlined">history</span>Historico</button>',
+                    '<button class="action-btn-table banco-action banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver historico de revisoes"><span class="material-symbols-outlined">history</span>Historico</button>',
                     '</td>',
                     '</tr>'
                 ].join('');
@@ -3249,31 +3307,43 @@
         };
 
         const carregarResumoEscalas = async (lojaId, mesRef) => {
+            const params = new URLSearchParams({ lojaId: String(lojaId) });
+            if (mesRef) params.set('mesRef', mesRef);
             try {
-                const data = await apiRequest('/api/escalas/resumo?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
+                const data = await apiRequest('/api/escalas/resumo?' + params.toString());
                 return data.escalas || [];
             } catch (error) {
                 const notFound = error.status === 404 || /nao encontrado|not found|recurso/i.test(error.message || '');
-                if (!notFound) throw error;
+                if (!notFound || !mesRef) throw error;
 
-                const data = await apiRequest('/api/escalas?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
+                const fallbackParams = new URLSearchParams({ lojaId: String(lojaId), mesRef });
+                const data = await apiRequest('/api/escalas?' + fallbackParams.toString());
                 return montarResumoEscalasFallback(data.escalas || [], lojaId, mesRef);
             }
         };
 
         const consultarEscalasBancoLocal = async () => {
-            const lojaId = parseInt(escalasFiltroLoja?.value || lojaEscalaSelect.value, 10);
-            const ano = parseInt(escalasFiltroAno?.value || anoSelect.value, 10);
-            const mes = parseInt(escalasFiltroMes?.value || mesSelect.value, 10);
-
-            if (!lojaId || Number.isNaN(ano) || Number.isNaN(mes)) {
-                showInfoModal('Selecione loja, mês e ano antes de consultar o banco.', 'info');
+            const lojasSelecionadas = getEscalasFiltroLojasSelecionadas();
+            if (!lojasSelecionadas.length) {
+                tabelaBancoBody.innerHTML = '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhuma loja permitida para consulta.</td></tr>';
                 return;
             }
 
-            const mesRef = formatDateForDb(ano, mes, 1);
-            const escalas = await carregarResumoEscalas(lojaId, mesRef);
-            renderizarTabelaBanco(escalas);
+            tabelaBancoBody.innerHTML = '<tr><td colspan="9" class="text-center text-gray-500 py-8">Carregando escalas do banco...</td></tr>';
+            const ano = String(escalasFiltroAno?.value || 'all');
+            const mes = String(escalasFiltroMes?.value || 'all');
+            const mesRef = ano !== 'all' && mes !== 'all' ? formatDateForDb(Number(ano), Number(mes), 1) : null;
+            const resultados = [];
+            for (const lojaId of lojasSelecionadas) {
+                const escalas = await carregarResumoEscalas(lojaId, mesRef);
+                resultados.push(...escalas);
+            }
+            const dedup = new Map();
+            resultados.forEach((escala) => {
+                const key = [escala.LOJA, String(escala.MES_REF || '').slice(0, 10)].join('|');
+                dedup.set(key, escala);
+            });
+            renderizarTabelaBanco(aplicarFiltrosEscalasBanco(Array.from(dedup.values())));
         };
 
         const renderizarDetalheEscalaBanco = (dias) => {
