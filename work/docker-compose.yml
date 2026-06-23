@@ -1,0 +1,49 @@
+services:
+  oracle-db:
+    image: gvenzl/oracle-free:23-slim
+    container_name: escala-oracle
+    environment:
+      ORACLE_PASSWORD: oracle
+      APP_USER: ESCALA
+      APP_USER_PASSWORD: escala
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./docker/oracle/init:/container-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+
+  app:
+    build:
+      context: .
+    container_name: escala-app
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      JWT_SECRET: dev-docker-secret-change-me
+      JWT_EXPIRES_IN: 8h
+      COOKIE_SECURE: "false"
+      TRUST_PROXY: "false"
+      ORACLE_USER: ESCALA
+      ORACLE_PASSWORD: escala
+      ORACLE_CONNECT_STRING: oracle-db:1521/FREEPDB1
+      ORACLE_POOL_MIN: 1
+      ORACLE_POOL_MAX: 4
+      ORACLE_POOL_INCREMENT: 1
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./views:/app/views
+    command: ["node", "--watch", "src/server.js"]
+    ports:
+      - "3000:3000"
+
+volumes:
+  oracle-data:

@@ -92,3 +92,15 @@ Para validar a integracao real com Oracle, use o login da aplicacao e o diagnost
 ## Observacao sobre credenciais
 
 A senha usada em qualquer print, chat ou documento deve ser tratada como exposta. Troque a senha do schema antes de conectar esta aplicacao ao banco real.
+
+## Docker local
+
+Para testar com Oracle local em Docker:
+
+~~~powershell
+cd "C:\Users\Murilo\Documents\Escala de Trabalho\work"
+docker compose up --build
+~~~
+
+Acesse http://localhost:3000/login.html com admin / admin123.
+Mais detalhes em docs/docker-local.md.
