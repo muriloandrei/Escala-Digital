@@ -1,4 +1,4 @@
-alter session set current_schema = ESCALA;
+connect ESCALA/escala@FREEPDB1
 
 create table SGN_ESC_LOJA (
   ESCLOJA_ID number(15) not null,
@@ -163,4 +163,3 @@ create sequence SGN_ESC_AUDITORIA_SEQ start with 1 increment by 1 nocache;
 create index SGN_ESC_FUNC_1_IDX on SGN_ESC_FUNCIONARIO (LOJA);
 create index SGN_ESC_AUSENCIA_1_IDX on SGN_ESC_AUSENCIA (CHAPA, DT_INIC);
 create index SGN_ESC_PROG_1_IDX on SGN_ESC_PROG (LOJA, MES_REF, REVISAO);
-create index SGN_ESC_PROG_DIA_1_IDX on SGN_ESC_PROG_DIA (ESCPROG_ID, DT);
