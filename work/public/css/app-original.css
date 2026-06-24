@@ -39,7 +39,7 @@
 
         /* --- Barra Lateral (Sidebar) --- */
         .sidebar {
-            width: 216px;
+            width: 248px;
             background-color: var(--cor-branco);
             border-right: 1px solid var(--cor-borda);
             display: flex;
@@ -55,18 +55,20 @@
         }
 
         .sidebar-logo {
-            display: flex;
             align-items: center;
-            height: 46px;
+            display: flex;
+            height: 58px;
+            justify-content: center;
             margin-bottom: 24px;
             padding: 0 4px;
+            width: 100%;
         }
 
         .sidebar-logo img {
             display: block;
             height: auto;
-            max-height: 42px;
-            max-width: 178px;
+            max-height: 54px;
+            max-width: 214px;
             object-fit: contain;
             object-position: left center;
             width: 100%;
@@ -168,7 +170,7 @@
             flex-grow: 1;
             padding: 24px 32px;
             overflow-y: auto;
-            margin-left: 216px;
+            margin-left: 248px;
         }
 
         .app-topbar {
@@ -254,6 +256,10 @@
         .session-summary span:not(.material-symbols-outlined) {
             color: var(--cor-texto-leve);
             font-size: 0.82rem;
+        }
+
+        .session-summary span.user-avatar {
+            color: #ffffff;
         }
 
         .logout-button {
