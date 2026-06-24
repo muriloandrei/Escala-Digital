@@ -113,6 +113,8 @@ function getMesStatus(mesRef, revisao = 1) {
   const hoje = new Date();
   const fimMes = new Date(ref.getFullYear(), ref.getMonth() + 1, 0, 23, 59, 59, 999);
   if (hoje > fimMes) return 'FINALIZADA';
+  const inicioMesAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  if (ref > inicioMesAtual) return 'AGENDADA';
   return Number(revisao) > 1 ? 'MODIFICADA' : 'ATIVA';
 }
 
@@ -146,6 +148,7 @@ async function listEscalas({ lojaId, mesRef }) {
           p.oficializada,
           case
             when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
             when p.revisao > 1 then 'MODIFICADA'
             else 'ATIVA'
           end as status,
@@ -204,6 +207,7 @@ async function listEscalasResumo({ lojaId, mesRef }) {
           ${auditJoin.selectSql}
           case
             when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
             when max(p.revisao) > 1 then 'MODIFICADA'
             else 'ATIVA'
           end as status
@@ -234,6 +238,7 @@ async function listEscalaRevisoes({ lojaId, mesRef }) {
           ${auditJoin.selectSql}
           case
             when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
             when p.revisao > 1 then 'MODIFICADA'
             else 'ATIVA'
           end as status
@@ -279,6 +284,7 @@ async function getEscalaMensal({ lojaId, mesRef }) {
           d.programacao,
           case
             when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
             when p.revisao > 1 then 'MODIFICADA'
             else 'ATIVA'
           end as status
@@ -636,6 +642,71 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
   });
 }
 
+async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias, oficializada = 0 }) {
+  return withConnection(async (connection) => {
+    try {
+      if (isMesFinalizado(mesRef)) {
+        const error = new Error('Escala finalizada nao pode ser editada.');
+        error.statusCode = 422;
+        throw error;
+      }
+
+      const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
+      if (!latestRevision) {
+        const error = new Error('Escala mensal nao encontrada.');
+        error.statusCode = 404;
+        throw error;
+      }
+      const nextRevision = latestRevision + 1;
+      const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
+      const headers = await connection.execute(
+        `select escprog_id, mes_ref, escfunc_id, escsecao_id, escfuncao_id, loja, chapa, oficializada
+         from sgn_esc_prog
+         where loja = :lojaId
+           and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+           and revisao = :latestRevision
+         order by escprog_id`,
+        { lojaId, mesRef, latestRevision },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+
+      for (const row of headers.rows) {
+        if (Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')) === escfuncId) continue;
+        const inserted = await insertEscalaOracle(connection, {
+          lojaId,
+          mesRef,
+          funcionario: {
+            escfuncId: pick(row, 'ESCFUNC_ID', 'escfunc_id'),
+            escsecaoId: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
+            escfuncaoId: pick(row, 'ESCFUNCAO_ID', 'escfuncao_id'),
+            chapa: pick(row, 'CHAPA', 'chapa')
+          },
+          dias: [],
+          oficializada: pick(row, 'OFICIALIZADA', 'oficializada'),
+          revisao: nextRevision
+        });
+        await connection.execute(
+          `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao)
+           select sgn_esc_prog_dia_seq.nextval, :newEscprogId, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+           from sgn_esc_prog_dia
+           where escprog_id = :oldEscprogId`,
+          { newEscprogId: inserted.escprogId, oldEscprogId: pick(row, 'ESCPROG_ID', 'escprog_id') },
+          { autoCommit: false }
+        );
+      }
+
+      const saved = await insertEscalaOracle(connection, {
+        lojaId, mesRef, funcionario, dias, oficializada, revisao: nextRevision
+      });
+      await connection.commit();
+      return saved;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    }
+  });
+}
+
 async function validateAusencias({ funcionarios }) {
   return withConnection(async (connection) => {
     const errors = [];
@@ -667,6 +738,7 @@ async function validateAusencias({ funcionarios }) {
 }
 
 module.exports = {
+  getMesStatus,
   listEscalas,
   listEscalasResumo,
   listEscalaRevisoes,
@@ -676,5 +748,6 @@ module.exports = {
   updateEscalaDia,
   saveEscala,
   saveEscalasBatch,
+  saveEscalaFuncionarioRevision,
   validateAusencias
 };

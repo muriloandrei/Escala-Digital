@@ -30,6 +30,7 @@
                         <button type="button" class="nav-parent" data-nav-group="escalas"><span class="material-symbols-outlined">event_note</span><span class="nav-label">Escalas</span><span class="material-symbols-outlined nav-chevron">expand_more</span></button>
                         <div class="nav-children">
                             <a href="#/escalas-geradas" id="nav-registros"><span class="nav-child-dot"></span><span class="nav-label">Escalas</span></a>
+                            <a href="#/escalas-funcionarios" id="nav-escalas-funcionarios"><span class="nav-child-dot"></span><span class="nav-label">Escalas por Funcionário</span></a>
                             <a href="#/secoes" id="nav-secoes"><span class="nav-child-dot"></span><span class="nav-label">Seções</span></a>
                             <a href="#/turnos-secao" id="nav-turnos-secao"><span class="nav-child-dot"></span><span class="nav-label">Turnos por Seção</span></a>
                         </div>
@@ -178,6 +179,7 @@
                         <select id="escalasFiltroStatus" class="escala-filter-select" aria-label="Filtrar por status">
                             <option value="all">Todos os status</option>
                             <option value="ATIVA">Ativa</option>
+                            <option value="AGENDADA">Agendada</option>
                             <option value="MODIFICADA">Modificada</option>
                             <option value="FINALIZADA">Finalizada</option>
                         </select>
@@ -186,6 +188,7 @@
                     <table class="data-table">
                         <thead>
                             <tr>
+                                <th>Data Inicial</th>
                                 <th>M&ecirc;s</th>
                                 <th>Loja</th>
                                 <th>Status</th>
@@ -198,7 +201,7 @@
                             </tr>
                         </thead>
                         <tbody id="tabela-banco-body">
-                            <tr><td colspan="9" class="text-center text-gray-500 py-8">Carregando escalas do banco...</td></tr>
+                            <tr><td colspan="10" class="text-center text-gray-500 py-8">Carregando escalas do banco...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -262,40 +265,16 @@
             </div>
 
             <div id="funcionarios-page" class="hidden">
-                <header class="main-header">
-                    <h1>Funcion&aacute;rios</h1>
-                    <div class="header-actions">
-                        <select id="funcionariosLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                        <button class="action-button secondary" id="carregarFuncionariosTelaBtn">
-                            <span class="material-symbols-outlined">refresh</span>
-                            Carregar
-                        </button>
-                    </div>
-                </header>
-
+                <header class="main-header"><h1>Funcionários</h1></header>
                 <div class="table-card">
-                    <div class="table-card-header">
-                        <h2 id="funcionariosTitulo">Funcionários cadastrados</h2>
+                    <div class="catalog-filter-bar">
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="funcionariosPesquisaInput" type="search" placeholder="Pesquisar nome, seção, função ou chapa"></label>
+                        <select id="funcionariosLojaSelect" class="escala-filter-select" aria-label="Filtrar funcionários por loja"></select>
+                        <select id="funcionariosSecaoFiltro" class="escala-filter-select"><option value="all">Todas as seções</option></select>
+                        <select id="funcionariosFuncaoFiltro" class="escala-filter-select"><option value="all">Todas as funções</option></select>
                     </div>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Chapa</th>
-                                <th>Nome</th>
-                                <th>Loja</th>
-                                <th>Seção</th>
-                                <th>Função</th>
-                                <th>Brigadista</th>
-                                <th>Entrada 1</th>
-                                <th>Saída 1</th>
-                                <th>Entrada 2</th>
-                                <th>Saída 2</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-funcionarios-body">
-                            <tr><td colspan="10" class="text-center text-gray-500 py-8">Selecione uma loja e carregue os funcionários.</td></tr>
-                        </tbody>
-                    </table>
+                    <div class="table-card-header"><h2 id="funcionariosTitulo">Funcionários cadastrados</h2></div>
+                    <table class="data-table"><thead><tr><th>Chapa</th><th>Nome</th><th>Loja</th><th>Seção</th><th>Função</th><th>Brigadista</th><th>Entrada 1</th><th>Saída 1</th><th>Entrada 2</th><th>Saída 2</th><th>Ações</th></tr></thead><tbody id="tabela-funcionarios-body"><tr><td colspan="11" class="text-center text-gray-500 py-8">Carregando funcionários...</td></tr></tbody></table>
                 </div>
             </div>
 
@@ -332,40 +311,11 @@
             </div>
 
             <div id="secoes-page" class="hidden">
-                <header class="main-header">
-                    <h1>Seções</h1>
-                    <div class="header-actions">
-                        <select id="secoesLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                        <button class="action-button" id="novaSecaoBtn">
-                            <span class="material-symbols-outlined">add</span>
-                            Criar Nova Seção
-                        </button>
-                        <button class="action-button secondary" id="carregarSecoesBtn">
-                            <span class="material-symbols-outlined">refresh</span>
-                            Carregar
-                        </button>
-                    </div>
-                </header>
-
+                <header class="main-header"><h1>Seções</h1><button class="action-button" id="novaSecaoBtn"><span class="material-symbols-outlined">add</span>Criar Nova Seção</button></header>
                 <div class="table-card">
-                    <div class="table-card-header">
-                        <h2 id="secoesTitulo">Seções cadastradas</h2>
-                        <p class="table-card-subtitle">Cadastro das seções disponíveis por loja.</p>
-                    </div>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Código</th>
-                                <th>Descrição</th>
-                                <th>Codfilial</th>
-                                <th>Codcoligada</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-secoes-body">
-                            <tr><td colspan="5" class="text-center text-gray-500 py-8">Selecione uma loja e carregue as seções.</td></tr>
-                        </tbody>
-                    </table>
+                    <div class="catalog-filter-bar two-filters"><label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="secoesPesquisaInput" type="search" placeholder="Pesquisar descrição ou código"></label><select id="secoesLojaSelect" class="escala-filter-select" aria-label="Filtrar seções por loja"></select></div>
+                    <div class="table-card-header"><h2 id="secoesTitulo">Seções cadastradas</h2><p class="table-card-subtitle">Cadastro das seções disponíveis por loja.</p></div>
+                    <table class="data-table"><thead><tr><th>Código</th><th>Descrição</th><th>Loja</th><th>Codcoligada</th><th>Ações</th></tr></thead><tbody id="tabela-secoes-body"><tr><td colspan="5" class="text-center text-gray-500 py-8">Carregando seções...</td></tr></tbody></table>
                 </div>
             </div>
 
@@ -388,43 +338,14 @@
                 </div>
             </div>
             <div id="turnos-secao-page" class="hidden">
-                <header class="main-header">
-                    <h1>Turnos por Seção</h1>
-                    <div class="header-actions">
-                        <select id="turnosSecaoLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                        <button type="button" class="action-button" id="novoTurnoSecaoBtn">
-                            <span class="material-symbols-outlined">add</span>
-                            Novo Turno
-                        </button>
-                        <button class="action-button secondary" id="carregarTurnosSecaoBtn">
-                            <span class="material-symbols-outlined">refresh</span>
-                            Carregar
-                        </button>
-                    </div>
-                </header>
+                <header class="main-header"><h1>Turnos por Seção</h1><button type="button" class="action-button" id="novoTurnoSecaoBtn"><span class="material-symbols-outlined">add</span>Novo Turno</button></header>
                 <div class="table-card">
-                    <div class="table-card-header">
-                        <h2 id="turnosSecaoTitulo">Turnos cadastrados</h2>
-                        <p class="table-card-subtitle">Cadastro dos horários da tabela SGN_ESC_SECAO_TURNO.</p>
-                    </div>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Seção</th>
-                                <th>Colaboradores</th>
-                                <th>Entrada 1</th>
-                                <th>Saída 1</th>
-                                <th>Entrada 2</th>
-                                <th>Saída 2</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-turnos-secao-body">
-                            <tr><td colspan="7" class="text-center text-gray-500 py-8">Selecione uma loja e carregue os turnos.</td></tr>
-                        </tbody>
-                    </table>
+                    <div class="catalog-filter-bar three-filters"><label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="turnosPesquisaInput" type="search" placeholder="Pesquisar seção ou código"></label><select id="turnosSecaoLojaSelect" class="escala-filter-select" aria-label="Filtrar turnos por loja"></select><select id="turnosSecaoFiltro" class="escala-filter-select"><option value="all">Todas as seções</option></select></div>
+                    <div class="table-card-header"><h2 id="turnosSecaoTitulo">Turnos cadastrados</h2><p class="table-card-subtitle">Cadastre os horários de cada turno em suas devidas seções.</p></div>
+                    <table class="data-table"><thead><tr><th>Seção</th><th>Colaboradores</th><th>Entrada 1</th><th>Saída 1</th><th>Entrada 2</th><th>Saída 2</th><th>Ações</th></tr></thead><tbody id="tabela-turnos-secao-body"><tr><td colspan="7" class="text-center text-gray-500 py-8">Carregando turnos...</td></tr></tbody></table>
                 </div>
             </div>
+
             <div id="turno-secao-form-page" class="hidden">
                 <header class="main-header">
                     <h1 id="turnoSecaoFormTitulo">Novo Turno</h1>
@@ -507,6 +428,28 @@
                 </div>
                 <table class="hidden"><tbody id="tabela-escala-detalhe-body"></tbody></table>
             </div>
+            <div id="escalas-funcionarios-page" class="hidden">
+                <header class="main-header"><h1>Escalas por Funcionário</h1></header>
+                <div class="table-card">
+                    <div class="catalog-filter-bar employee-scale-filters">
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="escalaFuncionarioPesquisa" type="search" placeholder="Pesquisar nome ou chapa"></label>
+                        <select id="escalaFuncionarioLoja" class="escala-filter-select"></select>
+                        <select id="escalaFuncionarioMes" class="escala-filter-select"></select>
+                        <select id="escalaFuncionarioAno" class="escala-filter-select"></select>
+                    </div>
+                    <div class="table-card-header"><h2>Funcionários com escala</h2><p id="escalaFuncionarioListaResumo" class="table-card-subtitle">Selecione loja e período.</p></div>
+                    <table class="data-table"><thead><tr><th>Chapa</th><th>Nome</th><th>Loja</th><th>Seção</th><th>Função</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tabelaEscalaFuncionariosBody"><tr><td colspan="7" class="text-center text-gray-500 py-8">Carregando escalas...</td></tr></tbody></table>
+                </div>
+            </div>
+
+            <div id="escala-funcionario-edicao-page" class="hidden">
+                <header class="main-header"><div><h1 id="escalaFuncionarioEdicaoTitulo">Escala do Funcionário</h1><p id="escalaFuncionarioEdicaoResumo" class="table-card-subtitle"></p></div><button class="action-button secondary" id="voltarEscalaFuncionariosBtn"><span class="material-symbols-outlined">arrow_back</span>Voltar</button></header>
+                <div class="table-card">
+                    <div class="table-card-header creation-card-header"><div><h2>Escala detalhada</h2><p class="table-card-subtitle">Edite os horários ou folgas e salve para criar uma nova revisão mensal.</p></div><div class="header-actions"><button class="action-button secondary" id="distribuirFolgasFuncionarioBtn"><span class="material-symbols-outlined">event_available</span>Distribuir Folgas 5×2</button><button class="action-button secondary" id="validarEscalaFuncionarioBtn"><span class="material-symbols-outlined">fact_check</span>Validar Escala</button><button class="action-button secondary" id="imprimirEscalaFuncionarioBtn"><span class="material-symbols-outlined">print</span>Imprimir Escala</button><button class="action-button" id="salvarEscalaFuncionarioBtn"><span class="material-symbols-outlined">save</span>Salvar</button></div></div>
+                    <div id="escalaFuncionarioDetalhadaContent" class="bank-detailed-scale"></div>
+                </div>
+            </div>
+
             <div id="roles-page" class="hidden">
                 <header class="main-header"><h1>Roles / Permissão</h1></header>
                 <div class="table-card">

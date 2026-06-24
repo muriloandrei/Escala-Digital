@@ -115,6 +115,40 @@ router.get('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) =>
   }
 });
 
+router.post('/funcionario/revisao', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = saveSchema.parse(req.body);
+    if (payload.funcionarios.length !== 1) {
+      return res.status(400).json({ error: 'Informe exatamente um funcionario para a revisao individual.' });
+    }
+    const ruleErrors = validateEscalaPayload(payload);
+    if (ruleErrors.length > 0) return res.status(422).json({ errors: ruleErrors });
+    const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
+    if (ausenciaErrors.length > 0) return res.status(422).json({ errors: ausenciaErrors });
+
+    const saved = await escalaService.saveEscalaFuncionarioRevision({
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      funcionario: payload.funcionarios[0],
+      dias: payload.funcionarios[0].dias,
+      oficializada: payload.oficializada || 0
+    });
+    await auditService.registerAudit({
+      action: 'EDITAR_ESCALA_FUNCIONARIO',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      revisao: saved.revisao,
+      referenceId: saved.escprogId,
+      details: { escfuncId: payload.funcionarios[0].escfuncId, chapa: payload.funcionarios[0].chapa }
+    });
+    return res.status(201).json({ saved: [saved] });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Formato da escala invalido.', details: error.errors });
+    return next(error);
+  }
+});
+
 router.get('/:escprogId/dias', async (req, res, next) => {
   try {
     const header = await escalaService.getEscalaHeader(Number(req.params.escprogId));

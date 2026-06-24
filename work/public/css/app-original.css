@@ -1219,3 +1219,36 @@
             cursor: not-allowed;
             opacity: 0.55;
         }
+
+
+        /* Catalog filter bars */
+        .catalog-filter-bar {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(170px, 220px));
+            margin-bottom: 22px;
+        }
+        .catalog-filter-bar.two-filters { grid-template-columns: minmax(260px, 1fr) minmax(180px, 240px); }
+        .catalog-filter-bar.three-filters { grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(180px, 240px)); }
+        .employee-scale-filters { grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(150px, 210px)); }
+        .status-agendada { background: #dbeafe; color: #1d4ed8; }
+        .action-btn-table.banco-action { white-space: nowrap; }
+        #funcionarios-page .table-card,
+        #secoes-page .table-card,
+        #turnos-secao-page .table-card,
+        #escalas-funcionarios-page .table-card { overflow-x: auto; }
+        #funcionarios-page .data-table { min-width: 1380px; }
+        #funcionarios-page .data-table th:last-child,
+        #funcionarios-page .data-table td:last-child { min-width: 110px; }
+        @media (max-width: 980px) {
+            .catalog-filter-bar,
+            .catalog-filter-bar.two-filters,
+            .catalog-filter-bar.three-filters,
+            .employee-scale-filters { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 620px) {
+            .catalog-filter-bar,
+            .catalog-filter-bar.two-filters,
+            .catalog-filter-bar.three-filters,
+            .employee-scale-filters { grid-template-columns: 1fr; }
+        }
