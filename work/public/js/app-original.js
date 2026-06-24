@@ -84,6 +84,13 @@
         const escalaDetalheTitulo = document.getElementById('escalaDetalheTitulo');
         const escalaDetalheResumo = document.getElementById('escalaDetalheResumo');
         const tabelaEscalaDetalheBody = document.getElementById('tabela-escala-detalhe-body');
+        const escalaSecaoTabs = document.getElementById('escalaSecaoTabs');
+        const escalaBancoTimelineContent = document.getElementById('escalaBancoTimelineContent');
+        const escalaBancoDetalhadaContent = document.getElementById('escalaBancoDetalhadaContent');
+        const escalaSecaoTimelineTitulo = document.getElementById('escalaSecaoTimelineTitulo');
+        const escalaSecaoDetalheTitulo = document.getElementById('escalaSecaoDetalheTitulo');
+        const imprimirTimelineBancoBtn = document.getElementById('imprimirTimelineBancoBtn');
+        const imprimirDetalheBancoBtn = document.getElementById('imprimirDetalheBancoBtn');
         const carregarAcessosBtn = document.getElementById('carregarAcessosBtn');
         const tabelaAcessosBody = document.getElementById('tabela-acessos-body');
         let novoUsuarioBtn = null;
@@ -498,6 +505,8 @@
         const anoSelect = document.getElementById('anoSelect');
         const tabelaEsqueletoContainer = document.getElementById('tabela-esqueleto-container');
         const gerarEscalaDetalhadaBtn = document.getElementById('gerarEscalaDetalhadaBtn');
+        const editarDistribuicaoBtn = document.getElementById('editarDistribuicaoBtn');
+        const autoDistribuirFolgasBtn = document.getElementById('autoDistribuirFolgasBtn');
         const imprimirEsqueletoBtn = document.getElementById('imprimirEsqueletoBtn');
         const detalhadaModal = document.getElementById('detalhadaModal');
         const detalhadaModalBody = document.getElementById('detalhada-modal-body');
@@ -550,12 +559,13 @@
         let escalaCarregadaId = null;
         let escalaCarregadaParaVisualizacao = null;
         let detailedScaleHasBeenGenerated = false;
+        let distribuicaoFolgasBloqueada = false;
         let currentLoadedScale = null;
         let funcionariosLojaCache = [];
         let ausenciasLojaCache = [];
         let secoesLojaCache = [];
         let turnosSecaoCache = [];
-        let escalaDetalheAtual = { escprogId: null, lojaId: null, mesRef: null, modo: 'individual', dias: [] };
+        let escalaDetalheAtual = { escprogId: null, lojaId: null, mesRef: null, modo: 'individual', dias: [], secaoAtiva: null, secoes: [] };
         let lojasPermitidasCache = [];
         let usuarioSessaoCache = null;
         let usuariosAcessoCache = [];
@@ -1033,8 +1043,34 @@
             gerarTabelaEsqueleto();
         });
 
+        const definirBloqueioDistribuicao = (bloqueada) => {
+            distribuicaoFolgasBloqueada = !!bloqueada;
+            const table = document.getElementById('tabela-esqueleto');
+            table?.classList.toggle('is-readonly', distribuicaoFolgasBloqueada);
+            table?.querySelectorAll('.collaborator-select').forEach(select => { select.disabled = distribuicaoFolgasBloqueada; });
+            criacaoSecoesLista?.querySelectorAll('input[type="checkbox"]').forEach(input => { input.disabled = distribuicaoFolgasBloqueada; });
+            document.querySelectorAll('#criacaoTimelineContent .delete-btn').forEach(button => { button.disabled = distribuicaoFolgasBloqueada; });
+            if (gerarTimelineCriacaoBtn) gerarTimelineCriacaoBtn.disabled = distribuicaoFolgasBloqueada;
+            if (autoDistribuirFolgasBtn) autoDistribuirFolgasBtn.disabled = distribuicaoFolgasBloqueada;
+            gerarEscalaDetalhadaBtn?.classList.toggle('hidden', !distribuicaoFolgasBloqueada);
+            editarDistribuicaoBtn?.classList.toggle('hidden', !distribuicaoFolgasBloqueada);
+            esqueletoModal?.classList.toggle('distribution-locked', distribuicaoFolgasBloqueada);
+        };
+
+        const liberarEdicaoDistribuicao = () => {
+            definirBloqueioDistribuicao(false);
+            detailedScaleHasBeenGenerated = false;
+            detalhadaModalBody.innerHTML = '';
+            detalhadaModal.classList.add('hidden');
+            gerarEscalaDetalhadaBtn.textContent = 'Gerar Escala Detalhada';
+            showInfoModal('Edição liberada. Distribua novamente as folgas 5x2 antes de gerar a escala detalhada.', 'info');
+        };
+
+        editarDistribuicaoBtn?.addEventListener('click', liberarEdicaoDistribuicao);
+
         const resetSkeletonModalState = () => {
             escalaCarregadaParaVisualizacao = null;
+            definirBloqueioDistribuicao(false);
             detailedScaleHasBeenGenerated = false;
             gerarEscalaDetalhadaBtn.textContent = 'Gerar Escala Detalhada';
             const skeletonTable = document.getElementById('tabela-esqueleto');
@@ -3388,150 +3424,233 @@
             renderizarTabelaBanco(aplicarFiltrosEscalasBanco(Array.from(dedup.values())));
         };
 
-        const renderizarDetalheEscalaBanco = (dias) => {
-            const table = tabelaEscalaDetalheBody.closest('table');
-            const thead = table?.querySelector('thead');
-            tabelaEscalaDetalheBody.innerHTML = '';
-            const somenteLeitura = escalaDetalheAtual.status === 'FINALIZADA';
-            const lista = dias || [];
-            const mesBase = detalheMesSelect?.value || String(lista[0]?.DT || '').slice(0, 7);
-            const [anoTexto, mesTexto] = String(mesBase || '').split('-');
-            const ano = Number(anoTexto);
-            const mesIndex = Number(mesTexto) - 1;
-            const diasNoMes = ano && mesTexto ? new Date(ano, mesIndex + 1, 0).getDate() : 31;
+        const getFuncionarioDetalheKey = (dia) => String(dia.ESCFUNC_ID || dia.CHAPA || dia.NOME || '');
+        const getSecaoDetalheKey = (dia) => String(dia.ESCSECAO_ID || dia.COD_SECAO || dia.SECAO_DESCR || 'SEM_SECAO');
+        const getSecaoDetalheNome = (dia) => {
+            const codigo = dia.COD_SECAO ? dia.COD_SECAO + ' - ' : '';
+            return codigo + (dia.SECAO_DESCR || 'Sem seção');
+        };
 
-            if (thead) {
-                const diasHeader = Array.from({ length: diasNoMes }, (_, index) => '<th class="day-column">' + (index + 1) + '</th>').join('');
-                thead.innerHTML = '<tr><th>Funcionario</th><th>Secao</th><th>Funcao</th>' + diasHeader + '<th>Folgas</th></tr>';
-            }
-
-            if (!lista.length) {
-                tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="' + (diasNoMes + 4) + '" class="text-center text-gray-500 py-8">Nenhum dia encontrado para os filtros selecionados.</td></tr>';
-                return;
-            }
-
+        const agruparDiasPorFuncionario = (dias) => {
             const grupos = new Map();
-            lista.forEach((dia) => {
+            (dias || []).forEach((dia) => {
                 const key = getFuncionarioDetalheKey(dia);
                 if (!grupos.has(key)) {
                     grupos.set(key, {
+                        key,
                         nome: dia.NOME || dia.CHAPA || key,
-                        secao: dia.SECAO_DESCR || dia.COD_SECAO || '',
+                        chapa: dia.CHAPA || '',
                         funcao: dia.FUNCAO_DESCR || '',
-                        dias: new Map(),
-                        folgas: 0
+                        escfuncId: dia.ESCFUNC_ID || '',
+                        dias: new Map()
                     });
                 }
-                const grupo = grupos.get(key);
-                const dataDia = String(dia.DT || '').slice(0, 10);
-                const numeroDia = Number(dataDia.slice(8, 10));
-                grupo.dias.set(numeroDia, dia);
-                if (String(dia.PROGRAMACAO || '').toUpperCase() === 'F') grupo.folgas += 1;
+                const numeroDia = Number(String(dia.DT || '').slice(8, 10));
+                if (numeroDia) grupos.get(key).dias.set(numeroDia, dia);
             });
+            return [...grupos.values()].sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+        };
 
-            [...grupos.values()].sort((a, b) => String(a.nome).localeCompare(String(b.nome))).forEach((grupo) => {
-                const cells = [];
-                for (let dia = 1; dia <= diasNoMes; dia += 1) {
-                    const registro = grupo.dias.get(dia);
-                    if (!registro) {
-                        cells.push('<td class="scale-day-cell empty">-</td>');
-                        continue;
+        const criarTimelineSecaoBanco = (dias) => {
+            const turnos = new Map();
+            agruparDiasPorFuncionario(dias).forEach((funcionario) => {
+                const frequencias = new Map();
+                funcionario.dias.forEach((dia) => {
+                    if (String(dia.PROGRAMACAO || '').toUpperCase() === 'F') return;
+                    const turno = [dia.HR_ENT1 || '', dia.HR_SAI1 || '', dia.HR_ENT2 || '', dia.HR_SAI2 || ''];
+                    if (!turno[0] || !turno[3]) return;
+                    const signature = turno.join('|');
+                    frequencias.set(signature, (frequencias.get(signature) || 0) + 1);
+                });
+                const principal = [...frequencias.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+                if (!principal) return;
+                if (!turnos.has(principal)) turnos.set(principal, 0);
+                turnos.set(principal, turnos.get(principal) + 1);
+            });
+            const exemplo = dias[0] || {};
+            return [...turnos.entries()].map(([signature, quantidade]) => {
+                const [inicio, inicioIntervalo, fimIntervalo, fim] = signature.split('|');
+                return {
+                    secaoId: getSecaoDetalheKey(exemplo),
+                    secaoNome: getSecaoDetalheNome(exemplo),
+                    quantidade: String(quantidade),
+                    inicio,
+                    inicioIntervalo,
+                    fimIntervalo,
+                    fim
+                };
+            });
+        };
+
+        const renderizarTabsSecoesEscala = () => {
+            if (!escalaSecaoTabs) return;
+            escalaSecaoTabs.innerHTML = escalaDetalheAtual.secoes.map((secao) => {
+                const ativa = String(secao.key) === String(escalaDetalheAtual.secaoAtiva);
+                return '<button type="button" class="section-tab' + (ativa ? ' active' : '') + '" role="tab" aria-selected="' + ativa + '" data-secao-key="' + escapeHtml(secao.key) + '">' + escapeHtml(secao.nome) + '<span>' + secao.funcionarios + '</span></button>';
+            }).join('');
+        };
+
+        const renderizarDetalhadaSecaoBanco = (dias) => {
+            if (!escalaBancoDetalhadaContent) return;
+            const dataRef = escalaDetalheAtual.mesRef ? new Date(escalaDetalheAtual.mesRef + 'T00:00:00') : null;
+            const ano = dataRef?.getFullYear() || new Date().getFullYear();
+            const mes = dataRef?.getMonth() || 0;
+            const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+            const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+            const somenteLeitura = escalaDetalheAtual.status === 'FINALIZADA';
+            const fields = [
+                { key: 'HR_ENT1', label: 'ENT.' },
+                { key: 'HR_SAI1', label: 'SAÍ.INT.' },
+                { key: 'INTERVALO', label: 'INTER.' },
+                { key: 'HR_ENT2', label: 'RET.INT.' },
+                { key: 'HR_SAI2', label: 'SAÍ.' },
+                { key: 'TRABALHADAS', label: 'H.TRAB', bold: true }
+            ];
+            const html = agruparDiasPorFuncionario(dias).map((funcionario) => {
+                let table = '<article class="bank-employee-scale"><header><div><h3>' + escapeHtml(funcionario.nome) + '</h3><p>' + escapeHtml(funcionario.chapa) + (funcionario.funcao ? ' | ' + escapeHtml(funcionario.funcao) : '') + '</p></div></header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
+                for (let dia = 1; dia <= diasNoMes; dia += 1) table += '<th>' + diasSemana[new Date(ano, mes, dia).getDay()] + '</th>';
+                table += '</tr><tr><th>DIA</th>';
+                for (let dia = 1; dia <= diasNoMes; dia += 1) table += '<th>' + dia + '</th>';
+                table += '</tr></thead><tbody>';
+                fields.forEach((field) => {
+                    table += '<tr' + (field.bold ? ' class="font-bold"' : '') + '><th>' + field.label + '</th>';
+                    for (let numeroDia = 1; numeroDia <= diasNoMes; numeroDia += 1) {
+                        const registro = funcionario.dias.get(numeroDia);
+                        if (!registro) { table += '<td class="empty">-</td>'; continue; }
+                        const folga = String(registro.PROGRAMACAO || '').toUpperCase() === 'F';
+                        let value = 'F';
+                        if (!folga) {
+                            if (field.key === 'INTERVALO') value = minutesToTime(Math.max(0, timeToMinutes(registro.HR_ENT2) - timeToMinutes(registro.HR_SAI1)));
+                            else if (field.key === 'TRABALHADAS') value = minutesToTime(Math.max(0, (timeToMinutes(registro.HR_SAI2) - timeToMinutes(registro.HR_ENT1)) - (timeToMinutes(registro.HR_ENT2) - timeToMinutes(registro.HR_SAI1))));
+                            else value = registro[field.key] || '--';
+                        }
+                        const domingo = new Date(ano, mes, numeroDia).getDay() === 0;
+                        const cellClass = folga ? (domingo ? 'day-off sunday' : 'day-off') : (domingo ? 'sunday' : '');
+                        const editable = !somenteLeitura && !field.bold && field.key !== 'INTERVALO';
+                        table += '<td class="' + cellClass + '">' + (editable ? '<button type="button" class="bank-day-edit" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" title="Editar dia ' + numeroDia + '">' + escapeHtml(value) + '</button>' : escapeHtml(value)) + '</td>';
                     }
-
-                    const programacao = String(registro.PROGRAMACAO || 'TRB').toUpperCase();
-                    const folga = programacao === 'F';
-                    const label = folga ? 'F' : (registro.HR_ENT1 || '--') + '-' + (registro.HR_SAI2 || registro.HR_SAI1 || '--');
-                    const button = '<button class="scale-day-button edit-dia-banco ' + (folga ? 'day-off' : '') + '" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || escalaDetalheAtual.escprogId || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" data-dia-index="' + escapeHtml(dia) + '" title="Editar dia ' + escapeHtml(dia) + '"' + (somenteLeitura ? ' disabled' : '') + '>' + escapeHtml(label) + '</button>';
-                    cells.push('<td class="scale-day-cell">' + button + '</td>');
-                }
-
-                const row = [
-                    '<tr>',
-                    '<td data-label="Funcionario" class="sticky-detail-col">' + escapeHtml(grupo.nome) + '</td>',
-                    '<td data-label="Secao">' + escapeHtml(grupo.secao) + '</td>',
-                    '<td data-label="Funcao">' + escapeHtml(grupo.funcao) + '</td>',
-                    cells.join(''),
-                    '<td data-label="Folgas">' + grupo.folgas + '</td>',
-                    '</tr>'
-                ].join('');
-                tabelaEscalaDetalheBody.innerHTML += row;
-            });
-        };
-        const getFuncionarioDetalheKey = (dia) => String(dia.ESCFUNC_ID || dia.CHAPA || dia.NOME || '');
-
-        const getDiasDetalheFiltrados = () => {
-            const mes = detalheMesSelect?.value || '';
-            const funcionario = detalheFuncionarioSelect?.value || '';
-            return (escalaDetalheAtual.dias || []).filter((dia) => {
-                const mesDia = String(dia.DT || '').slice(0, 7);
-                const funcionarioDia = getFuncionarioDetalheKey(dia);
-                return (!mes || mesDia === mes) && (!funcionario || funcionarioDia === funcionario);
-            });
+                    table += '</tr>';
+                });
+                return table + '</tbody></table></div></article>';
+            }).join('');
+            escalaBancoDetalhadaContent.innerHTML = html || '<p class="text-center text-gray-500 py-8">Nenhum colaborador encontrado nesta seção.</p>';
         };
 
-        const popularFiltroFuncionarioDetalhe = (dias) => {
-            if (!detalheFuncionarioSelect) return;
-            const atual = detalheFuncionarioSelect.value;
+        const renderizarSecaoAtivaEscala = () => {
+            const secao = escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva));
+            const dias = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
+            const nome = secao?.nome || 'Seção';
+            if (escalaSecaoTimelineTitulo) escalaSecaoTimelineTitulo.textContent = 'Timeline - ' + nome;
+            if (escalaSecaoDetalheTitulo) escalaSecaoDetalheTitulo.textContent = 'Escala detalhada - ' + nome;
+            renderizarTabsSecoesEscala();
+            renderizarTimelineCompleta('escalaBancoTimelineContent', criarTimelineSecaoBanco(dias));
+            renderizarDetalhadaSecaoBanco(dias);
+        };
+
+        const prepararSecoesDetalheEscala = () => {
             const map = new Map();
-            (dias || []).forEach((dia) => {
-                const key = getFuncionarioDetalheKey(dia);
-                if (!key || map.has(key)) return;
-                map.set(key, dia.NOME || dia.CHAPA || key);
+            (escalaDetalheAtual.dias || []).forEach((dia) => {
+                const key = getSecaoDetalheKey(dia);
+                if (!map.has(key)) map.set(key, { key, nome: getSecaoDetalheNome(dia), funcionarios: new Set() });
+                map.get(key).funcionarios.add(getFuncionarioDetalheKey(dia));
             });
-            detalheFuncionarioSelect.innerHTML = '<option value="">Todos os funcionarios</option>';
-            [...map.entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]))).forEach(([key, nome]) => {
-                const option = document.createElement('option');
-                option.value = key;
-                option.textContent = nome;
-                detalheFuncionarioSelect.appendChild(option);
-            });
-            if ([...map.keys()].includes(atual)) detalheFuncionarioSelect.value = atual;
-        };
-
-        const popularFiltroMesDetalhe = (dias) => {
-            if (!detalheMesSelect) return;
-            const meses = [...new Set((dias || []).map(dia => String(dia.DT || '').slice(0, 7)).filter(Boolean))];
-            detalheMesSelect.innerHTML = '';
-            meses.forEach((mes) => {
-                const option = document.createElement('option');
-                option.value = mes;
-                option.textContent = mes;
-                detalheMesSelect.appendChild(option);
-            });
+            escalaDetalheAtual.secoes = [...map.values()].map(item => ({ ...item, funcionarios: item.funcionarios.size })).sort((a, b) => a.nome.localeCompare(b.nome));
+            if (!escalaDetalheAtual.secoes.some(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva))) escalaDetalheAtual.secaoAtiva = escalaDetalheAtual.secoes[0]?.key || null;
+            renderizarSecaoAtivaEscala();
         };
 
         const carregarDetalheEscalaBanco = async (escprogId) => {
-            escalaDetalheAtual = { escprogId, lojaId: null, mesRef: null, modo: 'individual', status: null, dias: [] };
-            escalaDetalheTitulo.textContent = `Escala ${escprogId}`;
+            escalaDetalheAtual = { escprogId, lojaId: null, mesRef: null, modo: 'individual', status: null, dias: [], secoes: [], secaoAtiva: null };
+            escalaDetalheTitulo.textContent = 'Escala ' + escprogId;
             escalaDetalheResumo.textContent = 'Carregando dias da escala...';
-            tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
-            const data = await apiRequest(`/api/escalas/${encodeURIComponent(escprogId)}/dias`);
+            const data = await apiRequest('/api/escalas/' + encodeURIComponent(escprogId) + '/dias');
             escalaDetalheAtual.dias = data.dias || [];
-            popularFiltroMesDetalhe(escalaDetalheAtual.dias);
-            popularFiltroFuncionarioDetalhe(escalaDetalheAtual.dias);
-            escalaDetalheResumo.textContent = `${escalaDetalheAtual.dias.length} dia(s) encontrado(s).`;
-            renderizarDetalheEscalaBanco(getDiasDetalheFiltrados());
+            escalaDetalheAtual.mesRef = String(escalaDetalheAtual.dias[0]?.DT || '').slice(0, 7) + '-01';
+            escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s) encontrado(s).';
+            prepararSecoesDetalheEscala();
         };
 
         const carregarDetalheEscalaMensal = async (lojaId, mesRef) => {
-            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', status: null, dias: [] };
+            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', status: null, dias: [], secoes: [], secaoAtiva: null };
             escalaDetalheTitulo.textContent = 'Escala Loja ' + lojaId + ' - ' + formatarMesTabela(mesRef);
             escalaDetalheResumo.textContent = 'Carregando escala mensal...';
-            tabelaEscalaDetalheBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
             const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
             const escala = data.escala || {};
             escalaDetalheAtual.dias = escala.dias || [];
             escalaDetalheAtual.status = escala.status || null;
-            popularFiltroMesDetalhe(escalaDetalheAtual.dias);
-            popularFiltroFuncionarioDetalhe(escalaDetalheAtual.dias);
-            escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s), revisao ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
-            renderizarDetalheEscalaBanco(getDiasDetalheFiltrados());
+            escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s), revisão ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
+            prepararSecoesDetalheEscala();
         };
-        detalheMesSelect?.addEventListener('change', () => {
-            renderizarDetalheEscalaBanco(getDiasDetalheFiltrados());
+
+        escalaSecaoTabs?.addEventListener('click', (event) => {
+            const tab = event.target.closest('.section-tab');
+            if (!tab) return;
+            escalaDetalheAtual.secaoAtiva = tab.dataset.secaoKey;
+            renderizarSecaoAtivaEscala();
         });
-        detalheFuncionarioSelect?.addEventListener('change', () => {
-            renderizarDetalheEscalaBanco(getDiasDetalheFiltrados());
+
+        imprimirTimelineBancoBtn?.addEventListener('click', () => {
+            const dias = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
+            imprimirTimelineMelhorado(criarTimelineSecaoBanco(dias), escalaSecaoTimelineTitulo?.textContent || 'Timeline da seção');
+        });
+
+        imprimirDetalheBancoBtn?.addEventListener('click', () => {
+            if (!escalaBancoDetalhadaContent) return;
+            printContainer.innerHTML = '<div class="print-title">' + escapeHtml(escalaSecaoDetalheTitulo?.textContent || 'Escala detalhada') + '</div>' + escalaBancoDetalhadaContent.innerHTML;
+            window.print();
+        });
+
+        const editarDiaEscalaPorId = async (escprogId, escprogdiaId) => {
+            if (escalaDetalheAtual.status === 'FINALIZADA') {
+                showInfoModal('Escala finalizada não pode ser editada.', 'info');
+                return;
+            }
+            const dia = (escalaDetalheAtual.dias || []).find(item => String(item.ESCPROGDIA_ID || '') === String(escprogdiaId));
+            if (!escprogId || !escprogdiaId || !dia) return;
+            const values = await showInputModal({
+                title: 'Editar dia ' + formatarDataTabela(dia.DT),
+                inputs: [
+                    { label: 'Programação', type: 'select', id: 'PROGRAMACAO_TAB', value: dia.PROGRAMACAO || 'TRB', options: [
+                        { value: 'TRB', label: 'Trabalho' },
+                        { value: 'F', label: 'Folga' }
+                    ], required: true },
+                    { label: 'Entrada 1', type: 'time', id: 'HR_ENT1_TAB', value: dia.HR_ENT1 === 'F' ? '' : dia.HR_ENT1 || '' },
+                    { label: 'Saída 1', type: 'time', id: 'HR_SAI1_TAB', value: dia.HR_SAI1 === 'F' ? '' : dia.HR_SAI1 || '' },
+                    { label: 'Entrada 2', type: 'time', id: 'HR_ENT2_TAB', value: dia.HR_ENT2 === 'F' ? '' : dia.HR_ENT2 || '' },
+                    { label: 'Saída 2', type: 'time', id: 'HR_SAI2_TAB', value: dia.HR_SAI2 === 'F' ? '' : dia.HR_SAI2 || '' }
+                ],
+                confirmText: 'Salvar dia'
+            });
+            if (!values) return;
+            try {
+                const programacao = String(values.PROGRAMACAO_TAB || 'TRB').trim().toUpperCase();
+                const folga = programacao === 'F';
+                await apiRequest('/api/escalas/' + encodeURIComponent(escprogId) + '/dias/' + encodeURIComponent(escprogdiaId), {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        PROGRAMACAO: programacao,
+                        HR_ENT1: folga ? 'F' : values.HR_ENT1_TAB || dia.HR_ENT1 || '00:00',
+                        HR_SAI1: folga ? 'F' : values.HR_SAI1_TAB || dia.HR_SAI1 || '00:00',
+                        HR_ENT2: folga ? 'F' : values.HR_ENT2_TAB || dia.HR_ENT2 || '00:00',
+                        HR_SAI2: folga ? 'F' : values.HR_SAI2_TAB || dia.HR_SAI2 || '00:00'
+                    })
+                });
+                const secaoAtiva = escalaDetalheAtual.secaoAtiva;
+                showInfoModal('Dia atualizado no banco.', 'success');
+                await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
+                if (escalaDetalheAtual.secoes.some(item => String(item.key) === String(secaoAtiva))) {
+                    escalaDetalheAtual.secaoAtiva = secaoAtiva;
+                    renderizarSecaoAtivaEscala();
+                }
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        };
+
+        escalaBancoDetalhadaContent?.addEventListener('click', (event) => {
+            const button = event.target.closest('.bank-day-edit');
+            if (!button) return;
+            editarDiaEscalaPorId(button.dataset.escprogId, button.dataset.escprogdiaId);
         });
 
         tabelaEscalaDetalheBody?.addEventListener('click', async (event) => {
@@ -4015,7 +4134,7 @@
 
         document.getElementById('criacaoTimelineContent')?.addEventListener('click', async (event) => {
             const deleteButton = event.target.closest('.delete-btn');
-            if (!deleteButton) return;
+            if (!deleteButton || distribuicaoFolgasBloqueada) return;
             event.preventDefault();
             const index = Number(deleteButton.dataset.index);
             const turnoRemovido = dadosEscala[index];
@@ -4454,6 +4573,7 @@ const distribuirFolgas5x2Auto = async () => {
     detalhadaModalBody.innerHTML = '';
     detalhadaModal.classList.add('hidden');
     gerarEscalaDetalhadaBtn.textContent = 'Gerar Escala Detalhada';
+    definirBloqueioDistribuicao(true);
     if (ausenciasAplicadas.length > 0) {
         showInfoModal([
             "Distribuição concluída. Ausências cadastradas foram aplicadas como folga obrigatória.",
@@ -4465,4 +4585,4 @@ const distribuirFolgas5x2Auto = async () => {
 };
 
 // Adicionar o Event Listener para o novo botão (coloque dentro do window.onload ou junto aos outros botões)
-document.getElementById('autoDistribuirFolgasBtn').addEventListener('click', distribuirFolgas5x2Auto);
+autoDistribuirFolgasBtn.addEventListener('click', distribuirFolgas5x2Auto);

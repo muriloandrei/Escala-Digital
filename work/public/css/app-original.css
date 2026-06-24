@@ -1060,3 +1060,162 @@
                 flex-direction: column;
             }
         }
+
+
+        /* Section tabs for stored scales */
+        .section-tabs {
+            border-bottom: 1px solid var(--cor-borda);
+            display: flex;
+            gap: 4px;
+            overflow-x: auto;
+            padding: 0 4px;
+        }
+
+        .section-tab {
+            align-items: center;
+            background: transparent;
+            border: 0;
+            border-bottom: 3px solid transparent;
+            color: var(--cor-texto-leve);
+            cursor: pointer;
+            display: inline-flex;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            gap: 8px;
+            min-height: 44px;
+            padding: 8px 14px;
+            white-space: nowrap;
+        }
+
+        .section-tab span {
+            align-items: center;
+            background: #e2e8f0;
+            border-radius: 999px;
+            display: inline-flex;
+            font-size: 0.74rem;
+            height: 22px;
+            justify-content: center;
+            min-width: 22px;
+            padding: 0 6px;
+        }
+
+        .section-tab.active {
+            border-bottom-color: var(--cor-principal);
+            color: var(--cor-principal);
+        }
+
+        .section-tab.active span {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .bank-detailed-scale {
+            display: grid;
+            gap: 18px;
+        }
+
+        .bank-employee-scale {
+            border: 1px solid var(--cor-borda);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .bank-employee-scale > header {
+            background: #f8fafc;
+            border-bottom: 1px solid var(--cor-borda);
+            padding: 12px 14px;
+        }
+
+        .bank-employee-scale h3 {
+            color: var(--cor-texto);
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .bank-employee-scale header p {
+            color: var(--cor-texto-leve);
+            font-size: 0.8rem;
+        }
+
+        .bank-scale-scroll {
+            overflow-x: auto;
+        }
+
+        .bank-employee-scale table {
+            border-collapse: collapse;
+            min-width: 1180px;
+            width: 100%;
+        }
+
+        .bank-employee-scale th,
+        .bank-employee-scale td {
+            border: 1px solid #e2e8f0;
+            font-size: 0.72rem;
+            min-width: 44px;
+            padding: 5px 4px;
+            text-align: center;
+        }
+
+        .bank-employee-scale th:first-child {
+            background: #f8fafc;
+            left: 0;
+            min-width: 76px;
+            position: sticky;
+            z-index: 2;
+        }
+
+        .bank-employee-scale td.sunday {
+            background: #fef9c3;
+        }
+
+        .bank-employee-scale td.day-off {
+            background: #fee2e2;
+            color: #b91c1c;
+            font-weight: 700;
+        }
+
+        .bank-employee-scale td.day-off.sunday {
+            background: #ea580c;
+            color: white;
+        }
+
+        .bank-day-edit {
+            background: transparent;
+            border: 0;
+            color: inherit;
+            cursor: pointer;
+            font: inherit;
+            height: 100%;
+            padding: 2px;
+            width: 100%;
+        }
+
+        .bank-day-edit:hover {
+            background: rgba(37, 99, 235, 0.1);
+            outline: 1px solid #2563eb;
+        }
+
+
+        /* Distribution lock state */
+        .distribution-locked #tabela-esqueleto {
+            background: #f8fafc;
+        }
+
+        .distribution-locked #tabela-esqueleto .escala-cell,
+        .distribution-locked #tabela-esqueleto .collaborator-select {
+            cursor: not-allowed;
+        }
+
+        .distribution-locked #tabela-esqueleto .collaborator-select {
+            background: #f1f5f9;
+            opacity: 0.82;
+        }
+
+        #criacaoSecoesLista input:disabled,
+        #criacaoTimelineContent button:disabled,
+        #gerarTimelineCriacaoBtn:disabled,
+        #autoDistribuirFolgasBtn:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }

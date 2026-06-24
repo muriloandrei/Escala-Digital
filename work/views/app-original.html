@@ -459,10 +459,11 @@
             </div>
             <div id="escala-detalhe-page" class="hidden">
                 <header class="main-header">
-                    <h1>Detalhamento da Escala</h1>
+                    <div>
+                        <h1 id="escalaDetalheTitulo">Detalhamento da Escala</h1>
+                        <p id="escalaDetalheResumo" class="table-card-subtitle">Selecione uma escala no banco.</p>
+                    </div>
                     <div class="header-actions">
-                        <select id="detalheMesSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
-                        <select id="detalheFuncionarioSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
                         <button class="action-button secondary" id="voltarEscalasBtn">
                             <span class="material-symbols-outlined">arrow_back</span>
                             Voltar
@@ -470,31 +471,41 @@
                     </div>
                 </header>
 
-                <div class="table-card">
-                    <div class="table-card-header">
-                        <h2 id="escalaDetalheTitulo">Dias da escala</h2>
-                        <p id="escalaDetalheResumo" class="table-card-subtitle">Selecione uma escala no banco para consultar os dias.</p>
+                <select id="detalheMesSelect" class="hidden" aria-hidden="true"></select>
+                <select id="detalheFuncionarioSelect" class="hidden" aria-hidden="true"></select>
+
+                <div class="section-tabs" id="escalaSecaoTabs" role="tablist" aria-label="Seções da escala"></div>
+
+                <div class="table-card mt-6">
+                    <div class="table-card-header creation-card-header">
+                        <div>
+                            <h2 id="escalaSecaoTimelineTitulo">Timeline da seção</h2>
+                            <p class="table-card-subtitle">Turnos consolidados da seção selecionada.</p>
+                        </div>
+                        <button type="button" class="action-button secondary" id="imprimirTimelineBancoBtn">
+                            <span class="material-symbols-outlined">print</span>
+                            Imprimir Timeline
+                        </button>
                     </div>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                                                <th>Funcion&aacute;rio</th>
-                                <th>Se&ccedil;&atilde;o</th>
-                                <th>Fun&ccedil;&atilde;o</th>
-                                <th>Data</th>
-                                <th>Programa&ccedil;&atilde;o</th>
-                                <th>Entrada 1</th>
-                                <th>Sa&iacute;da 1</th>
-                                <th>Entrada 2</th>
-                                <th>Sa&iacute;da 2</th>
-                                <th>A&ccedil;&otilde;es</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-escala-detalhe-body">
-                            <tr><td colspan="10" class="text-center text-gray-500 py-8">Nenhuma escala selecionada.</td></tr>
-                        </tbody>
-                    </table>
+                    <div class="timeline-scroll-container overflow-x-auto pb-4">
+                        <div id="escalaBancoTimelineContent" style="min-width: 1200px; position: relative;"></div>
+                    </div>
                 </div>
+
+                <div class="table-card mt-6">
+                    <div class="table-card-header creation-card-header">
+                        <div>
+                            <h2 id="escalaSecaoDetalheTitulo">Escala detalhada</h2>
+                            <p class="table-card-subtitle">Clique em um horário do dia para editar o colaborador.</p>
+                        </div>
+                        <button type="button" class="action-button secondary" id="imprimirDetalheBancoBtn">
+                            <span class="material-symbols-outlined">print</span>
+                            Imprimir Escala
+                        </button>
+                    </div>
+                    <div id="escalaBancoDetalhadaContent" class="bank-detailed-scale"></div>
+                </div>
+                <table class="hidden"><tbody id="tabela-escala-detalhe-body"></tbody></table>
             </div>
             <div id="roles-page" class="hidden">
                 <header class="main-header"><h1>Roles / Permissão</h1></header>
@@ -567,9 +578,10 @@
                     <option value="2">Dom. 1×1</option>
                 </select>
                 <button id="autoDistribuirFolgasBtn" class="whitespace-nowrap text-sm bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Distribuir Folgas 5×2</button>
+                <button id="editarDistribuicaoBtn" class="hidden whitespace-nowrap text-sm bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10"><span class="material-symbols-outlined align-middle text-base">edit</span> Editar</button>
                 <!-- Botões de Visualização -->
                 <button id="visualizarTimelineBtn" class="whitespace-nowrap text-sm bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Visualizar Timeline</button>
-                <button id="gerarEscalaDetalhadaBtn" class="whitespace-nowrap text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Gerar Escala Detalhada</button>
+                <button id="gerarEscalaDetalhadaBtn" class="hidden whitespace-nowrap text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Gerar Escala Detalhada</button>
                 
               
                 
