@@ -984,3 +984,79 @@
                 grid-template-columns: 1fr;
             }
         }
+
+
+        /* Integrated scale creation flow */
+        .creation-card-header {
+            align-items: center;
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .creation-row-actions {
+            display: flex;
+        }
+
+        .creation-row-actions .action-btn {
+            align-items: center;
+            display: inline-flex;
+            gap: 4px;
+        }
+
+        .creation-row-actions .material-symbols-outlined {
+            font-size: 16px;
+        }
+
+        .embedded-scale-panel {
+            background: transparent !important;
+            display: block;
+            inset: auto;
+            position: static;
+            width: 100%;
+        }
+
+        .embedded-scale-panel.hidden {
+            display: none !important;
+        }
+
+        .embedded-scale-panel > .modal-content,
+        .embedded-scale-panel > #esqueleto-modal-content,
+        .embedded-scale-panel > #detalhada-modal-content {
+            border-radius: 8px;
+            box-shadow: var(--sombra-card);
+            height: auto !important;
+            max-width: none !important;
+            width: 100% !important;
+        }
+
+        #esqueletoModal.embedded-scale-panel #esqueleto-modal-header select,
+        #esqueletoModal.embedded-scale-panel #carregarFuncionariosBtn,
+        #esqueletoModal.embedded-scale-panel #funcionariosStatus,
+        #esqueletoModal.embedded-scale-panel #visualizarTimelineBtn,
+        #esqueletoModal.embedded-scale-panel #zoom-controls-esqueleto,
+        #esqueletoModal.embedded-scale-panel #closeModalBtn,
+        #detalhadaModal.embedded-scale-panel #closeDetalhadaModalBtn {
+            display: none !important;
+        }
+
+        #esqueletoModal.embedded-scale-panel #esqueleto-modal-header {
+            padding-right: 16px;
+        }
+
+        #esqueletoModal.embedded-scale-panel #modal-body,
+        #detalhadaModal.embedded-scale-panel #detalhada-modal-body {
+            max-height: 72vh;
+            overflow: auto;
+        }
+
+        #detalhadaModal.embedded-scale-panel {
+            z-index: auto !important;
+        }
+
+        @media (max-width: 800px) {
+            .creation-card-header {
+                align-items: stretch;
+                flex-direction: column;
+            }
+        }

@@ -35,6 +35,7 @@
         const gerarTimelineCriacaoBtn = document.getElementById('gerarTimelineCriacaoBtn');
         const criacaoTimelineCard = document.getElementById('criacaoTimelineCard');
         const carregarFuncionariosCriacaoBtn = document.getElementById('carregarFuncionariosCriacaoBtn');
+        const imprimirTimelineCriacaoBtn = document.getElementById('imprimirTimelineCriacaoBtn');
         const gerarDetalhadaCriacaoBtn = document.getElementById('gerarDetalhadaCriacaoBtn');
         const consultarBancoBtn = document.getElementById('consultarBancoBtn');
         const sincronizarBancoBtn = document.getElementById('sincronizarBancoBtn');
@@ -199,6 +200,20 @@
             navRegistros.classList.add('active');
             expandActiveNavGroup(navRegistros);
             setCurrentPageTitle('escalasGeradas');
+            prepararPaineisCriacao();
+
+            if (escalaRascunhoAtivo && escalaRascunhoContexto) {
+                copiarOptionsSelect(lojaEscalaSelect, criacaoEscalaLoja, escalaRascunhoContexto.loja);
+                copiarOptionsSelect(mesSelect, criacaoEscalaMes, String(new Date(escalaRascunhoContexto.mesRef + 'T00:00:00').getMonth()));
+                copiarOptionsSelect(anoSelect, criacaoEscalaAno, String(new Date(escalaRascunhoContexto.mesRef + 'T00:00:00').getFullYear()));
+                renderizarSecoesCriacao();
+                criacaoSecoesCard?.classList.remove('hidden');
+                criacaoTimelineCard?.classList.toggle('hidden', dadosEscala.length === 0);
+                if (dadosEscala.length > 0) renderizarTimelineCompleta('criacaoTimelineContent', dadosEscala);
+                if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Loja ' + escalaRascunhoContexto.loja + ' | ' + formatarMesTabela(escalaRascunhoContexto.mesRef) + ' | rascunho não salvo';
+                return;
+            }
+
             prepararPaginaCriacaoEscala(params);
         }
 
@@ -320,11 +335,17 @@
             if (pageKey.startsWith('escalas/nova/')) {
                 const [, , loja, mesRef] = pageKey.split('/');
                 const dataRef = mesRef ? new Date(mesRef + 'T00:00:00') : null;
-                showEscalaCriacaoPage({ loja, mes: dataRef ? String(dataRef.getMonth()) : '', ano: dataRef ? String(dataRef.getFullYear()) : '' });
+                if (escalaRascunhoAtivo && escalaRascunhoContexto) {
+                    showEscalaCriacaoPage({ loja, mes: dataRef ? String(dataRef.getMonth()) : '', ano: dataRef ? String(dataRef.getFullYear()) : '' });
+                } else {
+                    showEscalasGeradasPage();
+                    iniciarNovaEscalaRascunho({ loja, mesRef }).catch(error => showInfoModal(error.message, 'error'));
+                }
                 return;
             }
             if (pageKey === 'escalas/nova') {
-                showEscalaCriacaoPage();
+                showEscalasGeradasPage();
+                iniciarNovaEscalaRascunho().catch(error => showInfoModal(error.message, 'error'));
                 return;
             }
             if (pageKey.startsWith('escala-banco-mensal/')) {
@@ -373,7 +394,7 @@
                 return;
             }
 
-            if (escalaRascunhoAtivo && pageKey !== 'home') {
+            if (escalaRascunhoAtivo && !pageKey.startsWith('escalas/nova')) {
                 const confirmacao = await showInputModal({
                     title: 'Descartar rascunho?',
                     inputs: [{ type: 'message', text: 'Existe uma escala em rascunho. Se voce sair desta tela antes de salvar, o progresso sera perdido.' }],
@@ -414,16 +435,25 @@
         salvarSettingsBtn.addEventListener('click', (e) => { e.preventDefault(); salvarConfiguracoes(); });
         goToTimelineBtn.addEventListener('click', async (e) => {
             e.preventDefault();
+            iniciarNovaEscalaRascunho().catch(error => showInfoModal(error.message, 'error'));
+        });
+        iniciarCriacaoEscalaBtn?.addEventListener('click', async (e) => { e.preventDefault(); iniciarCriacaoEscalaPagina().catch(error => showInfoModal(error.message, 'error')); });
+        gerarTimelineCriacaoBtn?.addEventListener('click', async (e) => { e.preventDefault(); gerarTimelineCriacaoPagina().catch(error => showInfoModal(error.message, 'error')); });
+        carregarFuncionariosCriacaoBtn?.addEventListener('click', async (e) => {
+            e.preventDefault();
             try {
-                window.location.hash = '/escalas/nova';
+                await carregarFuncionariosDaLoja(true);
+                prepararPaineisCriacao();
+                resetSkeletonModalState();
+                esqueletoModal.classList.remove('hidden');
+                gerarTabelaEsqueleto();
+                esqueletoModal.scrollIntoView({ behavior: 'smooth', block: 'start' });
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
         });
-        iniciarCriacaoEscalaBtn?.addEventListener('click', async (e) => { e.preventDefault(); iniciarCriacaoEscalaPagina().catch(error => showInfoModal(error.message, 'error')); });
-        gerarTimelineCriacaoBtn?.addEventListener('click', async (e) => { e.preventDefault(); gerarTimelineCriacaoPagina().catch(error => showInfoModal(error.message, 'error')); });
-        carregarFuncionariosCriacaoBtn?.addEventListener('click', async (e) => { e.preventDefault(); await carregarFuncionariosDaLoja(true).catch(error => showInfoModal(error.message, 'error')); });
-        gerarDetalhadaCriacaoBtn?.addEventListener('click', (e) => { e.preventDefault(); abrirModalEscalaBtn.click(); });
+        imprimirTimelineCriacaoBtn?.addEventListener('click', () => imprimirTimelineMelhorado(dadosEscala, 'Linha do Tempo de Turnos'));
+        gerarDetalhadaCriacaoBtn?.addEventListener('click', (e) => { e.preventDefault(); gerarEscalaDetalhadaBtn.click(); });
 
         consultarBancoBtn?.addEventListener('click', async (e) => {
             e.preventDefault();
@@ -499,6 +529,18 @@
         const timelineZoomInBtn = document.getElementById('timelineZoomInBtn');
         const timelineZoomOutBtn = document.getElementById('timelineZoomOutBtn');
         const timelineZoomResetBtn = document.getElementById('timelineZoomResetBtn');
+
+        const prepararPaineisCriacao = () => {
+            if (!escalaCriacaoPage || !esqueletoModal || !detalhadaModal) return;
+            if (esqueletoModal.parentElement !== escalaCriacaoPage) escalaCriacaoPage.appendChild(esqueletoModal);
+            if (detalhadaModal.parentElement !== escalaCriacaoPage) escalaCriacaoPage.appendChild(detalhadaModal);
+            esqueletoModal.classList.add('embedded-scale-panel', 'mt-6');
+            detalhadaModal.classList.add('embedded-scale-panel', 'mt-6');
+            const skeletonTitle = esqueletoModal.querySelector('#esqueleto-modal-header h3');
+            const detailedTitle = detalhadaModal.querySelector('h3');
+            if (skeletonTitle) skeletonTitle.textContent = 'Distribuição de Funcionários e Folgas';
+            if (detailedTitle) detailedTitle.textContent = 'Escala de Trabalho Detalhada';
+        };
 
         let esqueletoZoomLevel = 1.0;
         let mainTimelineZoomLevel = 1.0;
@@ -701,7 +743,7 @@
 
 
         const renderizarCabecalho = (config, duracaoTotalTimeline) => { let markersHtml = ''; for (let min = config.inicioTimeline; min <= config.fimTimeline; min += config.intervaloMarcacao) { const percentLeft = ((min - config.inicioTimeline) / duracaoTotalTimeline) * 100; markersHtml += `<div class="absolute text-xs text-gray-500" style="left: ${percentLeft}%;"><span class="transform -translate-x-1/2 inline-block">${minutesToTime(min)}</span></div>`; } return `<div class="relative z-10 mb-3"><div class="flex items-center h-10"><div class="w-48 flex-shrink-0 pr-4"></div><div class="flex-1 h-full relative border-b-2 border-gray-200">${markersHtml}</div></div></div>`; };
-        const renderizarCorpo = (config, duracaoTotalTimeline, customDadosEscala, targetElementId) => { let bodyHtml = '<div>'; if (customDadosEscala.length === 0) { bodyHtml += `<p class="text-center text-gray-500 mt-4">Nenhum turno adicionado.</p>`; } else { customDadosEscala.forEach((escala, index) => { const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); let barsHtml = ''; const createBar = (startMin, endMin, color) => { if (endMin <= startMin) return ''; const duration = endMin - startMin; const leftPercent = ((startMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (leftPercent < 0 || widthPercent <= 0) return ''; return `<div class="absolute h-full ${color} rounded" style="left: ${leftPercent}%; width: ${widthPercent}%;"></div>`; }; if (inicioIntervaloMin < fimIntervaloMin && inicioIntervaloMin > inicioEscalaMin && fimIntervaloMin < fimEscalaMin) { barsHtml += createBar(inicioEscalaMin, inicioIntervaloMin, 'bg-green-500'); barsHtml += createBar(inicioIntervaloMin, fimIntervaloMin, 'bg-yellow-500'); barsHtml += createBar(fimIntervaloMin, fimEscalaMin, 'bg-green-500'); } else { barsHtml += createBar(inicioEscalaMin, fimEscalaMin, 'bg-green-500'); } let tempoInfoHtml = `<span class="text-xs text-gray-500 block">${escala.inicio} -<span class="text-gray-400"> ${escala.inicioIntervalo} - ${escala.fimIntervalo}</span> - ${escala.fim}</span>`; let actionsHtml = ''; if (targetElementId === 'timeline-content') { actionsHtml = `<div class="row-actions hidden mt-2 space-x-2"><button class="action-btn edit-btn" data-index="${index}">Editar</button><button class="action-btn delete-btn" data-index="${index}">Excluir</button></div>`; } bodyHtml += `<div class="timeline-row flex items-center py-1 ${targetElementId === 'timeline-content' ? 'cursor-pointer' : ''}"><div class="w-48 flex-shrink-0 pr-4 flex flex-col justify-center"><div><span class="font-bold text-gray-700">${escala.quantidade} Colab.</span><span class="text-xs text-gray-600 block">${escapeHtml(escala.secaoNome || "Sem secao")}</span>${tempoInfoHtml}</div>${actionsHtml}</div><div class="flex-1 h-8 bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${barsHtml}</div></div>`; }); } bodyHtml += `</div>`; return bodyHtml; };
+        const renderizarCorpo = (config, duracaoTotalTimeline, customDadosEscala, targetElementId) => { let bodyHtml = '<div>'; if (customDadosEscala.length === 0) { bodyHtml += `<p class="text-center text-gray-500 mt-4">Nenhum turno adicionado.</p>`; } else { customDadosEscala.forEach((escala, index) => { const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); let barsHtml = ''; const createBar = (startMin, endMin, color) => { if (endMin <= startMin) return ''; const duration = endMin - startMin; const leftPercent = ((startMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (leftPercent < 0 || widthPercent <= 0) return ''; return `<div class="absolute h-full ${color} rounded" style="left: ${leftPercent}%; width: ${widthPercent}%;"></div>`; }; if (inicioIntervaloMin < fimIntervaloMin && inicioIntervaloMin > inicioEscalaMin && fimIntervaloMin < fimEscalaMin) { barsHtml += createBar(inicioEscalaMin, inicioIntervaloMin, 'bg-green-500'); barsHtml += createBar(inicioIntervaloMin, fimIntervaloMin, 'bg-yellow-500'); barsHtml += createBar(fimIntervaloMin, fimEscalaMin, 'bg-green-500'); } else { barsHtml += createBar(inicioEscalaMin, fimEscalaMin, 'bg-green-500'); } let tempoInfoHtml = `<span class="text-xs text-gray-500 block">${escala.inicio} -<span class="text-gray-400"> ${escala.inicioIntervalo} - ${escala.fimIntervalo}</span> - ${escala.fim}</span>`; let actionsHtml = ''; if (targetElementId === 'timeline-content') { actionsHtml = `<div class="row-actions hidden mt-2 space-x-2"><button class="action-btn edit-btn" data-index="${index}">Editar</button><button class="action-btn delete-btn" data-index="${index}">Excluir</button></div>`; } else if (targetElementId === 'criacaoTimelineContent') { actionsHtml = `<div class="row-actions creation-row-actions mt-2"><button class="action-btn delete-btn" data-index="${index}"><span class="material-symbols-outlined">remove_circle</span>Remover secao</button></div>`; } bodyHtml += `<div class="timeline-row flex items-center py-1 ${targetElementId === 'timeline-content' ? 'cursor-pointer' : ''}"><div class="w-48 flex-shrink-0 pr-4 flex flex-col justify-center"><div><span class="font-bold text-gray-700">${escala.quantidade} Colab.</span><span class="text-xs text-gray-600 block">${escapeHtml(escala.secaoNome || "Sem secao")}</span>${tempoInfoHtml}</div>${actionsHtml}</div><div class="flex-1 h-8 bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${barsHtml}</div></div>`; }); } bodyHtml += `</div>`; return bodyHtml; };
         const renderizarLinhaDeSoma = (config, duracaoTotalTimeline, customDadosEscala) => { if (customDadosEscala.length === 0) return ''; const perfilCarga = new Array(duracaoTotalTimeline + 1).fill(0); customDadosEscala.forEach(escala => { const quantidade = parseInt(escala.quantidade); const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); for (let min = inicioEscalaMin; min < fimEscalaMin; min++) { const isBreak = (inicioIntervaloMin < fimIntervaloMin && min >= inicioIntervaloMin && min < fimIntervaloMin); if (!isBreak) { const index = min - config.inicioTimeline; if (index >= 0 && index < perfilCarga.length) perfilCarga[index] += quantidade; } } }); let summaryHtml = ''; let lastCount = -1; let blockStartMin = config.inicioTimeline; for (let i = 0; i <= duracaoTotalTimeline; i++) { const currentCount = perfilCarga[i] || 0; const currentMin = config.inicioTimeline + i; if (currentCount !== lastCount && i > 0) { const duration = currentMin - blockStartMin; const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (widthPercent > 0) { const color = lastCount > 0 ? 'bg-blue-600' : 'bg-transparent'; summaryHtml += `<div class="absolute h-full ${color} flex items-center justify-center" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount > 0 ? lastCount : ''}</span></div>`; } blockStartMin = currentMin; } lastCount = currentCount; } const duration = (config.inicioTimeline + duracaoTotalTimeline) - blockStartMin; const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (widthPercent > 0) { const color = lastCount > 0 ? 'bg-blue-600' : 'bg-transparent'; summaryHtml += `<div class="absolute h-full ${color} flex items-center justify-center" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount > 0 ? lastCount : ''}</span></div>`; } return `<div class="summary-row border-t-2 border-gray-300 mt-4 pt-4"><div class="flex items-center my-2 h-10"><div class="w-48 flex-shrink-0 text-center pr-4"><span class="font-bold text-lg text-gray-700">Total</span><span class="text-xs text-gray-500 block">Ativos</span></div><div class="flex-1 h-full bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${summaryHtml}</div></div></div>`; };
         
         const manipularEnvioFormulario = () => { let errors = []; const secaoOption = secaoTurnoSelect?.selectedOptions?.[0]; const novaEscala = { secaoId: secaoTurnoSelect?.value || '', secaoNome: secaoOption?.textContent || '', quantidade: quantidadeInput.value, inicio: inicioEscalaInput.value, fim: fimEscalaInput.value, inicioIntervalo: inicioIntervaloInput.value, fimIntervalo: fimIntervaloInput.value }; if (!novaEscala.secaoId) errors.push("Selecione uma secao com turno cadastrado."); if (!novaEscala.quantidade || !novaEscala.inicio || !novaEscala.fim) errors.push("A secao selecionada precisa ter quantidade, entrada e saida cadastradas."); if (timeToMinutes(novaEscala.fim) <= timeToMinutes(novaEscala.inicio)) errors.push("A saida do turno deve ser maior que a entrada."); const quantidadeNova = parseInt(novaEscala.quantidade, 10) || 0; const totalProjetado = contarTurnosCriados(modoEdicao.ativo ? modoEdicao.index : null) + quantidadeNova; if (funcionariosLojaCache.length > 0 && totalProjetado > funcionariosLojaCache.length) errors.push(`A loja possui ${funcionariosLojaCache.length} funcionario(s) carregado(s). Reduza a quantidade para nao ultrapassar o total disponivel.`); errors = errors.concat(validarTurnoSimples(novaEscala)); if (errors.length > 0) { showInfoModal(errors, 'error'); return; } if(modoEdicao.ativo) { dadosEscala[modoEdicao.index] = novaEscala; } else { dadosEscala.push(novaEscala); } dadosEscala.sort((a, b) => timeToMinutes(a.inicio) - timeToMinutes(b.inicio)); cancelarModoEdicao(); renderizarTimelineCompleta('timeline-content'); atualizarContadoresHome(); fecharModalTurno(); };
@@ -3587,6 +3629,7 @@
             return turnosSelecionados.map(turno => {
                 const codigo = turno.COD_SECAO ? turno.COD_SECAO + ' - ' : '';
                 return {
+                    turnoId: String(turno.ESCSECAOTURNO_ID || turno.ESCSECAO_ID || ''),
                     secaoId: String(turno.ESCSECAO_ID || ''),
                     secaoNome: codigo + (turno.DESCR || 'Secao'),
                     quantidade: String(turno.QTDE_COLABORADORES || 1),
@@ -3688,7 +3731,7 @@
             const selecionados = new Set(Array.from(criacaoSecoesLista?.querySelectorAll('input[type="checkbox"]:checked') || []).map(input => input.value));
             const turnosSelecionados = turnosSecaoCache.filter(turno => selecionados.has(String(turno.ESCSECAOTURNO_ID || turno.ESCSECAO_ID)));
             if (!turnosSelecionados.length) {
-                if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Selecione ao menos uma secao para gerar a timeline.';
+                if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Selecione ao menos uma seção para gerar a timeline.';
                 return;
             }
             dadosEscala = criarTimelineTurnosSelecionados(turnosSelecionados);
@@ -3696,76 +3739,87 @@
             renderizarTimelineCompleta('timeline-content', dadosEscala);
             atualizarContadoresHome();
             criacaoTimelineCard?.classList.remove('hidden');
-            if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Timeline gerada. Carregue funcionarios e gere a escala detalhada para salvar.';
+            esqueletoModal?.classList.add('hidden');
+            detalhadaModal?.classList.add('hidden');
+            detailedScaleHasBeenGenerated = false;
+            if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Timeline atualizada. Revise as seções e distribua os funcionários.';
         };
 
         const iniciarNovaEscalaRascunho = async (opcoes = {}) => {
-            const lojaPadrao = opcoes.loja || escalasFiltroLoja?.value || lojaEscalaSelect.value;
             const dataPadrao = opcoes.mesRef ? new Date(opcoes.mesRef + 'T00:00:00') : null;
-            const mesPadrao = dataPadrao ? String(dataPadrao.getMonth()) : String(escalasFiltroMes?.value || mesSelect.value);
-            const anoPadrao = dataPadrao ? String(dataPadrao.getFullYear()) : String(escalasFiltroAno?.value || anoSelect.value);
-            const lojaOptions = Array.from(lojaEscalaSelect.options || []).map(option => ({ value: option.value, label: option.textContent }));
+            let valoresPadrao = {
+                loja: String(opcoes.loja || (escalasFiltroLoja?.value !== 'all' ? escalasFiltroLoja?.value : '') || lojaEscalaSelect.value || ''),
+                mes: dataPadrao ? String(dataPadrao.getMonth()) : String(escalasFiltroMes?.value !== 'all' ? escalasFiltroMes?.value : mesSelect.value),
+                ano: dataPadrao ? String(dataPadrao.getFullYear()) : String(escalasFiltroAno?.value !== 'all' ? escalasFiltroAno?.value : anoSelect.value)
+            };
+
+            const lojaOptions = Array.from(lojaEscalaSelect.options || []).filter(option => option.value).map(option => ({ value: option.value, label: option.textContent }));
             const mesOptions = Array.from(mesSelect.options || []).map(option => ({ value: option.value, label: option.textContent }));
             const anoOptions = Array.from(anoSelect.options || []).map(option => ({ value: option.value, label: option.textContent }));
 
-            const values = await showInputModal({
-                title: 'Criar Escala',
-                inputs: [
-                    { type: 'message', text: 'A nova escala será criada como rascunho em memória. Se você sair da tela antes de salvar, o progresso será perdido.' },
-                    { label: 'Loja', type: 'select', id: 'nova-escala-loja', value: lojaPadrao, options: lojaOptions, required: true },
-                    { label: 'Mês', type: 'select', id: 'nova-escala-mes', value: mesPadrao, options: mesOptions, required: true },
-                    { label: 'Ano', type: 'select', id: 'nova-escala-ano', value: anoPadrao, options: anoOptions, required: true }
-                ],
-                confirmText: 'Criar Rascunho'
-            });
-            if (!values) return;
+            while (true) {
+                const values = await showInputModal({
+                    title: 'Criar Nova Escala',
+                    inputs: [
+                        { type: 'message', text: 'Selecione a loja e o período da nova escala.' },
+                        { label: 'Loja', type: 'select', id: 'nova-escala-loja', value: valoresPadrao.loja, options: lojaOptions, required: true },
+                        { label: 'Mês', type: 'select', id: 'nova-escala-mes', value: valoresPadrao.mes, options: mesOptions, required: true },
+                        { label: 'Ano', type: 'select', id: 'nova-escala-ano', value: valoresPadrao.ano, options: anoOptions, required: true }
+                    ],
+                    cancelText: 'Cancelar',
+                    confirmText: 'Iniciar Criação'
+                });
+                if (!values) return;
 
-            const loja = values['nova-escala-loja'];
-            const mes = Number(values['nova-escala-mes']);
-            const ano = Number(values['nova-escala-ano']);
-            const mesRef = formatDateForDb(ano, mes, 1);
+                const loja = values['nova-escala-loja'];
+                const mes = Number(values['nova-escala-mes']);
+                const ano = Number(values['nova-escala-ano']);
+                const mesRef = formatDateForDb(ano, mes, 1);
+                valoresPadrao = { loja, mes: String(mes), ano: String(ano) };
 
-            lojaEscalaSelect.value = loja;
-            funcionariosLojaSelect.value = loja;
-            if (homeLojaSelect) homeLojaSelect.value = loja;
-            if (escalasFiltroLoja) escalasFiltroLoja.value = loja;
-            mesSelect.value = String(mes);
-            anoSelect.value = String(ano);
-            if (escalasFiltroMes) escalasFiltroMes.value = String(mes);
-            if (escalasFiltroAno) escalasFiltroAno.value = String(ano);
+                let existentes = [];
+                try {
+                    existentes = await carregarResumoEscalas(loja, mesRef);
+                } catch (error) {
+                    showInfoModal('Não foi possível validar a escala existente: ' + error.message, 'error');
+                    return;
+                }
 
-            let resumoExistente = [];
-            try {
-                resumoExistente = await carregarResumoEscalas(loja, mesRef);
-            } catch (error) {
-                showInfoModal('Não foi possível validar escala existente: ' + error.message, 'error');
+                if (existentes.length > 0) {
+                    const abrirEscala = await showInputModal({
+                        title: 'Escala já existente',
+                        inputs: [{ type: 'message', text: 'Já existe uma escala para esta loja e mês. Selecione um novo mês ou Modifique a Escala criada.' }],
+                        cancelText: 'Voltar',
+                        confirmText: 'Abrir Escala'
+                    });
+                    if (abrirEscala) {
+                        window.location.hash = '/escala-banco-mensal/' + loja + '/' + mesRef;
+                        return;
+                    }
+                    continue;
+                }
+
+                lojaEscalaSelect.value = loja;
+                funcionariosLojaSelect.value = loja;
+                if (homeLojaSelect) homeLojaSelect.value = loja;
+                mesSelect.value = String(mes);
+                anoSelect.value = String(ano);
+                dadosEscala = [];
+                colaboradorShifts = [];
+                escalaCarregadaId = null;
+                currentLoadedScale = null;
+                detailedScaleHasBeenGenerated = false;
+                escalaRascunhoAtivo = true;
+                escalaRascunhoContexto = { loja, mesRef, criadoEm: new Date().toISOString() };
+                await carregarSecoesDaLoja(true);
+                await carregarTurnosSecaoDaLoja(true);
+                renderizarSecoesCriacao();
+                prepararPaineisCriacao();
+                esqueletoModal.classList.add('hidden');
+                detalhadaModal.classList.add('hidden');
+                window.location.hash = '/escalas/nova/' + loja + '/' + mesRef;
                 return;
             }
-
-            if (resumoExistente.length > 0) {
-                const confirmacao = await showInputModal({
-                    title: 'Escala existente',
-                    inputs: [{ type: 'message', text: 'Já existe uma escala para esta loja e mês. Ao salvar, será criada uma nova revisão mantendo o histórico anterior.' }],
-                    confirmText: 'Continuar'
-                });
-                if (!confirmacao) return;
-            }
-
-            dadosEscala = [];
-            escalaCarregadaId = null;
-            currentLoadedScale = null;
-            escalaRascunhoAtivo = true;
-            escalaRascunhoContexto = { loja, mesRef, criadoEm: new Date().toISOString() };
-            await carregarSecoesDaLoja(true);
-            await carregarTurnosSecaoDaLoja(true);
-            const turnosSelecionados = await selecionarTurnosRascunhoEscala();
-            if (turnosSelecionados === null) return;
-            dadosEscala = criarTimelineTurnosSelecionados(turnosSelecionados);
-            await carregarFuncionariosDaLoja(true);
-            renderizarTimelineCompleta('timeline-content');
-            atualizarContadoresHome();
-            window.location.hash = '/home';
-            showInfoModal(dadosEscala.length > 0 ? 'Timeline gerada a partir dos turnos por secao. Carregue os funcionarios e gere a escala detalhada quando finalizar.' : 'Rascunho criado, mas nenhum turno valido foi encontrado para montar a timeline.', dadosEscala.length > 0 ? 'success' : 'info');
         };
 
         window.addEventListener('beforeunload', (event) => {
@@ -3775,70 +3829,52 @@
         });
 
         salvarEscalaBtn.addEventListener('click', async () => {
-            if (escalaCarregadaId) {
-                const escalas = getEscalasSalvas();
-                const escalaParaAtualizar = escalas.find(e => e.id == escalaCarregadaId);
-                if (!escalaParaAtualizar) return;
-                
-                const values = await showInputModal({
-                    title: 'Confirmar Alterações',
-                    inputs: [{ label: `Digite a senha para a escala "${escalaParaAtualizar.nome}"`, type: 'password', id: 'escala-senha', required: true }],
-                    confirmText: 'Salvar Alterações'
-                });
+            const dados = parseEscalaFromModal();
+            if (!dados.length) {
+                showInfoModal('Gere a escala detalhada antes de salvar.', 'error');
+                return;
+            }
 
-                if (values && values['escala-senha'] === escalaParaAtualizar.senha) {
-                    escalaParaAtualizar.lojaId = escalaParaAtualizar.lojaId || parseInt(lojaEscalaSelect.value, 10);
-                    escalaParaAtualizar.dados = parseEscalaFromModal();
-                    escalaParaAtualizar.dataSalva = new Date().toLocaleDateString('pt-BR');
-                    await salvarEscalasNoStorage(escalas);
-                    const syncResult = await tentarSincronizarEscalaComBanco(escalaParaAtualizar);
-                    escalaRascunhoAtivo = false;
-                    escalaRascunhoContexto = null;
-                    showInfoModal(syncResult.ok && syncResult.count > 0 ? 'Escala atualizada e sincronizada com o banco!' : `Escala atualizada, mas não sincronizada com o banco: ${syncResult.message || 'carregue funcionários da loja antes de gerar a escala.'}`, syncResult.ok && syncResult.count > 0 ? 'success' : 'error');
-                    renderizarTabelaRegistros();
-                } else if(values) {
-                    showInfoModal('Senha incorreta. As alterações não foram salvas.', 'error');
-                }
-            } else {
-                const values = await showInputModal({
-                    title: 'Salvar Nova Escala',
-                    inputs: [
-                        { label: 'Nome da Escala', type: 'text', id: 'escala-nome', required: true },
-                        { label: 'Setor', type: 'text', id: 'escala-setor', required: true },
-                        { label: 'Senha de Acesso', type: 'password', id: 'escala-senha', required: true }
-                    ],
-                    confirmText: 'Criar e Salvar'
-                });
+            const semFuncionario = dados.filter(colaborador => !colaborador.escfuncId || !colaborador.chapa);
+            if (semFuncionario.length > 0) {
+                showInfoModal('Distribua todos os funcionários antes de salvar a escala.', 'error');
+                return;
+            }
 
-                if (!values) return;
-                
-                const novaEscala = {
-                    id: Date.now(),
-                    nome: values['escala-nome'],
-                    setor: values['escala-setor'],
-                    senha: values['escala-senha'],
-                    dataSalva: new Date().toLocaleDateString('pt-BR'),
-                    criadoEm: new Date().toISOString(),
-                    criadoPorLogin: usuarioSessaoCache?.login || '',
-                    criadoPorNome: usuarioSessaoCache?.nome || usuarioSessaoCache?.login || '',
-                    lojaId: parseInt(lojaEscalaSelect.value, 10),
-                    dados: parseEscalaFromModal(),
-                    timelineData: JSON.parse(JSON.stringify(dadosEscala)),
-                    mesAno: detalhadaMesAno.textContent,
-                    mes: parseInt(mesSelect.value),
-                    ano: parseInt(anoSelect.value)
-                };
+            const lojaId = Number(escalaRascunhoContexto?.loja || lojaEscalaSelect.value);
+            const mes = Number(mesSelect.value);
+            const ano = Number(anoSelect.value);
+            const escalaParaSalvar = {
+                id: Date.now(),
+                lojaId,
+                mes,
+                ano,
+                dados,
+                timelineData: JSON.parse(JSON.stringify(dadosEscala)),
+                mesAno: detalhadaMesAno.textContent,
+                criadoEm: new Date().toISOString(),
+                criadoPorLogin: usuarioSessaoCache?.login || '',
+                criadoPorNome: usuarioSessaoCache?.nome || usuarioSessaoCache?.login || ''
+            };
 
-                const escalas = getEscalasSalvas();
-                escalas.push(novaEscala);
-                await salvarEscalasNoStorage(escalas);
-                const syncResult = await tentarSincronizarEscalaComBanco(novaEscala);
+            salvarEscalaBtn.disabled = true;
+            salvarEscalaBtn.textContent = 'Salvando...';
+            try {
+                const result = await sincronizarEscalaComBanco(escalaParaSalvar);
+                const total = result.saved ? result.saved.length : 0;
+                if (!total) throw new Error('Nenhum funcionário foi gravado no banco.');
                 escalaRascunhoAtivo = false;
                 escalaRascunhoContexto = null;
-                escalaCarregadaId = novaEscala.id;
-                currentLoadedScale = novaEscala;
-                showInfoModal(syncResult.ok && syncResult.count > 0 ? "Escala salva e sincronizada com o banco! Agora você pode continuar editando e salvar as alterações." : `Escala salva, mas não sincronizada com o banco: ${syncResult.message || 'carregue funcionários da loja antes de gerar a escala.'}`, syncResult.ok && syncResult.count > 0 ? "success" : "error");
-                renderizarTabelaRegistros();
+                escalaCarregadaId = null;
+                currentLoadedScale = null;
+                showInfoModal('Escala salva no banco com sucesso para ' + total + ' funcionário(s).', 'success');
+                await consultarEscalasBancoLocal().catch(() => {});
+                setTimeout(() => { window.location.hash = '/escalas-geradas'; }, 700);
+            } catch (error) {
+                showInfoModal(error.details ? error.details.join(' ') : error.message, 'error');
+            } finally {
+                salvarEscalaBtn.disabled = false;
+                salvarEscalaBtn.textContent = 'Salvar Escala';
             }
         });
 
@@ -3976,6 +4012,32 @@
             }
         });
 
+
+        document.getElementById('criacaoTimelineContent')?.addEventListener('click', async (event) => {
+            const deleteButton = event.target.closest('.delete-btn');
+            if (!deleteButton) return;
+            event.preventDefault();
+            const index = Number(deleteButton.dataset.index);
+            const turnoRemovido = dadosEscala[index];
+            const confirmacao = await showInputModal({
+                title: 'Remover seção da escala',
+                inputs: [{ type: 'message', text: 'A seção será removida da timeline antes da escala ser salva.' }],
+                cancelText: 'Cancelar',
+                confirmText: 'Remover'
+            });
+            if (!confirmacao) return;
+            dadosEscala.splice(index, 1);
+            if (turnoRemovido?.turnoId) {
+                const checkbox = criacaoSecoesLista?.querySelector('input[value="' + CSS.escape(String(turnoRemovido.turnoId)) + '"]');
+                if (checkbox) checkbox.checked = false;
+            }
+            renderizarTimelineCompleta('criacaoTimelineContent', dadosEscala);
+            renderizarTimelineCompleta('timeline-content', dadosEscala);
+            esqueletoModal?.classList.add('hidden');
+            detalhadaModal?.classList.add('hidden');
+            detailedScaleHasBeenGenerated = false;
+            atualizarContadoresHome();
+        });
         const applyEsqueletoZoom = () => {
             const container = document.getElementById('tabela-esqueleto-container');
             if(container) {
@@ -4388,6 +4450,10 @@ const distribuirFolgas5x2Auto = async () => {
 
     const ausenciasAplicadas = aplicarAusenciasNoEsqueleto();
     atualizarContagemEsqueleto();
+    detailedScaleHasBeenGenerated = false;
+    detalhadaModalBody.innerHTML = '';
+    detalhadaModal.classList.add('hidden');
+    gerarEscalaDetalhadaBtn.textContent = 'Gerar Escala Detalhada';
     if (ausenciasAplicadas.length > 0) {
         showInfoModal([
             "Distribuição concluída. Ausências cadastradas foram aplicadas como folga obrigatória.",

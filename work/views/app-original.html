@@ -206,7 +206,10 @@
 
             <div id="escala-criacao-page" class="hidden">
                 <header class="main-header">
-                    <h1>Nova Escala</h1>
+                    <div>
+                        <h1>Nova Escala</h1>
+                        <p id="criacaoEscalaStatus" class="table-card-subtitle">Rascunho em andamento.</p>
+                    </div>
                     <div class="header-actions">
                         <button class="action-button secondary" id="voltarEscalasCriacaoBtn">
                             <span class="material-symbols-outlined">arrow_back</span>
@@ -215,42 +218,47 @@
                     </div>
                 </header>
 
-                <div class="table-card form-card">
-                    <div class="table-card-header">
-                        <h2>Dados da escala</h2>
-                        <p class="table-card-subtitle">Selecione loja e mes. Se ja existir escala para o periodo, a criacao sera bloqueada.</p>
-                    </div>
-                    <div class="dashboard-form">
-                        <div><label for="criacaoEscalaLoja">Loja</label><select id="criacaoEscalaLoja" required></select></div>
-                        <div><label for="criacaoEscalaMes">Mes</label><select id="criacaoEscalaMes" required></select></div>
-                        <div><label for="criacaoEscalaAno">Ano</label><select id="criacaoEscalaAno" required></select></div>
-                        <div class="form-actions"><button type="button" class="action-button" id="iniciarCriacaoEscalaBtn"><span class="material-symbols-outlined">play_arrow</span>Iniciar criacao</button></div>
-                    </div>
-                    <p id="criacaoEscalaStatus" class="table-card-subtitle mt-4">Informe os dados para carregar as secoes e montar a timeline.</p>
-                </div>
+                <select id="criacaoEscalaLoja" class="hidden" aria-hidden="true"></select>
+                <select id="criacaoEscalaMes" class="hidden" aria-hidden="true"></select>
+                <select id="criacaoEscalaAno" class="hidden" aria-hidden="true"></select>
+                <button type="button" class="hidden" id="iniciarCriacaoEscalaBtn">Iniciar criacao</button>
 
-                <div class="table-card mt-6 hidden" id="criacaoSecoesCard">
-                    <div class="table-card-header">
-                        <h2>Secoes da escala</h2>
-                        <p class="table-card-subtitle">Selecione as secoes e turnos que devem entrar na geracao.</p>
+                <div class="table-card" id="criacaoSecoesCard">
+                    <div class="table-card-header creation-card-header">
+                        <div>
+                            <h2>Se&ccedil;&otilde;es da escala</h2>
+                            <p class="table-card-subtitle">Marque ou desmarque se&ccedil;&otilde;es antes de finalizar a escala.</p>
+                        </div>
+                        <button type="button" class="action-button" id="gerarTimelineCriacaoBtn">
+                            <span class="material-symbols-outlined">timeline</span>
+                            Atualizar Timeline
+                        </button>
                     </div>
                     <div id="criacaoSecoesLista" class="section-choice-grid"></div>
-                    <div class="form-actions mt-4"><button type="button" class="action-button" id="gerarTimelineCriacaoBtn"><span class="material-symbols-outlined">timeline</span>Gerar Timeline</button></div>
                 </div>
 
                 <div class="table-card mt-6 hidden" id="criacaoTimelineCard">
-                    <div class="table-card-header">
-                        <h2>Timeline da escala</h2>
-                        <p class="table-card-subtitle">A timeline e montada a partir dos turnos selecionados. Depois carregue os funcionarios e gere a escala detalhada.</p>
+                    <div class="table-card-header creation-card-header">
+                        <div>
+                            <h2>Timeline da escala</h2>
+                            <p class="table-card-subtitle">Revise os turnos e remova se&ccedil;&otilde;es antes de distribuir os funcion&aacute;rios.</p>
+                        </div>
+                        <div class="header-actions">
+                            <button type="button" class="action-button secondary" id="imprimirTimelineCriacaoBtn">
+                                <span class="material-symbols-outlined">print</span>
+                                Imprimir Timeline
+                            </button>
+                            <button type="button" class="action-button" id="carregarFuncionariosCriacaoBtn">
+                                <span class="material-symbols-outlined">groups</span>
+                                Distribuir Funcion&aacute;rios
+                            </button>
+                        </div>
                     </div>
                     <div class="timeline-scroll-container overflow-x-auto pb-4">
                         <div id="criacaoTimelineContent" style="min-width: 1200px; position: relative;"></div>
                     </div>
-                    <div class="form-actions mt-4 flex gap-2 justify-end">
-                        <button type="button" class="action-button secondary" id="carregarFuncionariosCriacaoBtn"><span class="material-symbols-outlined">groups</span>Carregar Funcionarios</button>
-                        <button type="button" class="action-button" id="gerarDetalhadaCriacaoBtn"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala Detalhada</button>
-                    </div>
                 </div>
+                <button type="button" class="hidden" id="gerarDetalhadaCriacaoBtn">Gerar Escala Detalhada</button>
             </div>
 
             <div id="funcionarios-page" class="hidden">
@@ -593,7 +601,7 @@
                 <div class="flex items-center gap-2 md:gap-4 no-print flex-wrap">
                      <span id="detalhadaMesAno" class="text-sm font-semibold text-gray-700"></span>
                      <button id="validarEscalaBtn" class="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Validar Escala</button>
-                     <button id="salvarEscalaBtn" class="text-sm bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Salvar</button>
+                     <button id="salvarEscalaBtn" class="text-sm bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Salvar Escala</button>
                     <button id="imprimirDetalhadaBtn" class="text-sm bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Imprimir Escala Detalhada</button>
                     <button id="closeDetalhadaModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl font-bold">&times;</button>
                 </div>
