@@ -2,6 +2,14 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
+function parseTrustProxy(value) {
+  const normalized = String(value || 'false').trim().toLowerCase();
+  if (!normalized || normalized === 'false' || normalized === '0' || normalized === 'off') return false;
+  if (normalized === 'true' || normalized === 'on') return 1;
+  if (/^\d+$/.test(normalized)) return Number(normalized);
+  return value;
+}
+
 function getEnv() {
   const required = ['JWT_SECRET', 'ORACLE_USER', 'ORACLE_PASSWORD', 'ORACLE_CONNECT_STRING'];
 
@@ -26,8 +34,8 @@ function getEnv() {
       jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
       cookieSecure: String(process.env.COOKIE_SECURE || 'false') === 'true'
     },
-    trustProxy: String(process.env.TRUST_PROXY || 'false') === 'true'
+    trustProxy: parseTrustProxy(process.env.TRUST_PROXY)
   };
 }
 
-module.exports = { getEnv };
+module.exports = { getEnv, parseTrustProxy };

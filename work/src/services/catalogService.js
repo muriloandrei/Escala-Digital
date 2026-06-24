@@ -12,7 +12,8 @@ function normalizeLoja(row) {
     ESCLOJA_ID: pick(row, 'ESCLOJA_ID', 'escloja_id'),
     LOJA: pick(row, 'LOJA', 'loja'),
     QTDE_BRIGADISTA_EXIGIDO: pick(row, 'QTDE_BRIGADISTA_EXIGIDO', 'qtde_brigadista_exigido'),
-    QTDE_BRIGADISTA_EXIGIDO_DIA: pick(row, 'QTDE_BRIGADISTA_EXIGIDO_DIA', 'qtde_brigadista_exigido_dia')
+    QTDE_BRIGADISTA_EXIGIDO_DIA: pick(row, 'QTDE_BRIGADISTA_EXIGIDO_DIA', 'qtde_brigadista_exigido_dia'),
+    CODCOLIGADA: pick(row, 'CODCOLIGADA', 'codcoligada')
   };
 }
 
@@ -131,7 +132,25 @@ async function buildSecaoSelectList(connection, lojaCodigo) {
   ].join(', ');
 }
 
+async function getLojaCodcoligada(connection, lojaCodigo) {
+  const lojaColumns = await getTableColumns(connection, 'SGN_ESC_LOJA');
+  if (!lojaColumns.has('CODCOLIGADA')) return null;
+
+  const lojaResult = await connection.execute(
+    `select codcoligada
+     from sgn_esc_loja
+     where loja = :lojaId`,
+    { lojaId: lojaCodigo },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  const codcoligada = pick(lojaResult.rows[0], 'CODCOLIGADA', 'codcoligada');
+  return codcoligada === null || codcoligada === undefined ? null : Number(codcoligada);
+}
+
 async function resolveCodcoligada(connection, lojaCodigo) {
+  const lojaCodcoligada = await getLojaCodcoligada(connection, lojaCodigo);
+  if (lojaCodcoligada !== null) return lojaCodcoligada;
+
   const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
   if (secaoColumns.has('CODCOLIGADA')) {
     const lojaColumn = await getSecaoLojaColumn(connection);
@@ -164,8 +183,10 @@ async function resolveCodcoligada(connection, lojaCodigo) {
 
 async function listLojas() {
   return withConnection(async (connection) => {
+    const columns = await getTableColumns(connection, 'SGN_ESC_LOJA');
+    const codcoligadaSelect = columns.has('CODCOLIGADA') ? 'codcoligada' : 'cast(null as number) as codcoligada';
     const result = await connection.execute(
-      `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia
+      `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, ${codcoligadaSelect}
        from sgn_esc_loja
        order by loja`,
       {},
@@ -187,9 +208,15 @@ async function listFuncionariosByLoja(lojaId) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
     const secaoLojaColumn = await getSecaoLojaColumn(connection);
-    const secaoJoinLoja = secaoLojaColumn
-      ? `and s.${secaoLojaColumn.toLowerCase()} = f.loja`
-      : '';
+    const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
+    const funcaoColumns = await getTableColumns(connection, 'SGN_ESC_FUNCAO');
+    const lojaCodcoligada = await getLojaCodcoligada(connection, lojaCodigo);
+    const secaoJoinLoja = secaoLojaColumn ? `and s.${secaoLojaColumn.toLowerCase()} = f.loja` : '';
+    const secaoJoinColigada = secaoColumns.has('CODCOLIGADA') ? 'and s.codcoligada = f.codcoligada' : '';
+    const funcaoJoinColigada = funcaoColumns.has('CODCOLIGADA') ? 'and fu.codcoligada = f.codcoligada' : '';
+    const funcionarioColigadaWhere = lojaCodcoligada !== null ? 'and f.codcoligada = :codcoligada' : '';
+    const binds = { lojaId: lojaCodigo };
+    if (lojaCodcoligada !== null) binds.codcoligada = lojaCodcoligada;
     const result = await connection.execute(
       `select
           f.escfunc_id,
@@ -209,11 +236,12 @@ async function listFuncionariosByLoja(lojaId) {
           f.hr_sai2,
           f.dt_hr_incl
        from sgn_esc_funcionario f
-       left join sgn_esc_secao s on s.escsecao_id = f.escsecao_id ${secaoJoinLoja}
-       left join sgn_esc_funcao fu on fu.escfuncao_id = f.escfuncao_id
+       left join sgn_esc_secao s on s.escsecao_id = f.escsecao_id ${secaoJoinLoja} ${secaoJoinColigada}
+       left join sgn_esc_funcao fu on fu.escfuncao_id = f.escfuncao_id ${funcaoJoinColigada}
        where f.loja = :lojaId
+         ${funcionarioColigadaWhere}
        order by f.nome`,
-      { lojaId: lojaCodigo },
+      binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
@@ -225,19 +253,28 @@ async function listSecoesByLoja(lojaId) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
     const lojaColumn = await getSecaoLojaColumn(connection);
+    const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
+    const lojaCodcoligada = await getLojaCodcoligada(connection, lojaCodigo);
     const secaoSelectList = await buildSecaoSelectList(connection, lojaCodigo);
-    const secoesSql = lojaColumn
-      ? `select ${secaoSelectList}
-         from sgn_esc_secao
-         where ${lojaColumn.toLowerCase()} = :lojaId
-         order by descr`
-      : `select ${secaoSelectList}
-         from sgn_esc_secao
-         order by descr`;
+    const conditions = [];
+    const binds = {};
 
+    if (lojaColumn) {
+      conditions.push(`${lojaColumn.toLowerCase()} = :lojaId`);
+      binds.lojaId = lojaCodigo;
+    }
+    if (secaoColumns.has('CODCOLIGADA') && lojaCodcoligada !== null) {
+      conditions.push('codcoligada = :codcoligada');
+      binds.codcoligada = lojaCodcoligada;
+    }
+
+    const whereSql = conditions.length ? `where ${conditions.join(' and ')}` : '';
     const secoesResult = await connection.execute(
-      secoesSql,
-      { lojaId: lojaCodigo },
+      `select ${secaoSelectList}
+       from sgn_esc_secao
+       ${whereSql}
+       order by descr`,
+      binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
@@ -252,11 +289,22 @@ async function listTurnosByLoja(lojaId) {
     if (!canUseTurnos) return [];
 
     const lojaColumn = await getSecaoLojaColumn(connection);
+    const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
+    const lojaCodcoligada = await getLojaCodcoligada(connection, lojaCodigo);
     const turnosColumns = await getTableColumns(connection, 'SGN_ESC_SECAO_TURNO');
     const turnoIdSelect = turnosColumns.has('ESCSECAOTURNO_ID')
       ? 't.escsecaoturno_id'
       : 'cast(null as number) as escsecaoturno_id';
-    const whereSql = lojaColumn ? `where s.${lojaColumn.toLowerCase()} = :lojaId` : '';
+    const conditions = [];
+    const binds = { lojaId: lojaCodigo };
+
+    if (lojaColumn) conditions.push(`s.${lojaColumn.toLowerCase()} = :lojaId`);
+    if (secaoColumns.has('CODCOLIGADA') && lojaCodcoligada !== null) {
+      conditions.push('s.codcoligada = :codcoligada');
+      binds.codcoligada = lojaCodcoligada;
+    }
+
+    const whereSql = conditions.length ? `where ${conditions.join(' and ')}` : '';
     const result = await connection.execute(
       `select
           ${turnoIdSelect},
@@ -273,7 +321,7 @@ async function listTurnosByLoja(lojaId) {
        join sgn_esc_secao s on s.escsecao_id = t.escsecao_id
        ${whereSql}
        order by s.descr, t.hr_ent1, t.hr_sai1`,
-      { lojaId: lojaCodigo },
+      binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
@@ -283,19 +331,26 @@ async function listTurnosByLoja(lojaId) {
 
 async function findSecaoById(connection, { lojaId, escsecaoId }) {
   const lojaColumn = await getSecaoLojaColumn(connection);
+  const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
+  const lojaCodcoligada = await getLojaCodcoligada(connection, lojaId);
   const secaoSelectList = await buildSecaoSelectList(connection, lojaId);
-  const secaoSql = lojaColumn
-    ? `select ${secaoSelectList}
-       from sgn_esc_secao
-       where escsecao_id = :escsecaoId
-         and ${lojaColumn.toLowerCase()} = :lojaId`
-    : `select ${secaoSelectList}
-       from sgn_esc_secao
-       where escsecao_id = :escsecaoId`;
+  const conditions = ['escsecao_id = :escsecaoId'];
+  const binds = { escsecaoId };
+
+  if (lojaColumn) {
+    conditions.push(`${lojaColumn.toLowerCase()} = :lojaId`);
+    binds.lojaId = lojaId;
+  }
+  if (secaoColumns.has('CODCOLIGADA') && lojaCodcoligada !== null) {
+    conditions.push('codcoligada = :codcoligada');
+    binds.codcoligada = lojaCodcoligada;
+  }
 
   const result = await connection.execute(
-    secaoSql,
-    { lojaId, escsecaoId },
+    `select ${secaoSelectList}
+     from sgn_esc_secao
+     where ${conditions.join(' and ')}`,
+    binds,
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
 

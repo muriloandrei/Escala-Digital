@@ -3,6 +3,7 @@ connect ESCALA/escala@FREEPDB1
 create table SGN_ESC_LOJA (
   ESCLOJA_ID number(15) not null,
   LOJA number(10) not null,
+  CODCOLIGADA number(10) default 1 not null,
   QTDE_BRIGADISTA_EXIGIDO number(3) default 0 not null,
   QTDE_BRIGADISTA_EXIGIDO_DIA number(3) default 0 not null,
   constraint SGN_ESC_LOJA_PK primary key (ESCLOJA_ID),

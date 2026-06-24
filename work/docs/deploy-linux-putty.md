@@ -111,7 +111,7 @@ ORACLE_POOL_INCREMENT=1
 JWT_SECRET=segredo-longo-com-32-caracteres-ou-mais
 JWT_EXPIRES_IN=8h
 COOKIE_SECURE=true
-TRUST_PROXY=true
+TRUST_PROXY=1
 ```
 
 Permissao:
@@ -225,7 +225,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Em producao com HTTPS no Nginx, manter `COOKIE_SECURE=true` e `TRUST_PROXY=true`.
+Em producao com HTTPS no Nginx, manter `COOKIE_SECURE=true` e `TRUST_PROXY=1`.
 
 Se o teste for feito acessando diretamente `http://IP_DO_SERVIDOR:3000/app`, sem HTTPS e sem Nginx, usar temporariamente:
 

@@ -17,8 +17,8 @@ const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
 const env = getEnv();
 const app = express();
 
-if (env.trustProxy) {
-  app.set('trust proxy', 1);
+if (env.trustProxy !== false) {
+  app.set('trust proxy', env.trustProxy);
 }
 
 app.use(helmet({
