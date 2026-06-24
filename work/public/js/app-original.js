@@ -521,7 +521,7 @@
         carregarFuncionariosCriacaoBtn?.addEventListener('click', async (e) => {
             e.preventDefault();
             try {
-                await carregarFuncionariosDaLoja(true);
+                await carregarFuncionariosDaLoja(true, escalaRascunhoContexto?.loja || criacaoEscalaLoja?.value || '');
                 prepararPaineisCriacao();
                 resetSkeletonModalState();
                 esqueletoModal.classList.remove('hidden');
@@ -1177,13 +1177,13 @@
         mesSelect.addEventListener('change', async () => {
             detailedScaleHasBeenGenerated = false;
             gerarEscalaDetalhadaBtn.textContent = 'Gerar Escala Detalhada';
-            await carregarAusenciasDaLoja();
+            await carregarAusenciasDaLoja(getLojaContextoEscala());
             gerarTabelaEsqueleto();
         });
         anoSelect.addEventListener('change', async () => {
             detailedScaleHasBeenGenerated = false;
             gerarEscalaDetalhadaBtn.textContent = 'Gerar Escala Detalhada';
-            await carregarAusenciasDaLoja();
+            await carregarAusenciasDaLoja(getLojaContextoEscala());
             gerarTabelaEsqueleto();
         });
 
@@ -1831,7 +1831,6 @@
         addEscalaBtn.addEventListener('click', manipularEnvioFormulario);
         secaoTurnoSelect?.addEventListener('change', aplicarSecaoSelecionadaNoFormulario);
         const recarregarEscalasComFiltro = async () => {
-            sincronizarFiltrosEscalasComGerador();
             await consultarEscalasBancoLocal().catch(error => showInfoModal(error.message, 'error'));
         };
         escalasFiltroLoja?.addEventListener('change', recarregarEscalasComFiltro);
@@ -1869,14 +1868,7 @@
         });
         funcionariosLojaSelect.addEventListener('change', async () => {
             try {
-                lojaEscalaSelect.value = funcionariosLojaSelect.value;
-                if (homeLojaSelect) homeLojaSelect.value = funcionariosLojaSelect.value;
-                if (secoesLojaSelect) secoesLojaSelect.value = funcionariosLojaSelect.value;
-                if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = funcionariosLojaSelect.value;
-                await carregarSecoesDaLoja(true);
-                await carregarTurnosSecaoDaLoja(true);
                 await carregarFuncionariosTela(false);
-                await carregarFuncionariosDaLoja(false);
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
@@ -1892,11 +1884,6 @@
             await carregarFuncionariosDaLoja(true);
         });
         secoesLojaSelect?.addEventListener('change', async () => {
-            lojaEscalaSelect.value = secoesLojaSelect.value;
-            funcionariosLojaSelect.value = secoesLojaSelect.value;
-            if (homeLojaSelect) homeLojaSelect.value = secoesLojaSelect.value;
-            if (secaoFormLoja) secaoFormLoja.value = secoesLojaSelect.value;
-            if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = secoesLojaSelect.value;
             await carregarSecoesTela(false);
         });
         secaoFormLoja?.addEventListener('change', async () => {
@@ -1912,12 +1899,6 @@
             popularSelectSecaoFormulario('');
         });
         turnosSecaoLojaSelect?.addEventListener('change', async () => {
-            const loja = turnosSecaoLojaSelect.value;
-            lojaEscalaSelect.value = loja;
-            funcionariosLojaSelect.value = loja;
-            if (homeLojaSelect) homeLojaSelect.value = loja;
-            if (secoesLojaSelect) secoesLojaSelect.value = loja;
-            if (secaoFormLoja) secaoFormLoja.value = loja;
             await carregarTurnosSecaoTela(false);
         });
         secaoFormDescr?.addEventListener('change', () => aplicarSecaoSelecionadaNoCadastro());
@@ -2119,6 +2100,7 @@
         let escalaConfigCache = {};
         let escalaRascunhoAtivo = false;
         let escalaRascunhoContexto = null;
+        const getLojaContextoEscala = () => String(escalaRascunhoContexto?.loja || lojaEscalaSelect?.value || '');
 
         const apiRequest = async (url, options = {}) => {
             const { timeoutMs = 20000, signal, ...fetchOptions } = options;
@@ -2293,8 +2275,8 @@
             return lojas;
         };
 
-        const carregarSecoesDaLoja = async (silent = false) => {
-            const loja = secoesLojaSelect?.value && secoesLojaSelect.value !== 'all' ? secoesLojaSelect.value : lojaEscalaSelect.value;
+        const carregarSecoesDaLoja = async (silent = false, lojaInformada = '') => {
+            const loja = lojaInformada || (secoesLojaSelect?.value && secoesLojaSelect.value !== 'all' ? secoesLojaSelect.value : lojaEscalaSelect.value);
             if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
                 secoesLojaCache = [];
                 popularSelectSecaoFormulario('');
@@ -2317,8 +2299,9 @@
             }
         };
 
-        const carregarTurnosSecaoDaLoja = async (silent = false) => {
-            const loja = turnosSecaoLojaSelect?.value || lojaEscalaSelect.value;
+        const carregarTurnosSecaoDaLoja = async (silent = false, lojaInformada = '') => {
+            const lojaFiltro = turnosSecaoLojaSelect?.value;
+            const loja = lojaInformada || (lojaFiltro && lojaFiltro !== 'all' ? lojaFiltro : lojaEscalaSelect.value);
             if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
                 turnosSecaoCache = [];
                 popularSelectSecoesTurno();
@@ -2882,8 +2865,8 @@
             }
         });
 
-        const carregarAusenciasDaLoja = async () => {
-            const loja = lojaEscalaSelect.value;
+        const carregarAusenciasDaLoja = async (lojaInformada = '') => {
+            const loja = lojaInformada || lojaEscalaSelect.value;
             const ano = parseInt(anoSelect.value, 10);
             const mes = parseInt(mesSelect.value, 10);
             if (!loja || Number.isNaN(ano) || Number.isNaN(mes)) {
@@ -2994,8 +2977,8 @@
             return mensagens;
         };
 
-        const carregarFuncionariosDaLoja = async (silent = false) => {
-            const loja = lojaEscalaSelect.value;
+        const carregarFuncionariosDaLoja = async (silent = false, lojaInformada = '') => {
+            const loja = lojaInformada || lojaEscalaSelect.value;
             if (!loja) {
                 funcionariosLojaCache = [];
                 ausenciasLojaCache = [];
@@ -3008,7 +2991,7 @@
             try {
                 const data = await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios`);
                 funcionariosLojaCache = data.funcionarios || [];
-                await carregarAusenciasDaLoja();
+                await carregarAusenciasDaLoja(loja);
                 aplicarAusenciasNoEsqueleto();
                 atualizarContadoresHome();
                 funcionariosStatus.textContent = `${funcionariosLojaCache.length} funcionário(s), ${ausenciasLojaCache.length} ausência(s)`;
@@ -3459,11 +3442,6 @@
             });
         };
 
-        const sincronizarFiltrosEscalasComGerador = () => {
-            if (escalasFiltroLoja?.value && escalasFiltroLoja.value !== 'all') lojaEscalaSelect.value = escalasFiltroLoja.value;
-            if (escalasFiltroMes?.value && escalasFiltroMes.value !== 'all') mesSelect.value = escalasFiltroMes.value;
-            if (escalasFiltroAno?.value && escalasFiltroAno.value !== 'all') anoSelect.value = escalasFiltroAno.value;
-        };
 
         const getStatusClassEscala = (status) => {
             const normalized = String(status || '').toUpperCase();
@@ -4019,8 +3997,8 @@
             currentLoadedScale = null;
             escalaRascunhoAtivo = true;
             escalaRascunhoContexto = { loja, mesRef, criadoEm: new Date().toISOString() };
-            await carregarSecoesDaLoja(true);
-            await carregarTurnosSecaoDaLoja(true);
+            await carregarSecoesDaLoja(true, loja);
+            await carregarTurnosSecaoDaLoja(true, loja);
             renderizarSecoesCriacao();
             criacaoSecoesCard?.classList.remove('hidden');
             criacaoTimelineCard?.classList.add('hidden');
@@ -4111,8 +4089,8 @@
                 detailedScaleHasBeenGenerated = false;
                 escalaRascunhoAtivo = true;
                 escalaRascunhoContexto = { loja, mesRef, criadoEm: new Date().toISOString() };
-                await carregarSecoesDaLoja(true);
-                await carregarTurnosSecaoDaLoja(true);
+                await carregarSecoesDaLoja(true, loja);
+                await carregarTurnosSecaoDaLoja(true, loja);
                 renderizarSecoesCriacao();
                 prepararPaineisCriacao();
                 esqueletoModal.classList.add('hidden');
@@ -4613,7 +4591,7 @@ const distribuirFolgas5x2Auto = async () => {
     let scheduleMap = Array.from({ length: total }, () => ({}));
     let offCountPerDay = {};
 
-    await carregarAusenciasDaLoja();
+    await carregarAusenciasDaLoja(getLojaContextoEscala());
 
     const marcarFolgaNoMapa = (colabIdx, date) => {
         const key = date.toDateString();
