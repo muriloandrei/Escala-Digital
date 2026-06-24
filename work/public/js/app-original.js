@@ -118,8 +118,11 @@
         const tabelaAcessosBody = document.getElementById('tabela-acessos-body');
         let novoUsuarioBtn = null;
         const currentPageTitle = document.getElementById('currentPageTitle');
+        const currentPageParent = document.getElementById('currentPageParent');
         const loggedUserName = document.getElementById('loggedUserName');
         const loggedUserStores = document.getElementById('loggedUserStores');
+        const loggedUserInitials = document.getElementById('loggedUserInitials');
+        const loggedUserRole = document.getElementById('loggedUserRole');
         const logoutAppBtn = document.getElementById('logoutAppBtn');
         const abrirTurnoModalBtn = document.getElementById('abrirTurnoModalBtn');
         const turnoModal = document.getElementById('turnoModal');
@@ -146,10 +149,26 @@
             configuracoes: 'Configuracoes'
         };
 
+        const pageParents = {
+            home: 'Escalas',
+            escalasCriadas: 'Escalas',
+            escalasGeradas: 'Escalas',
+            escalaBanco: 'Escalas',
+            escalasFuncionarios: 'Escalas',
+            escalaFuncionarioEdicao: 'Escalas',
+            secoes: 'Escalas',
+            secaoForm: 'Escalas',
+            turnosSecao: 'Escalas',
+            turnoSecaoForm: 'Escalas',
+            funcionarios: 'Funcionários',
+            acessos: 'Configurações',
+            roles: 'Configurações',
+            configuracoes: 'Configurações'
+        };
+
         const setCurrentPageTitle = (key) => {
-            if (currentPageTitle) {
-                currentPageTitle.textContent = pageTitles[key] || pageTitles.home;
-            }
+            if (currentPageTitle) currentPageTitle.textContent = pageTitles[key] || pageTitles.home;
+            if (currentPageParent) currentPageParent.textContent = pageParents[key] || pageParents.home;
         };
 
         function hideAllPages() {
@@ -2137,10 +2156,17 @@
                 loggedUserName.textContent = user.nome || user.login || 'Usuário';
             }
 
+            if (loggedUserInitials) {
+                const nome = String(user.nome || user.login || 'Usuário').trim();
+                const partes = nome.split(/\s+/).filter(Boolean);
+                loggedUserInitials.textContent = ((partes[0]?.[0] || 'U') + (partes.length > 1 ? partes[partes.length - 1][0] : partes[0]?.[1] || 'S')).toUpperCase();
+            }
+
+            if (loggedUserRole) loggedUserRole.textContent = user.perfil === 'ADMIN' ? 'Admin' : (user.perfil || 'Usuário');
+
             if (loggedUserStores) {
-                loggedUserStores.textContent = lojas.length > 0
-                    ? `Lojas: ${lojas.join(', ')}`
-                    : 'Sem loja vinculada';
+                loggedUserStores.innerHTML = '<span class="material-symbols-outlined">storefront</span>' + (lojas.length === 1 ? '1 loja' : `${lojas.length} lojas`);
+                loggedUserStores.title = lojas.length > 0 ? `Lojas permitidas: ${lojas.join(', ')}` : 'Sem loja vinculada';
             }
         };
 

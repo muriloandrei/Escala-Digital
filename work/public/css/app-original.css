@@ -55,20 +55,21 @@
         }
 
         .sidebar-logo {
-            color: var(--cor-principal);
-            font-size: 1.6rem;
-            margin-bottom: 28px;
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 0 8px;
+            height: 46px;
+            margin-bottom: 24px;
+            padding: 0 4px;
         }
 
-        .sidebar-brand-text {
-            color: var(--cor-texto);
-            font-size: 0.92rem;
-            font-weight: 700;
-            line-height: 1.2;
+        .sidebar-logo img {
+            display: block;
+            height: auto;
+            max-height: 42px;
+            max-width: 178px;
+            object-fit: contain;
+            object-position: left center;
+            width: 100%;
         }
 
         .sidebar-nav ul {
@@ -181,14 +182,47 @@
             box-shadow: none;
             padding: 12px 18px;
             margin-bottom: 24px;
+            min-height: 64px;
         }
 
-        .app-eyebrow {
+        .app-breadcrumb {
+            align-items: center;
+            display: flex;
+            gap: 9px;
             color: var(--cor-texto-leve);
-            font-size: 0.78rem;
+            font-size: 0.86rem;
+        }
+
+        .app-breadcrumb strong {
+            color: var(--cor-texto);
             font-weight: 700;
-            letter-spacing: 0;
-            text-transform: uppercase;
+        }
+
+        .app-breadcrumb-separator {
+            color: #cbd5e1;
+        }
+
+        .topbar-session {
+            align-items: center;
+            display: flex;
+            gap: 14px;
+        }
+
+        .store-badge {
+            align-items: center;
+            background: var(--cor-principal-leve);
+            border-radius: 999px;
+            color: var(--cor-principal);
+            display: inline-flex;
+            font-size: 0.75rem;
+            font-weight: 700;
+            gap: 5px;
+            padding: 5px 9px;
+            white-space: nowrap;
+        }
+
+        .store-badge .material-symbols-outlined {
+            font-size: 1rem;
         }
 
         .session-summary {
@@ -198,15 +232,23 @@
             color: var(--cor-texto);
         }
 
-        .session-summary > .material-symbols-outlined {
-            color: var(--cor-principal);
-            font-size: 2rem;
+        .user-avatar {
+            align-items: center;
+            background: var(--cor-principal);
+            border-radius: 50%;
+            color: var(--cor-branco);
+            display: inline-flex;
+            flex: 0 0 34px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            height: 34px;
+            justify-content: center;
         }
 
         .session-summary div {
             display: flex;
             flex-direction: column;
-            min-width: 160px;
+            min-width: 110px;
         }
 
         .session-summary span:not(.material-symbols-outlined) {
@@ -242,6 +284,16 @@
         .main-header h1 {
             font-size: 1.8rem;
             font-weight: 600;
+        }
+
+        .page-title-group {
+            min-width: 0;
+        }
+
+        .page-title-group p {
+            color: var(--cor-texto-leve);
+            font-size: 0.9rem;
+            margin-top: 3px;
         }
         
         .hidden {
