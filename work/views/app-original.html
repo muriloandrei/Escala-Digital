@@ -438,6 +438,26 @@
                 </div>
                 <table class="hidden"><tbody id="tabela-escala-detalhe-body"></tbody></table>
             </div>
+
+            <div id="historico-page" class="hidden">
+                <header class="main-header">
+                    <div>
+                        <h1>Histórico</h1>
+                        <p class="table-card-subtitle">Acompanhe revisões, oficializações e alterações realizadas nas escalas.</p>
+                    </div>
+                </header>
+                <div class="table-card">
+                    <div class="catalog-filter-bar three-filters">
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="historicoPesquisaInput" type="search" placeholder="Pesquisar a??o, usu?rio ou detalhe"></label>
+                        <select id="historicoLojaSelect" class="escala-filter-select"></select>
+                        <select id="historicoMesSelect" class="escala-filter-select"></select>
+                        <select id="historicoAnoSelect" class="escala-filter-select"></select>
+                    </div>
+                    <div class="table-card-header"><h2>Relatório de alterações</h2><p id="historicoResumo" class="table-card-subtitle">Carregando histórico.</p></div>
+                    <table class="data-table"><thead><tr><th>Data</th><th>Ação</th><th>Loja</th><th>Mês</th><th>Revis?o</th><th>Usuário</th><th>Detalhe</th></tr></thead><tbody id="tabelaHistoricoBody"><tr><td colspan="7" class="text-center text-gray-500 py-8">Carregando histórico...</td></tr></tbody></table>
+                </div>
+            </div>
+
             <div id="escalas-funcionarios-page" class="hidden">
                 <header class="main-header"><h1>Escalas por Funcionário</h1></header>
                 <div class="table-card">
@@ -457,6 +477,24 @@
                 <div class="table-card">
                     <div class="table-card-header creation-card-header"><div><h2>Escala detalhada</h2><p class="table-card-subtitle">Edite os horários ou folgas e salve para criar uma nova revisão mensal.</p></div><div class="header-actions"><button class="action-button secondary" id="distribuirFolgasFuncionarioBtn"><span class="material-symbols-outlined">event_available</span>Distribuir Folgas 5×2</button><button class="action-button secondary" id="validarEscalaFuncionarioBtn"><span class="material-symbols-outlined">fact_check</span>Validar Escala</button><button class="action-button secondary" id="imprimirEscalaFuncionarioBtn"><span class="material-symbols-outlined">print</span>Imprimir Escala</button><button class="action-button" id="salvarEscalaFuncionarioBtn"><span class="material-symbols-outlined">save</span>Salvar</button></div></div>
                     <div id="escalaFuncionarioDetalhadaContent" class="bank-detailed-scale"></div>
+                </div>
+            </div>
+
+
+            <div id="tipos-descanso-page" class="hidden">
+                <header class="main-header">
+                    <div>
+                        <h1>Tipos de Descanso</h1>
+                        <p class="table-card-subtitle">Cadastre siglas usadas na edição da escala do funcionário.</p>
+                    </div>
+                    <button class="action-button" id="novoTipoDescansoBtn"><span class="material-symbols-outlined">add</span>Novo Tipo</button>
+                </header>
+                <div class="table-card">
+                    <div class="catalog-filter-bar two-filters">
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="tiposDescansoPesquisaInput" type="search" placeholder="Pesquisar descri??o ou sigla"></label>
+                        <select id="tiposDescansoStatusFiltro" class="escala-filter-select"><option value="all">Todos os status</option><option value="A">Ativos</option><option value="I">Inativos</option></select>
+                    </div>
+                    <table class="data-table"><thead><tr><th>ID</th><th>Descrição</th><th>Sigla</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tabelaTiposDescansoBody"><tr><td colspan="5" class="text-center text-gray-500 py-8">Carregando tipos...</td></tr></tbody></table>
                 </div>
             </div>
 

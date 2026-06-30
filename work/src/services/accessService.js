@@ -19,6 +19,23 @@ function normalizeUser(usuario, lojas) {
   };
 }
 
+const PERFIL_PAGES = [
+  { key: 'escalas', label: 'Escalas Geradas' },
+  { key: 'escalas-funcionarios', label: 'Escalas por Funcionario' },
+  { key: 'funcionarios', label: 'Funcionarios' },
+  { key: 'secoes', label: 'Secoes' },
+  { key: 'turnos-secao', label: 'Turnos por Secao' },
+  { key: 'historico', label: 'Historico' },
+  { key: 'tipos-descanso', label: 'Tipos de Descanso' },
+  { key: 'acessos', label: 'Controle de Acesso' },
+  { key: 'roles', label: 'Perfil de Acesso' },
+  { key: 'configuracoes', label: 'Configuracoes' }
+];
+
+function isMissingObjectError(error) {
+  return error?.errorNum === 942 || error?.code === 'ORA-00942';
+}
+
 function canSeeUser(requestUser, lojas) {
   if (requestUser?.perfil === 'ADMIN') return true;
   const permitidas = new Set((requestUser?.lojas || []).map(Number));
@@ -128,4 +145,100 @@ async function createUsuarioAcesso({ login, nome, password, perfil, status = 'A'
   });
 }
 
-module.exports = { listUsuariosAcesso, updateUsuarioAcesso, createUsuarioAcesso };
+async function listPerfisAcesso() {
+  return withConnection(async (connection) => {
+    try {
+      const result = await connection.execute(
+        `select p.perfil_id, p.nome, p.descr, p.status, p.dt_hr_incl,
+                pp.pagina, pp.pode_visualizar, pp.pode_editar, pp.pode_excluir
+         from sgn_esc_perfil p
+         left join sgn_esc_perfil_permissao pp on pp.perfil_id = p.perfil_id
+         order by p.nome, pp.pagina`,
+        {},
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const map = new Map();
+      result.rows.forEach((row) => {
+        const id = pick(row, "PERFIL_ID", "perfil_id");
+        if (!map.has(String(id))) {
+          map.set(String(id), {
+            PERFIL_ID: id,
+            NOME: pick(row, "NOME", "nome"),
+            DESCR: pick(row, "DESCR", "descr"),
+            STATUS: pick(row, "STATUS", "status"),
+            DT_HR_INCL: pick(row, "DT_HR_INCL", "dt_hr_incl"),
+            PERMISSOES: []
+          });
+        }
+        const pagina = pick(row, "PAGINA", "pagina");
+        if (pagina) {
+          map.get(String(id)).PERMISSOES.push({
+            PAGINA: pagina,
+            PODE_VISUALIZAR: Number(pick(row, "PODE_VISUALIZAR", "pode_visualizar") || 0),
+            PODE_EDITAR: Number(pick(row, "PODE_EDITAR", "pode_editar") || 0),
+            PODE_EXCLUIR: Number(pick(row, "PODE_EXCLUIR", "pode_excluir") || 0)
+          });
+        }
+      });
+      return { perfis: Array.from(map.values()), paginas: PERFIL_PAGES };
+    } catch (error) {
+      if (!isMissingObjectError(error)) throw error;
+      const usuarios = await listUsuariosAcesso({ perfil: "ADMIN" });
+      const nomes = [...new Set(usuarios.map((usuario) => usuario.PERFIL || "OPERADOR"))];
+      return { perfis: nomes.map((nome, index) => ({ PERFIL_ID: index + 1, NOME: nome, DESCR: "Perfil legado", STATUS: "A", PERMISSOES: [] })), paginas: PERFIL_PAGES };
+    }
+  });
+}
+
+async function createPerfilAcesso(data) {
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `insert into sgn_esc_perfil (perfil_id, nome, descr, status, dt_hr_incl)
+       values (sgn_esc_perfil_seq.nextval, :nome, :descr, :status, sysdate)
+       returning perfil_id into :perfilId`,
+      { nome: data.NOME, descr: data.DESCR || null, status: data.STATUS || "A", perfilId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT } },
+      { autoCommit: false }
+    );
+    const perfilId = result.outBinds.perfilId[0];
+    await savePerfilPermissoesInConnection(connection, perfilId, data.PERMISSOES || []);
+    await connection.commit();
+    return { PERFIL_ID: perfilId, NOME: data.NOME, DESCR: data.DESCR || null, STATUS: data.STATUS || "A" };
+  });
+}
+
+async function savePerfilPermissoesInConnection(connection, perfilId, permissoes) {
+  await connection.execute("delete from sgn_esc_perfil_permissao where perfil_id = :perfilId", { perfilId }, { autoCommit: false });
+  if (!Array.isArray(permissoes) || permissoes.length === 0) return;
+  await connection.executeMany(
+    `insert into sgn_esc_perfil_permissao (perfil_id, pagina, pode_visualizar, pode_editar, pode_excluir, dt_hr_incl)
+     values (:perfilId, :pagina, :visualizar, :editar, :excluir, sysdate)`,
+    permissoes.map((permissao) => ({
+      perfilId,
+      pagina: permissao.PAGINA,
+      visualizar: permissao.PODE_VISUALIZAR ? 1 : 0,
+      editar: permissao.PODE_EDITAR ? 1 : 0,
+      excluir: permissao.PODE_EXCLUIR ? 1 : 0
+    })),
+    { autoCommit: false }
+  );
+}
+
+async function updatePerfilAcesso(perfilId, data) {
+  return withConnection(async (connection) => {
+    const fields = [];
+    const binds = { perfilId };
+    if (data.NOME !== undefined) { fields.push("nome = :nome"); binds.nome = data.NOME; }
+    if (data.DESCR !== undefined) { fields.push("descr = :descr"); binds.descr = data.DESCR || null; }
+    if (data.STATUS !== undefined) { fields.push("status = :status"); binds.status = data.STATUS; }
+    if (fields.length) {
+      const result = await connection.execute(`update sgn_esc_perfil set ${fields.join(", ")} where perfil_id = :perfilId`, binds, { autoCommit: false });
+      if (!result.rowsAffected) { await connection.rollback(); return null; }
+    }
+    if (data.PERMISSOES !== undefined) await savePerfilPermissoesInConnection(connection, perfilId, data.PERMISSOES);
+    await connection.commit();
+    const { perfis } = await listPerfisAcesso();
+    return perfis.find((perfil) => Number(perfil.PERFIL_ID) === Number(perfilId)) || null;
+  });
+}
+
+module.exports = { listUsuariosAcesso, updateUsuarioAcesso, createUsuarioAcesso, listPerfisAcesso, createPerfilAcesso, updatePerfilAcesso };

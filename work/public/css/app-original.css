@@ -1384,3 +1384,54 @@
             background: #fef3c7;
             color: #92400e;
         }
+
+
+        .permissions-grid {
+            border: 1px solid var(--cor-borda);
+            border-radius: 8px;
+            display: grid;
+            gap: 8px;
+            margin-top: 8px;
+            max-height: 360px;
+            overflow: auto;
+            padding: 10px;
+        }
+
+        .permission-row {
+            align-items: center;
+            border-bottom: 1px solid #eef2f7;
+            display: grid;
+            gap: 8px;
+            grid-template-columns: minmax(150px, 1fr) repeat(3, minmax(92px, auto));
+            padding: 8px 0;
+        }
+
+        .permission-row:last-child {
+            border-bottom: 0;
+        }
+
+        .permission-row label {
+            align-items: center;
+            display: inline-flex;
+            gap: 6px;
+            font-size: 0.82rem;
+        }
+
+        .inner-card-header {
+            margin-bottom: 14px;
+            padding-bottom: 14px;
+        }
+
+        .print-aware-line {
+            font-size: 14px;
+            margin-top: 32px;
+            padding-top: 20px;
+        }
+
+        #historico-page .data-table,
+        #tipos-descanso-page .data-table,
+        #roles-page .data-table { min-width: 900px; }
+
+        @media (max-width: 680px) {
+            .permission-row { grid-template-columns: 1fr; }
+        }

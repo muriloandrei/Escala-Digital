@@ -35,6 +35,12 @@ const turnoSecaoSchema = secaoTurnoSchema.extend({
   ESCSECAO_ID: z.number().int().positive()
 }).strict();
 
+const tipoDescansoSchema = z.object({
+  DESCR: z.string().trim().min(1).max(100),
+  SIGLA: z.string().trim().min(1).max(3),
+  STATUS: z.enum(['A', 'I']).optional()
+}).strict();
+
 router.use(requireAuth);
 
 async function resolveLojaParam(req, res, next) {

@@ -94,8 +94,8 @@ function normalizeHorario(value, fallback) {
 
 function normalizeDiaBind(escprogId, dia) {
   const programacao = String(dia.programacao || '').trim().toUpperCase() || 'TRB';
-  const folga = programacao === 'F';
-  const fallback = folga ? 'F' : '00:00';
+  const descanso = programacao !== 'TRB';
+  const fallback = descanso ? programacao : '00:00';
 
   return {
     escprogId,
@@ -274,6 +274,37 @@ async function listEscalaRevisoes({ lojaId, mesRef }) {
     return result.rows;
   });
 }
+async function listHistoricoEscala({ lojaId, mesRef, lojasPermitidas = [] }) {
+  return withConnection(async (connection) => {
+    try {
+      const binds = {};
+      const filters = [];
+      if (lojaId) {
+        binds.lojaId = lojaId;
+        filters.push("a.loja = :lojaId");
+      } else if (Array.isArray(lojasPermitidas) && lojasPermitidas.length > 0) {
+        lojasPermitidas.forEach((loja, index) => { binds['loja' + index] = loja; });
+        filters.push('a.loja in (' + lojasPermitidas.map((_, index) => ':loja' + index).join(', ') + ')');
+      }
+      if (mesRef) { binds.mesRef = mesRef; filters.push("a.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')"); }
+      const whereSql = filters.length ? `where ${filters.join(" and ")}` : "";
+      const result = await connection.execute(
+        `select a.auditoria_id, a.usuario_id, a.login, a.nome_usuario, a.perfil, a.acao, a.entidade, a.entidade_id,
+                a.loja, a.mes_ref, a.revisao, a.detalhe, a.dt_hr_incl
+         from sgn_esc_auditoria a
+         ${whereSql}
+         order by a.dt_hr_incl desc, a.auditoria_id desc`,
+        binds,
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      return result.rows;
+    } catch (error) {
+      if (error?.errorNum === 942 || error?.code === "ORA-00942") return [];
+      throw error;
+    }
+  });
+}
+
 async function getEscalaMensal({ lojaId, mesRef }) {
   return withConnection(async (connection) => {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
@@ -781,7 +812,7 @@ async function validateAusencias({ funcionarios }) {
 
     for (const funcionario of funcionarios) {
       for (const dia of funcionario.dias || []) {
-        const trabalha = String(dia.programacao || 'TRB').toUpperCase() !== 'F';
+        const trabalha = String(dia.programacao || 'TRB').toUpperCase() === 'TRB';
         if (!trabalha) continue;
 
         const result = await connection.execute(
@@ -810,6 +841,7 @@ module.exports = {
   listEscalas,
   listEscalasResumo,
   listEscalaRevisoes,
+  listHistoricoEscala,
   getEscalaMensal,
   getEscalaHeader,
   getEscalaDias,

@@ -21,7 +21,54 @@ const usuarioCreateSchema = z.object({
   LOJAS: z.array(z.number().int().positive()).default([])
 }).strict();
 
+const permissaoSchema = z.object({
+  PAGINA: z.string().min(1).max(60),
+  PODE_VISUALIZAR: z.number().int().min(0).max(1).optional(),
+  PODE_EDITAR: z.number().int().min(0).max(1).optional(),
+  PODE_EXCLUIR: z.number().int().min(0).max(1).optional()
+}).strict();
+
+const perfilSchema = z.object({
+  NOME: z.string().min(1).max(30),
+  DESCR: z.string().max(100).nullable().optional(),
+  STATUS: z.enum(['A', 'I']).optional(),
+  PERMISSOES: z.array(permissaoSchema).optional()
+}).strict();
+
 router.use(requireAuth);
+
+router.get('/perfis', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await accessService.listPerfisAcesso();
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/perfis', requireAdmin, async (req, res, next) => {
+  try {
+    const data = perfilSchema.parse(req.body);
+    const perfil = await accessService.createPerfilAcesso(data);
+    return res.status(201).json({ perfil });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados de perfil invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
+router.patch('/perfis/:perfilId', requireAdmin, async (req, res, next) => {
+  try {
+    const data = perfilSchema.partial().parse(req.body);
+    const perfil = await accessService.updatePerfilAcesso(Number(req.params.perfilId), data);
+    if (!perfil) return res.status(404).json({ error: 'Perfil nao encontrado.' });
+    return res.json({ perfil });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados de perfil invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
 
 router.get('/usuarios', async (req, res, next) => {
   try {

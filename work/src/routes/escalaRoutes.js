@@ -86,6 +86,19 @@ router.get('/revisoes', resolveLojaRequest, requireLojaAccess, async (req, res, 
   }
 });
 
+
+router.get('/historico', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
+    const mesRef = req.query.mesRef || null;
+    const lojasPermitidas = req.user?.perfil === 'ADMIN' && (!req.user.lojas || req.user.lojas.length === 0) ? [] : (req.user.lojas || []);
+    const historico = await escalaService.listHistoricoEscala({ lojaId, mesRef, lojasPermitidas });
+    return res.json({ historico });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get('/mensal', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = Number(req.query.lojaId);
@@ -188,7 +201,12 @@ router.post('/funcionario/revisao', resolveLojaRequest, requireLojaAccess, async
       mesRef: payload.mesRef,
       revisao: saved.revisao,
       referenceId: saved.escprogId,
-      details: { escfuncId: payload.funcionarios[0].escfuncId, chapa: payload.funcionarios[0].chapa }
+      details: {
+        escfuncId: payload.funcionarios[0].escfuncId,
+        chapa: payload.funcionarios[0].chapa,
+        diasAlterados: payload.funcionarios[0].dias.length,
+        programacoes: [...new Set(payload.funcionarios[0].dias.map((dia) => dia.programacao || 'TRB'))]
+      }
     });
     return res.status(201).json({ saved: [saved] });
   } catch (error) {

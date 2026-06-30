@@ -541,6 +541,64 @@ async function listAusenciasByLojaMes(lojaId, inicio, fim) {
   });
 }
 
+async function listTiposDescanso({ includeInactive = false } = {}) {
+  return withConnection(async (connection) => {
+    try {
+      const whereSql = includeInactive ? "" : "where status = 'A'";
+      const result = await connection.execute(
+        `select esctipodesc_id, descr, sigla, status, dt_hr_incl
+         from sgn_esc_tipo_descanso
+         ${whereSql}
+         order by descr`,
+        {},
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      return result.rows.map(normalizeTipoDescanso);
+    } catch (error) {
+      if (isMissingObjectError(error)) return [];
+      throw error;
+    }
+  });
+}
+
+async function createTipoDescanso(data) {
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `insert into sgn_esc_tipo_descanso (esctipodesc_id, descr, sigla, status, dt_hr_incl)
+       values (sgn_esc_tipo_descanso_seq.nextval, :descr, :sigla, :status, sysdate)
+       returning esctipodesc_id into :id`,
+      {
+        descr: data.DESCR,
+        sigla: String(data.SIGLA || "").toUpperCase(),
+        status: data.STATUS || "A",
+        id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
+      },
+      { autoCommit: true }
+    );
+    return { ESCTIPODESC_ID: result.outBinds.id[0], DESCR: data.DESCR, SIGLA: String(data.SIGLA || "").toUpperCase(), STATUS: data.STATUS || "A" };
+  });
+}
+
+async function updateTipoDescanso(id, data) {
+  return withConnection(async (connection) => {
+    const fields = [];
+    const binds = { id };
+    if (data.DESCR !== undefined) { fields.push("descr = :descr"); binds.descr = data.DESCR; }
+    if (data.SIGLA !== undefined) { fields.push("sigla = :sigla"); binds.sigla = String(data.SIGLA || "").toUpperCase(); }
+    if (data.STATUS !== undefined) { fields.push("status = :status"); binds.status = data.STATUS; }
+    if (!fields.length) return null;
+
+    const result = await connection.execute(
+      `update sgn_esc_tipo_descanso set ${fields.join(", ")} where esctipodesc_id = :id`,
+      binds,
+      { autoCommit: true }
+    );
+    if (!result.rowsAffected) return null;
+    const tipos = await listTiposDescanso({ includeInactive: true });
+    return tipos.find((tipo) => Number(tipo.ESCTIPODESC_ID) === Number(id)) || null;
+  });
+}
+
 async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   const allowedFields = ['BRIGADISTA', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'];
@@ -578,6 +636,9 @@ module.exports = {
   createSecao,
   updateSecao,
   listAusenciasByLojaMes,
+  listTiposDescanso,
+  createTipoDescanso,
+  updateTipoDescanso,
   updateFuncionarioEscala,
   saveSecaoTurno,
   resolveLojaCodigo

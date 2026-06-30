@@ -151,6 +151,42 @@ create table SGN_ESC_AUDITORIA (
   constraint SGN_ESC_AUDITORIA_PK primary key (AUDITORIA_ID)
 );
 
+create table SGN_ESC_TIPO_DESCANSO (
+  ESCTIPODESC_ID number(15) not null,
+  DESCR varchar2(100) not null,
+  SIGLA varchar2(3) not null,
+  STATUS varchar2(1) default 'A' not null,
+  DT_HR_INCL date default sysdate not null,
+  constraint SGN_ESC_TIPO_DESC_PK primary key (ESCTIPODESC_ID),
+  constraint SGN_ESC_TIPO_DESC_1_UK unique (SIGLA),
+  constraint SGN_ESC_TIPO_DESC_STATUS_CK check (STATUS in ('A', 'I'))
+);
+
+create table SGN_ESC_PERFIL (
+  PERFIL_ID number(15) not null,
+  NOME varchar2(30) not null,
+  DESCR varchar2(100),
+  STATUS varchar2(1) default 'A' not null,
+  DT_HR_INCL date default sysdate not null,
+  constraint SGN_ESC_PERFIL_PK primary key (PERFIL_ID),
+  constraint SGN_ESC_PERFIL_1_UK unique (NOME),
+  constraint SGN_ESC_PERFIL_STATUS_CK check (STATUS in ('A', 'I'))
+);
+
+create table SGN_ESC_PERFIL_PERMISSAO (
+  PERFIL_ID number(15) not null,
+  PAGINA varchar2(60) not null,
+  PODE_VISUALIZAR number(1) default 1 not null,
+  PODE_EDITAR number(1) default 0 not null,
+  PODE_EXCLUIR number(1) default 0 not null,
+  DT_HR_INCL date default sysdate not null,
+  constraint SGN_ESC_PERFIL_PERM_PK primary key (PERFIL_ID, PAGINA),
+  constraint SGN_ESC_PERFIL_PERM_FK foreign key (PERFIL_ID) references SGN_ESC_PERFIL (PERFIL_ID),
+  constraint SGN_ESC_PERFIL_VIS_CK check (PODE_VISUALIZAR in (0, 1)),
+  constraint SGN_ESC_PERFIL_EDIT_CK check (PODE_EDITAR in (0, 1)),
+  constraint SGN_ESC_PERFIL_EXCL_CK check (PODE_EXCLUIR in (0, 1))
+);
+
 create sequence SGN_ESC_LOJA_SEQ start with 100 increment by 1 nocache;
 create sequence SGN_ESC_SECAO_SEQ start with 100 increment by 1 nocache;
 create sequence SGN_ESC_SECAO_TURNO_SEQ start with 100 increment by 1 nocache;
@@ -161,6 +197,8 @@ create sequence SGN_ESC_PROG_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_PROG_DIA_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_USUARIO_SEQ start with 10 increment by 1 nocache;
 create sequence SGN_ESC_AUDITORIA_SEQ start with 1 increment by 1 nocache;
+create sequence SGN_ESC_TIPO_DESCANSO_SEQ start with 10 increment by 1 nocache;
+create sequence SGN_ESC_PERFIL_SEQ start with 10 increment by 1 nocache;
 
 create index SGN_ESC_FUNC_1_IDX on SGN_ESC_FUNCIONARIO (LOJA);
 create index SGN_ESC_AUSENCIA_1_IDX on SGN_ESC_AUSENCIA (CHAPA, DT_INIC);

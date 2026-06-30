@@ -377,6 +377,25 @@
             carregarDetalheEscalaMensal(lojaId, mesRef).catch(error => showInfoModal(error.message, 'error'));
         }
 
+
+        function showHistoricoPage(params = {}) {
+            hideAllPages();
+            historicoPage?.classList.remove('hidden');
+            navHistorico?.classList.add('active');
+            expandActiveNavGroup(navHistorico);
+            setCurrentPageTitle('historico');
+            prepararFiltrosHistorico(params);
+            carregarHistoricoTela().catch(error => showInfoModal(error.message, 'error'));
+        }
+
+        function showTiposDescansoPage() {
+            hideAllPages();
+            tiposDescansoPage?.classList.remove('hidden');
+            navTiposDescanso?.classList.add('active');
+            expandActiveNavGroup(navTiposDescanso);
+            setCurrentPageTitle('tiposDescanso');
+            carregarTiposDescansoTela().catch(error => showInfoModal(error.message, 'error'));
+        }
         function showAcessosPage() {
             hideAllPages();
             acessosPage.classList.remove('hidden');
@@ -423,6 +442,11 @@
             if (pageKey.startsWith('escala-funcionario/')) {
                 const [, escfuncId, lojaId, mesRef] = pageKey.split('/');
                 showEscalaFuncionarioEdicaoPage(escfuncId, lojaId, mesRef);
+                return;
+            }
+            if (pageKey.startsWith('historico/')) {
+                const [, lojaId, mesRef] = pageKey.split('/');
+                showHistoricoPage({ lojaId, mesRef });
                 return;
             }
             if (pageKey.startsWith('escala-banco-mensal/')) {
@@ -2198,6 +2222,7 @@
             if (secaoFormLoja) secaoFormLoja.innerHTML = '';
             if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.innerHTML = '';
             if (escalaFuncionarioLoja) escalaFuncionarioLoja.innerHTML = '';
+            if (historicoLojaSelect) historicoLojaSelect.innerHTML = '';
 
             if (lojas.length === 0) {
                 const option = document.createElement('option');
@@ -2228,10 +2253,11 @@
             if (escalasFiltroLoja) escalasFiltroLoja.disabled = false;
             if (secoesLojaSelect) secoesLojaSelect.disabled = false;
             if (secaoFormLoja) secaoFormLoja.disabled = false;
+            if (historicoLojaSelect) historicoLojaSelect.disabled = false;
             carregarFuncionariosBtn.disabled = false;
             if (carregarFuncionariosTelaBtn) carregarFuncionariosTelaBtn.disabled = false;
 
-            [funcionariosLojaSelect, secoesLojaSelect, turnosSecaoLojaSelect, escalaFuncionarioLoja].forEach(select => {
+            [funcionariosLojaSelect, secoesLojaSelect, turnosSecaoLojaSelect, escalaFuncionarioLoja, historicoLojaSelect].forEach(select => {
                 if (!select) return;
                 const option = document.createElement('option');
                 option.value = 'all';
@@ -2259,6 +2285,7 @@
                 secaoFormLoja?.appendChild(option.cloneNode(true));
                 turnosSecaoLojaSelect?.appendChild(option.cloneNode(true));
                 escalaFuncionarioLoja?.appendChild(option.cloneNode(true));
+                historicoLojaSelect?.appendChild(option.cloneNode(true));
             });
 
             const lojaSelecionada = lojasPermitidasCache.includes(Number(lojaAtual))
@@ -2272,6 +2299,7 @@
             if (secaoFormLoja) secaoFormLoja.value = lojaSelecionada;
             if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = 'all';
             if (escalaFuncionarioLoja) escalaFuncionarioLoja.value = lojasPermitidasCache.length > 1 ? 'all' : lojaSelecionada;
+            if (historicoLojaSelect) historicoLojaSelect.value = lojasPermitidasCache.length > 1 ? 'all' : lojaSelecionada;
             return lojas;
         };
 
@@ -2643,6 +2671,96 @@
             }
         });
 
+
+        const carregarTiposDescansoCache = async (includeInactive = false) => {
+            const data = await apiRequest('/api/catalog/tipos-descanso' + (includeInactive ? '?includeInactive=1' : ''));
+            tiposDescansoCache = data.tipos || [];
+            return tiposDescansoCache;
+        };
+
+        const renderizarTiposDescansoTela = () => {
+            if (!tabelaTiposDescansoBody) return;
+            const termo = normalizarTextoFiltro(tiposDescansoPesquisaInput?.value);
+            const status = tiposDescansoStatusFiltro?.value || 'all';
+            const rows = tiposDescansoCache.filter((tipo) => {
+                const matchTermo = !termo || normalizarTextoFiltro((tipo.DESCR || "") + " " + (tipo.SIGLA || "")).includes(termo);
+                const matchStatus = status === 'all' || String(tipo.STATUS) === status;
+                return matchTermo && matchStatus;
+            });
+            tabelaTiposDescansoBody.innerHTML = rows.length ? rows.map((tipo) => `
+                <tr>
+                    <td data-label="ID">${escapeHtml(tipo.ESCTIPODESC_ID)}</td>
+                    <td data-label="Descrição">${escapeHtml(tipo.DESCR || "")}</td>
+                    <td data-label="Sigla"><span class="escala-status-chip pending-chip">${escapeHtml(tipo.SIGLA || "")}</span></td>
+                    <td data-label="Status">${tipo.STATUS === "A" ? "Ativo" : "Inativo"}</td>
+                    <td data-label="Ações" class="actions-cell">
+                        <button class="action-btn-table banco-action editar-tipo-descanso" data-id="${escapeHtml(tipo.ESCTIPODESC_ID)}"><span class="material-symbols-outlined">edit</span>Editar</button>
+                        <button class="action-btn-table banco-action danger-action toggle-tipo-descanso" data-id="${escapeHtml(tipo.ESCTIPODESC_ID)}" data-status="${escapeHtml(tipo.STATUS)}"><span class="material-symbols-outlined">block</span>${tipo.STATUS === "A" ? "Inativar" : "Reativar"}</button>
+                    </td>
+                </tr>`).join("") : '<tr><td colspan="5" class="text-center text-gray-500 py-8">Nenhum tipo de descanso encontrado.</td></tr>';
+        };
+
+        const carregarTiposDescansoTela = async () => {
+            await carregarTiposDescansoCache(true);
+            renderizarTiposDescansoTela();
+        };
+
+        const abrirModalTipoDescanso = async (tipo = null) => {
+            const values = await showInputModal({
+                title: tipo ? "Editar Tipo de Descanso" : "Novo Tipo de Descanso",
+                inputs: [
+                    { label: "Descrição", type: "text", id: "TIPO_DESCR", value: tipo?.DESCR || "", required: true },
+                    { label: "Sigla", type: "text", id: "TIPO_SIGLA", value: tipo?.SIGLA || "", required: true },
+                    { label: "Status", type: "select", id: "TIPO_STATUS", value: tipo?.STATUS || "A", options: [{ value: "A", label: "Ativo" }, { value: "I", label: "Inativo" }], required: true }
+                ],
+                confirmText: "Salvar"
+            });
+            if (!values) return;
+            const payload = { DESCR: values.TIPO_DESCR, SIGLA: String(values.TIPO_SIGLA || "").toUpperCase().slice(0, 3), STATUS: values.TIPO_STATUS };
+            if (tipo) {
+                await apiRequest(`/api/catalog/tipos-descanso/${encodeURIComponent(tipo.ESCTIPODESC_ID)}`, { method: "PATCH", body: JSON.stringify(payload) });
+            } else {
+                await apiRequest("/api/catalog/tipos-descanso", { method: "POST", body: JSON.stringify(payload) });
+            }
+            await carregarTiposDescansoTela();
+            showInfoModal("Tipo de descanso salvo com sucesso.", "success");
+        };
+
+        const prepararFiltrosHistorico = (params = {}) => {
+            if (historicoLojaSelect && historicoLojaSelect.options.length === 0) copiarOptionsSelect(escalasFiltroLoja || lojaEscalaSelect, historicoLojaSelect);
+            if (historicoLojaSelect) historicoLojaSelect.value = params.lojaId || escalasFiltroLoja?.value || historicoLojaSelect.value || lojaEscalaSelect?.value;
+            copiarOptionsSelect(mesSelect, historicoMesSelect, params.mesRef ? String(new Date(params.mesRef + "T00:00:00").getMonth()) : (escalasFiltroMes?.value || mesSelect?.value));
+            copiarOptionsSelect(anoSelect, historicoAnoSelect, params.mesRef ? String(new Date(params.mesRef + "T00:00:00").getFullYear()) : (escalasFiltroAno?.value || anoSelect?.value));
+        };
+
+        const aplicarFiltroHistoricoTela = () => {
+            if (!tabelaHistoricoBody) return;
+            const termo = normalizarTextoFiltro(historicoPesquisaInput?.value);
+            const rows = historicoCache.filter((item) => !termo || normalizarTextoFiltro([item.ACAO, item.NOME_USUARIO, item.LOGIN, item.DETALHE].join(" ")).includes(termo));
+            if (historicoResumo) historicoResumo.textContent = rows.length + " registro(s) encontrado(s).";
+            tabelaHistoricoBody.innerHTML = rows.length ? rows.map((item) => `
+                <tr>
+                    <td data-label="Data">${formatarDataTabela(item.DT_HR_INCL)}</td>
+                    <td data-label="Ação">${escapeHtml(item.ACAO || "-")}</td>
+                    <td data-label="Loja">${item.LOJA ? "Loja " + escapeHtml(item.LOJA) : "-"}</td>
+                    <td data-label="Mês">${item.MES_REF ? getNomeMesTabela(item.MES_REF) + " " + String(item.MES_REF).slice(0,4) : "-"}</td>
+                    <td data-label="Revis?o">${escapeHtml(item.REVISAO ?? "-")}</td>
+                    <td data-label="Usuário">${escapeHtml(item.NOME_USUARIO || item.LOGIN || "Sistema")}</td>
+                    <td data-label="Detalhe">${escapeHtml(item.DETALHE || "-")}</td>
+                </tr>`).join("") : '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum histórico encontrado.</td></tr>';
+        };
+
+        const carregarHistoricoTela = async () => {
+            if (!historicoLojaSelect || !historicoMesSelect || !historicoAnoSelect) return;
+            const loja = historicoLojaSelect.value && historicoLojaSelect.value !== "all" ? historicoLojaSelect.value : "";
+            const mesRef = historicoMesSelect.value !== "all" && historicoAnoSelect.value !== "all" ? formatDateForDb(Number(historicoAnoSelect.value), Number(historicoMesSelect.value), 1) : "";
+            const params = new URLSearchParams();
+            if (loja) params.set("lojaId", loja);
+            if (mesRef) params.set("mesRef", mesRef);
+            const data = await apiRequest("/api/escalas/historico" + (params.toString() ? "?" + params.toString() : ""));
+            historicoCache = data.historico || [];
+            aplicarFiltroHistoricoTela();
+        };
         const prepararFiltrosEscalaFuncionarios = () => {
             if (!escalaFuncionarioMes || !escalaFuncionarioAno) return;
             if (!escalaFuncionarioMes.options.length) copiarOptionsSelect(mesSelect, escalaFuncionarioMes, String(new Date().getMonth()));
@@ -2685,6 +2803,16 @@
         });
         voltarEscalaFuncionariosBtn?.addEventListener('click', () => { window.location.hash = '/escalas-funcionarios'; });
 
+
+        const isProgramacaoDescanso = (programacao) => String(programacao || 'TRB').toUpperCase() !== 'TRB';
+        const getValorDescanso = (dia) => String(dia?.PROGRAMACAO || 'F').toUpperCase();
+
+        const getTurnosFuncionarioAtual = () => {
+            const atual = escalaFuncionarioEdicaoAtual;
+            if (!atual) return [];
+            return (turnosSecaoCache || []).filter(turno => Number(turno.ESCSECAO_ID) === Number(atual.escsecaoId));
+        };
+
         const renderizarEscalaFuncionarioEdicao = () => {
             const atual = escalaFuncionarioEdicaoAtual;
             if (!atual) return;
@@ -2692,38 +2820,139 @@
             const diasNoMes = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate();
             const diasSemana = ['D','S','T','Q','Q','S','S'];
             const map = new Map(atual.dias.map(dia => [Number(String(dia.DT).slice(8,10)), dia]));
-            const fields = [{key:'HR_ENT1',label:'ENT.'},{key:'HR_SAI1',label:'SAÍ.INT.'},{key:'INTERVALO',label:'INTER.'},{key:'HR_ENT2',label:'RET.INT.'},{key:'HR_SAI2',label:'SAÍ.'},{key:'TRABALHADAS',label:'H.TRAB'}];
+            const fields = [{key:'HR_ENT1',label:'ENT.'},{key:'HR_SAI1',label:'SAI.INT.'},{key:'INTERVALO',label:'INTER.'},{key:'HR_ENT2',label:'RET.INT.'},{key:'HR_SAI2',label:'SAI.'},{key:'TRABALHADAS',label:'H.TRAB'}];
             let table = '<article class="bank-employee-scale"><header><div><h3>' + escapeHtml(atual.nome) + '</h3><p>' + escapeHtml(atual.chapa + ' | ' + atual.secao + ' | ' + atual.funcao) + '</p></div></header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
             for(let d=1;d<=diasNoMes;d++) table += '<th>' + diasSemana[new Date(ref.getFullYear(),ref.getMonth(),d).getDay()] + '</th>';
             table += '</tr><tr><th>DIA</th>'; for(let d=1;d<=diasNoMes;d++) table += '<th>' + d + '</th>'; table += '</tr></thead><tbody>';
-            fields.forEach(field => { table += '<tr><th>' + field.label + '</th>'; for(let d=1;d<=diasNoMes;d++){ const dia=map.get(d); if(!dia){table+='<td>-</td>';continue;} const folga=String(dia.PROGRAMACAO).toUpperCase()==='F'; let value='F'; if(!folga){ if(field.key==='INTERVALO') value=minutesToTime(Math.max(0,timeToMinutes(dia.HR_ENT2)-timeToMinutes(dia.HR_SAI1))); else if(field.key==='TRABALHADAS') value=minutesToTime(Math.max(0,(timeToMinutes(dia.HR_SAI2)-timeToMinutes(dia.HR_ENT1))-(timeToMinutes(dia.HR_ENT2)-timeToMinutes(dia.HR_SAI1)))); else value=dia[field.key]||'--'; } const domingo=new Date(ref.getFullYear(),ref.getMonth(),d).getDay()===0; const cls=folga?(domingo?'day-off sunday':'day-off'):(domingo?'sunday':''); const editable=!['INTERVALO','TRABALHADAS'].includes(field.key); table+='<td class="'+cls+'">'+(editable?'<button class="bank-day-edit funcionario-dia-edit" data-dia="'+d+'">'+escapeHtml(value)+'</button>':escapeHtml(value))+'</td>'; } table+='</tr>'; });
+            fields.forEach(field => {
+                table += '<tr><th>' + field.label + '</th>';
+                for(let d=1;d<=diasNoMes;d++){
+                    const dia=map.get(d);
+                    if(!dia){table+='<td>-</td>';continue;}
+                    const descanso=isProgramacaoDescanso(dia.PROGRAMACAO);
+                    let value=getValorDescanso(dia);
+                    if(!descanso){
+                        if(field.key==='INTERVALO') value=minutesToTime(Math.max(0,timeToMinutes(dia.HR_ENT2)-timeToMinutes(dia.HR_SAI1)));
+                        else if(field.key==='TRABALHADAS') value=minutesToTime(Math.max(0,(timeToMinutes(dia.HR_SAI2)-timeToMinutes(dia.HR_ENT1))-(timeToMinutes(dia.HR_ENT2)-timeToMinutes(dia.HR_SAI1))));
+                        else value=dia[field.key]||'--';
+                    }
+                    const domingo=new Date(ref.getFullYear(),ref.getMonth(),d).getDay()===0;
+                    const cls=descanso?(domingo?'day-off sunday':'day-off'):(domingo?'sunday':'');
+                    const editable=!['INTERVALO','TRABALHADAS'].includes(field.key);
+                    table+='<td class="'+cls+'">'+(editable?'<button class="bank-day-edit funcionario-dia-edit" data-dia="'+d+'">'+escapeHtml(value)+'</button>':escapeHtml(value))+'</td>';
+                }
+                table+='</tr>';
+            });
             escalaFuncionarioDetalhadaContent.innerHTML = table + '</tbody></table></div></article>';
         };
 
+        const sincronizarFiltrosEdicaoFuncionario = (mesRef) => {
+            if (!escalaFuncionarioEdicaoMes || !escalaFuncionarioEdicaoAno) return;
+            if (!escalaFuncionarioEdicaoMes.options.length) copiarOptionsSelect(mesSelect, escalaFuncionarioEdicaoMes);
+            if (!escalaFuncionarioEdicaoAno.options.length) copiarOptionsSelect(anoSelect, escalaFuncionarioEdicaoAno);
+            const data = new Date(mesRef + 'T00:00:00');
+            escalaFuncionarioEdicaoMes.value = String(data.getMonth());
+            escalaFuncionarioEdicaoAno.value = String(data.getFullYear());
+        };
+
         const carregarEscalaFuncionarioEdicao = async (escfuncId, lojaId, mesRef) => {
+            sincronizarFiltrosEdicaoFuncionario(mesRef);
             const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
             const escala = data.escala || {};
             const dias = (escala.dias || []).filter(dia => String(dia.ESCFUNC_ID) === String(escfuncId)).map(dia => ({...dia}));
             if (!dias.length) throw new Error('Escala do funcionário não encontrada.');
-            const base=dias[0]; escalaFuncionarioEdicaoAtual={escfuncId:Number(escfuncId),lojaId:Number(lojaId),mesRef,status:escala.status,revisao:escala.revisao,chapa:base.CHAPA,nome:base.NOME||base.CHAPA,secao:base.SECAO_DESCR||base.COD_SECAO||'',funcao:base.FUNCAO_DESCR||'',escsecaoId:base.ESCSECAO_ID,escfuncaoId:base.ESCFUNCAO_ID,dias};
+            const base=dias[0];
+            escalaFuncionarioEdicaoAtual={escfuncId:Number(escfuncId),lojaId:Number(lojaId),mesRef,status:escala.status,revisao:escala.revisao,chapa:base.CHAPA,nome:base.NOME||base.CHAPA,secao:base.SECAO_DESCR||base.COD_SECAO||'',funcao:base.FUNCAO_DESCR||'',escsecaoId:base.ESCSECAO_ID,escfuncaoId:base.ESCFUNCAO_ID,dias};
             escalaFuncionarioEdicaoTitulo.textContent='Escala - '+escalaFuncionarioEdicaoAtual.nome;
-            escalaFuncionarioEdicaoResumo.textContent='Loja '+lojaId+' | '+getNomeMesTabela(mesRef)+' '+mesRef.slice(0,4)+' | Revisão '+escala.revisao+' | '+escala.status;
-            const finalizada=escala.status==='FINALIZADA'; [distribuirFolgasFuncionarioBtn,salvarEscalaFuncionarioBtn].forEach(btn=>{if(btn)btn.disabled=finalizada;});
+            escalaFuncionarioEdicaoResumo.textContent='Loja '+lojaId+' | '+getNomeMesTabela(mesRef)+' '+mesRef.slice(0,4)+' | Revis?o '+escala.revisao+' | '+escala.status;
+            const finalizada=escala.status==='FINALIZADA';
+            [distribuirFolgasFuncionarioBtn,salvarEscalaFuncionarioBtn].forEach(btn=>{if(btn)btn.disabled=finalizada;});
+            await carregarTiposDescansoCache(false);
+            const lojaTurnoAtual = turnosSecaoLojaSelect?.value;
+            if (!turnosSecaoCache.length || String(lojaTurnoAtual || '') !== String(lojaId)) {
+                if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = String(lojaId);
+                await carregarTurnosSecaoDaLoja(true);
+            }
+            renderizarEscalaFuncionarioEdicao();
+        };
+
+        [escalaFuncionarioEdicaoMes, escalaFuncionarioEdicaoAno].forEach(select => select?.addEventListener('change', () => {
+            const atual = escalaFuncionarioEdicaoAtual;
+            if (!atual || !escalaFuncionarioEdicaoMes || !escalaFuncionarioEdicaoAno) return;
+            const novoMesRef = formatDateForDb(Number(escalaFuncionarioEdicaoAno.value), Number(escalaFuncionarioEdicaoMes.value), 1);
+            window.location.hash = '/escala-funcionario/' + atual.escfuncId + '/' + atual.lojaId + '/' + novoMesRef;
+        }));
+
+        const aplicarEdicaoDiasFuncionario = (inicio, fim, values) => {
+            const atual = escalaFuncionarioEdicaoAtual;
+            if (!atual) return;
+            const diaInicio = Math.min(Number(inicio), Number(fim));
+            const diaFim = Math.max(Number(inicio), Number(fim));
+            const tipoDia = values.IND_TIPO_DIA || 'TRABALHO';
+            const descansoSigla = String(values.IND_TIPO_DESCANSO || 'F').toUpperCase();
+            const turnoSelecionado = getTurnosFuncionarioAtual().find(turno => String(turno.ESCSECAOTURNO_ID) === String(values.IND_TURNO_ID));
+            atual.dias.forEach((dia) => {
+                const numeroDia = Number(String(dia.DT).slice(8,10));
+                if (numeroDia < diaInicio || numeroDia > diaFim) return;
+                if (tipoDia === 'DESCANSO') {
+                    dia.PROGRAMACAO = descansoSigla;
+                    dia.HR_ENT1 = descansoSigla;
+                    dia.HR_SAI1 = descansoSigla;
+                    dia.HR_ENT2 = descansoSigla;
+                    dia.HR_SAI2 = descansoSigla;
+                    return;
+                }
+                dia.PROGRAMACAO = 'TRB';
+                if (values.IND_MODO_TRABALHO === 'TURNO' && turnoSelecionado) {
+                    dia.HR_ENT1 = turnoSelecionado.HR_ENT1;
+                    dia.HR_SAI1 = turnoSelecionado.HR_SAI1;
+                    dia.HR_ENT2 = turnoSelecionado.HR_ENT2;
+                    dia.HR_SAI2 = turnoSelecionado.HR_SAI2;
+                } else {
+                    dia.HR_ENT1 = values.IND_HR_ENT1;
+                    dia.HR_SAI1 = values.IND_HR_SAI1;
+                    dia.HR_ENT2 = values.IND_HR_ENT2;
+                    dia.HR_SAI2 = values.IND_HR_SAI2;
+                }
+            });
             renderizarEscalaFuncionarioEdicao();
         };
 
         escalaFuncionarioDetalhadaContent?.addEventListener('click', async event => {
-            const button=event.target.closest('.funcionario-dia-edit'); if(!button||!escalaFuncionarioEdicaoAtual)return;
-            const dia=escalaFuncionarioEdicaoAtual.dias.find(item=>Number(String(item.DT).slice(8,10))===Number(button.dataset.dia)); if(!dia)return;
-            const values=await showInputModal({title:'Editar dia '+formatarDataTabela(dia.DT),inputs:[{label:'Programação',type:'select',id:'IND_PROGRAMACAO',value:dia.PROGRAMACAO||'TRB',options:[{value:'TRB',label:'Trabalho'},{value:'F',label:'Folga'}],required:true},{label:'Entrada 1',type:'time',id:'IND_HR_ENT1',value:dia.HR_ENT1==='F'?'':dia.HR_ENT1||''},{label:'Saída 1',type:'time',id:'IND_HR_SAI1',value:dia.HR_SAI1==='F'?'':dia.HR_SAI1||''},{label:'Entrada 2',type:'time',id:'IND_HR_ENT2',value:dia.HR_ENT2==='F'?'':dia.HR_ENT2||''},{label:'Saída 2',type:'time',id:'IND_HR_SAI2',value:dia.HR_SAI2==='F'?'':dia.HR_SAI2||''}],confirmText:'Aplicar'}); if(!values)return;
-            const folga=values.IND_PROGRAMACAO==='F'; dia.PROGRAMACAO=folga?'F':'TRB'; dia.HR_ENT1=folga?'F':values.IND_HR_ENT1; dia.HR_SAI1=folga?'F':values.IND_HR_SAI1; dia.HR_ENT2=folga?'F':values.IND_HR_ENT2; dia.HR_SAI2=folga?'F':values.IND_HR_SAI2; renderizarEscalaFuncionarioEdicao();
+            const button=event.target.closest('.funcionario-dia-edit');
+            if(!button||!escalaFuncionarioEdicaoAtual)return;
+            const dia=escalaFuncionarioEdicaoAtual.dias.find(item=>Number(String(item.DT).slice(8,10))===Number(button.dataset.dia));
+            if(!dia)return;
+            const numeroDia = Number(button.dataset.dia);
+            if (!tiposDescansoCache.length) await carregarTiposDescansoCache(false);
+            const turnos = getTurnosFuncionarioAtual();
+            const tipoOptions = tiposDescansoCache.filter(tipo => tipo.STATUS !== 'I').map(tipo => ({ value: tipo.SIGLA, label: tipo.DESCR + ' (' + tipo.SIGLA + ')' }));
+            const turnoOptions = turnos.map(turno => ({ value: turno.ESCSECAOTURNO_ID, label: (turno.DESCR || 'Turno') + ' | ' + turno.HR_ENT1 + '-' + turno.HR_SAI1 + ' / ' + turno.HR_ENT2 + '-' + turno.HR_SAI2 }));
+            const values=await showInputModal({
+                title:'Editar dia '+formatarDataTabela(dia.DT),
+                inputs:[
+                    {label:'Aplicar do dia',type:'number',id:'IND_DIA_INICIO',value:String(numeroDia),required:true},
+                    {label:'Aplicar at? o dia',type:'number',id:'IND_DIA_FIM',value:String(numeroDia),required:true},
+                    {label:'Tipo do dia',type:'select',id:'IND_TIPO_DIA',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true},
+                    {label:'Tipo de descanso',type:'select',id:'IND_TIPO_DESCANSO',value:isProgramacaoDescanso(dia.PROGRAMACAO)?getValorDescanso(dia):'F',options:tipoOptions.length?tipoOptions:[{value:'F',label:'Folga (F)'}]},
+                    {label:'Modo de trabalho',type:'select',id:'IND_MODO_TRABALHO',value:'MANUAL',options:[{value:'TURNO',label:'Selecionar turno'},{value:'MANUAL',label:'Inserir manual'}]},
+                    {label:'Turno da se??o',type:'select',id:'IND_TURNO_ID',value:turnoOptions[0]?.value || '',options:turnoOptions.length?turnoOptions:[{value:'',label:'Nenhum turno cadastrado'}]},
+                    {label:'Entrada 1',type:'time',id:'IND_HR_ENT1',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_ENT1||''},
+                    {label:'Sa?da 1',type:'time',id:'IND_HR_SAI1',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_SAI1||''},
+                    {label:'Entrada 2',type:'time',id:'IND_HR_ENT2',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_ENT2||''},
+                    {label:'Sa?da 2',type:'time',id:'IND_HR_SAI2',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_SAI2||''}
+                ],
+                confirmText:'Aplicar'
+            });
+            if(!values)return;
+            aplicarEdicaoDiasFuncionario(values.IND_DIA_INICIO, values.IND_DIA_FIM, values);
         });
 
         const distribuirFolgasFuncionario = () => {
             const atual = escalaFuncionarioEdicaoAtual;
             if (!atual) return;
             const dias = [...atual.dias].sort((a,b) => String(a.DT).localeCompare(String(b.DT)));
-            const horarioBase = dias.find(d => String(d.PROGRAMACAO).toUpperCase() !== 'F' && d.HR_ENT1 !== 'F') || { HR_ENT1:'08:00', HR_SAI1:'12:00', HR_ENT2:'13:00', HR_SAI2:'16:20' };
+            const horarioBase = dias.find(d => !isProgramacaoDescanso(d.PROGRAMACAO) && d.HR_ENT1 !== 'F') || { HR_ENT1:'08:00', HR_SAI1:'12:00', HR_ENT2:'13:00', HR_SAI2:'16:20' };
             dias.forEach(d => { d.PROGRAMACAO='TRB'; d.HR_ENT1=horarioBase.HR_ENT1; d.HR_SAI1=horarioBase.HR_SAI1; d.HR_ENT2=horarioBase.HR_ENT2; d.HR_SAI2=horarioBase.HR_SAI2; });
             const semanas = new Map();
             dias.forEach(dia => {
@@ -2746,21 +2975,21 @@
                 folgas.forEach(({dia}) => { dia.PROGRAMACAO='F'; dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F'; });
             });
             let consecutivos=0;
-            dias.forEach(dia => { if(dia.PROGRAMACAO==='F'){consecutivos=0;return;} consecutivos++; if(consecutivos>5){dia.PROGRAMACAO='F';dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F';consecutivos=0;} });
+            dias.forEach(dia => { if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>5){dia.PROGRAMACAO='F';dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F';consecutivos=0;} });
             renderizarEscalaFuncionarioEdicao();
-            showInfoModal('Folgas 5x2 distribuídas. Revise e valide antes de salvar.','success');
+            showInfoModal('Folgas 5x2 distribu?das. Revise e valide antes de salvar.','success');
         };
         distribuirFolgasFuncionarioBtn?.addEventListener('click',distribuirFolgasFuncionario);
 
         const validarEscalaFuncionarioAtual = () => {
             const atual=escalaFuncionarioEdicaoAtual;if(!atual)return false; const errors=[]; let consecutivos=0;
-            [...atual.dias].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach(dia=>{if(String(dia.PROGRAMACAO).toUpperCase()==='F'){consecutivos=0;return;} consecutivos++; if(consecutivos>Number(regraMaxDiasConsecutivosInput.value||7))errors.push('Mais de '+regraMaxDiasConsecutivosInput.value+' dias consecutivos em '+formatarDataTabela(dia.DT)+'.'); errors.push(...validarTurnoSimples({inicio:dia.HR_ENT1,inicioIntervalo:dia.HR_SAI1,fimIntervalo:dia.HR_ENT2,fim:dia.HR_SAI2}).map(e=>formatarDataTabela(dia.DT)+': '+e));});
+            [...atual.dias].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach(dia=>{if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>Number(regraMaxDiasConsecutivosInput.value||7))errors.push('Mais de '+regraMaxDiasConsecutivosInput.value+' dias consecutivos em '+formatarDataTabela(dia.DT)+'.'); errors.push(...validarTurnoSimples({inicio:dia.HR_ENT1,inicioIntervalo:dia.HR_SAI1,fimIntervalo:dia.HR_ENT2,fim:dia.HR_SAI2}).map(e=>formatarDataTabela(dia.DT)+': '+e));});
             showInfoModal(errors.length?errors:'A escala do funcionário foi validada com sucesso.',errors.length?'error':'success'); return errors.length===0;
         };
         validarEscalaFuncionarioBtn?.addEventListener('click',validarEscalaFuncionarioAtual);
-        imprimirEscalaFuncionarioBtn?.addEventListener('click',()=>{if(!escalaFuncionarioEdicaoAtual)return;printContainer.innerHTML='<div class="print-title">Escala - '+escapeHtml(escalaFuncionarioEdicaoAtual.nome)+'</div>'+escalaFuncionarioDetalhadaContent.innerHTML;window.print();});
+        imprimirEscalaFuncionarioBtn?.addEventListener('click',()=>{if(!escalaFuncionarioEdicaoAtual)return;printContainer.innerHTML='<div class="print-title">Escala - '+escapeHtml(escalaFuncionarioEdicaoAtual.nome)+'</div>'+escalaFuncionarioDetalhadaContent.innerHTML+'<div class="print-aware-line">Ciente: ___________________________________________ &nbsp;&nbsp; Data: ____/____/________</div>';window.print();});
 
-        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const folga=String(d.PROGRAMACAO).toUpperCase()==='F';return{data:String(d.DT).slice(0,10),hrEnt1:folga?null:d.HR_ENT1,hrSai1:folga?null:d.HR_SAI1,hrEnt2:folga?null:d.HR_ENT2,hrSai2:folga?null:d.HR_SAI2,programacao:folga?'F':'TRB'};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:0})});showInfoModal('Escala do funcionário salva em uma nova revisão.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
+        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB'};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:0})});showInfoModal('Escala do funcionário salva em uma nova revisão.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
 
         const renderizarAcessosTela = (usuarios) => {
             tabelaAcessosBody.innerHTML = '';
@@ -3039,49 +3268,115 @@
             `;
         };
 
+﻿        const carregarPerfisAcesso = async () => {
+            const data = await apiRequest('/api/acessos/perfis');
+            perfisAcessoCache = data.perfis || [];
+            perfilPaginasCache = data.paginas || [];
+            return data;
+        };
+
+        const montarPermissoesPerfil = (perfil = null) => {
+            const existentes = new Map((perfil?.PERMISSOES || []).map(p => [String(p.PAGINA), p]));
+            return perfilPaginasCache.map((pagina) => {
+                const atual = existentes.get(String(pagina.key)) || {};
+                return {
+                    PAGINA: pagina.key,
+                    LABEL: pagina.label,
+                    PODE_VISUALIZAR: Number(atual.PODE_VISUALIZAR ?? 1),
+                    PODE_EDITAR: Number(atual.PODE_EDITAR ?? 0),
+                    PODE_EXCLUIR: Number(atual.PODE_EXCLUIR ?? 0)
+                };
+            });
+        };
+
+        const abrirModalPerfilAcesso = async (perfil = null) => {
+            const permissoes = montarPermissoesPerfil(perfil);
+            const html = '<div class="permissions-grid">' + permissoes.map((permissao) => `
+                <div class="permission-row" data-page="${escapeHtml(permissao.PAGINA)}">
+                    <strong>${escapeHtml(permissao.LABEL)}</strong>
+                    <label><input type="checkbox" data-perm="PODE_VISUALIZAR" ${permissao.PODE_VISUALIZAR ? 'checked' : ''}> Visualizar</label>
+                    <label><input type="checkbox" data-perm="PODE_EDITAR" ${permissao.PODE_EDITAR ? 'checked' : ''}> Editar</label>
+                    <label><input type="checkbox" data-perm="PODE_EXCLUIR" ${permissao.PODE_EXCLUIR ? 'checked' : ''}> Inativar</label>
+                </div>`).join('') + '</div>';
+            const values = await showInputModal({
+                title: perfil ? 'Editar Perfil de Acesso' : 'Novo Perfil de Acesso',
+                inputs: [
+                    { label: 'Nome do perfil', type: 'text', id: 'PERFIL_NOME', value: perfil?.NOME || '', required: true },
+                    { label: 'Descrição', type: 'text', id: 'PERFIL_DESCR', value: perfil?.DESCR || '' },
+                    { label: 'Status', type: 'select', id: 'PERFIL_STATUS', value: perfil?.STATUS || 'A', options: [{ value: 'A', label: 'Ativo' }, { value: 'I', label: 'Inativo' }], required: true },
+                    { type: 'html', html }
+                ],
+                confirmText: 'Salvar'
+            });
+            if (!values) return;
+            const rows = Array.from(document.querySelectorAll('#inputModalBody .permission-row'));
+            const payload = {
+                NOME: String(values.PERFIL_NOME || '').trim().toUpperCase(),
+                DESCR: values.PERFIL_DESCR || null,
+                STATUS: values.PERFIL_STATUS,
+                PERMISSOES: rows.map(row => ({
+                    PAGINA: row.dataset.page,
+                    PODE_VISUALIZAR: row.querySelector('[data-perm="PODE_VISUALIZAR"]')?.checked ? 1 : 0,
+                    PODE_EDITAR: row.querySelector('[data-perm="PODE_EDITAR"]')?.checked ? 1 : 0,
+                    PODE_EXCLUIR: row.querySelector('[data-perm="PODE_EXCLUIR"]')?.checked ? 1 : 0
+                }))
+            };
+            if (perfil) {
+                await apiRequest('/api/acessos/perfis/' + encodeURIComponent(perfil.PERFIL_ID), { method: 'PATCH', body: JSON.stringify(payload) });
+            } else {
+                await apiRequest('/api/acessos/perfis', { method: 'POST', body: JSON.stringify(payload) });
+            }
+            await renderizarRolesSettings();
+            showInfoModal('Perfil de acesso salvo com sucesso.', 'success');
+        };
+
         const renderizarRolesSettings = async () => {
             if (usuarioSessaoCache?.perfil !== 'ADMIN') return;
-
             const container = document.getElementById('rolesSettingsContainer');
             if (!container) return;
-
-            if (usuariosAcessoCache.length === 0) {
-                const data = await apiRequest('/api/acessos/usuarios');
-                usuariosAcessoCache = data.usuarios || [];
-            }
-
-            const roles = usuariosAcessoCache.reduce((acc, usuario) => {
-                const role = usuario.PERFIL || 'SEM_ROLE';
-                acc[role] = acc[role] || { total: 0, ativos: 0, lojas: new Set() };
-                acc[role].total += 1;
-                if (usuario.STATUS === 'A') acc[role].ativos += 1;
-                (usuario.LOJAS || []).forEach(loja => acc[role].lojas.add(loja));
-                return acc;
-            }, {});
-
-            const rows = Object.entries(roles).map(([role, info]) => `
-                <tr>
-                    <td data-label="Perfil de Acesso">${role}</td>
-                    <td data-label="Usuários">${info.ativos}/${info.total} ativo(s)</td>
-                    <td data-label="Lojas">${Array.from(info.lojas).sort((a, b) => a - b).join(', ') || '-'}</td>
-                    <td data-label="Permissões">${role === 'ADMIN' ? 'Administração completa' : 'Operação nas lojas permitidas'}</td>
-                </tr>
-            `).join('');
-
+            await carregarPerfisAcesso();
+            const rows = perfisAcessoCache.map((perfil) => {
+                const permissoesAtivas = (perfil.PERMISSOES || []).filter(p => Number(p.PODE_VISUALIZAR) || Number(p.PODE_EDITAR) || Number(p.PODE_EXCLUIR)).length;
+                return `
+                    <tr>
+                        <td data-label="Perfil de Acesso">${escapeHtml(perfil.NOME || '')}</td>
+                        <td data-label="Descrição">${escapeHtml(perfil.DESCR || '-')}</td>
+                        <td data-label="Status">${perfil.STATUS === 'A' ? 'Ativo' : 'Inativo'}</td>
+                        <td data-label="Permissões">${permissoesAtivas} página(s)</td>
+                        <td data-label="Ações" class="actions-cell">
+                            <button class="action-btn-table banco-action editar-perfil-acesso" data-id="${escapeHtml(perfil.PERFIL_ID)}"><span class="material-symbols-outlined">edit</span>Editar</button>
+                            <button class="action-btn-table banco-action danger-action toggle-perfil-acesso" data-id="${escapeHtml(perfil.PERFIL_ID)}" data-status="${escapeHtml(perfil.STATUS)}"><span class="material-symbols-outlined">block</span>${perfil.STATUS === 'A' ? 'Inativar' : 'Reativar'}</button>
+                        </td>
+                    </tr>`;
+            }).join('');
             container.innerHTML = `
+                <div class="table-card-header creation-card-header inner-card-header">
+                    <div><h2>Perfis cadastrados</h2><p class="table-card-subtitle">Defina visualização, edição e inativação por página.</p></div>
+                    <button type="button" class="action-button" id="novoPerfilAcessoBtn"><span class="material-symbols-outlined">add</span>Novo Perfil</button>
+                </div>
                 <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Perfil de Acesso</th>
-                            <th>Usuários</th>
-                            <th>Lojas</th>
-                            <th>Permissões</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows || '<tr><td colspan="4" class="text-center text-gray-500 py-8">Nenhuma role encontrada.</td></tr>'}</tbody>
-                </table>
-            `;
+                    <thead><tr><th>Perfil de Acesso</th><th>Descrição</th><th>Status</th><th>Permissões</th><th>Ações</th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="5" class="text-center text-gray-500 py-8">Nenhum perfil encontrado.</td></tr>'}</tbody>
+                </table>`;
         };
+
+        document.getElementById('rolesSettingsContainer')?.addEventListener('click', async (event) => {
+            const novo = event.target.closest('#novoPerfilAcessoBtn');
+            const edit = event.target.closest('.editar-perfil-acesso');
+            const toggle = event.target.closest('.toggle-perfil-acesso');
+            try {
+                if (novo) return abrirModalPerfilAcesso();
+                const button = edit || toggle;
+                if (!button) return;
+                const perfil = perfisAcessoCache.find(item => Number(item.PERFIL_ID) === Number(button.dataset.id));
+                if (!perfil) return;
+                if (edit) return abrirModalPerfilAcesso(perfil);
+                await apiRequest('/api/acessos/perfis/' + encodeURIComponent(perfil.PERFIL_ID), { method: 'PATCH', body: JSON.stringify({ STATUS: perfil.STATUS === 'A' ? 'I' : 'A' }) });
+                await renderizarRolesSettings();
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
 
         const renderizarTabelaRegistros = () => {
             const escalas = getEscalasSalvas();
@@ -3480,7 +3775,7 @@
                     '<td data-label="Mês">' + getNomeMesTabela(escala.MES_REF) + '</td>',
                     '<td data-label="Loja">Loja ' + escapeHtml(loja) + '</td>',
                     '<td data-label="Status"><span class="escala-status-chip ' + getStatusClassEscala(status) + '">' + escapeHtml(status || '-') + '</span></td>',
-                    '<td data-label="Oficializada"><span class="escala-status-chip ' + (oficializada ? 'official-chip' : 'pending-chip') + '">' + (oficializada ? 'Sim' : 'N?o') + '</span></td>',
+                    '<td data-label="Oficializada"><span class="escala-status-chip ' + (oficializada ? 'official-chip' : 'pending-chip') + '">' + (oficializada ? 'Sim' : 'Não') + '</span></td>',
                     '<td data-label="Secoes">' + escapeHtml(escala.SECOES || 0) + '</td>',
                     '<td data-label="Funcionarios">' + escapeHtml(escala.FUNCIONARIOS || 0) + '</td>',
                     '<td data-label="Modificada em">' + formatarDataTabela(escala.MODIFICADA_EM) + '</td>',
@@ -3489,7 +3784,7 @@
                     '<button class="action-btn-table banco-action banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
                     oficializarAction,
                     inativarAction,
-                    '<button class="action-btn-table banco-action banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver hist?rico de revis?es"><span class="material-symbols-outlined">history</span>Hist?rico</button>',
+                    '<button class="action-btn-table banco-action banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver histórico de revisões"><span class="material-symbols-outlined">history</span>Histórico</button>',
                     '</td>',
                     '</tr>'
                 ].join('');
@@ -3518,7 +3813,7 @@
             ].join('')).join('');
 
             await showInputModal({
-                title: 'Hist?rico de revis?es - Loja ' + loja + ' - ' + formatarMesTabela(mesRef),
+                title: 'Histórico de revisões - Loja ' + loja + ' - ' + formatarMesTabela(mesRef),
                 inputs: [{
                     type: 'html',
                     html: '<div class="revision-history-modal"><table class="data-table compact-table"><thead><tr><th>Revis?o</th><th>Status</th><th>Se??es</th><th>Funcion?rios</th><th>Criada em</th><th>Modificada em</th><th>Modificada por</th></tr></thead><tbody>' + rows + '</tbody></table></div>'

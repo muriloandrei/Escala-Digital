@@ -29,6 +29,21 @@ insert into SGN_ESC_FUNCIONARIO (ESCFUNC_ID, CODCOLIGADA, LOJA, CHAPA, NOME, SEX
 
 insert into SGN_ESC_AUSENCIA (ESCAUSEN_ID, ESCFUNC_ID, CHAPA, DT_INIC, DT_FIM, MOTIVO, DT_HR_INCL) values (1, 2, '000102', date '2026-06-10', date '2026-06-12', 'Ferias', sysdate);
 
+insert into SGN_ESC_TIPO_DESCANSO (ESCTIPODESC_ID, DESCR, SIGLA, STATUS, DT_HR_INCL) values (1, 'Folga', 'F', 'A', sysdate);
+insert into SGN_ESC_TIPO_DESCANSO (ESCTIPODESC_ID, DESCR, SIGLA, STATUS, DT_HR_INCL) values (2, 'Ferias', 'FER', 'A', sysdate);
+
+insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (1, 'ADMIN', 'Administracao completa', 'A', sysdate);
+insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (2, 'OPERADOR', 'Operacao nas lojas permitidas', 'A', sysdate);
+
+insert into SGN_ESC_PERFIL_PERMISSAO (PERFIL_ID, PAGINA, PODE_VISUALIZAR, PODE_EDITAR, PODE_EXCLUIR, DT_HR_INCL)
+select 1, pagina, 1, 1, 1, sysdate from (
+  select 'escalas' pagina from dual union all select 'escalas-funcionarios' from dual union all select 'funcionarios' from dual union all select 'secoes' from dual union all select 'turnos-secao' from dual union all select 'historico' from dual union all select 'tipos-descanso' from dual union all select 'acessos' from dual union all select 'roles' from dual union all select 'configuracoes' from dual
+);
+insert into SGN_ESC_PERFIL_PERMISSAO (PERFIL_ID, PAGINA, PODE_VISUALIZAR, PODE_EDITAR, PODE_EXCLUIR, DT_HR_INCL)
+select 2, pagina, 1, editar, 0, sysdate from (
+  select 'escalas' pagina, 1 editar from dual union all select 'escalas-funcionarios', 1 from dual union all select 'funcionarios', 1 from dual union all select 'secoes', 1 from dual union all select 'turnos-secao', 1 from dual union all select 'historico', 0 from dual union all select 'tipos-descanso', 1 from dual union all select 'acessos', 0 from dual union all select 'roles', 0 from dual union all select 'configuracoes', 0 from dual
+);
+
 insert into SGN_ESC_USUARIO (USUARIO_ID, LOGIN, NOME, SENHA_HASH, PERFIL, STATUS, DT_HR_INCL) values (1, 'admin', 'Administrador', '$2a$10$1N1BKFLNZh7I2s7bkMavhu2RBBJpWqQQXbONkZosobki33EPpzxWe', 'ADMIN', 'A', sysdate);
 insert into SGN_ESC_USUARIO (USUARIO_ID, LOGIN, NOME, SENHA_HASH, PERFIL, STATUS, DT_HR_INCL) values (2, 'loja1', 'Usuario Loja 1', '$2a$10$1N1BKFLNZh7I2s7bkMavhu2RBBJpWqQQXbONkZosobki33EPpzxWe', 'OPERADOR', 'A', sysdate);
 insert into SGN_ESC_USUARIO_LOJA (USUARIO_ID, LOJA) values (2, 1);
