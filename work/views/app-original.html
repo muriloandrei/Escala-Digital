@@ -301,7 +301,7 @@
 
                 <div class="table-card">
                     <div class="table-card-header">
-                        <h2>Usuários com acesso Ã  escala</h2>
+                        <h2>Usuários com acesso à escala</h2>
                     </div>
                     <table class="data-table">
                         <thead>
@@ -314,7 +314,7 @@
                             </tr>
                         </thead>
                         <tbody id="tabela-acessos-body">
-                            <tr><td colspan="5" class="text-center text-gray-500 py-8">Carregue os usuários com acesso Ã  escala.</td></tr>
+                            <tr><td colspan="5" class="text-center text-gray-500 py-8">Carregue os usuários com acesso à escala.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -448,13 +448,13 @@
                 </header>
                 <div class="table-card">
                     <div class="catalog-filter-bar three-filters">
-                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="historicoPesquisaInput" type="search" placeholder="Pesquisar a??o, usu?rio ou detalhe"></label>
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="historicoPesquisaInput" type="search" placeholder="Pesquisar ação, usuário ou detalhe"></label>
                         <select id="historicoLojaSelect" class="escala-filter-select"></select>
                         <select id="historicoMesSelect" class="escala-filter-select"></select>
                         <select id="historicoAnoSelect" class="escala-filter-select"></select>
                     </div>
                     <div class="table-card-header"><h2>Relatório de alterações</h2><p id="historicoResumo" class="table-card-subtitle">Carregando histórico.</p></div>
-                    <table class="data-table"><thead><tr><th>Data</th><th>Ação</th><th>Loja</th><th>Mês</th><th>Revis?o</th><th>Usuário</th><th>Detalhe</th></tr></thead><tbody id="tabelaHistoricoBody"><tr><td colspan="7" class="text-center text-gray-500 py-8">Carregando histórico...</td></tr></tbody></table>
+                    <table class="data-table"><thead><tr><th>Data</th><th>Ação</th><th>Loja</th><th>Mês</th><th>Revisão</th><th>Usuário</th><th>Detalhe</th></tr></thead><tbody id="tabelaHistoricoBody"><tr><td colspan="7" class="text-center text-gray-500 py-8">Carregando histórico...</td></tr></tbody></table>
                 </div>
             </div>
 
@@ -491,7 +491,7 @@
                 </header>
                 <div class="table-card">
                     <div class="catalog-filter-bar two-filters">
-                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="tiposDescansoPesquisaInput" type="search" placeholder="Pesquisar descri??o ou sigla"></label>
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="tiposDescansoPesquisaInput" type="search" placeholder="Pesquisar descrição ou sigla"></label>
                         <select id="tiposDescansoStatusFiltro" class="escala-filter-select"><option value="all">Todos os status</option><option value="A">Ativos</option><option value="I">Inativos</option></select>
                     </div>
                     <table class="data-table"><thead><tr><th>ID</th><th>Descrição</th><th>Sigla</th><th>Status</th><th>Ações</th></tr></thead><tbody id="tabelaTiposDescansoBody"><tr><td colspan="5" class="text-center text-gray-500 py-8">Carregando tipos...</td></tr></tbody></table>
@@ -506,44 +506,36 @@
                 </div>
             </div>
             <div id="settings-page" class="hidden">
-                 <header class="main-header"><h1>Configurações</h1></header>
-                <div class="bg-white p-6 rounded-xl shadow-md w-full max-w-2xl mx-auto">
-                    
-                        <hr class="my-6">
-                        <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Linha do Tempo</h4>
-                        <div><label for="horaInicioTimeline" class="block text-sm font-medium text-gray-700">Hora Início</label><input type="time" id="horaInicioTimeline" value="05:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="horaFimTimeline" class="block text-sm font-medium text-gray-700">Hora Fim</label><input type="time" id="horaFimTimeline" value="23:30" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="intervaloMarcacao" class="block text-sm font-medium text-gray-700">Intervalo (minutos)</label><input type="number" id="intervaloMarcacao" value="30" min="5" step="5" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <hr class="my-6">
-                        <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Regras de Turno</h4>
-                        <div><label for="regraJornadaTrabalho" class="block text-sm font-medium text-gray-700">Jornada de Trabalho Padrão</label><input type="time" id="regraJornadaTrabalho" value="07:20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxHoraExtra" class="block text-sm font-medium text-gray-700">Máximo de Hora Extra Diária</label><input type="time" id="regraMaxHoraExtra" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <hr>
-                        <div><label for="regraMinIntervalo" class="block text-sm font-medium text-gray-700">Duração Mínima Intervalo</label><input type="time" id="regraMinIntervalo" value="01:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxIntervalo" class="block text-sm font-medium text-gray-700">Duração Máxima Intervalo</label><input type="time" id="regraMaxIntervalo" value="02:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxJornadaContinua" class="block text-sm font-medium text-gray-700">Jornada Máxima Contínua</label><input type="time" id="regraMaxJornadaContinua" value="06:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraDescansoEntreTurnos" class="block text-sm font-medium text-gray-700">Descanso Mínimo Entre Turnos</label><input type="time" id="regraDescansoEntreTurnos" value="11:00" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraDescansoPosFolga" class="block text-sm font-medium text-gray-700">Descanso Mínimo Pós-Folga (horas)</label><input type="number" id="regraDescansoPosFolga" value="35" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        <div><label for="regraMaxDiasConsecutivos" class="block text-sm font-medium text-gray-700">Máximo de Dias de Trabalho Consecutivos</label><input type="number" id="regraMaxDiasConsecutivos" value="7" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-                        
-                        <hr class="my-6">
-                        <h4 class="text-md font-semibold text-gray-800 border-b pb-2">Backup e Restauração de TUDO</h4>
-                        <div class="space-y-3">
-                            <p class="text-sm text-gray-600">
-                                Salve um arquivo de backup com TODAS as suas escalas e configurações.
-                                Use a opção de carregar para restaurar TODOS os dados a partir de um backup.
-                            </p>
-                            <div class="flex gap-4">
-                                <button id="salvarBackupBtn" type="button" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Salvar Backup Total</button>
-                                <button id="carregarBackupBtn" type="button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Carregar Backup Total</button>
-                            </div>
-                        </div>
-                        <input type="file" id="backupFileInput" class="hidden" accept=".json">
-                        </div>
-                    <div class="pt-6 border-t mt-6">
-                        <button id="salvarSettingsBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition duration-300">Salvar Alterações</button>
+                <header class="main-header">
+                    <div>
+                        <h1>Configurações</h1>
+                        <p class="table-card-subtitle">Ajuste parâmetros visuais e regras usadas na validação da escala.</p>
                     </div>
-                </div>
+                    <button id="salvarSettingsBtn" type="button" class="action-button"><span class="material-symbols-outlined">save</span>Salvar Alterações</button>
+                </header>
+                <form id="settings-form" class="settings-grid">
+                    <section class="table-card settings-card">
+                        <div class="table-card-header"><h2>Linha do Tempo</h2><p class="table-card-subtitle">Defina a janela e o intervalo de marcação exibidos na timeline.</p></div>
+                        <div class="dashboard-form compact-form">
+                            <div><label for="horaInicioTimeline">Hora Início</label><input type="time" id="horaInicioTimeline" value="05:00"></div>
+                            <div><label for="horaFimTimeline">Hora Fim</label><input type="time" id="horaFimTimeline" value="23:30"></div>
+                            <div><label for="intervaloMarcacao">Intervalo (minutos)</label><input type="number" id="intervaloMarcacao" value="30" min="5" step="5"></div>
+                        </div>
+                    </section>
+                    <section class="table-card settings-card">
+                        <div class="table-card-header"><h2>Regras de Turno</h2><p class="table-card-subtitle">Parâmetros usados pelas validações de jornada e descanso.</p></div>
+                        <div class="dashboard-form compact-form">
+                            <div><label for="regraJornadaTrabalho">Jornada de Trabalho Padrão</label><input type="time" id="regraJornadaTrabalho" value="07:20"></div>
+                            <div><label for="regraMaxHoraExtra">Máximo de Hora Extra Diária</label><input type="time" id="regraMaxHoraExtra" value="02:00"></div>
+                            <div><label for="regraMinIntervalo">Duração Mínima Intervalo</label><input type="time" id="regraMinIntervalo" value="01:00"></div>
+                            <div><label for="regraMaxIntervalo">Duração Máxima Intervalo</label><input type="time" id="regraMaxIntervalo" value="02:00"></div>
+                            <div><label for="regraMaxJornadaContinua">Jornada Máxima Contínua</label><input type="time" id="regraMaxJornadaContinua" value="06:00"></div>
+                            <div><label for="regraDescansoEntreTurnos">Descanso Mínimo Entre Turnos</label><input type="time" id="regraDescansoEntreTurnos" value="11:00"></div>
+                            <div><label for="regraDescansoPosFolga">Descanso Mínimo Pós-Folga (horas)</label><input type="number" id="regraDescansoPosFolga" value="35"></div>
+                            <div><label for="regraMaxDiasConsecutivos">Máximo de Dias de Trabalho Consecutivos</label><input type="number" id="regraMaxDiasConsecutivos" value="7"></div>
+                        </div>
+                    </section>
+                </form>
             </div>
         </main>
     </div>

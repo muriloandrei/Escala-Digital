@@ -1947,22 +1947,34 @@
                 showInfoModal(error.message, 'error');
             }
         });
+        const getPerfilAcessoOptions = async (selected = '') => {
+            if (!perfisAcessoCache.length) await carregarPerfisAcesso();
+            const ativos = perfisAcessoCache.filter(perfil => perfil.STATUS !== 'I' || String(perfil.NOME) === String(selected));
+            return ativos.map(perfil => ({ value: perfil.NOME, label: perfil.NOME + (perfil.STATUS === 'I' ? ' (Inativo)' : '') }));
+        };
+
+        const getLojasPermitidasOptions = (selected = []) => {
+            const selecionadas = new Set((selected || []).map(String));
+            return lojasPermitidasCache.map(loja => ({ value: String(loja), label: 'Loja ' + loja, checked: selecionadas.has(String(loja)) }));
+        };
+
         carregarAcessosBtn.parentElement.addEventListener('click', async (event) => {
             if (event.target.closest('#novoUsuarioBtn')) {
-                const values = await showInputModal({
-                    title: 'Novo Usuário',
-                    inputs: [
-                        { label: 'Login', type: 'text', id: 'LOGIN', required: true },
-                        { label: 'Nome', type: 'text', id: 'NOME', required: true },
-                        { label: 'Senha inicial', type: 'password', id: 'PASSWORD', required: true },
-                        { label: 'Perfil de Acesso', type: 'text', id: 'PERFIL', value: 'GERENTE', required: true },
-                        { label: 'Lojas permitidas (separadas por vírgula)', type: 'text', id: 'LOJAS', value: (lojasPermitidasCache[0] || '').toString() }
-                    ],
-                    confirmText: 'Criar'
-                });
-                if (!values) return;
-
                 try {
+                    const perfilOptions = await getPerfilAcessoOptions('OPERADOR');
+                    const lojaInicial = lojasPermitidasCache.length === 1 ? [String(lojasPermitidasCache[0])] : [];
+                    const values = await showInputModal({
+                        title: 'Novo Usuário',
+                        inputs: [
+                            { label: 'Login', type: 'text', id: 'LOGIN', required: true },
+                            { label: 'Nome', type: 'text', id: 'NOME', required: true },
+                            { label: 'Senha inicial', type: 'password', id: 'PASSWORD', required: true },
+                            { label: 'Perfil de Acesso', type: 'select', id: 'PERFIL', value: perfilOptions[0]?.value || 'OPERADOR', options: perfilOptions, required: true },
+                            { label: 'Lojas permitidas', type: 'checkbox-group', id: 'LOJAS', value: lojaInicial, options: getLojasPermitidasOptions(lojaInicial), required: true }
+                        ],
+                        confirmText: 'Criar'
+                    });
+                    if (!values) return;
                     await apiRequest('/api/acessos/usuarios', {
                         method: 'POST',
                         body: JSON.stringify({
@@ -1970,7 +1982,7 @@
                             NOME: values.NOME,
                             PASSWORD: values.PASSWORD,
                             PERFIL: values.PERFIL,
-                            LOJAS: String(values.LOJAS || '').split(',').map(loja => Number(loja.trim())).filter(Boolean)
+                            LOJAS: (values.LOJAS || []).map(loja => Number(loja)).filter(Boolean)
                         })
                     });
                     await carregarAcessosTela(false);
@@ -2744,7 +2756,7 @@
                     <td data-label="Ação">${escapeHtml(item.ACAO || "-")}</td>
                     <td data-label="Loja">${item.LOJA ? "Loja " + escapeHtml(item.LOJA) : "-"}</td>
                     <td data-label="Mês">${item.MES_REF ? getNomeMesTabela(item.MES_REF) + " " + String(item.MES_REF).slice(0,4) : "-"}</td>
-                    <td data-label="Revis?o">${escapeHtml(item.REVISAO ?? "-")}</td>
+                    <td data-label="Revisão">${escapeHtml(item.REVISAO ?? "-")}</td>
                     <td data-label="Usuário">${escapeHtml(item.NOME_USUARIO || item.LOGIN || "Sistema")}</td>
                     <td data-label="Detalhe">${escapeHtml(item.DETALHE || "-")}</td>
                 </tr>`).join("") : '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum histórico encontrado.</td></tr>';
@@ -2864,7 +2876,7 @@
             const base=dias[0];
             escalaFuncionarioEdicaoAtual={escfuncId:Number(escfuncId),lojaId:Number(lojaId),mesRef,status:escala.status,revisao:escala.revisao,chapa:base.CHAPA,nome:base.NOME||base.CHAPA,secao:base.SECAO_DESCR||base.COD_SECAO||'',funcao:base.FUNCAO_DESCR||'',escsecaoId:base.ESCSECAO_ID,escfuncaoId:base.ESCFUNCAO_ID,dias};
             escalaFuncionarioEdicaoTitulo.textContent='Escala - '+escalaFuncionarioEdicaoAtual.nome;
-            escalaFuncionarioEdicaoResumo.textContent='Loja '+lojaId+' | '+getNomeMesTabela(mesRef)+' '+mesRef.slice(0,4)+' | Revis?o '+escala.revisao+' | '+escala.status;
+            escalaFuncionarioEdicaoResumo.textContent='Loja '+lojaId+' | '+getNomeMesTabela(mesRef)+' '+mesRef.slice(0,4)+' | Revisão '+escala.revisao+' | '+escala.status;
             const finalizada=escala.status==='FINALIZADA';
             [distribuirFolgasFuncionarioBtn,salvarEscalaFuncionarioBtn].forEach(btn=>{if(btn)btn.disabled=finalizada;});
             await carregarTiposDescansoCache(false);
@@ -2936,11 +2948,11 @@
                     {label:'Tipo do dia',type:'select',id:'IND_TIPO_DIA',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true},
                     {label:'Tipo de descanso',type:'select',id:'IND_TIPO_DESCANSO',value:isProgramacaoDescanso(dia.PROGRAMACAO)?getValorDescanso(dia):'F',options:tipoOptions.length?tipoOptions:[{value:'F',label:'Folga (F)'}]},
                     {label:'Modo de trabalho',type:'select',id:'IND_MODO_TRABALHO',value:'MANUAL',options:[{value:'TURNO',label:'Selecionar turno'},{value:'MANUAL',label:'Inserir manual'}]},
-                    {label:'Turno da se??o',type:'select',id:'IND_TURNO_ID',value:turnoOptions[0]?.value || '',options:turnoOptions.length?turnoOptions:[{value:'',label:'Nenhum turno cadastrado'}]},
+                    {label:'Turno da seção',type:'select',id:'IND_TURNO_ID',value:turnoOptions[0]?.value || '',options:turnoOptions.length?turnoOptions:[{value:'',label:'Nenhum turno cadastrado'}]},
                     {label:'Entrada 1',type:'time',id:'IND_HR_ENT1',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_ENT1||''},
-                    {label:'Sa?da 1',type:'time',id:'IND_HR_SAI1',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_SAI1||''},
+                    {label:'Saída 1',type:'time',id:'IND_HR_SAI1',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_SAI1||''},
                     {label:'Entrada 2',type:'time',id:'IND_HR_ENT2',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_ENT2||''},
-                    {label:'Sa?da 2',type:'time',id:'IND_HR_SAI2',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_SAI2||''}
+                    {label:'Saída 2',type:'time',id:'IND_HR_SAI2',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_SAI2||''}
                 ],
                 confirmText:'Aplicar'
             });
@@ -3061,13 +3073,14 @@
                     return;
                 }
 
+                const perfilOptions = await getPerfilAcessoOptions(usuario.PERFIL || 'OPERADOR');
                 const values = await showInputModal({
                     title: `Editar usuário - ${usuario.LOGIN}`,
                     inputs: [
                         { label: 'Nome', type: 'text', id: 'NOME', value: usuario.NOME || '', required: true },
-                        { label: 'Perfil de Acesso', type: 'text', id: 'PERFIL', value: usuario.PERFIL || '', required: true },
-                        { label: 'Status (A/I)', type: 'text', id: 'STATUS', value: usuario.STATUS || 'A', required: true },
-                        { label: 'Lojas permitidas (separadas por vírgula)', type: 'text', id: 'LOJAS', value: (usuario.LOJAS || []).join(', ') }
+                        { label: 'Perfil de Acesso', type: 'select', id: 'PERFIL', value: usuario.PERFIL || perfilOptions[0]?.value || 'OPERADOR', options: perfilOptions, required: true },
+                        { label: 'Status', type: 'select', id: 'STATUS', value: usuario.STATUS || 'A', options: [{ value: 'A', label: 'Ativo' }, { value: 'I', label: 'Inativo' }], required: true },
+                        { label: 'Lojas permitidas', type: 'checkbox-group', id: 'LOJAS', value: (usuario.LOJAS || []).map(String), options: getLojasPermitidasOptions(usuario.LOJAS || []), required: true }
                     ],
                     confirmText: 'Salvar'
                 });
@@ -3078,8 +3091,8 @@
                     body: JSON.stringify({
                         NOME: values.NOME,
                         PERFIL: values.PERFIL,
-                        STATUS: String(values.STATUS || 'A').trim().toUpperCase().slice(0, 1),
-                        LOJAS: String(values.LOJAS || '').split(',').map(loja => Number(loja.trim())).filter(Boolean)
+                        STATUS: values.STATUS,
+                        LOJAS: (values.LOJAS || []).map(loja => Number(loja)).filter(Boolean)
                     })
                 });
                 if (String(usuario.USUARIO_ID) === String(usuarioSessaoCache?.sub)) {
@@ -3268,7 +3281,7 @@
             `;
         };
 
-﻿        const carregarPerfisAcesso = async () => {
+        const carregarPerfisAcesso = async () => {
             const data = await apiRequest('/api/acessos/perfis');
             perfisAcessoCache = data.perfis || [];
             perfilPaginasCache = data.paginas || [];
@@ -3816,7 +3829,7 @@
                 title: 'Histórico de revisões - Loja ' + loja + ' - ' + formatarMesTabela(mesRef),
                 inputs: [{
                     type: 'html',
-                    html: '<div class="revision-history-modal"><table class="data-table compact-table"><thead><tr><th>Revis?o</th><th>Status</th><th>Se??es</th><th>Funcion?rios</th><th>Criada em</th><th>Modificada em</th><th>Modificada por</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+                    html: '<div class="revision-history-modal"><table class="data-table compact-table"><thead><tr><th>Revisão</th><th>Status</th><th>Seções</th><th>Funcionários</th><th>Criada em</th><th>Modificada em</th><th>Modificada por</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
                 }],
                 confirmText: 'Fechar',
                 cancelText: ''
