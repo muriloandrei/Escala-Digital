@@ -53,6 +53,43 @@ async function resolveLojaParam(req, res, next) {
   }
 }
 
+
+router.get('/tipos-descanso', async (req, res, next) => {
+  try {
+    const tipos = await catalogService.listTiposDescanso({ includeInactive: req.query.includeInactive === '1' });
+    return res.json({ tipos });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/tipos-descanso', async (req, res, next) => {
+  try {
+    const data = tipoDescansoSchema.parse(req.body);
+    const tipo = await catalogService.createTipoDescanso(data);
+    return res.status(201).json({ tipo });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos de tipo de descanso invalidos.', details: error.errors });
+    }
+    return next(error);
+  }
+});
+
+router.patch('/tipos-descanso/:tipoId', async (req, res, next) => {
+  try {
+    const data = tipoDescansoSchema.partial().parse(req.body);
+    const tipo = await catalogService.updateTipoDescanso(Number(req.params.tipoId), data);
+    if (!tipo) return res.status(404).json({ error: 'Tipo de descanso nao encontrado.' });
+    return res.json({ tipo });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos de tipo de descanso invalidos.', details: error.errors });
+    }
+    return next(error);
+  }
+});
+
 router.get('/lojas', async (req, res, next) => {
   try {
     const lojas = await catalogService.listLojas();
