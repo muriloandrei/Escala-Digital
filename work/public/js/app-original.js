@@ -114,6 +114,8 @@
         const validarEscalaFuncionarioBtn = document.getElementById('validarEscalaFuncionarioBtn');
         const imprimirEscalaFuncionarioBtn = document.getElementById('imprimirEscalaFuncionarioBtn');
         const salvarEscalaFuncionarioBtn = document.getElementById('salvarEscalaFuncionarioBtn');
+        const escalaFuncionarioEdicaoMes = document.getElementById('escalaFuncionarioEdicaoMes');
+        const escalaFuncionarioEdicaoAno = document.getElementById('escalaFuncionarioEdicaoAno');
         const carregarAcessosBtn = document.getElementById('carregarAcessosBtn');
         const tabelaAcessosBody = document.getElementById('tabela-acessos-body');
         let novoUsuarioBtn = null;
@@ -3003,7 +3005,7 @@
 
         salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB'};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:0})});showInfoModal('Escala do funcionário salva em uma nova revisão.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
 
-        const renderizarAcessosTela = (usuarios) => {
+        function renderizarAcessosTela(usuarios) {
             tabelaAcessosBody.innerHTML = '';
 
             if (!usuarios || usuarios.length === 0) {
@@ -3038,16 +3040,18 @@
                 `;
                 tabelaAcessosBody.innerHTML += row;
             });
-        };
+        
+        }
 
-        const carregarAcessosTela = async (showSuccess = true) => {
+        async function carregarAcessosTela(showSuccess = true) {
             const data = await apiRequest('/api/acessos/usuarios');
             usuariosAcessoCache = data.usuarios || [];
             renderizarAcessosTela(usuariosAcessoCache);
             if (showSuccess) {
                 showInfoModal(`${(data.usuarios || []).length} usuário(s) carregado(s).`, 'success');
             }
-        };
+        
+        }
 
         tabelaAcessosBody.addEventListener('click', async (event) => {
             const editButton = event.target.closest('.edit-usuario');
@@ -3281,12 +3285,13 @@
             `;
         };
 
-        const carregarPerfisAcesso = async () => {
+        async function carregarPerfisAcesso() {
             const data = await apiRequest('/api/acessos/perfis');
             perfisAcessoCache = data.perfis || [];
             perfilPaginasCache = data.paginas || [];
             return data;
-        };
+        
+        }
 
         const montarPermissoesPerfil = (perfil = null) => {
             const existentes = new Map((perfil?.PERMISSOES || []).map(p => [String(p.PAGINA), p]));
@@ -3343,7 +3348,7 @@
             showInfoModal('Perfil de acesso salvo com sucesso.', 'success');
         };
 
-        const renderizarRolesSettings = async () => {
+        async function renderizarRolesSettings() {
             if (usuarioSessaoCache?.perfil !== 'ADMIN') return;
             const container = document.getElementById('rolesSettingsContainer');
             if (!container) return;
@@ -3371,7 +3376,8 @@
                     <thead><tr><th>Perfil de Acesso</th><th>Descrição</th><th>Status</th><th>Permissões</th><th>Ações</th></tr></thead>
                     <tbody>${rows || '<tr><td colspan="5" class="text-center text-gray-500 py-8">Nenhum perfil encontrado.</td></tr>'}</tbody>
                 </table>`;
-        };
+        
+        }
 
         document.getElementById('rolesSettingsContainer')?.addEventListener('click', async (event) => {
             const novo = event.target.closest('#novoPerfilAcessoBtn');
