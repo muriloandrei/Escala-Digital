@@ -1,7 +1,7 @@
 /* --- Reset Básico e Estilos Globais (Layout Base) --- */
         :root {
-            --cor-principal: #2563eb;
-            --cor-principal-leve: #eff6ff;
+            --cor-principal: #0b1f4d;
+            --cor-principal-leve: #eaf0ff;
             --cor-fundo: #f6f8fb;
             --cor-branco: #ffffff;
             --cor-texto: #334155;
@@ -9,7 +9,7 @@
             --cor-borda: #e2e8f0;
             --cor-sucesso: #10b981;
             --cor-alerta: #ef4444;
-            --cor-info: #3b82f6;
+            --cor-info: #0f3a7a;
             --sombra-card: 0 1px 3px rgba(15, 23, 42, 0.06);
         }
 
@@ -40,8 +40,8 @@
         /* --- Barra Lateral (Sidebar) --- */
         .sidebar {
             width: 248px;
-            background-color: var(--cor-branco);
-            border-right: 1px solid var(--cor-borda);
+            background-color: var(--cor-principal);
+            border-right: 1px solid rgba(255,255,255,0.12);
             display: flex;
             flex-direction: column;
             align-items: stretch;
@@ -92,7 +92,7 @@
             justify-content: flex-start;
             gap: 12px;
             padding: 10px 12px;
-            color: var(--cor-texto-leve);
+            color: rgba(255,255,255,0.72);
             text-decoration: none;
             width: 100%;
             transition: color 0.2s;
@@ -106,12 +106,13 @@
 
         .sidebar-nav a:hover,
         .nav-parent:hover {
-            color: var(--cor-principal);
+            color: #ffffff;
+            background: rgba(255,255,255,0.1);
         }
 
         .sidebar-nav a.active {
-            color: var(--cor-principal);
-            background-color: var(--cor-principal-leve);
+            color: #ffffff;
+            background-color: rgba(255,255,255,0.14);
         }
 
         .nav-group {
@@ -119,7 +120,7 @@
         }
 
         .nav-parent {
-            color: var(--cor-texto);
+            color: #ffffff;
         }
 
         .nav-chevron {
@@ -180,8 +181,8 @@
             justify-content: space-between;
             align-items: center;
             gap: 24px;
-            background: var(--cor-branco);
-            border: 1px solid var(--cor-borda);
+            background: var(--cor-principal);
+            border: 1px solid rgba(255,255,255,0.12);
             border-radius: 0;
             box-shadow: none;
             padding: 12px 18px;
@@ -193,12 +194,12 @@
             align-items: center;
             display: flex;
             gap: 9px;
-            color: var(--cor-texto-leve);
+            color: rgba(255,255,255,0.72);
             font-size: 0.86rem;
         }
 
         .app-breadcrumb strong {
-            color: var(--cor-texto);
+            color: #ffffff;
             font-weight: 700;
         }
 
@@ -238,9 +239,10 @@
 
         .user-avatar {
             align-items: center;
-            background: var(--cor-principal);
+            background: #12306f;
+            border: 1px solid rgba(255,255,255,0.24);
             border-radius: 50%;
-            color: var(--cor-branco);
+            color: #ffffff;
             display: inline-flex;
             flex: 0 0 34px;
             font-size: 0.76rem;
@@ -1350,4 +1352,37 @@
             .footer { left: 0; width: 100%; }
             .table-card { padding: 14px; }
             #registros-page .data-table { min-width: 0; }
+        }
+
+
+        .action-btn-table.officialize-action {
+            background: #ecfdf5;
+            border-color: #86efac;
+            color: #047857;
+        }
+
+        .action-btn-table.officialize-action:hover:not(:disabled) {
+            background: #059669;
+            color: #ffffff;
+        }
+
+        .action-btn-table.danger-action {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #b91c1c;
+        }
+
+        .action-btn-table.danger-action:hover:not(:disabled) {
+            background: #dc2626;
+            color: #ffffff;
+        }
+
+        .official-chip {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .pending-chip {
+            background: #fef3c7;
+            color: #92400e;
         }

@@ -115,30 +115,43 @@ function getMesStatus(mesRef, revisao = 1) {
   if (hoje > fimMes) return 'FINALIZADA';
   const inicioMesAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   if (ref > inicioMesAtual) return 'AGENDADA';
-  return Number(revisao) > 1 ? 'MODIFICADA' : 'ATIVA';
+  return Number(revisao) > 0 ? 'MODIFICADA' : 'ATIVA';
 }
 
 function isMesFinalizado(mesRef) {
   return getMesStatus(mesRef, 1) === 'FINALIZADA';
 }
 
-async function getLatestRevision(connection, { lojaId, mesRef }) {
+async function hasProgAtivaColumn(connection) {
+  const columns = await getTableColumns(connection, 'SGN_ESC_PROG');
+  return columns.has('ATIVA');
+}
+
+async function getAtivaSql(connection, alias = 'p') {
+  return (await hasProgAtivaColumn(connection)) ? `nvl(${alias}.ativa, 1) = 1` : '1 = 1';
+}
+
+async function getLatestRevision(connection, { lojaId, mesRef, includeInactive = false }) {
+  const ativaSql = includeInactive ? '1 = 1' : await getAtivaSql(connection, 'p');
   const result = await connection.execute(
-    `select nvl(max(revisao), 0) as revisao
-     from sgn_esc_prog
-     where loja = :lojaId
-       and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')`,
+    `select max(p.revisao) as revisao
+     from sgn_esc_prog p
+     where p.loja = :lojaId
+       and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+       and ${ativaSql}`,
     { lojaId, mesRef },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
 
-  return Number(pick(result.rows[0], 'REVISAO', 'revisao') || 0);
+  const value = pick(result.rows[0], 'REVISAO', 'revisao');
+  return value === null || value === undefined ? null : Number(value);
 }
 
 async function listEscalas({ lojaId, mesRef }) {
   return withConnection(async (connection) => {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
-    if (!latestRevision) return [];
+    if (latestRevision === null) return [];
+    const ativaSql = await getAtivaSql(connection, 'p');
 
     const result = await connection.execute(
       `select
@@ -149,7 +162,7 @@ async function listEscalas({ lojaId, mesRef }) {
           case
             when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
-            when p.revisao > 1 then 'MODIFICADA'
+            when p.revisao > 0 then 'MODIFICADA'
             else 'ATIVA'
           end as status,
           f.escfunc_id,
@@ -171,6 +184,7 @@ async function listEscalas({ lojaId, mesRef }) {
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
          and p.revisao = :latestRevision
+         and ${ativaSql}
        order by f.chapa`,
       { lojaId, mesRef, latestRevision },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -193,8 +207,10 @@ async function listEscalasResumo({ lojaId, mesRef }) {
       filters.push(`p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')`);
     }
 
+    filters.push(await getAtivaSql(connection, 'p'));
     const whereSql = filters.length ? `where ${filters.join(' and ')}` : '';
     const auditJoin = await getAuditJoinSql(connection, 'p');
+    const ativaSql = await getAtivaSql(connection, 'p');
     const result = await connection.execute(
       `select
           p.mes_ref,
@@ -202,13 +218,14 @@ async function listEscalasResumo({ lojaId, mesRef }) {
           min(p.dt_hr_incl) as data_inicio,
           max(p.dt_hr_incl) as modificada_em,
           max(p.revisao) as revisao,
+          max(p.oficializada) as oficializada,
           count(distinct p.escsecao_id) as secoes,
           count(distinct p.escfunc_id) as funcionarios,
           ${auditJoin.selectSql}
           case
             when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
-            when max(p.revisao) > 1 then 'MODIFICADA'
+            when max(p.revisao) > 0 then 'MODIFICADA'
             else 'ATIVA'
           end as status
        from sgn_esc_prog p
@@ -227,6 +244,7 @@ async function listEscalasResumo({ lojaId, mesRef }) {
 async function listEscalaRevisoes({ lojaId, mesRef }) {
   return withConnection(async (connection) => {
     const auditJoin = await getAuditJoinSql(connection, 'p');
+    const ativaSql = await getAtivaSql(connection, 'p');
     const result = await connection.execute(
       `select
           p.revisao,
@@ -239,13 +257,14 @@ async function listEscalaRevisoes({ lojaId, mesRef }) {
           case
             when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
-            when p.revisao > 1 then 'MODIFICADA'
+            when p.revisao > 0 then 'MODIFICADA'
             else 'ATIVA'
           end as status
           from sgn_esc_prog p
        ${auditJoin.joinSql}
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+         and ${ativaSql}
        group by p.mes_ref, p.revisao
        order by p.revisao desc`,
       { lojaId, mesRef },
@@ -258,7 +277,8 @@ async function listEscalaRevisoes({ lojaId, mesRef }) {
 async function getEscalaMensal({ lojaId, mesRef }) {
   return withConnection(async (connection) => {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
-    if (!latestRevision) return { revisao: 0, status: null, dias: [] };
+    if (latestRevision === null) return { revisao: null, status: null, dias: [] };
+    const ativaSql = await getAtivaSql(connection, 'p');
 
     const result = await connection.execute(
       `select
@@ -285,7 +305,7 @@ async function getEscalaMensal({ lojaId, mesRef }) {
           case
             when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
-            when p.revisao > 1 then 'MODIFICADA'
+            when p.revisao > 0 then 'MODIFICADA'
             else 'ATIVA'
           end as status
        from sgn_esc_prog p
@@ -296,6 +316,7 @@ async function getEscalaMensal({ lojaId, mesRef }) {
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
          and p.revisao = :latestRevision
+         and ${ativaSql}
        order by s.descr, f.nome, p.chapa, d.dt`,
       { lojaId, mesRef, latestRevision },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -361,7 +382,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
       }
 
       const latestRevision = await getLatestRevision(connection, { lojaId: loja, mesRef: mesRefKey });
-      if (revisaoAtual !== latestRevision) {
+      if (latestRevision === null || revisaoAtual !== latestRevision) {
         const error = new Error('Apenas a revisao mais recente pode ser editada.');
         error.statusCode = 409;
         throw error;
@@ -380,13 +401,15 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
       const targetDate = pick(targetDay, 'DT', 'dt');
       const nextRevision = latestRevision + 1;
 
+      const ativaSql = await getAtivaSql(connection, 'p');
       const headersToCopy = await connection.execute(
-        `select escprog_id, mes_ref, escfunc_id, escsecao_id, escfuncao_id, loja, chapa, oficializada
-         from sgn_esc_prog
-         where loja = :loja
-           and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-           and revisao = :latestRevision
-         order by escprog_id`,
+        `select p.escprog_id, p.mes_ref, p.escfunc_id, p.escsecao_id, p.escfuncao_id, p.loja, p.chapa, p.oficializada
+         from sgn_esc_prog p
+         where p.loja = :loja
+           and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+           and p.revisao = :latestRevision
+           and ${ativaSql}
+         order by p.escprog_id`,
         { loja, mesRef: mesRefKey, latestRevision },
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
@@ -409,7 +432,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
             loja: pick(row, 'LOJA', 'loja'),
             chapa: pick(row, 'CHAPA', 'chapa'),
             revisao: nextRevision,
-            oficializada: pick(row, 'OFICIALIZADA', 'oficializada'),
+            oficializada: 0,
             escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
           },
           { autoCommit: false }
@@ -538,8 +561,9 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
   return { escprogId, revisao, escsecaoId };
 }
 
-async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision, nextRevision, secoesAlteradas, oficializada }) {
-  if (!latestRevision || secoesAlteradas.length === 0) return;
+async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision, nextRevision, secoesAlteradas }) {
+  if (latestRevision === null || latestRevision === undefined || secoesAlteradas.length === 0) return;
+  const ativaSql = await getAtivaSql(connection, 'p');
 
   const binds = {
     lojaId,
@@ -549,13 +573,14 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
   };
   const secaoPlaceholders = secoesAlteradas.map((_, index) => `:secao${index}`).join(', ');
   const copyHeaders = await connection.execute(
-    `select escprog_id, mes_ref, escfunc_id, escsecao_id, escfuncao_id, loja, chapa, oficializada
-     from sgn_esc_prog
-     where loja = :lojaId
-       and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-       and revisao = :latestRevision
-       and escsecao_id not in (${secaoPlaceholders})
-     order by escprog_id`,
+    `select p.escprog_id, p.mes_ref, p.escfunc_id, p.escsecao_id, p.escfuncao_id, p.loja, p.chapa, p.oficializada
+     from sgn_esc_prog p
+     where p.loja = :lojaId
+       and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+       and p.revisao = :latestRevision
+       and ${ativaSql}
+       and p.escsecao_id not in (${secaoPlaceholders})
+     order by p.escprog_id`,
     binds,
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
@@ -577,7 +602,7 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
         loja: pick(row, 'LOJA', 'loja'),
         chapa: pick(row, 'CHAPA', 'chapa'),
         revisao: nextRevision,
-        oficializada: pick(row, 'OFICIALIZADA', 'oficializada') || oficializada,
+        oficializada: 0,
         escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
       },
       { autoCommit: false }
@@ -607,7 +632,7 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
       }
 
       const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
-      const nextRevision = latestRevision + 1;
+      const nextRevision = latestRevision === null ? 0 : latestRevision + 1;
       const secoesAlteradas = [...new Set((funcionarios || [])
         .map((funcionario) => Number(funcionario.escsecaoId || funcionario.ESCSECAO_ID || 0))
         .filter(Boolean))];
@@ -618,7 +643,7 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
         latestRevision,
         nextRevision,
         secoesAlteradas,
-        oficializada
+        oficializada: 0
       });
 
       const saved = [];
@@ -652,20 +677,22 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
       }
 
       const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
-      if (!latestRevision) {
+      if (latestRevision === null) {
         const error = new Error('Escala mensal nao encontrada.');
         error.statusCode = 404;
         throw error;
       }
       const nextRevision = latestRevision + 1;
       const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
+      const ativaSql = await getAtivaSql(connection, 'p');
       const headers = await connection.execute(
-        `select escprog_id, mes_ref, escfunc_id, escsecao_id, escfuncao_id, loja, chapa, oficializada
-         from sgn_esc_prog
-         where loja = :lojaId
-           and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-           and revisao = :latestRevision
-         order by escprog_id`,
+        `select p.escprog_id, p.mes_ref, p.escfunc_id, p.escsecao_id, p.escfuncao_id, p.loja, p.chapa, p.oficializada
+         from sgn_esc_prog p
+         where p.loja = :lojaId
+           and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+           and p.revisao = :latestRevision
+           and ${ativaSql}
+         order by p.escprog_id`,
         { lojaId, mesRef, latestRevision },
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
@@ -682,7 +709,7 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
             chapa: pick(row, 'CHAPA', 'chapa')
           },
           dias: [],
-          oficializada: pick(row, 'OFICIALIZADA', 'oficializada'),
+          oficializada: 0,
           revisao: nextRevision
         });
         await connection.execute(
@@ -704,6 +731,47 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
       await connection.rollback();
       throw error;
     }
+  });
+}
+
+async function oficializarEscala({ lojaId, mesRef }) {
+  return withConnection(async (connection) => {
+    const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
+    if (latestRevision === null) return { affectedRows: 0, revisao: null };
+    const ativaSql = await getAtivaSql(connection, 'p');
+    const result = await connection.execute(
+      `update sgn_esc_prog p
+       set p.oficializada = 1
+       where p.loja = :lojaId
+         and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+         and p.revisao = :latestRevision
+         and ${ativaSql}`,
+      { lojaId, mesRef, latestRevision },
+      { autoCommit: true }
+    );
+    return { affectedRows: result.rowsAffected || 0, revisao: latestRevision };
+  });
+}
+
+async function inativarEscala({ lojaId, mesRef }) {
+  return withConnection(async (connection) => {
+    const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
+    if (latestRevision === null) return { affectedRows: 0, revisao: null };
+    if (!(await hasProgAtivaColumn(connection))) {
+      const error = new Error('Coluna ATIVA nao encontrada em SGN_ESC_PROG. Execute a migration 20260630_add_prog_ativa.sql antes de inativar escalas.');
+      error.statusCode = 500;
+      throw error;
+    }
+    const result = await connection.execute(
+      `update sgn_esc_prog
+       set ativa = 0, oficializada = 0
+       where loja = :lojaId
+         and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+         and nvl(ativa, 1) = 1`,
+      { lojaId, mesRef },
+      { autoCommit: true }
+    );
+    return { affectedRows: result.rowsAffected || 0, revisao: latestRevision };
   });
 }
 
@@ -749,5 +817,7 @@ module.exports = {
   saveEscala,
   saveEscalasBatch,
   saveEscalaFuncionarioRevision,
+  oficializarEscala,
+  inativarEscala,
   validateAusencias
 };

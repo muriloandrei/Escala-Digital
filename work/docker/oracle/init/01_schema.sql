@@ -92,8 +92,9 @@ create table SGN_ESC_PROG (
   ESCFUNCAO_ID number(15) not null,
   LOJA number(10) not null,
   CHAPA varchar2(8) not null,
-  REVISAO number(2) not null,
+  REVISAO number(2) default 0 not null,
   OFICIALIZADA number(1) default 0 not null,
+  ATIVA number(1) default 1 not null,
   DT_HR_INCL date default sysdate not null,
   constraint SGN_ESC_PROG_PK primary key (ESCPROG_ID),
   constraint SGN_ESC_PROG_FUNC_FK foreign key (ESCFUNC_ID) references SGN_ESC_FUNCIONARIO (ESCFUNC_ID)

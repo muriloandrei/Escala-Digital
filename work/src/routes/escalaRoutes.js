@@ -100,6 +100,54 @@ router.get('/mensal', resolveLojaRequest, requireLojaAccess, async (req, res, ne
     return next(error);
   }
 });
+
+router.post('/oficializar', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({
+      lojaId: z.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+    }).parse(req.body);
+
+    const result = await escalaService.oficializarEscala(payload);
+    if (!result.affectedRows) return res.status(404).json({ error: 'Escala ativa nao encontrada.' });
+    await auditService.registerAudit({
+      action: 'OFICIALIZAR_ESCALA',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      revisao: result.revisao,
+      details: { oficializada: 1 }
+    });
+    return res.json({ ok: true, revisao: result.revisao, affectedRows: result.affectedRows });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de oficializacao invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
+router.post('/inativar', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({
+      lojaId: z.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+    }).parse(req.body);
+
+    const result = await escalaService.inativarEscala(payload);
+    if (!result.affectedRows) return res.status(404).json({ error: 'Escala ativa nao encontrada.' });
+    await auditService.registerAudit({
+      action: 'INATIVAR_ESCALA',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      revisao: result.revisao,
+      details: { ativa: 0, oficializada: 0 }
+    });
+    return res.json({ ok: true, revisao: result.revisao, affectedRows: result.affectedRows });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de inativacao invalidos.', details: error.errors });
+    return next(error);
+  }
+});
 router.get('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = Number(req.query.lojaId);

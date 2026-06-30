@@ -145,7 +145,7 @@
             escalasFuncionarios: 'Escalas por Funcionário',
             escalaFuncionarioEdicao: 'Editar Escala do Funcionário',
             acessos: 'Controle de Acesso',
-            roles: 'Roles / Permissao',
+            roles: 'Perfil de Acesso',
             configuracoes: 'Configuracoes'
         };
 
@@ -1931,7 +1931,7 @@
                         { label: 'Login', type: 'text', id: 'LOGIN', required: true },
                         { label: 'Nome', type: 'text', id: 'NOME', required: true },
                         { label: 'Senha inicial', type: 'password', id: 'PASSWORD', required: true },
-                        { label: 'Role', type: 'text', id: 'PERFIL', value: 'GERENTE', required: true },
+                        { label: 'Perfil de Acesso', type: 'text', id: 'PERFIL', value: 'GERENTE', required: true },
                         { label: 'Lojas permitidas (separadas por vírgula)', type: 'text', id: 'LOJAS', value: (lojasPermitidasCache[0] || '').toString() }
                     ],
                     confirmText: 'Criar'
@@ -2662,14 +2662,14 @@
             prepararFiltrosEscalaFuncionarios();
             const mesRef = getMesRefEscalaFuncionario();
             const lojas = escalaFuncionarioLoja?.value && escalaFuncionarioLoja.value !== 'all' ? [Number(escalaFuncionarioLoja.value)] : [...lojasPermitidasCache];
-            tabelaEscalaFuncionariosBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
+            tabelaEscalaFuncionariosBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
             const resultados = await Promise.all(lojas.map(async loja => {
                 const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(loja) + '&mesRef=' + encodeURIComponent(mesRef));
                 const escala = data.escala || {};
                 const grupos = new Map();
                 (escala.dias || []).forEach(dia => {
                     const key = String(dia.ESCFUNC_ID || dia.CHAPA || '');
-                    if (!grupos.has(key)) grupos.set(key, { escfuncId: dia.ESCFUNC_ID, chapa: dia.CHAPA, nome: dia.NOME || dia.CHAPA, loja, secao: dia.SECAO_DESCR || dia.COD_SECAO || '', funcao: dia.FUNCAO_DESCR || '', status: escala.status || '-', mesRef });
+                    if (!grupos.has(key)) grupos.set(key, { escfuncId: dia.ESCFUNC_ID, chapa: dia.CHAPA, nome: dia.NOME || dia.CHAPA, loja, secao: dia.SECAO_DESCR || dia.COD_SECAO || '', funcao: dia.FUNCAO_DESCR || '', status: escala.status || '-', revisao: dia.REVISAO ?? escala.revisao ?? '-', mesRef });
                 });
                 return [...grupos.values()];
             }));
@@ -2778,7 +2778,7 @@
                     <tr data-usuario-id="${usuario.USUARIO_ID}">
                         <td data-label="Login">${usuario.LOGIN || ''}</td>
                         <td data-label="Nome">${usuario.NOME || ''}</td>
-                        <td data-label="Role">${usuario.PERFIL || ''}</td>
+                        <td data-label="Perfil de Acesso">${usuario.PERFIL || ''}</td>
                         <td data-label="Status">${statusLabel}</td>
                         <td data-label="Lojas Permitidas">
                             <span>${lojas}</span>
@@ -2836,7 +2836,7 @@
                     title: `Editar usuário - ${usuario.LOGIN}`,
                     inputs: [
                         { label: 'Nome', type: 'text', id: 'NOME', value: usuario.NOME || '', required: true },
-                        { label: 'Role', type: 'text', id: 'PERFIL', value: usuario.PERFIL || '', required: true },
+                        { label: 'Perfil de Acesso', type: 'text', id: 'PERFIL', value: usuario.PERFIL || '', required: true },
                         { label: 'Status (A/I)', type: 'text', id: 'STATUS', value: usuario.STATUS || 'A', required: true },
                         { label: 'Lojas permitidas (separadas por vírgula)', type: 'text', id: 'LOJAS', value: (usuario.LOJAS || []).join(', ') }
                     ],
@@ -3061,7 +3061,7 @@
 
             const rows = Object.entries(roles).map(([role, info]) => `
                 <tr>
-                    <td data-label="Role">${role}</td>
+                    <td data-label="Perfil de Acesso">${role}</td>
                     <td data-label="Usuários">${info.ativos}/${info.total} ativo(s)</td>
                     <td data-label="Lojas">${Array.from(info.lojas).sort((a, b) => a - b).join(', ') || '-'}</td>
                     <td data-label="Permissões">${role === 'ADMIN' ? 'Administração completa' : 'Operação nas lojas permitidas'}</td>
@@ -3072,7 +3072,7 @@
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Role</th>
+                            <th>Perfil de Acesso</th>
                             <th>Usuários</th>
                             <th>Lojas</th>
                             <th>Permissões</th>
@@ -3465,24 +3465,31 @@
                 const loja = escala.LOJA || '';
                 const status = String(escala.STATUS || '-').toUpperCase();
                 const finalizada = status === 'FINALIZADA';
-                const criarEscalaAction = finalizada
+                const oficializada = Number(escala.OFICIALIZADA || 0) === 1;
+                const oficializarAction = finalizada
                     ? '<button class="action-btn-table banco-action" disabled title="Escala finalizada"><span class="material-symbols-outlined">lock</span>Finalizada</button>'
-                    : '<button class="action-btn-table banco-action banco-criar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Criar escala"><span class="material-symbols-outlined">add</span>Criar Escala</button>';
+                    : oficializada
+                        ? '<button class="action-btn-table banco-action officialize-action" disabled title="Escala oficializada"><span class="material-symbols-outlined">verified</span>Oficializada</button>'
+                        : '<button class="action-btn-table banco-action officialize-action banco-oficializar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Oficializar escala"><span class="material-symbols-outlined">verified</span>Oficializar</button>';
+                const inativarAction = finalizada
+                    ? ''
+                    : '<button class="action-btn-table banco-action danger-action banco-inativar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Inativar escala"><span class="material-symbols-outlined">delete</span>Inativar</button>';
                 const row = [
                     '<tr>',
                     '<td data-label="Data Inicial">' + formatarDataTabela(escala.MES_REF) + '</td>',
                     '<td data-label="Mês">' + getNomeMesTabela(escala.MES_REF) + '</td>',
                     '<td data-label="Loja">Loja ' + escapeHtml(loja) + '</td>',
                     '<td data-label="Status"><span class="escala-status-chip ' + getStatusClassEscala(status) + '">' + escapeHtml(status || '-') + '</span></td>',
-                    '<td data-label="Revisao">' + escapeHtml(escala.REVISAO || '') + '</td>',
+                    '<td data-label="Oficializada"><span class="escala-status-chip ' + (oficializada ? 'official-chip' : 'pending-chip') + '">' + (oficializada ? 'Sim' : 'N?o') + '</span></td>',
                     '<td data-label="Secoes">' + escapeHtml(escala.SECOES || 0) + '</td>',
                     '<td data-label="Funcionarios">' + escapeHtml(escala.FUNCIONARIOS || 0) + '</td>',
                     '<td data-label="Modificada em">' + formatarDataTabela(escala.MODIFICADA_EM) + '</td>',
                     '<td data-label="Modificada por">' + escapeHtml(escala.MODIFICADO_POR || 'Sistema') + '</td>',
                     '<td data-label="Acoes" class="actions-cell">',
                     '<button class="action-btn-table banco-action banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
-                    criarEscalaAction,
-                    '<button class="action-btn-table banco-action banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver historico de revisoes"><span class="material-symbols-outlined">history</span>Historico</button>',
+                    oficializarAction,
+                    inativarAction,
+                    '<button class="action-btn-table banco-action banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver hist?rico de revis?es"><span class="material-symbols-outlined">history</span>Hist?rico</button>',
                     '</td>',
                     '</tr>'
                 ].join('');
@@ -3511,10 +3518,10 @@
             ].join('')).join('');
 
             await showInputModal({
-                title: 'Historico de revisoes - Loja ' + loja + ' - ' + formatarMesTabela(mesRef),
+                title: 'Hist?rico de revis?es - Loja ' + loja + ' - ' + formatarMesTabela(mesRef),
                 inputs: [{
                     type: 'html',
-                    html: '<div class="revision-history-modal"><table class="data-table compact-table"><thead><tr><th>Revisao</th><th>Status</th><th>Secoes</th><th>Funcionarios</th><th>Criada em</th><th>Modificada em</th><th>Modificada por</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+                    html: '<div class="revision-history-modal"><table class="data-table compact-table"><thead><tr><th>Revis?o</th><th>Status</th><th>Se??es</th><th>Funcion?rios</th><th>Criada em</th><th>Modificada em</th><th>Modificada por</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
                 }],
                 confirmText: 'Fechar',
                 cancelText: ''
@@ -3534,8 +3541,8 @@
             return [{
                 MES_REF: base.MES_REF || mesRef,
                 LOJA: base.LOJA || lojaId,
-                STATUS: base.STATUS || (revisao > 1 ? 'MODIFICADA' : 'ATIVA'),
-                REVISAO: revisao || base.REVISAO || 1,
+                STATUS: base.STATUS || (revisao > 0 ? 'MODIFICADA' : 'ATIVA'),
+                REVISAO: revisao ?? base.REVISAO ?? 0,
                 SECOES: secoes.size,
                 FUNCIONARIOS: funcionarios.size || rowsRevisao.length,
                 MODIFICADA_EM: base.DT_HR_INCL || base.MES_REF || mesRef,
@@ -4211,10 +4218,12 @@
         tabelaBancoBody.addEventListener('click', async (e) => {
             const abrirButton = e.target.closest('.banco-abrir');
             const criarButton = e.target.closest('.banco-criar');
+            const oficializarButton = e.target.closest('.banco-oficializar');
+            const inativarButton = e.target.closest('.banco-inativar');
             const historicoButton = e.target.closest('.banco-historico');
-            if (!abrirButton && !criarButton && !historicoButton) return;
+            if (!abrirButton && !criarButton && !oficializarButton && !inativarButton && !historicoButton) return;
 
-            const button = abrirButton || criarButton || historicoButton;
+            const button = abrirButton || criarButton || oficializarButton || inativarButton || historicoButton;
             const loja = button.dataset.loja;
             const mesRef = button.dataset.mesRef;
             if (loja) {
@@ -4229,9 +4238,34 @@
                 if (escalasFiltroMes) escalasFiltroMes.value = String(dataRef.getMonth());
                 if (escalasFiltroAno) escalasFiltroAno.value = String(dataRef.getFullYear());
             }
-
             if (criarButton) {
                 window.location.hash = '/escalas/nova/' + loja + '/' + mesRef;
+                return;
+            }
+
+            if (oficializarButton) {
+                const confirmacao = await showInputModal({
+                    title: 'Oficializar escala',
+                    inputs: [{ type: 'message', text: 'A escala sera marcada como oficial. Qualquer alteracao futura criara uma nova revisao nao oficializada.' }],
+                    confirmText: 'Oficializar'
+                });
+                if (!confirmacao) return;
+                await apiRequest('/api/escalas/oficializar', { method: 'POST', body: JSON.stringify({ lojaId: Number(loja), mesRef }) });
+                showInfoModal('Escala oficializada com sucesso.', 'success');
+                await consultarEscalasBancoLocal();
+                return;
+            }
+
+            if (inativarButton) {
+                const confirmacao = await showInputModal({
+                    title: 'Inativar escala',
+                    inputs: [{ type: 'message', text: 'A escala sera inativada e nao aparecera nos relatorios nem bloqueara nova escala para o mesmo mes.' }],
+                    confirmText: 'Inativar'
+                });
+                if (!confirmacao) return;
+                await apiRequest('/api/escalas/inativar', { method: 'POST', body: JSON.stringify({ lojaId: Number(loja), mesRef }) });
+                showInfoModal('Escala inativada com sucesso.', 'success');
+                await consultarEscalasBancoLocal();
                 return;
             }
 
