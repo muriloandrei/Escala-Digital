@@ -67,6 +67,17 @@ function normalizeSecaoTurno(row) {
   };
 }
 
+function normalizeTipoDescanso(row) {
+  return {
+    ESCTIPODESC_ID: pick(row, 'ESCTIPODESC_ID', 'esctipodesc_id'),
+    DESCR: pick(row, 'DESCR', 'descr'),
+    SIGLA: pick(row, 'SIGLA', 'sigla'),
+    CLASSIFICACAO: pick(row, 'CLASSIFICACAO', 'classificacao') || 'OUTROS',
+    STATUS: pick(row, 'STATUS', 'status'),
+    DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl')
+  };
+}
+
 function isMissingObjectError(error) {
   return error?.errorNum === 942 || error?.code === 'ORA-00942';
 }
@@ -544,9 +555,11 @@ async function listAusenciasByLojaMes(lojaId, inicio, fim) {
 async function listTiposDescanso({ includeInactive = false } = {}) {
   return withConnection(async (connection) => {
     try {
+      const columns = await getTableColumns(connection, 'SGN_ESC_TIPO_DESCANSO');
+      const classificacaoSelect = columns.has('CLASSIFICACAO') ? 'classificacao' : "'OUTROS' as classificacao";
       const whereSql = includeInactive ? "" : "where status = 'A'";
       const result = await connection.execute(
-        `select esctipodesc_id, descr, sigla, status, dt_hr_incl
+        `select esctipodesc_id, descr, sigla, ${classificacaoSelect}, status, dt_hr_incl
          from sgn_esc_tipo_descanso
          ${whereSql}
          order by descr`,
@@ -563,19 +576,28 @@ async function listTiposDescanso({ includeInactive = false } = {}) {
 
 async function createTipoDescanso(data) {
   return withConnection(async (connection) => {
+    const columns = await getTableColumns(connection, 'SGN_ESC_TIPO_DESCANSO');
+    const insertColumns = ['esctipodesc_id', 'descr', 'sigla', 'status', 'dt_hr_incl'];
+    const insertValues = ['sgn_esc_tipo_descanso_seq.nextval', ':descr', ':sigla', ':status', 'sysdate'];
+    const binds = {
+      descr: data.DESCR,
+      sigla: String(data.SIGLA || '').toUpperCase(),
+      status: data.STATUS || 'A',
+      id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
+    };
+    if (columns.has('CLASSIFICACAO')) {
+      insertColumns.splice(3, 0, 'classificacao');
+      insertValues.splice(3, 0, ':classificacao');
+      binds.classificacao = data.CLASSIFICACAO || 'OUTROS';
+    }
     const result = await connection.execute(
-      `insert into sgn_esc_tipo_descanso (esctipodesc_id, descr, sigla, status, dt_hr_incl)
-       values (sgn_esc_tipo_descanso_seq.nextval, :descr, :sigla, :status, sysdate)
+      `insert into sgn_esc_tipo_descanso (${insertColumns.join(', ')})
+       values (${insertValues.join(', ')})
        returning esctipodesc_id into :id`,
-      {
-        descr: data.DESCR,
-        sigla: String(data.SIGLA || "").toUpperCase(),
-        status: data.STATUS || "A",
-        id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
-      },
+      binds,
       { autoCommit: true }
     );
-    return { ESCTIPODESC_ID: result.outBinds.id[0], DESCR: data.DESCR, SIGLA: String(data.SIGLA || "").toUpperCase(), STATUS: data.STATUS || "A" };
+    return { ESCTIPODESC_ID: result.outBinds.id[0], DESCR: data.DESCR, SIGLA: String(data.SIGLA || '').toUpperCase(), CLASSIFICACAO: data.CLASSIFICACAO || 'OUTROS', STATUS: data.STATUS || 'A' };
   });
 }
 
@@ -584,7 +606,9 @@ async function updateTipoDescanso(id, data) {
     const fields = [];
     const binds = { id };
     if (data.DESCR !== undefined) { fields.push("descr = :descr"); binds.descr = data.DESCR; }
+    const columns = await getTableColumns(connection, 'SGN_ESC_TIPO_DESCANSO');
     if (data.SIGLA !== undefined) { fields.push("sigla = :sigla"); binds.sigla = String(data.SIGLA || "").toUpperCase(); }
+    if (data.CLASSIFICACAO !== undefined && columns.has('CLASSIFICACAO')) { fields.push("classificacao = :classificacao"); binds.classificacao = data.CLASSIFICACAO || 'OUTROS'; }
     if (data.STATUS !== undefined) { fields.push("status = :status"); binds.status = data.STATUS; }
     if (!fields.length) return null;
 

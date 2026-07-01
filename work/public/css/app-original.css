@@ -1261,6 +1261,13 @@
             color: white;
         }
 
+        .bank-employee-scale tr.bank-interval-row th,
+        .bank-employee-scale tr.bank-interval-row td {
+            background: #e5e7eb;
+            color: #475569;
+            font-weight: 700;
+        }
+
         .bank-day-edit {
             background: transparent;
             border: 0;
@@ -1291,7 +1298,7 @@
         .employee-period-tabs {
             display: grid;
             gap: 8px;
-            min-width: min(720px, 100%);
+            min-width: min(620px, 100%);
         }
 
         .employee-year-tabs {
@@ -1334,7 +1341,7 @@
         .employee-month-tabs {
             display: grid;
             gap: 6px;
-            grid-template-columns: repeat(6, minmax(82px, 1fr));
+            grid-template-columns: repeat(12, minmax(42px, 1fr));
         }
 
         .employee-month-tab {
@@ -1344,8 +1351,8 @@
             color: #64748b;
             font-size: 0.76rem;
             font-weight: 800;
-            min-height: 34px;
-            padding: 6px 8px;
+            min-height: 30px;
+            padding: 5px 6px;
         }
 
         .employee-month-tab.has-scale {
@@ -1409,7 +1416,7 @@
         }
 
         @media (max-width: 1180px) {
-            .employee-month-tabs { grid-template-columns: repeat(4, minmax(82px, 1fr)); }
+            .employee-month-tabs { grid-template-columns: repeat(6, minmax(42px, 1fr)); }
             .employee-scale-actions { justify-content: flex-start; }
         }
 

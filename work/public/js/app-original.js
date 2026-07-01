@@ -2738,7 +2738,7 @@
             const termo = normalizarTextoFiltro(tiposDescansoPesquisaInput?.value);
             const status = tiposDescansoStatusFiltro?.value || 'all';
             const rows = tiposDescansoCache.filter((tipo) => {
-                const matchTermo = !termo || normalizarTextoFiltro((tipo.DESCR || "") + " " + (tipo.SIGLA || "")).includes(termo);
+                const matchTermo = !termo || normalizarTextoFiltro((tipo.DESCR || "") + " " + (tipo.SIGLA || "") + " " + (tipo.CLASSIFICACAO || "")).includes(termo);
                 const matchStatus = status === 'all' || String(tipo.STATUS) === status;
                 return matchTermo && matchStatus;
             });
@@ -2747,6 +2747,7 @@
                     <td data-label="ID">${escapeHtml(tipo.ESCTIPODESC_ID)}</td>
                     <td data-label="Descrição">${escapeHtml(tipo.DESCR || "")}</td>
                     <td data-label="Sigla"><span class="escala-status-chip pending-chip">${escapeHtml(tipo.SIGLA || "")}</span></td>
+                    <td data-label="Classificacao">${escapeHtml(tipo.CLASSIFICACAO || "OUTROS")}</td>
                     <td data-label="Status">${tipo.STATUS === "A" ? "Ativo" : "Inativo"}</td>
                     <td data-label="Ações" class="actions-cell">
                         <button class="action-btn-table banco-action editar-tipo-descanso" data-id="${escapeHtml(tipo.ESCTIPODESC_ID)}"><span class="material-symbols-outlined">edit</span>Editar</button>
@@ -2766,12 +2767,13 @@
                 inputs: [
                     { label: "Descrição", type: "text", id: "TIPO_DESCR", value: tipo?.DESCR || "", required: true },
                     { label: "Sigla", type: "text", id: "TIPO_SIGLA", value: tipo?.SIGLA || "", required: true },
+                    { label: "Classificacao", type: "select", id: "TIPO_CLASSIFICACAO", value: tipo?.CLASSIFICACAO || "OUTROS", options: [{ value: "FOLGA", label: "Folga" }, { value: "FERIAS", label: "Ferias" }, { value: "AFASTAMENTO", label: "Afastamento" }, { value: "OUTROS", label: "Outros" }], required: true },
                     { label: "Status", type: "select", id: "TIPO_STATUS", value: tipo?.STATUS || "A", options: [{ value: "A", label: "Ativo" }, { value: "I", label: "Inativo" }], required: true }
                 ],
                 confirmText: "Salvar"
             });
             if (!values) return;
-            const payload = { DESCR: values.TIPO_DESCR, SIGLA: String(values.TIPO_SIGLA || "").toUpperCase().slice(0, 3), STATUS: values.TIPO_STATUS };
+            const payload = { DESCR: values.TIPO_DESCR, SIGLA: String(values.TIPO_SIGLA || "").toUpperCase().slice(0, 3), CLASSIFICACAO: values.TIPO_CLASSIFICACAO || "OUTROS", STATUS: values.TIPO_STATUS };
             if (tipo) {
                 await apiRequest(`/api/catalog/tipos-descanso/${encodeURIComponent(tipo.ESCTIPODESC_ID)}`, { method: "PATCH", body: JSON.stringify(payload) });
             } else {
@@ -2828,21 +2830,21 @@
             const termo = normalizarTextoFiltro(escalaFuncionarioPesquisa?.value);
             const rows = escalasFuncionariosCache.filter(item => !termo || normalizarTextoFiltro(item.nome + ' ' + item.chapa).includes(termo));
             escalaFuncionarioListaResumo.textContent = rows.length + ' funcionário(s) com escala no período.';
-            tabelaEscalaFuncionariosBody.innerHTML = rows.length ? rows.map(item => '<tr><td>' + escapeHtml(item.chapa) + '</td><td>' + escapeHtml(item.nome) + '</td><td>Loja ' + escapeHtml(item.loja) + '</td><td>' + escapeHtml(item.secao) + '</td><td>' + escapeHtml(item.funcao) + '</td><td><span class="escala-status-chip ' + getStatusClassEscala(item.status) + '">' + escapeHtml(item.status) + '</span></td><td class="actions-cell"><button class="action-btn-table banco-action editar-escala-funcionario" data-escfunc-id="' + escapeHtml(item.escfuncId) + '" data-loja="' + escapeHtml(item.loja) + '" data-mes-ref="' + escapeHtml(item.mesRef) + '"><span class="material-symbols-outlined">edit_calendar</span>Editar</button></td></tr>').join('') : '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum funcionário com escala encontrado.</td></tr>';
+            tabelaEscalaFuncionariosBody.innerHTML = rows.length ? rows.map(item => '<tr><td>' + escapeHtml(item.chapa) + '</td><td>' + escapeHtml(item.nome) + '</td><td>Loja ' + escapeHtml(item.loja) + '</td><td>' + escapeHtml(item.secao) + '</td><td>' + escapeHtml(item.funcao) + '</td><td>' + escapeHtml(item.revisao ?? '-') + '</td><td><span class="escala-status-chip ' + (item.oficializada ? 'official-chip' : 'pending-chip') + '">' + (item.oficializada ? 'Sim' : 'Nao') + '</span></td><td><span class="escala-status-chip ' + getStatusClassEscala(item.status) + '">' + escapeHtml(item.status) + '</span></td><td class="actions-cell"><button class="action-btn-table banco-action editar-escala-funcionario" data-escfunc-id="' + escapeHtml(item.escfuncId) + '" data-loja="' + escapeHtml(item.loja) + '" data-mes-ref="' + escapeHtml(item.mesRef) + '"><span class="material-symbols-outlined">edit_calendar</span>Editar</button></td></tr>').join('') : '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum funcionário com escala encontrado.</td></tr>';
         };
 
         const carregarEscalasFuncionarios = async () => {
             prepararFiltrosEscalaFuncionarios();
             const mesRef = getMesRefEscalaFuncionario();
             const lojas = escalaFuncionarioLoja?.value && escalaFuncionarioLoja.value !== 'all' ? [Number(escalaFuncionarioLoja.value)] : [...lojasPermitidasCache];
-            tabelaEscalaFuncionariosBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
+            tabelaEscalaFuncionariosBody.innerHTML = '<tr><td colspan="9" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
             const resultados = await Promise.all(lojas.map(async loja => {
                 const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(loja) + '&mesRef=' + encodeURIComponent(mesRef));
                 const escala = data.escala || {};
                 const grupos = new Map();
                 (escala.dias || []).forEach(dia => {
                     const key = String(dia.ESCFUNC_ID || dia.CHAPA || '');
-                    if (!grupos.has(key)) grupos.set(key, { escfuncId: dia.ESCFUNC_ID, chapa: dia.CHAPA, nome: dia.NOME || dia.CHAPA, loja, secao: dia.SECAO_DESCR || dia.COD_SECAO || '', funcao: dia.FUNCAO_DESCR || '', status: escala.status || '-', revisao: dia.REVISAO ?? escala.revisao ?? '-', mesRef });
+                    if (!grupos.has(key)) grupos.set(key, { escfuncId: dia.ESCFUNC_ID, chapa: dia.CHAPA, nome: dia.NOME || dia.CHAPA, loja, secao: dia.SECAO_DESCR || dia.COD_SECAO || '', funcao: dia.FUNCAO_DESCR || '', status: escala.status || '-', revisao: dia.REVISAO ?? escala.revisao ?? '-', oficializada: Number(dia.OFICIALIZADA ?? escala.oficializada ?? escala.OFICIALIZADA ?? 0) === 1, mesRef });
                 });
                 return [...grupos.values()];
             }));
@@ -2881,14 +2883,11 @@
             table += '</tr><tr><th>DIA</th>';
             for(let d=1;d<=diasNoMes;d++) {
                 const dia = map.get(d);
-                const domingo = new Date(ref.getFullYear(),ref.getMonth(),d).getDay()===0;
-                const descanso = dia ? isProgramacaoDescanso(dia.PROGRAMACAO) : false;
-                const cls = descanso ? ' day-off' : (domingo ? ' sunday' : '');
-                table += '<th class="employee-day-header' + cls + '"><button type="button" class="bank-day-header-button funcionario-dia-edit" data-dia="' + d + '" title="Editar dia ' + d + '">' + d + '</button></th>';
+                table += '<th class="employee-day-header"><button type="button" class="bank-day-header-button funcionario-dia-edit" data-dia="' + d + '" title="Editar dia ' + d + '">' + d + '</button></th>';
             }
             table += '</tr></thead><tbody>';
             fields.forEach(field => {
-                table += '<tr><th>' + field.label + '</th>';
+                table += '<tr class="' + (field.key === 'INTERVALO' ? 'bank-interval-row' : '') + '"><th>' + field.label + '</th>';
                 for(let d=1;d<=diasNoMes;d++){
                     const dia=map.get(d);
                     if(!dia){table+='<td class="scale-day-cell empty">-</td>';continue;}
@@ -2919,11 +2918,12 @@
             if (escalaFuncionarioAnoAtualLabel) escalaFuncionarioAnoAtualLabel.textContent = String(ano);
             escalaFuncionarioMesTabs.innerHTML = Array.from({ length: 12 }, (_, mes) => {
                 const dataRef = formatDateForDb(ano, mes, 1);
-                const nome = getNomeMesTabela(dataRef);
+                const nomeCompleto = getNomeMesTabela(dataRef);
+                const nome = nomeCompleto.slice(0, 3);
                 const temEscala = mesesDisponiveis.has(mes);
                 const ativo = mes === mesAtual;
                 const classe = ['employee-month-tab', ativo ? 'active' : '', temEscala ? 'has-scale' : 'no-scale'].filter(Boolean).join(' ');
-                return '<button type="button" class="' + classe + '" data-mes="' + mes + '" data-has-scale="' + (temEscala ? '1' : '0') + '">' + escapeHtml(nome) + '</button>';
+                return '<button type="button" class="' + classe + '" data-mes="' + mes + '" data-has-scale="' + (temEscala ? '1' : '0') + '" title="' + escapeHtml(nomeCompleto) + '">' + escapeHtml(nome) + '</button>'; 
             }).join('');
         };
 
@@ -2969,6 +2969,8 @@
             [distribuirFolgasFuncionarioBtn,salvarEscalaFuncionarioBtn].forEach(btn=>{if(btn)btn.disabled=finalizada;});
             await carregarTiposDescansoCache(false);
             await carregarMesesDisponiveisFuncionario(escfuncId, lojaId, Number(mesRef.slice(0, 4)));
+            await carregarAusenciasDaLoja(lojaId, mesRef);
+            aplicarAusenciasNaEscalaFuncionarioAtual();
             const lojaTurnoAtual = turnosSecaoLojaSelect?.value;
             if (!turnosSecaoCache.length || String(lojaTurnoAtual || '') !== String(lojaId)) {
                 if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = String(lojaId);
@@ -3064,7 +3066,7 @@
             const turnoOptions = turnos.map(turno => ({ value: turno.ESCSECAOTURNO_ID, label: (turno.DESCR || 'Turno') + ' | ' + turno.HR_ENT1 + '-' + turno.HR_SAI1 + ' / ' + turno.HR_ENT2 + '-' + turno.HR_SAI2 }));
             const descansoAtual = isProgramacaoDescanso(dia.PROGRAMACAO);
             const values=await showInputModal({
-                title:'Editar dia '+formatarDataTabela(dia.DT),
+                title:'Editar dia '+formatarDataTabela(dia.DT)+(dia.AUSENCIA_OBRIGATORIA ? ' - ausencia obrigatoria' : ''),
                 panelClass:'bg-white rounded-lg shadow-xl w-11/12 max-w-5xl flex flex-col employee-day-modal',
                 inputs:[
                     {label:'Tipo do dia',type:'select',id:'IND_TIPO_DIA',value:descansoAtual?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true,wrapperClass:'employee-modal-span-2'},
@@ -3232,10 +3234,11 @@
             }
         });
 
-        const carregarAusenciasDaLoja = async (lojaInformada = '') => {
+        const carregarAusenciasDaLoja = async (lojaInformada = '', mesRefInformado = '') => {
             const loja = lojaInformada || lojaEscalaSelect.value;
-            const ano = parseInt(anoSelect.value, 10);
-            const mes = parseInt(mesSelect.value, 10);
+            const periodoData = mesRefInformado ? new Date(mesRefInformado + 'T00:00:00') : null;
+            const ano = periodoData ? periodoData.getFullYear() : parseInt(anoSelect.value, 10);
+            const mes = periodoData ? periodoData.getMonth() : parseInt(mesSelect.value, 10);
             if (!loja || Number.isNaN(ano) || Number.isNaN(mes)) {
                 ausenciasLojaCache = [];
                 return [];
@@ -3259,6 +3262,37 @@
                 const mesmoFuncionario = Number(ausencia.ESCFUNC_ID) === Number(escfuncId) || String(ausencia.CHAPA) === String(chapa);
                 return mesmoFuncionario && ausenciaCobreDia(ausencia, dataIso);
             });
+        };
+
+        const getSiglaDescansoPorMotivo = (motivo) => {
+            const normalizado = normalizarTextoFiltro(motivo || '');
+            const tipo = tiposDescansoCache.find(item => {
+                const descr = normalizarTextoFiltro(item.DESCR || '');
+                const sigla = normalizarTextoFiltro(item.SIGLA || '');
+                return normalizado.includes(descr) || descr.includes(normalizado) || normalizado === sigla;
+            });
+            return String(tipo?.SIGLA || (normalizado.includes('ferias') ? 'FER' : 'F')).toUpperCase().slice(0, 3);
+        };
+
+        const aplicarAusenciasNaEscalaFuncionarioAtual = () => {
+            const atual = escalaFuncionarioEdicaoAtual;
+            if (!atual || ausenciasLojaCache.length === 0) return [];
+            const mensagens = [];
+            atual.dias.forEach(dia => {
+                const dataIso = String(dia.DT || '').slice(0, 10);
+                const ausencia = encontrarAusenciaFuncionario(atual.escfuncId, atual.chapa, dataIso);
+                if (!ausencia) return;
+                const sigla = getSiglaDescansoPorMotivo(ausencia.MOTIVO);
+                dia.PROGRAMACAO = sigla;
+                dia.HR_ENT1 = sigla;
+                dia.HR_SAI1 = sigla;
+                dia.HR_ENT2 = sigla;
+                dia.HR_SAI2 = sigla;
+                dia.AUSENCIA_OBRIGATORIA = 1;
+                dia.MOTIVO_AUSENCIA = ausencia.MOTIVO || 'ausencia';
+                mensagens.push(dataIso + ' (' + dia.MOTIVO_AUSENCIA + ')');
+            });
+            return mensagens;
         };
 
         const marcarCelulaFolgaAusencia = (cell, isSunday, motivo) => {
@@ -4114,7 +4148,7 @@
                 for (let dia = 1; dia <= diasNoMes; dia += 1) table += '<th>' + dia + '</th>';
                 table += '</tr></thead><tbody>';
                 fields.forEach((field) => {
-                    table += '<tr' + (field.bold ? ' class="font-bold"' : '') + '><th>' + field.label + '</th>';
+                    table += '<tr class="' + [field.bold ? 'font-bold' : '', field.key === 'INTERVALO' ? 'bank-interval-row' : ''].filter(Boolean).join(' ') + '"><th>' + field.label + '</th>'; 
                     for (let numeroDia = 1; numeroDia <= diasNoMes; numeroDia += 1) {
                         const registro = funcionario.dias.get(numeroDia);
                         if (!registro) { table += '<td class="empty">-</td>'; continue; }

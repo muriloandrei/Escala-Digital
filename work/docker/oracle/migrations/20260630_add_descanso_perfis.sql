@@ -5,6 +5,7 @@ begin
     ESCTIPODESC_ID number(15) not null,
     DESCR varchar2(100) not null,
     SIGLA varchar2(3) not null,
+    CLASSIFICACAO varchar2(30) default 'OUTROS' not null,
     STATUS varchar2(1) default 'A' not null,
     DT_HR_INCL date default sysdate not null,
     constraint SGN_ESC_TIPO_DESC_PK primary key (ESCTIPODESC_ID),
@@ -71,9 +72,9 @@ end;
 /
 
 merge into SGN_ESC_TIPO_DESCANSO d
-using (select 'Folga' descr, 'F' sigla from dual union all select 'Ferias' descr, 'FER' sigla from dual) s
+using (select 'Folga' descr, 'F' sigla, 'FOLGA' classificacao from dual union all select 'Ferias' descr, 'FER' sigla, 'FERIAS' classificacao from dual) s
 on (d.sigla = s.sigla)
-when not matched then insert (ESCTIPODESC_ID, DESCR, SIGLA, STATUS, DT_HR_INCL) values (SGN_ESC_TIPO_DESCANSO_SEQ.nextval, s.descr, s.sigla, 'A', sysdate);
+when not matched then insert (ESCTIPODESC_ID, DESCR, SIGLA, CLASSIFICACAO, STATUS, DT_HR_INCL) values (SGN_ESC_TIPO_DESCANSO_SEQ.nextval, s.descr, s.sigla, s.classificacao, 'A', sysdate);
 
 merge into SGN_ESC_PERFIL p
 using (select 'ADMIN' nome, 'Administracao completa' descr from dual union all select 'OPERADOR' nome, 'Operacao nas lojas permitidas' descr from dual) s

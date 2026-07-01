@@ -38,6 +38,7 @@ const turnoSecaoSchema = secaoTurnoSchema.extend({
 const tipoDescansoSchema = z.object({
   DESCR: z.string().trim().min(1).max(100),
   SIGLA: z.string().trim().min(1).max(3),
+  CLASSIFICACAO: z.enum(['FOLGA', 'FERIAS', 'AFASTAMENTO', 'OUTROS']).optional(),
   STATUS: z.enum(['A', 'I']).optional()
 }).strict();
 

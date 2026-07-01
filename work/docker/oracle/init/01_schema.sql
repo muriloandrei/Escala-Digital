@@ -155,6 +155,7 @@ create table SGN_ESC_TIPO_DESCANSO (
   ESCTIPODESC_ID number(15) not null,
   DESCR varchar2(100) not null,
   SIGLA varchar2(3) not null,
+  CLASSIFICACAO varchar2(30) default 'OUTROS' not null,
   STATUS varchar2(1) default 'A' not null,
   DT_HR_INCL date default sysdate not null,
   constraint SGN_ESC_TIPO_DESC_PK primary key (ESCTIPODESC_ID),

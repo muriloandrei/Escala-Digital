@@ -29,8 +29,8 @@ insert into SGN_ESC_FUNCIONARIO (ESCFUNC_ID, CODCOLIGADA, LOJA, CHAPA, NOME, SEX
 
 insert into SGN_ESC_AUSENCIA (ESCAUSEN_ID, ESCFUNC_ID, CHAPA, DT_INIC, DT_FIM, MOTIVO, DT_HR_INCL) values (1, 2, '000102', date '2026-06-10', date '2026-06-12', 'Ferias', sysdate);
 
-insert into SGN_ESC_TIPO_DESCANSO (ESCTIPODESC_ID, DESCR, SIGLA, STATUS, DT_HR_INCL) values (1, 'Folga', 'F', 'A', sysdate);
-insert into SGN_ESC_TIPO_DESCANSO (ESCTIPODESC_ID, DESCR, SIGLA, STATUS, DT_HR_INCL) values (2, 'Ferias', 'FER', 'A', sysdate);
+insert into SGN_ESC_TIPO_DESCANSO (ESCTIPODESC_ID, DESCR, SIGLA, CLASSIFICACAO, STATUS, DT_HR_INCL) values (1, 'Folga', 'F', 'FOLGA', 'A', sysdate);
+insert into SGN_ESC_TIPO_DESCANSO (ESCTIPODESC_ID, DESCR, SIGLA, CLASSIFICACAO, STATUS, DT_HR_INCL) values (2, 'Ferias', 'FER', 'FERIAS', 'A', sysdate);
 
 insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (1, 'ADMIN', 'Administracao completa', 'A', sysdate);
 insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (2, 'OPERADOR', 'Operacao nas lojas permitidas', 'A', sysdate);
