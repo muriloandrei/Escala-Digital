@@ -25,10 +25,12 @@ const saveSchema = z.object({
       hrSai1: z.string().max(5).nullable().optional(),
       hrEnt2: z.string().max(5).nullable().optional(),
       hrSai2: z.string().max(5).nullable().optional(),
-      programacao: z.string().max(3).nullable().optional()
+      programacao: z.string().max(3).nullable().optional(),
+      justificativa: z.string().max(500).nullable().optional()
     }))
   })),
-  oficializada: z.number().int().min(0).max(1).optional()
+  oficializada: z.number().int().min(0).max(1).optional(),
+  justificativa: z.string().max(500).nullable().optional()
 });
 const diaSchema = z.object({
   HR_ENT1: z.string().max(5),
@@ -205,7 +207,8 @@ router.post('/funcionario/revisao', resolveLojaRequest, requireLojaAccess, async
         escfuncId: payload.funcionarios[0].escfuncId,
         chapa: payload.funcionarios[0].chapa,
         diasAlterados: payload.funcionarios[0].dias.length,
-        programacoes: [...new Set(payload.funcionarios[0].dias.map((dia) => dia.programacao || 'TRB'))]
+        programacoes: [...new Set(payload.funcionarios[0].dias.map((dia) => dia.programacao || 'TRB'))],
+        justificativa: payload.justificativa || payload.funcionarios[0].dias.find((dia) => dia.justificativa)?.justificativa || null
       }
     });
     return res.status(201).json({ saved: [saved] });

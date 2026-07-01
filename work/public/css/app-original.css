@@ -1277,6 +1277,149 @@
             outline: 1px solid #2563eb;
         }
 
+        .employee-scale-header {
+            align-items: flex-start;
+            gap: 18px;
+        }
+
+        .employee-scale-actions {
+            align-items: flex-start;
+            flex: 1;
+            justify-content: flex-end;
+        }
+
+        .employee-period-tabs {
+            display: grid;
+            gap: 8px;
+            min-width: min(720px, 100%);
+        }
+
+        .employee-year-tabs {
+            align-items: center;
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .employee-year-tabs span {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            color: var(--cor-principal);
+            font-size: 0.82rem;
+            font-weight: 800;
+            min-width: 74px;
+            padding: 6px 12px;
+            text-align: center;
+        }
+
+        .icon-tab-button {
+            align-items: center;
+            background: #f8fafc;
+            border: 1px solid var(--cor-borda);
+            border-radius: 8px;
+            color: var(--cor-texto);
+            display: inline-flex;
+            height: 34px;
+            justify-content: center;
+            width: 34px;
+        }
+
+        .icon-tab-button:hover {
+            background: #e0ecff;
+            border-color: #93c5fd;
+            color: var(--cor-principal);
+        }
+
+        .employee-month-tabs {
+            display: grid;
+            gap: 6px;
+            grid-template-columns: repeat(6, minmax(82px, 1fr));
+        }
+
+        .employee-month-tab {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            color: #64748b;
+            font-size: 0.76rem;
+            font-weight: 800;
+            min-height: 34px;
+            padding: 6px 8px;
+        }
+
+        .employee-month-tab.has-scale {
+            background: #dbeafe;
+            border-color: #93c5fd;
+            color: var(--cor-principal);
+        }
+
+        .employee-month-tab.active,
+        .employee-month-tab.has-scale:hover {
+            background: var(--cor-principal);
+            border-color: var(--cor-principal);
+            color: #ffffff;
+        }
+
+        .employee-month-tab.no-scale {
+            cursor: pointer;
+            opacity: 0.78;
+        }
+
+        .employee-day-header.day-off {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .employee-day-header.sunday {
+            background: #fef9c3;
+        }
+
+        .bank-day-header-button {
+            background: transparent;
+            border: 0;
+            border-radius: 6px;
+            color: inherit;
+            cursor: pointer;
+            font: inherit;
+            font-weight: 800;
+            min-height: 28px;
+            width: 100%;
+        }
+
+        .bank-day-header-button:hover {
+            background: rgba(37, 99, 235, 0.12);
+            outline: 1px solid #2563eb;
+        }
+
+        .employee-day-modal #inputModalBody,
+        #inputModalPanel.employee-day-modal #inputModalBody {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: repeat(4, minmax(140px, 1fr));
+        }
+
+        #inputModalPanel.employee-day-modal .employee-modal-span-2 {
+            grid-column: span 2;
+        }
+
+        #inputModalPanel.employee-day-modal textarea {
+            min-height: 90px;
+            resize: vertical;
+        }
+
+        @media (max-width: 1180px) {
+            .employee-month-tabs { grid-template-columns: repeat(4, minmax(82px, 1fr)); }
+            .employee-scale-actions { justify-content: flex-start; }
+        }
+
+        @media (max-width: 760px) {
+            .employee-month-tabs { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
+            .employee-day-modal #inputModalBody,
+            #inputModalPanel.employee-day-modal #inputModalBody { grid-template-columns: 1fr; }
+            #inputModalPanel.employee-day-modal .employee-modal-span-2 { grid-column: auto; }
+        }
+
 
         /* Distribution lock state */
         .distribution-locked #tabela-esqueleto {

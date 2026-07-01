@@ -116,6 +116,10 @@
         const salvarEscalaFuncionarioBtn = document.getElementById('salvarEscalaFuncionarioBtn');
         const escalaFuncionarioEdicaoMes = document.getElementById('escalaFuncionarioEdicaoMes');
         const escalaFuncionarioEdicaoAno = document.getElementById('escalaFuncionarioEdicaoAno');
+        const escalaFuncionarioMesTabs = document.getElementById('escalaFuncionarioMesTabs');
+        const escalaFuncionarioAnoAtualLabel = document.getElementById('escalaFuncionarioAnoAtualLabel');
+        const escalaFuncionarioAnoAnteriorBtn = document.getElementById('escalaFuncionarioAnoAnteriorBtn');
+        const escalaFuncionarioAnoProximoBtn = document.getElementById('escalaFuncionarioAnoProximoBtn');
         const carregarAcessosBtn = document.getElementById('carregarAcessosBtn');
         const tabelaAcessosBody = document.getElementById('tabela-acessos-body');
         let novoUsuarioBtn = null;
@@ -672,6 +676,7 @@
         let funcionariosTelaCache = [];
         let escalasFuncionariosCache = [];
         let escalaFuncionarioEdicaoAtual = null;
+        let escalaFuncionarioMesesDisponiveisCache = new Map();
         const getLojaCodigo = (loja) => loja?.LOJA ?? loja?.loja;
         
         // --- Variáveis para Copiar/Colar e Seleção ---
@@ -2001,9 +2006,12 @@
         const inputModalBody = document.getElementById('inputModalBody');
         const inputModalConfirmBtn = document.getElementById('inputModalConfirmBtn');
         const inputModalCancelBtn = document.getElementById('inputModalCancelBtn');
+        const inputModalPanel = document.getElementById('inputModalPanel');
 
         const showInputModal = (config) => {
             return new Promise((resolve) => {
+                const basePanelClass = 'bg-white rounded-lg shadow-xl w-11/12 max-w-sm flex flex-col';
+                if (inputModalPanel) inputModalPanel.className = (config.panelClass || basePanelClass).trim();
                 inputModalTitle.textContent = config.title;
                 inputModalConfirmBtn.textContent = config.confirmText || 'Confirmar';
                 
@@ -2016,11 +2024,35 @@
 
                 inputModalBody.innerHTML = '';
 
+                const setInputBaseProps = (field, input) => {
+                    field.id = input.id;
+                    field.required = Boolean(input.required);
+                    field.dataset.requiredOriginal = input.required ? '1' : '0';
+                    if (input.placeholder) field.placeholder = input.placeholder;
+                    field.className = input.className || 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
+                    return field;
+                };
+
+                const appendField = (input, field) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.dataset.fieldWrapper = input.id;
+                    if (input.dependsOn) wrapper.dataset.dependsOn = input.dependsOn;
+                    if (input.showWhen) wrapper.dataset.showWhen = Array.isArray(input.showWhen) ? input.showWhen.join('|') : String(input.showWhen);
+                    if (input.wrapperClass) wrapper.className = input.wrapperClass;
+                    const label = document.createElement('label');
+                    label.className = 'block text-sm font-medium text-gray-700';
+                    label.textContent = input.label;
+                    wrapper.appendChild(label);
+                    wrapper.appendChild(field);
+                    inputModalBody.appendChild(wrapper);
+                    return wrapper;
+                };
+
                 config.inputs.forEach(input => {
                     if (input.type === 'message') {
                         const p = document.createElement('p');
                         p.textContent = input.text;
-                        p.className = 'text-gray-700';
+                        p.className = input.className || 'text-gray-700';
                         inputModalBody.appendChild(p);
                         return;
                     }
@@ -2032,15 +2064,8 @@
                         return;
                     }
 
-                    const label = document.createElement('label');
-                    label.className = 'block text-sm font-medium text-gray-700';
-                    label.textContent = input.label;
-
                     if (input.type === 'select') {
-                        const selectEl = document.createElement('select');
-                        selectEl.id = input.id;
-                        selectEl.required = input.required;
-                        selectEl.className = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
+                        const selectEl = setInputBaseProps(document.createElement('select'), input);
                         (input.options || []).forEach(option => {
                             const optionEl = document.createElement('option');
                             optionEl.value = option.value;
@@ -2048,8 +2073,7 @@
                             if (String(option.value) === String(input.value || '')) optionEl.selected = true;
                             selectEl.appendChild(optionEl);
                         });
-                        inputModalBody.appendChild(label);
-                        inputModalBody.appendChild(selectEl);
+                        appendField(input, selectEl);
                         return;
                     }
 
@@ -2057,6 +2081,7 @@
                         const wrapper = document.createElement('div');
                         wrapper.id = input.id;
                         wrapper.dataset.inputType = 'checkbox-group';
+                        wrapper.dataset.requiredOriginal = input.required ? '1' : '0';
                         wrapper.className = 'mt-2 max-h-64 overflow-auto rounded-md border border-gray-200 bg-white p-3 space-y-2';
                         (input.options || []).forEach(option => {
                             const row = document.createElement('label');
@@ -2072,45 +2097,61 @@
                             row.appendChild(span);
                             wrapper.appendChild(row);
                         });
-                        inputModalBody.appendChild(label);
-                        inputModalBody.appendChild(wrapper);
+                        appendField(input, wrapper);
                         return;
                     }
 
-                    const inputEl = document.createElement('input');
+                    if (input.type === 'textarea') {
+                        const textareaEl = setInputBaseProps(document.createElement('textarea'), input);
+                        textareaEl.rows = input.rows || 3;
+                        textareaEl.value = input.value || '';
+                        appendField(input, textareaEl);
+                        return;
+                    }
+
+                    const inputEl = setInputBaseProps(document.createElement('input'), input);
                     inputEl.type = input.type;
-                    inputEl.id = input.id;
-                    inputEl.required = input.required;
                     inputEl.value = input.value || '';
-                    inputEl.className = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
-                    inputModalBody.appendChild(label);
-                    inputModalBody.appendChild(inputEl);
+                    appendField(input, inputEl);
                 });
+
+                const applyConditionalFields = () => {
+                    inputModalBody.querySelectorAll('[data-depends-on]').forEach(wrapper => {
+                        const controller = document.getElementById(wrapper.dataset.dependsOn);
+                        const allowed = String(wrapper.dataset.showWhen || '').split('|').filter(Boolean);
+                        const visible = controller && !controller.disabled && allowed.includes(String(controller.value));
+                        wrapper.classList.toggle('hidden', !visible);
+                        wrapper.querySelectorAll('input, select, textarea').forEach(field => {
+                            field.disabled = !visible;
+                            field.required = visible && field.dataset.requiredOriginal === '1';
+                        });
+                    });
+                };
+
+                inputModalBody.querySelectorAll('select').forEach(select => select.addEventListener('change', applyConditionalFields));
+                applyConditionalFields();
 
                 const hideModal = () => {
                     inputModal.classList.add('hidden');
                     inputModalConfirmBtn.onclick = null;
                     inputModalCancelBtn.onclick = null;
+                    if (inputModalPanel) inputModalPanel.className = basePanelClass;
                 };
 
                 inputModalConfirmBtn.onclick = () => {
                     const values = {};
                     let allValid = true;
                     config.inputs.forEach(input => {
-                        if (input.type === 'message') return;
+                        if (input.type === 'message' || input.type === 'html') return;
                         const inputEl = document.getElementById(input.id);
-                        if (!inputEl) return;
+                        if (!inputEl || inputEl.disabled) return;
                         if (input.type === 'checkbox-group') {
                             const checked = Array.from(inputEl.querySelectorAll('input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
-                            if (input.required && checked.length === 0) {
-                                allValid = false;
-                            }
+                            if (input.required && checked.length === 0) allValid = false;
                             values[input.id] = checked;
                             return;
                         }
-                        if (inputEl.required && !inputEl.value) {
-                            allValid = false;
-                        }
+                        if (inputEl.required && !String(inputEl.value || '').trim()) allValid = false;
                         values[input.id] = inputEl.value;
                     });
 
@@ -2118,7 +2159,7 @@
                         hideModal();
                         resolve(values);
                     } else {
-                        showInfoModal('Por favor, preencha todos os campos obrigatórios.', 'error');
+                        showInfoModal('Por favor, preencha todos os campos obrigatorios.', 'error');
                     }
                 };
 
@@ -2131,7 +2172,7 @@
             });
         };
         
-        // --- LÓGICA DE SALVAR/CARREGAR/DELETAR ---
+        // --- L?GICA DE SALVAR/CARREGAR/DELETAR ---
         const salvarEscalaBtn = document.getElementById('salvarEscalaBtn');
         const tabelaRegistrosBody = document.getElementById('tabela-registros-body');
         let escalasSalvasCache = [];
@@ -2836,13 +2877,21 @@
             const map = new Map(atual.dias.map(dia => [Number(String(dia.DT).slice(8,10)), dia]));
             const fields = [{key:'HR_ENT1',label:'ENT.'},{key:'HR_SAI1',label:'SAI.INT.'},{key:'INTERVALO',label:'INTER.'},{key:'HR_ENT2',label:'RET.INT.'},{key:'HR_SAI2',label:'SAI.'},{key:'TRABALHADAS',label:'H.TRAB'}];
             let table = '<article class="bank-employee-scale"><header><div><h3>' + escapeHtml(atual.nome) + '</h3><p>' + escapeHtml(atual.chapa + ' | ' + atual.secao + ' | ' + atual.funcao) + '</p></div></header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
-            for(let d=1;d<=diasNoMes;d++) table += '<th>' + diasSemana[new Date(ref.getFullYear(),ref.getMonth(),d).getDay()] + '</th>';
-            table += '</tr><tr><th>DIA</th>'; for(let d=1;d<=diasNoMes;d++) table += '<th>' + d + '</th>'; table += '</tr></thead><tbody>';
+            for(let d=1;d<=diasNoMes;d++) table += '<th class="employee-day-header">' + diasSemana[new Date(ref.getFullYear(),ref.getMonth(),d).getDay()] + '</th>';
+            table += '</tr><tr><th>DIA</th>';
+            for(let d=1;d<=diasNoMes;d++) {
+                const dia = map.get(d);
+                const domingo = new Date(ref.getFullYear(),ref.getMonth(),d).getDay()===0;
+                const descanso = dia ? isProgramacaoDescanso(dia.PROGRAMACAO) : false;
+                const cls = descanso ? ' day-off' : (domingo ? ' sunday' : '');
+                table += '<th class="employee-day-header' + cls + '"><button type="button" class="bank-day-header-button funcionario-dia-edit" data-dia="' + d + '" title="Editar dia ' + d + '">' + d + '</button></th>';
+            }
+            table += '</tr></thead><tbody>';
             fields.forEach(field => {
                 table += '<tr><th>' + field.label + '</th>';
                 for(let d=1;d<=diasNoMes;d++){
                     const dia=map.get(d);
-                    if(!dia){table+='<td>-</td>';continue;}
+                    if(!dia){table+='<td class="scale-day-cell empty">-</td>';continue;}
                     const descanso=isProgramacaoDescanso(dia.PROGRAMACAO);
                     let value=getValorDescanso(dia);
                     if(!descanso){
@@ -2852,12 +2901,48 @@
                     }
                     const domingo=new Date(ref.getFullYear(),ref.getMonth(),d).getDay()===0;
                     const cls=descanso?(domingo?'day-off sunday':'day-off'):(domingo?'sunday':'');
-                    const editable=!['INTERVALO','TRABALHADAS'].includes(field.key);
-                    table+='<td class="'+cls+'">'+(editable?'<button class="bank-day-edit funcionario-dia-edit" data-dia="'+d+'">'+escapeHtml(value)+'</button>':escapeHtml(value))+'</td>';
+                    table+='<td class="' + cls + '" data-dia="' + d + '">' + escapeHtml(value) + '</td>';
                 }
                 table+='</tr>';
             });
             escalaFuncionarioDetalhadaContent.innerHTML = table + '</tbody></table></div></article>';
+            renderizarTabsPeriodoFuncionario();
+        };
+
+        const getChaveMesesFuncionario = (escfuncId, lojaId, ano) => String(escfuncId || '') + '|' + String(lojaId || '') + '|' + String(ano || '');
+
+        const renderizarTabsPeriodoFuncionario = () => {
+            if (!escalaFuncionarioMesTabs || !escalaFuncionarioEdicaoMes || !escalaFuncionarioEdicaoAno) return;
+            const ano = Number(escalaFuncionarioEdicaoAno.value) || new Date().getFullYear();
+            const mesAtual = Number(escalaFuncionarioEdicaoMes.value);
+            const mesesDisponiveis = escalaFuncionarioMesesDisponiveisCache.get(getChaveMesesFuncionario(escalaFuncionarioEdicaoAtual?.escfuncId, escalaFuncionarioEdicaoAtual?.lojaId, ano)) || new Set();
+            if (escalaFuncionarioAnoAtualLabel) escalaFuncionarioAnoAtualLabel.textContent = String(ano);
+            escalaFuncionarioMesTabs.innerHTML = Array.from({ length: 12 }, (_, mes) => {
+                const dataRef = formatDateForDb(ano, mes, 1);
+                const nome = getNomeMesTabela(dataRef);
+                const temEscala = mesesDisponiveis.has(mes);
+                const ativo = mes === mesAtual;
+                const classe = ['employee-month-tab', ativo ? 'active' : '', temEscala ? 'has-scale' : 'no-scale'].filter(Boolean).join(' ');
+                return '<button type="button" class="' + classe + '" data-mes="' + mes + '" data-has-scale="' + (temEscala ? '1' : '0') + '">' + escapeHtml(nome) + '</button>';
+            }).join('');
+        };
+
+        const carregarMesesDisponiveisFuncionario = async (escfuncId, lojaId, ano) => {
+            const chave = getChaveMesesFuncionario(escfuncId, lojaId, ano);
+            if (escalaFuncionarioMesesDisponiveisCache.has(chave)) return escalaFuncionarioMesesDisponiveisCache.get(chave);
+            const resultados = await Promise.all(Array.from({ length: 12 }, async (_, mes) => {
+                const mesRef = formatDateForDb(ano, mes, 1);
+                try {
+                    const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
+                    const dias = data?.escala?.dias || [];
+                    return dias.some(dia => String(dia.ESCFUNC_ID) === String(escfuncId)) ? mes : null;
+                } catch (error) {
+                    return null;
+                }
+            }));
+            const meses = new Set(resultados.filter(mes => mes !== null));
+            escalaFuncionarioMesesDisponiveisCache.set(chave, meses);
+            return meses;
         };
 
         const sincronizarFiltrosEdicaoFuncionario = (mesRef) => {
@@ -2867,6 +2952,7 @@
             const data = new Date(mesRef + 'T00:00:00');
             escalaFuncionarioEdicaoMes.value = String(data.getMonth());
             escalaFuncionarioEdicaoAno.value = String(data.getFullYear());
+            if (escalaFuncionarioAnoAtualLabel) escalaFuncionarioAnoAtualLabel.textContent = String(data.getFullYear());
         };
 
         const carregarEscalaFuncionarioEdicao = async (escfuncId, lojaId, mesRef) => {
@@ -2882,6 +2968,7 @@
             const finalizada=escala.status==='FINALIZADA';
             [distribuirFolgasFuncionarioBtn,salvarEscalaFuncionarioBtn].forEach(btn=>{if(btn)btn.disabled=finalizada;});
             await carregarTiposDescansoCache(false);
+            await carregarMesesDisponiveisFuncionario(escfuncId, lojaId, Number(mesRef.slice(0, 4)));
             const lojaTurnoAtual = turnosSecaoLojaSelect?.value;
             if (!turnosSecaoCache.length || String(lojaTurnoAtual || '') !== String(lojaId)) {
                 if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = String(lojaId);
@@ -2897,17 +2984,50 @@
             window.location.hash = '/escala-funcionario/' + atual.escfuncId + '/' + atual.lojaId + '/' + novoMesRef;
         }));
 
-        const aplicarEdicaoDiasFuncionario = (inicio, fim, values) => {
+        escalaFuncionarioMesTabs?.addEventListener('click', event => {
+            const button = event.target.closest('.employee-month-tab');
+            const atual = escalaFuncionarioEdicaoAtual;
+            if (!button || !atual) return;
+            if (button.dataset.hasScale !== '1') {
+                showInfoModal('Este funcionario nao possui escala cadastrada neste mes.', 'info');
+                return;
+            }
+            const novoMesRef = formatDateForDb(Number(escalaFuncionarioEdicaoAno.value), Number(button.dataset.mes), 1);
+            window.location.hash = '/escala-funcionario/' + atual.escfuncId + '/' + atual.lojaId + '/' + novoMesRef;
+        });
+
+        const navegarAnoEscalaFuncionario = async (delta) => {
+            const atual = escalaFuncionarioEdicaoAtual;
+            if (!atual || !escalaFuncionarioEdicaoAno) return;
+            const novoAno = (Number(escalaFuncionarioEdicaoAno.value) || new Date().getFullYear()) + delta;
+            escalaFuncionarioEdicaoAno.value = String(novoAno);
+            const meses = await carregarMesesDisponiveisFuncionario(atual.escfuncId, atual.lojaId, novoAno);
+            renderizarTabsPeriodoFuncionario();
+            if (!meses.size) {
+                showInfoModal('Este funcionario nao possui escala cadastrada neste ano.', 'info');
+                return;
+            }
+            const primeiroMes = [...meses].sort((a, b) => a - b)[0];
+            const novoMesRef = formatDateForDb(novoAno, primeiroMes, 1);
+            window.location.hash = '/escala-funcionario/' + atual.escfuncId + '/' + atual.lojaId + '/' + novoMesRef;
+        };
+
+        escalaFuncionarioAnoAnteriorBtn?.addEventListener('click', () => navegarAnoEscalaFuncionario(-1).catch(error => showInfoModal(error.message, 'error')));
+        escalaFuncionarioAnoProximoBtn?.addEventListener('click', () => navegarAnoEscalaFuncionario(1).catch(error => showInfoModal(error.message, 'error')));
+
+        const aplicarEdicaoDiasFuncionario = (diaSelecionado, values) => {
             const atual = escalaFuncionarioEdicaoAtual;
             if (!atual) return;
-            const diaInicio = Math.min(Number(inicio), Number(fim));
-            const diaFim = Math.max(Number(inicio), Number(fim));
+            const diaInicio = Number(diaSelecionado);
+            const diaFim = Number(diaSelecionado);
+            atual.justificativaAlteracao = String(values.IND_JUSTIFICATIVA || '').trim();
             const tipoDia = values.IND_TIPO_DIA || 'TRABALHO';
             const descansoSigla = String(values.IND_TIPO_DESCANSO || 'F').toUpperCase();
             const turnoSelecionado = getTurnosFuncionarioAtual().find(turno => String(turno.ESCSECAOTURNO_ID) === String(values.IND_TURNO_ID));
             atual.dias.forEach((dia) => {
                 const numeroDia = Number(String(dia.DT).slice(8,10));
                 if (numeroDia < diaInicio || numeroDia > diaFim) return;
+                dia.JUSTIFICATIVA_ALTERACAO = atual.justificativaAlteracao;
                 if (tipoDia === 'DESCANSO') {
                     dia.PROGRAMACAO = descansoSigla;
                     dia.HR_ENT1 = descansoSigla;
@@ -2942,24 +3062,25 @@
             const turnos = getTurnosFuncionarioAtual();
             const tipoOptions = tiposDescansoCache.filter(tipo => tipo.STATUS !== 'I').map(tipo => ({ value: tipo.SIGLA, label: tipo.DESCR + ' (' + tipo.SIGLA + ')' }));
             const turnoOptions = turnos.map(turno => ({ value: turno.ESCSECAOTURNO_ID, label: (turno.DESCR || 'Turno') + ' | ' + turno.HR_ENT1 + '-' + turno.HR_SAI1 + ' / ' + turno.HR_ENT2 + '-' + turno.HR_SAI2 }));
+            const descansoAtual = isProgramacaoDescanso(dia.PROGRAMACAO);
             const values=await showInputModal({
                 title:'Editar dia '+formatarDataTabela(dia.DT),
+                panelClass:'bg-white rounded-lg shadow-xl w-11/12 max-w-5xl flex flex-col employee-day-modal',
                 inputs:[
-                    {label:'Aplicar do dia',type:'number',id:'IND_DIA_INICIO',value:String(numeroDia),required:true},
-                    {label:'Aplicar at? o dia',type:'number',id:'IND_DIA_FIM',value:String(numeroDia),required:true},
-                    {label:'Tipo do dia',type:'select',id:'IND_TIPO_DIA',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true},
-                    {label:'Tipo de descanso',type:'select',id:'IND_TIPO_DESCANSO',value:isProgramacaoDescanso(dia.PROGRAMACAO)?getValorDescanso(dia):'F',options:tipoOptions.length?tipoOptions:[{value:'F',label:'Folga (F)'}]},
-                    {label:'Modo de trabalho',type:'select',id:'IND_MODO_TRABALHO',value:'MANUAL',options:[{value:'TURNO',label:'Selecionar turno'},{value:'MANUAL',label:'Inserir manual'}]},
-                    {label:'Turno da seção',type:'select',id:'IND_TURNO_ID',value:turnoOptions[0]?.value || '',options:turnoOptions.length?turnoOptions:[{value:'',label:'Nenhum turno cadastrado'}]},
-                    {label:'Entrada 1',type:'time',id:'IND_HR_ENT1',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_ENT1||''},
-                    {label:'Saída 1',type:'time',id:'IND_HR_SAI1',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_SAI1||''},
-                    {label:'Entrada 2',type:'time',id:'IND_HR_ENT2',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_ENT2||''},
-                    {label:'Saída 2',type:'time',id:'IND_HR_SAI2',value:isProgramacaoDescanso(dia.PROGRAMACAO)?'':dia.HR_SAI2||''}
+                    {label:'Tipo do dia',type:'select',id:'IND_TIPO_DIA',value:descansoAtual?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true,wrapperClass:'employee-modal-span-2'},
+                    {label:'Justificativa da mudan\u00e7a',type:'textarea',id:'IND_JUSTIFICATIVA',value:dia.JUSTIFICATIVA_ALTERACAO||'',required:true,rows:3,placeholder:'Descreva o motivo da altera\u00e7\u00e3o deste dia.',wrapperClass:'employee-modal-span-2'},
+                    {label:'Tipo de descanso',type:'select',id:'IND_TIPO_DESCANSO',value:descansoAtual?getValorDescanso(dia):'F',options:tipoOptions.length?tipoOptions:[{value:'F',label:'Folga (F)'}],dependsOn:'IND_TIPO_DIA',showWhen:'DESCANSO',required:true,wrapperClass:'employee-modal-span-2'},
+                    {label:'Modo de trabalho',type:'select',id:'IND_MODO_TRABALHO',value:'MANUAL',options:[{value:'TURNO',label:'Selecionar turno'},{value:'MANUAL',label:'Inserir manual'}],dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true,wrapperClass:'employee-modal-span-2'},
+                    {label:'Turno da se??o',type:'select',id:'IND_TURNO_ID',value:turnoOptions[0]?.value || '',options:turnoOptions.length?turnoOptions:[{value:'',label:'Nenhum turno cadastrado'}],dependsOn:'IND_MODO_TRABALHO',showWhen:'TURNO',required:true,wrapperClass:'employee-modal-span-2'},
+                    {label:'Entrada 1',type:'time',id:'IND_HR_ENT1',value:descansoAtual?'':dia.HR_ENT1||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true},
+                    {label:'Sa?da 1',type:'time',id:'IND_HR_SAI1',value:descansoAtual?'':dia.HR_SAI1||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true},
+                    {label:'Entrada 2',type:'time',id:'IND_HR_ENT2',value:descansoAtual?'':dia.HR_ENT2||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true},
+                    {label:'Sa?da 2',type:'time',id:'IND_HR_SAI2',value:descansoAtual?'':dia.HR_SAI2||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true}
                 ],
                 confirmText:'Aplicar'
             });
             if(!values)return;
-            aplicarEdicaoDiasFuncionario(values.IND_DIA_INICIO, values.IND_DIA_FIM, values);
+            aplicarEdicaoDiasFuncionario(numeroDia, values);
         });
 
         const distribuirFolgasFuncionario = () => {
@@ -3003,7 +3124,7 @@
         validarEscalaFuncionarioBtn?.addEventListener('click',validarEscalaFuncionarioAtual);
         imprimirEscalaFuncionarioBtn?.addEventListener('click',()=>{if(!escalaFuncionarioEdicaoAtual)return;printContainer.innerHTML='<div class="print-title">Escala - '+escapeHtml(escalaFuncionarioEdicaoAtual.nome)+'</div>'+escalaFuncionarioDetalhadaContent.innerHTML+'<div class="print-aware-line">Ciente: ___________________________________________ &nbsp;&nbsp; Data: ____/____/________</div>';window.print();});
 
-        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB'};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:0})});showInfoModal('Escala do funcionário salva em uma nova revisão.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
+        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB',justificativa:d.JUSTIFICATIVA_ALTERACAO||atual.justificativaAlteracao||null};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:0,justificativa:atual.justificativaAlteracao||null})});showInfoModal('Escala do funcionário salva em uma nova revisão.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
 
         function renderizarAcessosTela(usuarios) {
             tabelaAcessosBody.innerHTML = '';
