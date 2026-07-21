@@ -138,7 +138,7 @@ def add_screenshot(doc, key, caption):
         return
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.add_run().add_picture(str(image), width=Inches(8.9))
+    p.add_run().add_picture(str(image), width=Inches(7.0))
     cap = doc.add_paragraph(caption)
     cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
     cap.paragraph_format.space_after = Pt(10)
@@ -165,9 +165,9 @@ def add_button_table(doc, rows):
 def build():
     doc = Document()
     sec = doc.sections[0]
-    sec.orientation = WD_ORIENT.LANDSCAPE
-    sec.page_width = Inches(11.69)
-    sec.page_height = Inches(8.27)
+    sec.orientation = WD_ORIENT.PORTRAIT
+    sec.page_width = Inches(8.27)
+    sec.page_height = Inches(11.69)
     sec.top_margin = Inches(0.55)
     sec.bottom_margin = Inches(0.55)
     sec.left_margin = Inches(0.6)
@@ -418,4 +418,5 @@ def build():
 
 if __name__ == '__main__':
     build()
+
 
