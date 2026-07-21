@@ -35,6 +35,11 @@ screens = {
     'config': ASSETS / '13-configuracoes.png',
     'modal_criar': ASSETS / '14-modal-criar-escala.png',
     'abrir': ASSETS / '15-abrir-escala.png',
+    'criacao_secoes': ASSETS / '16-criacao-selecionar-secoes.png',
+    'criacao_timeline': ASSETS / '17-criacao-timeline-gerada.png',
+    'criacao_distribuir': ASSETS / '18-criacao-distribuir-funcionarios.png',
+    'criacao_folgas': ASSETS / '19-criacao-folgas-distribuidas.png',
+    'criacao_detalhada': ASSETS / '20-criacao-escala-detalhada.png',
 }
 
 def set_cell_shading(cell, fill):
@@ -257,17 +262,37 @@ def build():
     ])
     add_note(doc, 'Regra importante', 'Uma loja deve ter apenas uma escala ativa por mes. Escalas inativas sao ignoradas para essa validacao.')
 
-    add_heading(doc, '5. Montar timeline e gerar escala detalhada')
-    add_body(doc, 'Na pagina de criacao, selecione os turnos por secao que entram na escala. A timeline permite revisar a cobertura antes de distribuir folgas e gerar a escala detalhada.')
+    add_heading(doc, '5. Fluxo completo do Iniciar Criacao')
+    add_body(doc, 'Depois de clicar em Iniciar Criacao, o sistema abre a pagina de rascunho da escala. E aqui que voce escolhe as secoes, gera a timeline, distribui os funcionarios/folgas e confirma a escala detalhada antes de salvar no banco.')
+    add_screenshot(doc, 'criacao_secoes', 'Etapa 1 - Selecionar as secoes/turnos que farao parte da escala.')
+    add_steps(doc, [
+        'Confira loja e periodo no status do rascunho.',
+        'Marque as secoes/turnos que devem compor a escala.',
+        'Deixe desmarcado qualquer turno que nao deve entrar naquele mes.',
+        'Clique em Atualizar Timeline para montar a linha do tempo.'
+    ])
+    add_screenshot(doc, 'criacao_timeline', 'Etapa 2 - Timeline gerada com as secoes selecionadas.')
+    add_body(doc, 'A timeline mostra os blocos de trabalho, intervalo e cobertura por secao. Antes de distribuir funcionarios, revise se os horarios e quantidades estao corretos.')
+    add_screenshot(doc, 'criacao_distribuir', 'Etapa 3 - Tela de distribuicao dos funcionarios antes da regra 5x2.')
+    add_body(doc, 'Ao clicar em Distribuir Funcionarios, o sistema abre a grade operacional da escala. Nessa tela voce confere colaboradores, dias do mes e a barra de botoes da escala.')
+    add_screenshot(doc, 'criacao_folgas', 'Etapa 4 - Folgas distribuidas pela regra 5x2 e timeline bloqueada para edicao.')
+    add_body(doc, 'Depois de clicar em Distribuir Folgas 5x2, a timeline fica bloqueada para impedir mudancas sem nova validacao. O botao Gerar Escala Detalhada passa a aparecer. Para mudar colaboradores ou folgas, clique em Editar e distribua novamente antes de gerar a detalhada.')
+    add_screenshot(doc, 'criacao_detalhada', 'Etapa 5 - Escala detalhada pronta para validar, salvar ou imprimir.')
     add_button_table(doc, [
-        ('Atualizar Timeline', 'Card Secoes da escala', 'Regera a timeline com as secoes/turnos selecionados.'),
-        ('Remover secao', 'Timeline', 'Remove uma secao do rascunho antes de salvar.'),
-        ('Distribuir Folgas 5x2', 'Barra de acoes da escala', 'Aplica a regra de folgas 5x2 aos colaboradores carregados.'),
-        ('Editar', 'Ao lado da distribuicao', 'Libera a timeline novamente para ajustes e oculta a geracao detalhada ate nova distribuicao.'),
-        ('Validar Escala', 'Barra de acoes da escala', 'Executa as validacoes de regras antes do salvamento.'),
-        ('Gerar Escala Detalhada', 'Apos distribuicao', 'Monta a grade dia a dia dos funcionarios.'),
-        ('Imprimir', 'Barra de acoes', 'Gera a impressao da timeline ou escala detalhada.'),
-        ('Salvar', 'Barra de acoes', 'Grava a escala no banco nas tabelas de programacao e dias.')
+        ('Atualizar Timeline', 'Pagina Nova Escala', 'Monta ou remonta a timeline com as secoes/turnos marcados.'),
+        ('Remover secao', 'Linha da timeline', 'Remove uma secao/turno do rascunho antes da distribuicao.'),
+        ('Imprimir Timeline', 'Cabecalho da timeline', 'Imprime a visualizacao da timeline de turnos.'),
+        ('Distribuir Funcionarios', 'Cabecalho da timeline', 'Abre a grade/esqueleto para distribuir funcionarios, folgas e gerar a escala.'),
+        ('Carregar Funcionarios', 'Modal Escala', 'Carrega os funcionarios da loja quando a grade precisar ser atualizada.'),
+        ('Distribuir Folgas 5x2', 'Modal Escala', 'Aplica automaticamente as folgas conforme a regra 5x2 e bloqueia a edicao da timeline.'),
+        ('Editar', 'Modal Escala apos distribuicao', 'Libera a edicao novamente, esconde Gerar Escala Detalhada e exige nova distribuicao.'),
+        ('Visualizar Timeline', 'Modal Escala', 'Abre uma visualizacao ampliada da timeline usada na escala.'),
+        ('Gerar Escala Detalhada', 'Modal Escala apos distribuicao', 'Converte a grade distribuida em escala diaria por funcionario.'),
+        ('Imprimir Esqueleto', 'Modal Escala', 'Imprime a grade/esqueleto de distribuicao.'),
+        ('Validar Escala', 'Modal Escala Detalhada', 'Executa as regras de validacao antes do salvamento.'),
+        ('Salvar Escala', 'Modal Escala Detalhada', 'Grava a escala no banco e retorna para Escalas Geradas.'),
+        ('Imprimir Escala Detalhada', 'Modal Escala Detalhada', 'Imprime a escala mensal detalhada.'),
+        ('Fechar', 'Modais de escala', 'Fecha a janela atual. Se houver rascunho nao salvo, o progresso pode ser perdido ao sair da tela.')
     ])
 
     add_heading(doc, '6. Abrir e editar uma escala pronta')
