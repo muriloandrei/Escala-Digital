@@ -252,7 +252,7 @@ def build():
     ])
 
     add_heading(doc, '4. Criar uma nova escala')
-    add_screenshot(doc, 'modal_criar', 'Modal inicial para escolher loja, mes e ano da escala.')
+    add_screenshot(doc, 'modal_criar', 'Print 14 - Modal inicial para escolher loja, mes e ano da escala.')
     add_steps(doc, [
         'Na tela Escalas Geradas, clique em Criar Nova Escala.',
         'Escolha a loja, o mes e o ano.',
@@ -264,20 +264,20 @@ def build():
 
     add_heading(doc, '5. Fluxo completo do Iniciar Criacao')
     add_body(doc, 'Depois de clicar em Iniciar Criacao, o sistema abre a pagina de rascunho da escala. E aqui que voce escolhe as secoes, gera a timeline, distribui os funcionarios/folgas e confirma a escala detalhada antes de salvar no banco.')
-    add_screenshot(doc, 'criacao_secoes', 'Etapa 1 - Selecionar as secoes/turnos que farao parte da escala.')
+    add_screenshot(doc, 'criacao_secoes', 'Print 16 - Etapa 1: selecionar as secoes/turnos que farao parte da escala.')
     add_steps(doc, [
         'Confira loja e periodo no status do rascunho.',
         'Marque as secoes/turnos que devem compor a escala.',
         'Deixe desmarcado qualquer turno que nao deve entrar naquele mes.',
         'Clique em Atualizar Timeline para montar a linha do tempo.'
     ])
-    add_screenshot(doc, 'criacao_timeline', 'Etapa 2 - Timeline gerada com as secoes selecionadas.')
+    add_screenshot(doc, 'criacao_timeline', 'Print 17 - Etapa 2: timeline gerada com as secoes selecionadas.')
     add_body(doc, 'A timeline mostra os blocos de trabalho, intervalo e cobertura por secao. Antes de distribuir funcionarios, revise se os horarios e quantidades estao corretos.')
-    add_screenshot(doc, 'criacao_distribuir', 'Etapa 3 - Tela de distribuicao dos funcionarios antes da regra 5x2.')
+    add_screenshot(doc, 'criacao_distribuir', 'Print 18 - Etapa 3: tela de distribuicao dos funcionarios antes da regra 5x2.')
     add_body(doc, 'Ao clicar em Distribuir Funcionarios, o sistema abre a grade operacional da escala. Nessa tela voce confere colaboradores, dias do mes e a barra de botoes da escala.')
-    add_screenshot(doc, 'criacao_folgas', 'Etapa 4 - Folgas distribuidas pela regra 5x2 e timeline bloqueada para edicao.')
+    add_screenshot(doc, 'criacao_folgas', 'Print 19 - Etapa 4: folgas distribuidas pela regra 5x2 e timeline bloqueada para edicao.')
     add_body(doc, 'Depois de clicar em Distribuir Folgas 5x2, a timeline fica bloqueada para impedir mudancas sem nova validacao. O botao Gerar Escala Detalhada passa a aparecer. Para mudar colaboradores ou folgas, clique em Editar e distribua novamente antes de gerar a detalhada.')
-    add_screenshot(doc, 'criacao_detalhada', 'Etapa 5 - Escala detalhada pronta para validar, salvar ou imprimir.')
+    add_screenshot(doc, 'criacao_detalhada', 'Print 20 - Etapa 5: escala detalhada pronta para validar, salvar ou imprimir.')
     add_button_table(doc, [
         ('Atualizar Timeline', 'Pagina Nova Escala', 'Monta ou remonta a timeline com as secoes/turnos marcados.'),
         ('Remover secao', 'Linha da timeline', 'Remove uma secao/turno do rascunho antes da distribuicao.'),
@@ -295,8 +295,17 @@ def build():
         ('Fechar', 'Modais de escala', 'Fecha a janela atual. Se houver rascunho nao salvo, o progresso pode ser perdido ao sair da tela.')
     ])
 
+    add_heading(doc, '5.1 Sequencia visual dos prints 15 a 20')
+    add_body(doc, 'Esta sequencia reune os prints especificos do fluxo de criacao e abertura da escala para consulta rapida.')
+    add_screenshot(doc, 'abrir', 'Print 15 - Abrir uma escala existente para visualizacao/edicao.')
+    add_screenshot(doc, 'criacao_secoes', 'Print 16 - Selecionar secoes/turnos no rascunho da nova escala.')
+    add_screenshot(doc, 'criacao_timeline', 'Print 17 - Gerar e revisar a timeline da escala.')
+    add_screenshot(doc, 'criacao_distribuir', 'Print 18 - Distribuir funcionarios na grade/esqueleto.')
+    add_screenshot(doc, 'criacao_folgas', 'Print 19 - Aplicar Distribuir Folgas 5x2 e bloquear edicao.')
+    add_screenshot(doc, 'criacao_detalhada', 'Print 20 - Gerar a escala detalhada para validar, salvar e imprimir.')
+
     add_heading(doc, '6. Abrir e editar uma escala pronta')
-    add_screenshot(doc, 'abrir', 'Visualizacao ao abrir uma escala existente.')
+    add_screenshot(doc, 'abrir', 'Print 15 - Visualizacao ao abrir uma escala existente.')
     add_body(doc, 'Ao abrir uma escala, o sistema apresenta as secoes em abas. Cada aba concentra a timeline e a escala detalhada daquela secao, facilitando a conferencia e edicao por grupo de colaboradores.')
     add_bullets(doc, [
         'Use as abas para alternar entre secoes da escala.',
