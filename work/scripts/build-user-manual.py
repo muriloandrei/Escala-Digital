@@ -166,8 +166,8 @@ def build():
     doc = Document()
     sec = doc.sections[0]
     sec.orientation = WD_ORIENT.LANDSCAPE
-    sec.page_width = Inches(11)
-    sec.page_height = Inches(8.5)
+    sec.page_width = Inches(11.69)
+    sec.page_height = Inches(8.27)
     sec.top_margin = Inches(0.55)
     sec.bottom_margin = Inches(0.55)
     sec.left_margin = Inches(0.6)
@@ -418,3 +418,4 @@ def build():
 
 if __name__ == '__main__':
     build()
+
