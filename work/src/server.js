@@ -26,17 +26,29 @@ app.use(helmet({
 }));
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 300,
-  standardHeaders: true,
-  legacyHeaders: false
-}));
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', database: 'oracle' });
+});
+
+const loginLimiter = rateLimit({
+  windowMs: env.rateLimit.loginWindowMs,
+  limit: env.rateLimit.loginLimit,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas de login. Aguarde alguns minutos e tente novamente.' }
+});
+
+const apiLimiter = rateLimit({
+  windowMs: env.rateLimit.apiWindowMs,
+  limit: env.rateLimit.apiLimit,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === '/favicon.ico',
+  message: { error: 'Muitas requisicoes. Aguarde alguns instantes e tente novamente.' }
 });
 
 function redirectToLoginWhenMissingSession(req, res, next) {
@@ -51,6 +63,8 @@ app.get('/app', redirectToLoginWhenMissingSession, requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'views', 'app-original.html'));
 });
 
+app.use('/api/auth/login', loginLimiter);
+app.use('/api', apiLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/catalog', catalogRoutes);
 app.use('/api/escalas', escalaRoutes);

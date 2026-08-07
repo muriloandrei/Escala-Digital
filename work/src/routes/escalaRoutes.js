@@ -4,7 +4,8 @@ const { requireAuth, requireLojaAccess } = require('../middleware/auth');
 const escalaService = require('../services/escalaService');
 const catalogService = require('../services/catalogService');
 const auditService = require('../services/auditService');
-const { validateEscalaPayload } = require('../rules/escalaRules');
+const rmIntegrationService = require('../services/rmIntegrationService');
+const { REGRAS_VIGENTES, validateEscalaPayload } = require('../rules/escalaRules');
 
 const router = express.Router();
 
@@ -19,6 +20,7 @@ const saveSchema = z.object({
     ESCSECAO_ID: z.coerce.number().int().positive().nullable().optional(),
     escfuncaoId: z.coerce.number().int().positive().nullable().optional(),
     ESCFUNCAO_ID: z.coerce.number().int().positive().nullable().optional(),
+    escsecaoTurnoId: z.coerce.number().int().positive().nullable().optional(),
     dias: z.array(z.object({
       data: z.string().min(10).max(10),
       hrEnt1: z.string().max(5).nullable().optional(),
@@ -41,6 +43,10 @@ const diaSchema = z.object({
 }).strict();
 
 router.use(requireAuth);
+
+router.get('/regras', async (req, res) => {
+  res.json({ regras: REGRAS_VIGENTES });
+});
 
 async function resolveLojaRequest(req, res, next) {
   try {
@@ -116,6 +122,41 @@ router.get('/mensal', resolveLojaRequest, requireLojaAccess, async (req, res, ne
   }
 });
 
+router.get('/rm/logs', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const logs = await rmIntegrationService.listRmLogs({
+      lojaId: req.query.lojaId ? Number(req.query.lojaId) : null,
+      mesRef: req.query.mesRef || null
+    });
+    return res.json({ logs });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/rm/reprocessar', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({
+      lojaId: z.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      revisao: z.number().int().min(0)
+    }).parse(req.body);
+    const rm = await rmIntegrationService.oficializarNoRm(payload);
+    await auditService.registerAudit({
+      action: 'REPROCESSAR_RM',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      revisao: payload.revisao,
+      details: rm
+    });
+    return res.json({ ok: true, rm });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de reprocessamento invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
 router.post('/oficializar', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = z.object({
@@ -125,15 +166,16 @@ router.post('/oficializar', resolveLojaRequest, requireLojaAccess, async (req, r
 
     const result = await escalaService.oficializarEscala(payload);
     if (!result.affectedRows) return res.status(404).json({ error: 'Escala ativa nao encontrada.' });
+    const rm = await rmIntegrationService.oficializarNoRm({ ...payload, revisao: result.revisao });
     await auditService.registerAudit({
       action: 'OFICIALIZAR_ESCALA',
       user: req.user,
       lojaId: payload.lojaId,
       mesRef: payload.mesRef,
       revisao: result.revisao,
-      details: { oficializada: 1 }
+      details: { oficializada: 1, rmStatus: rm.enabled ? (rm.falhas ? 'FALHA_PARCIAL' : 'ENVIADO') : 'IGNORADO', rmEnviados: rm.enviados, rmFalhas: rm.falhas }
     });
-    return res.json({ ok: true, revisao: result.revisao, affectedRows: result.affectedRows });
+    return res.json({ ok: true, revisao: result.revisao, affectedRows: result.affectedRows, rm });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de oficializacao invalidos.', details: error.errors });
     return next(error);

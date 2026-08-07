@@ -45,6 +45,14 @@ ORACLE_CONNECT_STRING=host:porta/service
 PORT=3000
 COOKIE_SECURE=false
 TRUST_PROXY=false
+RATE_LIMIT_API_MAX=1500
+RATE_LIMIT_LOGIN_MAX=30
+RM_API_ENABLED=false
+RM_API_BASE_URL=https://rm.exemplo.local/api
+RM_API_USER=usuario_rm
+RM_API_PASSWORD=senha_rm
+RM_API_TIMEOUT_MS=15000
+RM_API_RETRIES=2
 ```
 
 4. Instalar dependencias:
@@ -104,3 +112,15 @@ docker compose up --build
 
 Acesse http://localhost:3000/login.html com admin / admin123.
 Mais detalhes em docs/docker-local.md.
+
+## Atualizacao de banco
+
+Antes de subir a versao Linux em um banco ja existente, execute as migrations em `docker/oracle/migrations`, especialmente:
+
+```txt
+20260630_add_prog_ativa.sql
+20260701_add_tipo_descanso_classificacao.sql
+20260807_rm_rules_horarios.sql
+```
+
+A migration `20260807_rm_rules_horarios.sql` adiciona horarios padrao, log de integracao RM e campos opcionais de turno oficial na escala mensal.

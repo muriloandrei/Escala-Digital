@@ -34,6 +34,20 @@ function getEnv() {
       jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
       cookieSecure: String(process.env.COOKIE_SECURE || 'false') === 'true'
     },
+    rateLimit: {
+      apiWindowMs: Number(process.env.RATE_LIMIT_API_WINDOW_MS || 15 * 60 * 1000),
+      apiLimit: Number(process.env.RATE_LIMIT_API_MAX || 1500),
+      loginWindowMs: Number(process.env.RATE_LIMIT_LOGIN_WINDOW_MS || 15 * 60 * 1000),
+      loginLimit: Number(process.env.RATE_LIMIT_LOGIN_MAX || 30)
+    },
+    rm: {
+      enabled: String(process.env.RM_API_ENABLED || 'false').trim().toLowerCase() === 'true',
+      baseUrl: process.env.RM_API_BASE_URL || '',
+      username: process.env.RM_API_USER || '',
+      password: process.env.RM_API_PASSWORD || '',
+      timeoutMs: Number(process.env.RM_API_TIMEOUT_MS || 15000),
+      retries: Number(process.env.RM_API_RETRIES || 2)
+    },
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY)
   };
 }

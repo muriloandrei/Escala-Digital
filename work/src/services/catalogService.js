@@ -78,6 +78,21 @@ function normalizeTipoDescanso(row) {
   };
 }
 
+function normalizeHorarioPadrao(row) {
+  return {
+    ESCHORPAD_ID: pick(row, 'ESCHORPAD_ID', 'eschorpad_id'),
+    DESCR: pick(row, 'DESCR', 'descr'),
+    HR_ENT1: pick(row, 'HR_ENT1', 'hr_ent1'),
+    HR_SAI1: pick(row, 'HR_SAI1', 'hr_sai1'),
+    HR_ENT2: pick(row, 'HR_ENT2', 'hr_ent2'),
+    HR_SAI2: pick(row, 'HR_SAI2', 'hr_sai2'),
+    JORNADA_MINUTOS: pick(row, 'JORNADA_MINUTOS', 'jornada_minutos'),
+    INTERVALO_MINUTOS: pick(row, 'INTERVALO_MINUTOS', 'intervalo_minutos'),
+    STATUS: pick(row, 'STATUS', 'status'),
+    DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl')
+  };
+}
+
 function isMissingObjectError(error) {
   return error?.errorNum === 942 || error?.code === 'ORA-00942';
 }
@@ -215,7 +230,23 @@ async function resolveLojaCodigo(lojaId) {
   return loja ? Number(loja.LOJA) : Number(lojaId);
 }
 
-async function listFuncionariosByLoja(lojaId) {
+async function getLatestRevision(connection, { lojaId, mesRef }) {
+  const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
+  const ativaSql = progColumns.has('ATIVA') ? 'and nvl(ativa, 1) = 1' : '';
+  const result = await connection.execute(
+    `select max(revisao) as revisao
+     from sgn_esc_prog
+     where loja = :lojaId
+       and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+       ${ativaSql}`,
+    { lojaId, mesRef },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  const value = pick(result.rows[0], 'REVISAO', 'revisao');
+  return value === null || value === undefined ? null : Number(value);
+}
+
+async function listFuncionariosByLoja(lojaId, options = {}) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
     const secaoLojaColumn = await getSecaoLojaColumn(connection);
@@ -228,8 +259,7 @@ async function listFuncionariosByLoja(lojaId) {
     const funcionarioColigadaWhere = lojaCodcoligada !== null ? 'and f.codcoligada = :codcoligada' : '';
     const binds = { lojaId: lojaCodigo };
     if (lojaCodcoligada !== null) binds.codcoligada = lojaCodcoligada;
-    const result = await connection.execute(
-      `select
+    const baseSql = `select
           f.escfunc_id,
           f.codcoligada,
           f.loja,
@@ -241,22 +271,54 @@ async function listFuncionariosByLoja(lojaId) {
           s.descr as secao_descr,
           f.escfuncao_id,
           fu.descr as funcao_descr,
-          f.hr_ent1,
-          f.hr_sai1,
-          f.hr_ent2,
-          f.hr_sai2,
+          ${options.mesRef ? 'coalesce(e.hr_ent1, f.hr_ent1)' : 'f.hr_ent1'} as hr_ent1,
+          ${options.mesRef ? 'coalesce(e.hr_sai1, f.hr_sai1)' : 'f.hr_sai1'} as hr_sai1,
+          ${options.mesRef ? 'coalesce(e.hr_ent2, f.hr_ent2)' : 'f.hr_ent2'} as hr_ent2,
+          ${options.mesRef ? 'coalesce(e.hr_sai2, f.hr_sai2)' : 'f.hr_sai2'} as hr_sai2,
+          ${options.mesRef ? 'e.programacao as escala_programacao, e.revisao as escala_revisao, e.oficializada as escala_oficializada' : "cast(null as varchar2(3)) as escala_programacao, cast(null as number) as escala_revisao, cast(null as number) as escala_oficializada"},
           f.dt_hr_incl
        from sgn_esc_funcionario f
        left join sgn_esc_secao s on s.escsecao_id = f.escsecao_id ${secaoJoinLoja} ${secaoJoinColigada}
        left join sgn_esc_funcao fu on fu.escfuncao_id = f.escfuncao_id ${funcaoJoinColigada}
+       ${options.mesRef ? `left join (
+          select p.escfunc_id,
+                 p.revisao,
+                 p.oficializada,
+                 max(d.hr_ent1) keep (dense_rank first order by case when nvl(d.programacao, 'TRB') = 'TRB' then 0 else 1 end, d.dt) as hr_ent1,
+                 max(d.hr_sai1) keep (dense_rank first order by case when nvl(d.programacao, 'TRB') = 'TRB' then 0 else 1 end, d.dt) as hr_sai1,
+                 max(d.hr_ent2) keep (dense_rank first order by case when nvl(d.programacao, 'TRB') = 'TRB' then 0 else 1 end, d.dt) as hr_ent2,
+                 max(d.hr_sai2) keep (dense_rank first order by case when nvl(d.programacao, 'TRB') = 'TRB' then 0 else 1 end, d.dt) as hr_sai2,
+                 max(d.programacao) keep (dense_rank first order by case when nvl(d.programacao, 'TRB') = 'TRB' then 0 else 1 end, d.dt) as programacao
+          from sgn_esc_prog p
+          join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
+          where p.loja = :lojaId
+            and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and p.revisao = :latestRevision
+            ${await getTableColumns(connection, 'SGN_ESC_PROG').then((columns) => columns.has('ATIVA') ? 'and nvl(p.ativa, 1) = 1' : '')}
+          group by p.escfunc_id, p.revisao, p.oficializada
+       ) e on e.escfunc_id = f.escfunc_id` : ''}
        where f.loja = :lojaId
          ${funcionarioColigadaWhere}
-       order by f.nome`,
+       order by f.nome`;
+
+    if (options.mesRef) {
+      const latestRevision = await getLatestRevision(connection, { lojaId: lojaCodigo, mesRef: options.mesRef });
+      binds.mesRef = options.mesRef;
+      binds.latestRevision = latestRevision ?? -1;
+    }
+
+    const result = await connection.execute(
+      baseSql,
       binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows.map(normalizeFuncionario);
+    return result.rows.map((row) => ({
+      ...normalizeFuncionario(row),
+      ESCALA_PROGRAMACAO: pick(row, 'ESCALA_PROGRAMACAO', 'escala_programacao'),
+      ESCALA_REVISAO: pick(row, 'ESCALA_REVISAO', 'escala_revisao'),
+      ESCALA_OFICIALIZADA: pick(row, 'ESCALA_OFICIALIZADA', 'escala_oficializada')
+    }));
   });
 }
 
@@ -574,6 +636,69 @@ async function listTiposDescanso({ includeInactive = false } = {}) {
   });
 }
 
+async function listHorariosPadrao({ includeInactive = false } = {}) {
+  return withConnection(async (connection) => {
+    try {
+      const whereSql = includeInactive ? '' : "where status = 'A'";
+      const result = await connection.execute(
+        `select eschorpad_id, descr, hr_ent1, hr_sai1, hr_ent2, hr_sai2, jornada_minutos, intervalo_minutos, status, dt_hr_incl
+         from sgn_esc_horario_padrao
+         ${whereSql}
+         order by status, descr`,
+        {},
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      return result.rows.map(normalizeHorarioPadrao);
+    } catch (error) {
+      if (isMissingObjectError(error)) return [];
+      throw error;
+    }
+  });
+}
+
+async function createHorarioPadrao(data) {
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `insert into sgn_esc_horario_padrao (
+         eschorpad_id, descr, hr_ent1, hr_sai1, hr_ent2, hr_sai2, jornada_minutos, intervalo_minutos, status, dt_hr_incl
+       ) values (
+         sgn_esc_horario_padrao_seq.nextval, :descr, :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :jornadaMinutos, :intervaloMinutos, :status, sysdate
+       )
+       returning eschorpad_id into :id`,
+      {
+        descr: data.DESCR,
+        hrEnt1: data.HR_ENT1,
+        hrSai1: data.HR_SAI1,
+        hrEnt2: data.HR_ENT2,
+        hrSai2: data.HR_SAI2,
+        jornadaMinutos: data.JORNADA_MINUTOS || 528,
+        intervaloMinutos: data.INTERVALO_MINUTOS || 70,
+        status: data.STATUS || 'A',
+        id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
+      },
+      { autoCommit: true }
+    );
+    return { ESCHORPAD_ID: result.outBinds.id[0], ...data, STATUS: data.STATUS || 'A' };
+  });
+}
+
+async function updateHorarioPadrao(id, data) {
+  return withConnection(async (connection) => {
+    const allowed = ['DESCR', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2', 'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS'];
+    const updates = Object.fromEntries(Object.entries(data || {}).filter(([field]) => allowed.includes(field)));
+    if (!Object.keys(updates).length) return null;
+    const assignments = Object.keys(updates).map((field) => `${field.toLowerCase()} = :${field}`).join(', ');
+    const result = await connection.execute(
+      `update sgn_esc_horario_padrao set ${assignments} where eschorpad_id = :id`,
+      { ...updates, id },
+      { autoCommit: true }
+    );
+    if (!result.rowsAffected) return null;
+    const horarios = await listHorariosPadrao({ includeInactive: true });
+    return horarios.find((horario) => Number(horario.ESCHORPAD_ID) === Number(id)) || null;
+  });
+}
+
 async function createTipoDescanso(data) {
   return withConnection(async (connection) => {
     const columns = await getTableColumns(connection, 'SGN_ESC_TIPO_DESCANSO');
@@ -661,8 +786,11 @@ module.exports = {
   updateSecao,
   listAusenciasByLojaMes,
   listTiposDescanso,
+  listHorariosPadrao,
   createTipoDescanso,
+  createHorarioPadrao,
   updateTipoDescanso,
+  updateHorarioPadrao,
   updateFuncionarioEscala,
   saveSecaoTurno,
   resolveLojaCodigo

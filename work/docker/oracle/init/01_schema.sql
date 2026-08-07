@@ -92,6 +92,11 @@ create table SGN_ESC_PROG (
   ESCFUNCAO_ID number(15) not null,
   LOJA number(10) not null,
   CHAPA varchar2(8) not null,
+  ESCSECAOTURNO_ID number(15),
+  HR_OFICIAL_ENT1 varchar2(5),
+  HR_OFICIAL_SAI1 varchar2(5),
+  HR_OFICIAL_ENT2 varchar2(5),
+  HR_OFICIAL_SAI2 varchar2(5),
   REVISAO number(2) default 0 not null,
   OFICIALIZADA number(1) default 0 not null,
   ATIVA number(1) default 1 not null,
@@ -163,6 +168,37 @@ create table SGN_ESC_TIPO_DESCANSO (
   constraint SGN_ESC_TIPO_DESC_STATUS_CK check (STATUS in ('A', 'I'))
 );
 
+create table SGN_ESC_HORARIO_PADRAO (
+  ESCHORPAD_ID number(15) not null,
+  DESCR varchar2(100) not null,
+  HR_ENT1 varchar2(5) not null,
+  HR_SAI1 varchar2(5) not null,
+  HR_ENT2 varchar2(5) not null,
+  HR_SAI2 varchar2(5) not null,
+  JORNADA_MINUTOS number(5) default 528 not null,
+  INTERVALO_MINUTOS number(5) default 70 not null,
+  STATUS varchar2(1) default 'A' not null,
+  DT_HR_INCL date default sysdate not null,
+  constraint SGN_ESC_HOR_PAD_PK primary key (ESCHORPAD_ID),
+  constraint SGN_ESC_HOR_PAD_STATUS_CK check (STATUS in ('A', 'I'))
+);
+
+create table SGN_ESC_RM_LOG (
+  ESCRMLOG_ID number(15) not null,
+  LOJA number(10),
+  MES_REF date,
+  REVISAO number(2),
+  ESCFUNC_ID number(15),
+  CHAPA varchar2(8),
+  CPF varchar2(20),
+  ACAO varchar2(40) not null,
+  STATUS varchar2(20) not null,
+  MENSAGEM varchar2(1000),
+  PAYLOAD_RESUMO varchar2(1000),
+  DT_HR_INCL date default sysdate not null,
+  constraint SGN_ESC_RM_LOG_PK primary key (ESCRMLOG_ID)
+);
+
 create table SGN_ESC_PERFIL (
   PERFIL_ID number(15) not null,
   NOME varchar2(30) not null,
@@ -200,6 +236,8 @@ create sequence SGN_ESC_USUARIO_SEQ start with 10 increment by 1 nocache;
 create sequence SGN_ESC_AUDITORIA_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_TIPO_DESCANSO_SEQ start with 10 increment by 1 nocache;
 create sequence SGN_ESC_PERFIL_SEQ start with 10 increment by 1 nocache;
+create sequence SGN_ESC_HORARIO_PADRAO_SEQ start with 10 increment by 1 nocache;
+create sequence SGN_ESC_RM_LOG_SEQ start with 1 increment by 1 nocache;
 
 create index SGN_ESC_FUNC_1_IDX on SGN_ESC_FUNCIONARIO (LOJA);
 create index SGN_ESC_AUSENCIA_1_IDX on SGN_ESC_AUSENCIA (CHAPA, DT_INIC);

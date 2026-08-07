@@ -112,6 +112,18 @@ JWT_SECRET=segredo-longo-com-32-caracteres-ou-mais
 JWT_EXPIRES_IN=8h
 COOKIE_SECURE=true
 TRUST_PROXY=1
+
+RATE_LIMIT_API_WINDOW_MS=900000
+RATE_LIMIT_API_MAX=1500
+RATE_LIMIT_LOGIN_WINDOW_MS=900000
+RATE_LIMIT_LOGIN_MAX=30
+
+RM_API_ENABLED=false
+RM_API_BASE_URL=https://rm.exemplo.local/api
+RM_API_USER=usuario_rm
+RM_API_PASSWORD=senha_rm_rotacionada
+RM_API_TIMEOUT_MS=15000
+RM_API_RETRIES=2
 ```
 
 Permissao:
@@ -121,12 +133,36 @@ sudo chown escalaapp:escalaapp /opt/escala-app/.env
 sudo chmod 600 /opt/escala-app/.env
 ```
 
+Observacoes:
+
+- Mantenha `RM_API_ENABLED=false` ate validar a URL real, usuario e senha rotacionada da API RM.
+- Nunca versionar usuario, senha, token ou header Basic/Auth real.
+- Se acessar direto por `http://IP:3000`, use `COOKIE_SECURE=false` temporariamente; com HTTPS via Nginx, use `COOKIE_SECURE=true`.
+
 ## 7. Instalar dependencias
 
 ```bash
 cd /opt/escala-app
 sudo -u escalaapp npm ci --omit=dev
 ```
+
+## 7.1 Aplicar migrations Oracle
+
+Antes de reiniciar a aplicacao em um banco ja existente, execute as migrations novas com o usuario dono do schema ou um usuario com permissao de alteracao:
+
+```bash
+cd /opt/escala-app
+sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260630_add_prog_ativa.sql
+sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260701_add_tipo_descanso_classificacao.sql
+sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260807_rm_rules_horarios.sql
+```
+
+A migration `20260807_rm_rules_horarios.sql` cria:
+
+- `SGN_ESC_HORARIO_PADRAO` e `SGN_ESC_HORARIO_PADRAO_SEQ`;
+- `SGN_ESC_RM_LOG` e `SGN_ESC_RM_LOG_SEQ`;
+- campos opcionais em `SGN_ESC_PROG` para guardar o turno oficial inicial do funcionario;
+- permissoes das novas telas para perfis existentes.
 
 ## 8. Teste manual antes do servico
 
@@ -249,7 +285,10 @@ Com `COOKIE_SECURE=true` em HTTP direto, o navegador ignora o cookie de login e 
 9. Geracao de escala funciona.
 10. Salvamento no Oracle grava `SGN_ESC_PROG` e `SGN_ESC_PROG_DIA`.
 11. Validacao bloqueia funcionario ausente em dia trabalhado.
-12. Logs nao mostram senha, token ou dados sensiveis.
+12. Tela de regras carrega as regras vigentes.
+13. Tela de horarios padrao lista a jornada 08:48 com intervalo 1:10.
+14. Oficializacao grava auditoria e log RM como enviado, falha ou ignorado.
+15. Logs nao mostram senha, token ou dados sensiveis.
 
 ## 11.1 Diagnostico Oracle
 
@@ -323,6 +362,7 @@ Depois de enviar alteracoes para o GitHub:
 cd /opt/escala-app
 sudo -u escalaapp git pull
 sudo -u escalaapp npm ci --omit=dev
+sudo -u escalaapp node --check work/src/server.js
 sudo systemctl restart escala-app
 sudo systemctl status escala-app
 ```

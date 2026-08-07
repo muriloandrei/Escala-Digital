@@ -1,4 +1,4 @@
-// --- SELETORES DE PÁGINAS E NAVEGAÇÃO ---
+// --- SELETORES DE PAGINAS E NAVEGACAO ---
         const timelinePage = document.getElementById('timeline-page');
         const registrosPage = document.getElementById('registros-page');
         const funcionariosPage = document.getElementById('funcionarios-page');
@@ -9,6 +9,11 @@
         const escalaDetalhePage = document.getElementById('escala-detalhe-page');
         const escalasFuncionariosPage = document.getElementById('escalas-funcionarios-page');
         const escalaFuncionarioEdicaoPage = document.getElementById('escala-funcionario-edicao-page');
+        const historicoPage = document.getElementById('historico-page');
+        const tiposDescansoPage = document.getElementById('tipos-descanso-page');
+        const regrasPage = document.getElementById('regras-page');
+        const horariosPadraoPage = document.getElementById('horarios-padrao-page');
+        const integracaoRmPage = document.getElementById('integracao-rm-page');
         const acessosPage = document.getElementById('acessos-page');
         const rolesPage = document.getElementById('roles-page');
         const settingsPage = document.getElementById('settings-page');
@@ -20,8 +25,13 @@
         const navFuncionarios = document.getElementById('nav-funcionarios');
         const navSecoes = document.getElementById('nav-secoes');
         const navTurnosSecao = document.getElementById('nav-turnos-secao');
+        const navHistorico = document.getElementById('nav-historico');
+        const navTiposDescanso = document.getElementById('nav-tipos-descanso');
+        const navRegras = document.getElementById('nav-regras');
         const navAcessos = document.getElementById('nav-acessos');
         const navRoles = document.getElementById('nav-roles');
+        const navHorariosPadrao = document.getElementById('nav-horarios-padrao');
+        const navIntegracaoRm = document.getElementById('nav-integracao-rm');
         const navSettings = document.getElementById('nav-settings');
         
         const salvarSettingsBtn = document.getElementById('salvarSettingsBtn');
@@ -56,6 +66,8 @@
         const funcionariosPesquisaInput = document.getElementById('funcionariosPesquisaInput');
         const funcionariosSecaoFiltro = document.getElementById('funcionariosSecaoFiltro');
         const funcionariosFuncaoFiltro = document.getElementById('funcionariosFuncaoFiltro');
+        const funcionariosMesFiltro = document.getElementById('funcionariosMesFiltro');
+        const funcionariosAnoFiltro = document.getElementById('funcionariosAnoFiltro');
         const secoesLojaSelect = document.getElementById('secoesLojaSelect');
         const novaSecaoBtn = document.getElementById('novaSecaoBtn');
         const carregarSecoesBtn = document.getElementById('carregarSecoesBtn');
@@ -120,6 +132,27 @@
         const escalaFuncionarioAnoAtualLabel = document.getElementById('escalaFuncionarioAnoAtualLabel');
         const escalaFuncionarioAnoAnteriorBtn = document.getElementById('escalaFuncionarioAnoAnteriorBtn');
         const escalaFuncionarioAnoProximoBtn = document.getElementById('escalaFuncionarioAnoProximoBtn');
+        const tabelaRegrasBody = document.getElementById('tabelaRegrasBody');
+        const novoHorarioPadraoBtn = document.getElementById('novoHorarioPadraoBtn');
+        const horariosPadraoPesquisaInput = document.getElementById('horariosPadraoPesquisaInput');
+        const horariosPadraoStatusFiltro = document.getElementById('horariosPadraoStatusFiltro');
+        const tabelaHorariosPadraoBody = document.getElementById('tabelaHorariosPadraoBody');
+        const rmPesquisaInput = document.getElementById('rmPesquisaInput');
+        const rmLojaSelect = document.getElementById('rmLojaSelect');
+        const rmMesSelect = document.getElementById('rmMesSelect');
+        const rmAnoSelect = document.getElementById('rmAnoSelect');
+        const rmResumo = document.getElementById('rmResumo');
+        const tabelaRmLogsBody = document.getElementById('tabelaRmLogsBody');
+        const historicoPesquisaInput = document.getElementById('historicoPesquisaInput');
+        const historicoLojaSelect = document.getElementById('historicoLojaSelect');
+        const historicoMesSelect = document.getElementById('historicoMesSelect');
+        const historicoAnoSelect = document.getElementById('historicoAnoSelect');
+        const historicoResumo = document.getElementById('historicoResumo');
+        const tabelaHistoricoBody = document.getElementById('tabelaHistoricoBody');
+        const novoTipoDescansoBtn = document.getElementById('novoTipoDescansoBtn');
+        const tiposDescansoPesquisaInput = document.getElementById('tiposDescansoPesquisaInput');
+        const tiposDescansoStatusFiltro = document.getElementById('tiposDescansoStatusFiltro');
+        const tabelaTiposDescansoBody = document.getElementById('tabelaTiposDescansoBody');
         const carregarAcessosBtn = document.getElementById('carregarAcessosBtn');
         const tabelaAcessosBody = document.getElementById('tabela-acessos-body');
         let novoUsuarioBtn = null;
@@ -150,6 +183,11 @@
             escalaBanco: 'Detalhamento da Escala',
             escalasFuncionarios: 'Escalas por Funcionário',
             escalaFuncionarioEdicao: 'Editar Escala do Funcionário',
+            historico: 'Historico',
+            tiposDescanso: 'Tipos de Descanso',
+            regras: 'Regras da Escala',
+            horariosPadrao: 'Horarios Padrao',
+            integracaoRm: 'Integracao RM',
             acessos: 'Controle de Acesso',
             roles: 'Perfil de Acesso',
             configuracoes: 'Configuracoes'
@@ -166,7 +204,12 @@
             secaoForm: 'Escalas',
             turnosSecao: 'Escalas',
             turnoSecaoForm: 'Escalas',
+            regras: 'Escalas',
+            historico: 'Escalas',
+            tiposDescanso: 'Funcionários',
             funcionarios: 'Funcionários',
+            horariosPadrao: 'Configurações',
+            integracaoRm: 'Configurações',
             acessos: 'Configurações',
             roles: 'Configurações',
             configuracoes: 'Configurações'
@@ -189,6 +232,11 @@
             escalaDetalhePage.classList.add('hidden');
             escalasFuncionariosPage?.classList.add('hidden');
             escalaFuncionarioEdicaoPage?.classList.add('hidden');
+            historicoPage?.classList.add('hidden');
+            tiposDescansoPage?.classList.add('hidden');
+            regrasPage?.classList.add('hidden');
+            horariosPadraoPage?.classList.add('hidden');
+            integracaoRmPage?.classList.add('hidden');
             acessosPage.classList.add('hidden');
             rolesPage.classList.add('hidden');
             settingsPage.classList.add('hidden');
@@ -301,6 +349,8 @@
             navFuncionarios.classList.add('active');
             expandActiveNavGroup(navFuncionarios);
             setCurrentPageTitle('funcionarios');
+            if (funcionariosMesFiltro && !funcionariosMesFiltro.options.length) copiarOptionsSelect(mesSelect, funcionariosMesFiltro, String(new Date().getMonth()));
+            if (funcionariosAnoFiltro && !funcionariosAnoFiltro.options.length) copiarOptionsSelect(anoSelect, funcionariosAnoFiltro, String(new Date().getFullYear()));
             carregarFuncionariosTela(false).catch(error => showInfoModal(error.message, 'error'));
         }
 
@@ -402,6 +452,34 @@
             setCurrentPageTitle('tiposDescanso');
             carregarTiposDescansoTela().catch(error => showInfoModal(error.message, 'error'));
         }
+
+        function showRegrasPage() {
+            hideAllPages();
+            regrasPage?.classList.remove('hidden');
+            navRegras?.classList.add('active');
+            expandActiveNavGroup(navRegras);
+            setCurrentPageTitle('regras');
+            carregarRegrasTela().catch(error => showInfoModal(error.message, 'error'));
+        }
+
+        function showHorariosPadraoPage() {
+            hideAllPages();
+            horariosPadraoPage?.classList.remove('hidden');
+            navHorariosPadrao?.classList.add('active');
+            expandActiveNavGroup(navHorariosPadrao);
+            setCurrentPageTitle('horariosPadrao');
+            carregarHorariosPadraoTela().catch(error => showInfoModal(error.message, 'error'));
+        }
+
+        function showIntegracaoRmPage() {
+            hideAllPages();
+            integracaoRmPage?.classList.remove('hidden');
+            navIntegracaoRm?.classList.add('active');
+            expandActiveNavGroup(navIntegracaoRm);
+            setCurrentPageTitle('integracaoRm');
+            prepararFiltrosRm();
+            carregarRmLogsTela().catch(error => showInfoModal(error.message, 'error'));
+        }
         function showAcessosPage() {
             hideAllPages();
             acessosPage.classList.remove('hidden');
@@ -482,6 +560,11 @@
                 funcionarios: showFuncionariosPage,
                 secoes: showSecoesPage,
                 'turnos-secao': showTurnosSecaoPage,
+                historico: showHistoricoPage,
+                'tipos-descanso': showTiposDescansoPage,
+                regras: showRegrasPage,
+                'horarios-padrao': showHorariosPadraoPage,
+                'integracao-rm': showIntegracaoRmPage,
                 acessos: showAcessosPage,
                 roles: showRolesPage,
                 configuracoes: showSettingsPage
@@ -529,8 +612,11 @@
         navFuncionarios.addEventListener('click', () => { window.location.hash = '/funcionarios'; });
         navSecoes.addEventListener('click', () => { window.location.hash = '/secoes'; });
         navTurnosSecao.addEventListener('click', () => { window.location.hash = '/turnos-secao'; });
+        navRegras?.addEventListener('click', () => { window.location.hash = '/regras'; });
         navAcessos.addEventListener('click', () => { window.location.hash = '/acessos'; });
         navRoles.addEventListener('click', () => { window.location.hash = '/roles'; });
+        navHorariosPadrao?.addEventListener('click', () => { window.location.hash = '/horarios-padrao'; });
+        navIntegracaoRm?.addEventListener('click', () => { window.location.hash = '/integracao-rm'; });
         navSettings.addEventListener('click', () => { window.location.hash = '/configuracoes'; });
         document.querySelectorAll('.nav-parent').forEach(button => {
             button.addEventListener('click', () => {
@@ -582,7 +668,7 @@
             }
         });
 
-        // --- LÓGICA DA ESCALA ---
+        // --- LOGICA DA ESCALA ---
         const formContainer = document.getElementById('form-container');
         const formTitle = document.getElementById('form-title');
         const horaInicioTimelineInput = document.getElementById('horaInicioTimeline');
@@ -677,6 +763,13 @@
         let escalasFuncionariosCache = [];
         let escalaFuncionarioEdicaoAtual = null;
         let escalaFuncionarioMesesDisponiveisCache = new Map();
+        let regrasEscalaCache = [];
+        let horariosPadraoCache = [];
+        let rmLogsCache = [];
+        let tiposDescansoCache = [];
+        let historicoCache = [];
+        let perfisAcessoCache = [];
+        let perfilPaginasCache = [];
         const getLojaCodigo = (loja) => loja?.LOJA ?? loja?.loja;
         
         // --- Variáveis para Copiar/Colar e Seleção ---
@@ -685,7 +778,7 @@
         let selectionRange = { startCell: null, endCell: null, colabContainer: null, cells: [] };
 
         const { timeToMinutes, minutesToTime, hoursToMinutes } = window.EscalaRulesCore;
-        const showInfoModal = (messages, type = 'info') => { infoMessagesList.innerHTML = ''; if (type === 'error') { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-red-500'; infoModalTitle.textContent = 'Atenção: Erros Encontrados'; } else if (type === 'success') { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-green-500'; infoModalTitle.textContent = 'Sucesso'; } else { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-blue-500'; infoModalTitle.textContent = 'Informação'; } if (Array.isArray(messages)) { messages.forEach(msg => { const li = document.createElement('li'); li.textContent = msg; infoMessagesList.appendChild(li); }); } else { const li = document.createElement('li'); li.textContent = messages; infoMessagesList.appendChild(li); } infoModal.classList.remove('hidden'); };
+        const showInfoModal = (messages, type = 'info') => { infoMessagesList.innerHTML = ''; const panel = infoModal?.querySelector('.modal-content') || infoModal?.querySelector('div'); if (panel) panel.classList.add('info-modal-wide'); if (type === 'error') { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-red-500'; infoModalTitle.textContent = 'Atenção: Erros Encontrados'; } else if (type === 'success') { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-green-500'; infoModalTitle.textContent = 'Sucesso'; } else { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-blue-500'; infoModalTitle.textContent = 'Informação'; } if (Array.isArray(messages)) { messages.forEach(msg => { const li = document.createElement('li'); li.textContent = msg; infoMessagesList.appendChild(li); }); } else { const li = document.createElement('li'); li.textContent = messages; infoMessagesList.appendChild(li); } infoModal.classList.remove('hidden'); };
         
         const contarTurnosCriados = (ignorarIndex = null) => dadosEscala.reduce((total, escala, index) => {
             if (index === ignorarIndex) return total;
@@ -983,7 +1076,7 @@
                     return `<option value="${escapeHtml(value)}" data-escfunc-id="${escapeHtml(item.ESCFUNC_ID)}" data-chapa="${escapeHtml(item.CHAPA)}" data-escsecao-id="${escapeHtml(item.ESCSECAO_ID || '')}" data-escfuncao-id="${escapeHtml(item.ESCFUNCAO_ID || '')}" data-name="${escapeHtml(label)}" ${selected}>${escapeHtml(label)}</option>`;
                 }).join('');
                 const horarios = ` ${escala.inicio} - ${escala.inicioIntervalo} - ${escala.fimIntervalo} - ${escala.fim}`;
-                tableHtml += `<tr data-colab-index="${index}" data-escfunc-id="${escapeHtml(escfuncId)}" data-chapa="${escapeHtml(chapa)}" data-escsecao-id="${escapeHtml(escsecaoId)}" data-escfuncao-id="${escapeHtml(escfuncaoId)}"><td data-name="${escapeHtml(nomeBase)}" class="sticky left-0 bg-white font-semibold z-10"><select class="collaborator-select" aria-label="Selecionar colaborador"><option value="">Colaborador ${index + 1}</option>${funcionarioOptions}</select><span class="collaborator-name-span hidden">${escapeHtml(nomeBase)}</span><span class="collaborator-time-span text-gray-500">${escapeHtml(horarios)}</span></td>`;
+                tableHtml += `<tr data-colab-index="${index}" data-turno-id="${escapeHtml(escala.turnoId || '')}" data-escfunc-id="${escapeHtml(escfuncId)}" data-chapa="${escapeHtml(chapa)}" data-escsecao-id="${escapeHtml(escsecaoId)}" data-escfuncao-id="${escapeHtml(escfuncaoId)}"><td data-name="${escapeHtml(nomeBase)}" class="sticky left-0 bg-white font-semibold z-10"><select class="collaborator-select" aria-label="Selecionar colaborador"><option value="">Colaborador ${index + 1}</option>${funcionarioOptions}</select><span class="collaborator-name-span hidden">${escapeHtml(nomeBase)}</span><span class="collaborator-time-span text-gray-500">${escapeHtml(horarios)}</span></td>`;
                 for (let dia = 1; dia <= diasNoMes; dia++) {
                     const data = new Date(ano, mes, dia);
                     tableHtml += `<td class="escala-cell ${data.getDay() === 0 ? 'bg-yellow-100' : ''}" data-dia="${dia}"></td>`;
@@ -1012,10 +1105,10 @@
             atualizarContagemEsqueleto();
         };
         
-        const gerarEscalaDetalhada = () => { escalaCarregadaId = null; const skeletonRows = document.querySelectorAll('#tabela-esqueleto tbody tr'); if (skeletonRows.length === 0) { showInfoModal("Gere o esqueleto da escala primeiro.", "error"); return; } const ano = parseInt(anoSelect.value); const mes = parseInt(mesSelect.value); const diasNoMes = new Date(ano, mes + 1, 0).getDate(); const diasDaSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']; let allDetailsHtml = ''; skeletonRows.forEach(row => { const colabIndex = parseInt(row.dataset.colabIndex); const escfuncId = row.dataset.escfuncId || ''; const chapa = row.dataset.chapa || ''; const escsecaoId = row.dataset.escsecaoId || ''; const escfuncaoId = row.dataset.escfuncaoId || ''; const colaboradorNome = row.querySelector('td[data-name]').dataset.name; const escala = colaboradorShifts[colabIndex]; if (!escala) return; const folgas = new Set(); row.querySelectorAll('.escala-cell').forEach(cell => { if (cell.textContent.toUpperCase() === 'F') { folgas.add(parseInt(cell.dataset.dia)); } }); const intervaloMin = timeToMinutes(escala.fimIntervalo) - timeToMinutes(escala.inicioIntervalo); const hIntervalo = minutesToTime(intervaloMin); const hTrabalhadasMin = (timeToMinutes(escala.fim) - timeToMinutes(escala.inicio)) - intervaloMin; const hTrabalhadas = minutesToTime(hTrabalhadasMin); let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${colabIndex}" data-escfunc-id="${escfuncId}" data-chapa="${chapa}" data-escsecao-id="${escsecaoId}" data-escfuncao-id="${escfuncaoId}"><div class="header-info"><h3 class="font-bold text-lg" contenteditable="true">${colaboradorNome}</h3></div><table class="w-full"><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}">${i + 1}</th>`).join('')}</tr></thead><tbody>`; const fields = [ { label: 'ENT.', value: escala.inicio, key: 'inicio', editable: true }, { label: 'SAÍ.INT.', value: escala.inicioIntervalo, key: 'inicioIntervalo', editable: true }, { label: 'INTER.', value: hIntervalo, key: 'intervalo', editable: false }, { label: 'RET.INT.', value: escala.fimIntervalo, key: 'fimIntervalo', editable: true }, { label: 'SAÍ.', value: escala.fim, key: 'fim', editable: true }, { label: 'H.TRAB', value: hTrabalhadas, key: 'trabalhadas', bold: true, editable: false }, ]; fields.forEach(field => { detailTable += `<tr class="${field.bold ? 'font-bold bg-gray-50' : ''}" data-key="${field.key}"><td>${field.label}</td>`; for (let dia = 1; dia <= diasNoMes; dia++) { const isDomingo = new Date(ano, mes, dia).getDay() === 0; const isFolga = folgas.has(dia); const cellContent = isFolga ? 'F' : field.value; const isEditable = field.editable && !isFolga; const editableAttribute = isEditable ? 'contenteditable="true"' : ''; let bgColor = ''; if (isFolga) { bgColor = isDomingo ? 'bg-orange-500 text-white' : 'bg-red-100'; } else if (isDomingo) { bgColor = 'bg-yellow-100'; } detailTable += `<td class="${bgColor}" ${editableAttribute}>${cellContent}</td>`; } detailTable += `</tr>`; }); detailTable += `</tbody></table></div>`; allDetailsHtml += detailTable; }); detalhadaModalBody.innerHTML = allDetailsHtml; detalhadaMesAno.textContent = `${mesSelect.options[mesSelect.selectedIndex].text} / ${ano}`; if (detalhadaModal.classList.contains('hidden')) { detalhadaModal.classList.remove('hidden'); } detailedScaleHasBeenGenerated = true; gerarEscalaDetalhadaBtn.textContent = 'Ver Escala Detalhada'; };
+        const gerarEscalaDetalhada = () => { escalaCarregadaId = null; const skeletonRows = document.querySelectorAll('#tabela-esqueleto tbody tr'); if (skeletonRows.length === 0) { showInfoModal("Gere o esqueleto da escala primeiro.", "error"); return; } const ano = parseInt(anoSelect.value); const mes = parseInt(mesSelect.value); const diasNoMes = new Date(ano, mes + 1, 0).getDate(); const diasDaSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']; let allDetailsHtml = ''; skeletonRows.forEach(row => { const colabIndex = parseInt(row.dataset.colabIndex); const escfuncId = row.dataset.escfuncId || ''; const chapa = row.dataset.chapa || ''; const escsecaoId = row.dataset.escsecaoId || ''; const escfuncaoId = row.dataset.escfuncaoId || ''; const colaboradorNome = row.querySelector('td[data-name]').dataset.name; const escala = colaboradorShifts[colabIndex]; if (!escala) return; const folgas = new Set(); row.querySelectorAll('.escala-cell').forEach(cell => { if (cell.textContent.toUpperCase() === 'F') { folgas.add(parseInt(cell.dataset.dia)); } }); const intervaloMin = timeToMinutes(escala.fimIntervalo) - timeToMinutes(escala.inicioIntervalo); const hIntervalo = minutesToTime(intervaloMin); const hTrabalhadasMin = (timeToMinutes(escala.fim) - timeToMinutes(escala.inicio)) - intervaloMin; const hTrabalhadas = minutesToTime(hTrabalhadasMin); let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${colabIndex}" data-escfunc-id="${escfuncId}" data-chapa="${chapa}" data-escsecao-id="${escsecaoId}" data-escfuncao-id="${escfuncaoId}" data-turno-id="${escala.turnoId || ''}"><div class="header-info"><h3 class="font-bold text-lg" contenteditable="true">${colaboradorNome}</h3></div><table class="w-full"><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}">${i + 1}</th>`).join('')}</tr></thead><tbody>`; const fields = [ { label: 'ENT.', value: escala.inicio, key: 'inicio', editable: true }, { label: 'SAÍ.INT.', value: escala.inicioIntervalo, key: 'inicioIntervalo', editable: true }, { label: 'INTER.', value: hIntervalo, key: 'intervalo', editable: false }, { label: 'RET.INT.', value: escala.fimIntervalo, key: 'fimIntervalo', editable: true }, { label: 'SAÍ.', value: escala.fim, key: 'fim', editable: true }, { label: 'H.TRAB', value: hTrabalhadas, key: 'trabalhadas', bold: true, editable: false }, ]; fields.forEach(field => { detailTable += `<tr class="${field.bold ? 'font-bold bg-gray-50' : ''}" data-key="${field.key}"><td>${field.label}</td>`; for (let dia = 1; dia <= diasNoMes; dia++) { const isDomingo = new Date(ano, mes, dia).getDay() === 0; const isFolga = folgas.has(dia); const cellContent = isFolga ? 'F' : field.value; const isEditable = field.editable && !isFolga; const editableAttribute = isEditable ? 'contenteditable="true"' : ''; let bgColor = ''; if (isFolga) { bgColor = isDomingo ? 'bg-orange-500 text-white' : 'bg-red-100'; } else if (isDomingo) { bgColor = 'bg-yellow-100'; } detailTable += `<td class="${bgColor}" ${editableAttribute}>${cellContent}</td>`; } detailTable += `</tr>`; }); detailTable += `</tbody></table></div>`; allDetailsHtml += detailTable; }); detalhadaModalBody.innerHTML = allDetailsHtml; detalhadaMesAno.textContent = `${mesSelect.options[mesSelect.selectedIndex].text} / ${ano}`; if (detalhadaModal.classList.contains('hidden')) { detalhadaModal.classList.remove('hidden'); } detailedScaleHasBeenGenerated = true; gerarEscalaDetalhadaBtn.textContent = 'Ver Escala Detalhada'; };
         
         // =========================================================================
-        // FUNÇÃO DE IMPRESSÃO DA TIMELINE (VERSÃO CORRIGIDA E MELHORADA)
+        // FUNCAO DE IMPRESSAO DA TIMELINE (VERSAO CORRIGIDA E MELHORADA)
         // =========================================================================
         const imprimirTimelineMelhorado = (dataSource = dadosEscala, title = 'Relatório de Linha do Tempo') => {
             const printContent = document.getElementById('print-container');
@@ -1141,7 +1234,7 @@
         const prepareSkeletonForPrint = () => { const tableElement = document.getElementById('tabela-esqueleto'); if (!tableElement) return; const clone = tableElement.cloneNode(true); clone.classList.add('print-skeleton-table'); clone.removeAttribute('id'); const month = mesSelect.options[mesSelect.selectedIndex].text; const year = anoSelect.value; printContainer.innerHTML = `<div class="print-title">Esqueleto da Escala</div><div class="print-subtitle">${month} / ${year}</div>`; printContainer.appendChild(clone); window.print(); };
         const prepareDetailedForPrint = () => { const detailedElements = detalhadaModalBody.querySelectorAll('.colaborador-escala-detalhada'); if (detailedElements.length === 0) return; const month = mesSelect.options[mesSelect.selectedIndex].text; const year = anoSelect.value; printContainer.innerHTML = `<div class="print-title">Escala Detalhada</div><div class="print-subtitle">${month} / ${year}</div>`; detailedElements.forEach(el => { printContainer.appendChild(el.cloneNode(true)); }); window.print(); };
         
-        // --- EVENTOS E AÇÕES PRINCIPAIS ---
+        // --- EVENTOS E ACOES PRINCIPAIS ---
 
         abrirModalEscalaBtn.addEventListener('click', () => {
             resetSkeletonModalState();
@@ -1242,12 +1335,13 @@
             timelineVisualizerModal.classList.add('hidden');
         });
         
-        // --- LÓGICA DE SINCRONIZAÇÃO E VALIDAÇÃO (ATUALIZADA) ---
+        // --- LOGICA DE SINCRONIZACAO E VALIDACAO (ATUALIZADA) ---
 
         validarEscalaBtn.addEventListener('click', () => {
             let allErrors = [];
             const ausenciasAplicadas = aplicarAusenciasNaDetalhada();
             allErrors = allErrors.concat(validarDescansos());
+            allErrors = allErrors.concat(validarDomingosDetalhada());
             allErrors = allErrors.concat(validarDiasConsecutivos());
             allErrors = allErrors.concat(validarJornada());
             
@@ -1382,6 +1476,30 @@
             return errors;
         };
 
+        const validarDomingosDetalhada = () => {
+            const errors = [];
+            const colaboradoresDivs = detalhadaModalBody.querySelectorAll('.colaborador-escala-detalhada');
+            colaboradoresDivs.forEach(colabDiv => {
+                const nomeColab = colabDiv.querySelector('h3').textContent;
+                const inicioRow = colabDiv.querySelector('tbody tr[data-key="inicio"]');
+                if (!inicioRow) return;
+                let ultimoDomingoTrabalhado = null;
+                const diasNoMes = colabDiv.querySelector('thead tr:last-child').children.length - 1;
+                for (let dia = 1; dia <= diasNoMes; dia++) {
+                    const data = new Date(Number(anoSelect.value), Number(mesSelect.value), dia);
+                    if (data.getDay() !== 0) continue;
+                    const cell = inicioRow.cells[dia];
+                    const trabalha = cell && cell.textContent.trim().toUpperCase() !== 'F';
+                    if (!trabalha) continue;
+                    if (ultimoDomingoTrabalhado && Math.round((data - ultimoDomingoTrabalhado) / 86400000) === 7) {
+                        errors.push(`${nomeColab}: dois domingos trabalhados em sequencia (${ultimoDomingoTrabalhado.getDate()} e ${dia}).`);
+                    }
+                    ultimoDomingoTrabalhado = data;
+                }
+            });
+            return errors;
+        };
+
         const validarDiasConsecutivos = () => {
             let errors = [];
             const maxDias = parseInt(regraMaxDiasConsecutivosInput.value);
@@ -1412,7 +1530,7 @@
         };
 
 
-        // --- LÓGICA DE EDIÇÃO, SELEÇÃO E COPIAR/COLAR ---
+        // --- LOGICA DE EDICAO, SELECAO E COPIAR/COLAR ---
 
         detalhadaModalBody.addEventListener('input', (e) => {
             const targetCell = e.target;
@@ -2666,8 +2784,9 @@
 
         const carregarFuncionariosTela = async () => {
             const lojas = funcionariosLojaSelect?.value && funcionariosLojaSelect.value !== 'all' ? [Number(funcionariosLojaSelect.value)] : [...lojasPermitidasCache];
+            const mesRef = funcionariosMesFiltro && funcionariosAnoFiltro ? formatDateForDb(Number(funcionariosAnoFiltro.value), Number(funcionariosMesFiltro.value), 1) : '';
             const resultados = await Promise.all(lojas.map(async loja => {
-                const data = await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/funcionarios');
+                const data = await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/funcionarios' + (mesRef ? '?mesRef=' + encodeURIComponent(mesRef) : ''));
                 return data.funcionarios || [];
             }));
             funcionariosTelaCache = resultados.flat();
@@ -2679,6 +2798,8 @@
         funcionariosPesquisaInput?.addEventListener('input', aplicarFiltrosFuncionariosTela);
         funcionariosSecaoFiltro?.addEventListener('change', aplicarFiltrosFuncionariosTela);
         funcionariosFuncaoFiltro?.addEventListener('change', aplicarFiltrosFuncionariosTela);
+        funcionariosMesFiltro?.addEventListener('change', () => carregarFuncionariosTela().catch(error => showInfoModal(error.message, 'error')));
+        funcionariosAnoFiltro?.addEventListener('change', () => carregarFuncionariosTela().catch(error => showInfoModal(error.message, 'error')));
         funcionariosLojaSelect?.addEventListener('change', () => carregarFuncionariosTela().catch(error => showInfoModal(error.message, 'error')));
 
         tabelaFuncionariosBody.addEventListener('click', async (event) => {
@@ -2727,6 +2848,131 @@
         });
 
 
+        const carregarRegrasTela = async () => {
+            const data = await apiRequest('/api/escalas/regras');
+            regrasEscalaCache = data.regras || [];
+            if (!tabelaRegrasBody) return;
+            tabelaRegrasBody.innerHTML = regrasEscalaCache.length ? regrasEscalaCache.map(regra => `
+                <tr>
+                    <td data-label="C&oacute;digo">${escapeHtml(regra.codigo || '')}</td>
+                    <td data-label="Regra">${escapeHtml(regra.titulo || '')}</td>
+                    <td data-label="Descri&ccedil;&atilde;o">${escapeHtml(regra.descricao || '')}</td>
+                </tr>`).join('') : '<tr><td colspan="3" class="text-center text-gray-500 py-8">Nenhuma regra cadastrada.</td></tr>';
+        };
+
+        const calcularMinutosHorarioPadrao = (values) => {
+            const intervalo = Math.max(0, timeToMinutes(values.HR_ENT2) - timeToMinutes(values.HR_SAI1));
+            const jornada = Math.max(0, (timeToMinutes(values.HR_SAI2) - timeToMinutes(values.HR_ENT1)) - intervalo);
+            return { intervalo, jornada };
+        };
+
+        const carregarHorariosPadraoCache = async (includeInactive = false) => {
+            const data = await apiRequest('/api/catalog/horarios-padrao' + (includeInactive ? '?includeInactive=1' : ''));
+            horariosPadraoCache = data.horarios || [];
+            return horariosPadraoCache;
+        };
+
+        const renderizarHorariosPadraoTela = () => {
+            if (!tabelaHorariosPadraoBody) return;
+            const termo = normalizarTextoFiltro(horariosPadraoPesquisaInput?.value);
+            const status = horariosPadraoStatusFiltro?.value || 'all';
+            const rows = horariosPadraoCache.filter((horario) => {
+                const matchTermo = !termo || normalizarTextoFiltro(horario.DESCR || '').includes(termo);
+                const matchStatus = status === 'all' || String(horario.STATUS) === status;
+                return matchTermo && matchStatus;
+            });
+            tabelaHorariosPadraoBody.innerHTML = rows.length ? rows.map((horario) => `
+                <tr>
+                    <td data-label="Descri&ccedil;&atilde;o">${escapeHtml(horario.DESCR || '')}</td>
+                    <td data-label="Entrada 1">${escapeHtml(horario.HR_ENT1 || '')}</td>
+                    <td data-label="Sa&iacute;da 1">${escapeHtml(horario.HR_SAI1 || '')}</td>
+                    <td data-label="Entrada 2">${escapeHtml(horario.HR_ENT2 || '')}</td>
+                    <td data-label="Sa&iacute;da 2">${escapeHtml(horario.HR_SAI2 || '')}</td>
+                    <td data-label="Jornada">${minutesToTime(Number(horario.JORNADA_MINUTOS || 0))}</td>
+                    <td data-label="Intervalo">${minutesToTime(Number(horario.INTERVALO_MINUTOS || 0))}</td>
+                    <td data-label="Status">${horario.STATUS === 'A' ? 'Ativo' : 'Inativo'}</td>
+                    <td data-label="A&ccedil;&otilde;es" class="actions-cell">
+                        <button class="action-btn-table banco-action editar-horario-padrao" data-id="${escapeHtml(horario.ESCHORPAD_ID)}"><span class="material-symbols-outlined">edit</span>Editar</button>
+                        <button class="action-btn-table banco-action danger-action toggle-horario-padrao" data-id="${escapeHtml(horario.ESCHORPAD_ID)}" data-status="${escapeHtml(horario.STATUS)}"><span class="material-symbols-outlined">block</span>${horario.STATUS === 'A' ? 'Inativar' : 'Reativar'}</button>
+                    </td>
+                </tr>`).join('') : '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhum hor&aacute;rio encontrado.</td></tr>';
+        };
+
+        const carregarHorariosPadraoTela = async () => {
+            await carregarHorariosPadraoCache(true);
+            renderizarHorariosPadraoTela();
+        };
+
+        const abrirModalHorarioPadrao = async (horario = null) => {
+            const values = await showInputModal({
+                title: horario ? 'Editar Horario Padrao' : 'Novo Horario Padrao',
+                inputs: [
+                    { label: 'Descricao', type: 'text', id: 'DESCR', value: horario?.DESCR || '', required: true },
+                    { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: horario?.HR_ENT1 || '08:00', required: true },
+                    { label: 'Saida 1', type: 'time', id: 'HR_SAI1', value: horario?.HR_SAI1 || '12:00', required: true },
+                    { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: horario?.HR_ENT2 || '13:10', required: true },
+                    { label: 'Saida 2', type: 'time', id: 'HR_SAI2', value: horario?.HR_SAI2 || '17:58', required: true },
+                    { label: 'Status', type: 'select', id: 'STATUS', value: horario?.STATUS || 'A', options: [{ value: 'A', label: 'Ativo' }, { value: 'I', label: 'Inativo' }], required: true }
+                ],
+                confirmText: 'Salvar'
+            });
+            if (!values) return;
+            const calculo = calcularMinutosHorarioPadrao(values);
+            if (calculo.jornada !== 528 || calculo.intervalo !== 70) {
+                showInfoModal('Horario padrao deve ter jornada 08:48 e 1:10 de almoco.', 'error');
+                return;
+            }
+            const payload = { ...values, JORNADA_MINUTOS: calculo.jornada, INTERVALO_MINUTOS: calculo.intervalo };
+            if (horario) await apiRequest('/api/catalog/horarios-padrao/' + encodeURIComponent(horario.ESCHORPAD_ID), { method: 'PATCH', body: JSON.stringify(payload) });
+            else await apiRequest('/api/catalog/horarios-padrao', { method: 'POST', body: JSON.stringify(payload) });
+            await carregarHorariosPadraoTela();
+            showInfoModal('Horario padrao salvo com sucesso.', 'success');
+        };
+
+        const prepararFiltrosRm = () => {
+            copiarOptionsSelect(escalasFiltroLoja || lojaEscalaSelect, rmLojaSelect, escalasFiltroLoja?.value || 'all');
+            copiarOptionsSelect(mesSelect, rmMesSelect, escalasFiltroMes?.value || String(new Date().getMonth()));
+            copiarOptionsSelect(anoSelect, rmAnoSelect, escalasFiltroAno?.value || String(new Date().getFullYear()));
+            if (rmLojaSelect && !Array.from(rmLojaSelect.options).some(option => option.value === 'all')) {
+                rmLojaSelect.insertAdjacentHTML('afterbegin', '<option value="all">Todas as lojas</option>');
+                rmLojaSelect.value = 'all';
+            }
+        };
+
+        const aplicarFiltroRmTela = () => {
+            if (!tabelaRmLogsBody) return;
+            const termo = normalizarTextoFiltro(rmPesquisaInput?.value);
+            const rows = rmLogsCache.filter((log) => !termo || normalizarTextoFiltro([log.CHAPA, log.ACAO, log.STATUS, log.MENSAGEM].join(' ')).includes(termo));
+            if (rmResumo) rmResumo.textContent = rows.length + ' registro(s) encontrado(s).';
+            tabelaRmLogsBody.innerHTML = rows.length ? rows.map((log) => {
+                const mesRef = String(log.MES_REF || '').slice(0, 10);
+                const falha = String(log.STATUS || '').toUpperCase() === 'FALHA';
+                return `
+                    <tr>
+                        <td data-label="Data">${formatarDataTabela(log.DT_HR_INCL)}</td>
+                        <td data-label="Loja">${escapeHtml(log.LOJA || '-')}</td>
+                        <td data-label="Mes">${mesRef ? getNomeMesTabela(mesRef) + ' ' + mesRef.slice(0, 4) : '-'}</td>
+                        <td data-label="Revisao">${escapeHtml(log.REVISAO ?? '-')}</td>
+                        <td data-label="Chapa">${escapeHtml(log.CHAPA || '-')}</td>
+                        <td data-label="Acao">${escapeHtml(log.ACAO || '-')}</td>
+                        <td data-label="Status"><span class="escala-status-chip ${falha ? 'danger-chip' : 'official-chip'}">${escapeHtml(log.STATUS || '-')}</span></td>
+                        <td data-label="Mensagem">${escapeHtml(log.MENSAGEM || '-')}</td>
+                        <td data-label="Acoes" class="actions-cell">${falha ? `<button class="action-btn-table banco-action rm-reprocessar" data-loja="${escapeHtml(log.LOJA || '')}" data-mes-ref="${escapeHtml(mesRef)}" data-revisao="${escapeHtml(log.REVISAO ?? 0)}"><span class="material-symbols-outlined">sync</span>Reprocessar</button>` : '-'}</td>
+                    </tr>`;
+            }).join('') : '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhum log encontrado.</td></tr>';
+        };
+
+        const carregarRmLogsTela = async () => {
+            const params = new URLSearchParams();
+            if (rmLojaSelect?.value && rmLojaSelect.value !== 'all') params.set('lojaId', rmLojaSelect.value);
+            if (rmMesSelect?.value !== 'all' && rmAnoSelect?.value !== 'all') {
+                params.set('mesRef', formatDateForDb(Number(rmAnoSelect.value), Number(rmMesSelect.value), 1));
+            }
+            const data = await apiRequest('/api/escalas/rm/logs' + (params.toString() ? '?' + params.toString() : ''));
+            rmLogsCache = data.logs || [];
+            aplicarFiltroRmTela();
+        };
+
         const carregarTiposDescansoCache = async (includeInactive = false) => {
             const data = await apiRequest('/api/catalog/tipos-descanso' + (includeInactive ? '?includeInactive=1' : ''));
             tiposDescansoCache = data.tipos || [];
@@ -2761,6 +3007,42 @@
             renderizarTiposDescansoTela();
         };
 
+        horariosPadraoPesquisaInput?.addEventListener('input', renderizarHorariosPadraoTela);
+        horariosPadraoStatusFiltro?.addEventListener('change', renderizarHorariosPadraoTela);
+        novoHorarioPadraoBtn?.addEventListener('click', () => abrirModalHorarioPadrao().catch(error => showInfoModal(error.message, 'error')));
+        tabelaHorariosPadraoBody?.addEventListener('click', async (event) => {
+            const edit = event.target.closest('.editar-horario-padrao');
+            const toggle = event.target.closest('.toggle-horario-padrao');
+            const button = edit || toggle;
+            if (!button) return;
+            const horario = horariosPadraoCache.find(item => Number(item.ESCHORPAD_ID) === Number(button.dataset.id));
+            if (!horario) return;
+            try {
+                if (edit) return abrirModalHorarioPadrao(horario);
+                await apiRequest('/api/catalog/horarios-padrao/' + encodeURIComponent(horario.ESCHORPAD_ID), { method: 'PATCH', body: JSON.stringify({ STATUS: horario.STATUS === 'A' ? 'I' : 'A' }) });
+                await carregarHorariosPadraoTela();
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+
+        rmPesquisaInput?.addEventListener('input', aplicarFiltroRmTela);
+        [rmLojaSelect, rmMesSelect, rmAnoSelect].forEach(select => select?.addEventListener('change', () => carregarRmLogsTela().catch(error => showInfoModal(error.message, 'error'))));
+        tabelaRmLogsBody?.addEventListener('click', async (event) => {
+            const button = event.target.closest('.rm-reprocessar');
+            if (!button) return;
+            try {
+                await apiRequest('/api/escalas/rm/reprocessar', {
+                    method: 'POST',
+                    body: JSON.stringify({ lojaId: Number(button.dataset.loja), mesRef: button.dataset.mesRef, revisao: Number(button.dataset.revisao || 0) })
+                });
+                await carregarRmLogsTela();
+                showInfoModal('Reprocessamento enviado para o RM.', 'success');
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+
         const abrirModalTipoDescanso = async (tipo = null) => {
             const values = await showInputModal({
                 title: tipo ? "Editar Tipo de Descanso" : "Novo Tipo de Descanso",
@@ -2782,6 +3064,25 @@
             await carregarTiposDescansoTela();
             showInfoModal("Tipo de descanso salvo com sucesso.", "success");
         };
+
+        tiposDescansoPesquisaInput?.addEventListener('input', renderizarTiposDescansoTela);
+        tiposDescansoStatusFiltro?.addEventListener('change', renderizarTiposDescansoTela);
+        novoTipoDescansoBtn?.addEventListener('click', () => abrirModalTipoDescanso().catch(error => showInfoModal(error.message, 'error')));
+        tabelaTiposDescansoBody?.addEventListener('click', async (event) => {
+            const edit = event.target.closest('.editar-tipo-descanso');
+            const toggle = event.target.closest('.toggle-tipo-descanso');
+            const button = edit || toggle;
+            if (!button) return;
+            const tipo = tiposDescansoCache.find(item => Number(item.ESCTIPODESC_ID) === Number(button.dataset.id));
+            if (!tipo) return;
+            try {
+                if (edit) return abrirModalTipoDescanso(tipo);
+                await apiRequest('/api/catalog/tipos-descanso/' + encodeURIComponent(tipo.ESCTIPODESC_ID), { method: 'PATCH', body: JSON.stringify({ STATUS: tipo.STATUS === 'A' ? 'I' : 'A' }) });
+                await carregarTiposDescansoTela();
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
 
         const prepararFiltrosHistorico = (params = {}) => {
             if (historicoLojaSelect && historicoLojaSelect.options.length === 0) copiarOptionsSelect(escalasFiltroLoja || lojaEscalaSelect, historicoLojaSelect);
@@ -2864,6 +3165,30 @@
         const isProgramacaoDescanso = (programacao) => String(programacao || 'TRB').toUpperCase() !== 'TRB';
         const getValorDescanso = (dia) => String(dia?.PROGRAMACAO || 'F').toUpperCase();
 
+        const validarDiasEscalaFuncionario = (dias, nome) => {
+            const errors = [];
+            let ultimoTrabalho = null;
+            let ultimoDomingo = null;
+            [...(dias || [])].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach((dia) => {
+                const dataIso = String(dia.DT || '').slice(0,10);
+                const data = new Date(dataIso + 'T00:00:00');
+                if (isProgramacaoDescanso(dia.PROGRAMACAO)) return;
+                errors.push(...validarTurnoSimples({inicio:dia.HR_ENT1,inicioIntervalo:dia.HR_SAI1,fimIntervalo:dia.HR_ENT2,fim:dia.HR_SAI2}).map(e=>formatarDataTabela(dia.DT)+': '+e));
+                if (ultimoTrabalho) {
+                    const diasDiff = Math.round((data - ultimoTrabalho.data) / 86400000);
+                    const descanso = ((diasDiff - 1) * 1440) + (1440 - timeToMinutes(ultimoTrabalho.HR_SAI2)) + timeToMinutes(dia.HR_ENT1);
+                    if (diasDiff === 1 && descanso < timeToMinutes(regraDescansoEntreTurnosInput.value)) errors.push(`${nome}: interjornada menor que ${regraDescansoEntreTurnosInput.value} entre ${formatarDataTabela(ultimoTrabalho.DT)} e ${formatarDataTabela(dia.DT)}.`);
+                    if (diasDiff > 1 && descanso < hoursToMinutes(regraDescansoPosFolgaInput.value)) errors.push(`${nome}: descanso apos folga menor que ${regraDescansoPosFolgaInput.value}h entre ${formatarDataTabela(ultimoTrabalho.DT)} e ${formatarDataTabela(dia.DT)}.`);
+                }
+                if (data.getDay() === 0) {
+                    if (ultimoDomingo && Math.round((data - ultimoDomingo) / 86400000) === 7) errors.push(`${nome}: dois domingos trabalhados em sequencia (${formatarDataTabela(ultimoDomingo.toISOString())} e ${formatarDataTabela(dia.DT)}).`);
+                    ultimoDomingo = data;
+                }
+                ultimoTrabalho = dia;
+            });
+            return errors;
+        };
+
         const getTurnosFuncionarioAtual = () => {
             const atual = escalaFuncionarioEdicaoAtual;
             if (!atual) return [];
@@ -2899,8 +3224,9 @@
                         else value=dia[field.key]||'--';
                     }
                     const domingo=new Date(ref.getFullYear(),ref.getMonth(),d).getDay()===0;
-                    const cls=descanso?(domingo?'day-off sunday':'day-off'):(domingo?'sunday':'');
-                    table+='<td class="' + cls + '" data-dia="' + d + '">' + escapeHtml(value) + '</td>';
+                    const cls=[descanso?(domingo?'day-off sunday':'day-off'):(domingo?'sunday':''), dia.CRITICA_MANUAL ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
+                    const marker = dia.CRITICA_MANUAL && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Critica: ajuste manual">!</span>' : '';
+                    table+='<td class="' + cls + '" data-dia="' + d + '">' + marker + escapeHtml(value) + '</td>';
                 }
                 table+='</tr>';
             });
@@ -3020,16 +3346,18 @@
         const aplicarEdicaoDiasFuncionario = (diaSelecionado, values) => {
             const atual = escalaFuncionarioEdicaoAtual;
             if (!atual) return;
-            const diaInicio = Number(diaSelecionado);
-            const diaFim = Number(diaSelecionado);
+            const diaInicio = Math.max(1, Number(values.IND_APLICAR_DE || diaSelecionado));
+            const diaFim = Math.max(diaInicio, Number(values.IND_APLICAR_ATE || values.IND_APLICAR_DE || diaSelecionado));
             atual.justificativaAlteracao = String(values.IND_JUSTIFICATIVA || '').trim();
             const tipoDia = values.IND_TIPO_DIA || 'TRABALHO';
             const descansoSigla = String(values.IND_TIPO_DESCANSO || 'F').toUpperCase();
             const turnoSelecionado = getTurnosFuncionarioAtual().find(turno => String(turno.ESCSECAOTURNO_ID) === String(values.IND_TURNO_ID));
+            const horarioPadrao = horariosPadraoCache.find(horario => String(horario.ESCHORPAD_ID) === String(values.IND_HORARIO_PADRAO_ID));
             atual.dias.forEach((dia) => {
                 const numeroDia = Number(String(dia.DT).slice(8,10));
                 if (numeroDia < diaInicio || numeroDia > diaFim) return;
                 dia.JUSTIFICATIVA_ALTERACAO = atual.justificativaAlteracao;
+                dia.CRITICA_MANUAL = 1;
                 if (tipoDia === 'DESCANSO') {
                     dia.PROGRAMACAO = descansoSigla;
                     dia.HR_ENT1 = descansoSigla;
@@ -3044,6 +3372,11 @@
                     dia.HR_SAI1 = turnoSelecionado.HR_SAI1;
                     dia.HR_ENT2 = turnoSelecionado.HR_ENT2;
                     dia.HR_SAI2 = turnoSelecionado.HR_SAI2;
+                } else if (values.IND_MODO_TRABALHO === 'PADRAO' && horarioPadrao) {
+                    dia.HR_ENT1 = horarioPadrao.HR_ENT1;
+                    dia.HR_SAI1 = horarioPadrao.HR_SAI1;
+                    dia.HR_ENT2 = horarioPadrao.HR_ENT2;
+                    dia.HR_SAI2 = horarioPadrao.HR_SAI2;
                 } else {
                     dia.HR_ENT1 = values.IND_HR_ENT1;
                     dia.HR_SAI1 = values.IND_HR_SAI1;
@@ -3061,19 +3394,24 @@
             if(!dia)return;
             const numeroDia = Number(button.dataset.dia);
             if (!tiposDescansoCache.length) await carregarTiposDescansoCache(false);
+            if (!horariosPadraoCache.length) await carregarHorariosPadraoCache(false);
             const turnos = getTurnosFuncionarioAtual();
             const tipoOptions = tiposDescansoCache.filter(tipo => tipo.STATUS !== 'I').map(tipo => ({ value: tipo.SIGLA, label: tipo.DESCR + ' (' + tipo.SIGLA + ')' }));
             const turnoOptions = turnos.map(turno => ({ value: turno.ESCSECAOTURNO_ID, label: (turno.DESCR || 'Turno') + ' | ' + turno.HR_ENT1 + '-' + turno.HR_SAI1 + ' / ' + turno.HR_ENT2 + '-' + turno.HR_SAI2 }));
+            const horarioPadraoOptions = horariosPadraoCache.filter(horario => horario.STATUS !== 'I').map(horario => ({ value: horario.ESCHORPAD_ID, label: horario.DESCR + ' | ' + horario.HR_ENT1 + '-' + horario.HR_SAI1 + ' / ' + horario.HR_ENT2 + '-' + horario.HR_SAI2 }));
             const descansoAtual = isProgramacaoDescanso(dia.PROGRAMACAO);
             const values=await showInputModal({
                 title:'Editar dia '+formatarDataTabela(dia.DT)+(dia.AUSENCIA_OBRIGATORIA ? ' - ausencia obrigatoria' : ''),
                 panelClass:'bg-white rounded-lg shadow-xl w-11/12 max-w-5xl flex flex-col employee-day-modal',
                 inputs:[
+                    {label:'Aplicar do dia',type:'number',id:'IND_APLICAR_DE',value:String(numeroDia),required:true},
+                    {label:'Aplicar ate o dia',type:'number',id:'IND_APLICAR_ATE',value:String(numeroDia),required:true},
                     {label:'Tipo do dia',type:'select',id:'IND_TIPO_DIA',value:descansoAtual?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true,wrapperClass:'employee-modal-span-2'},
                     {label:'Justificativa da mudan\u00e7a',type:'textarea',id:'IND_JUSTIFICATIVA',value:dia.JUSTIFICATIVA_ALTERACAO||'',required:true,rows:3,placeholder:'Descreva o motivo da altera\u00e7\u00e3o deste dia.',wrapperClass:'employee-modal-span-2'},
                     {label:'Tipo de descanso',type:'select',id:'IND_TIPO_DESCANSO',value:descansoAtual?getValorDescanso(dia):'F',options:tipoOptions.length?tipoOptions:[{value:'F',label:'Folga (F)'}],dependsOn:'IND_TIPO_DIA',showWhen:'DESCANSO',required:true,wrapperClass:'employee-modal-span-2'},
-                    {label:'Modo de trabalho',type:'select',id:'IND_MODO_TRABALHO',value:'MANUAL',options:[{value:'TURNO',label:'Selecionar turno'},{value:'MANUAL',label:'Inserir manual'}],dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true,wrapperClass:'employee-modal-span-2'},
+                    {label:'Modo de trabalho',type:'select',id:'IND_MODO_TRABALHO',value:'MANUAL',options:[{value:'TURNO',label:'Selecionar turno'},{value:'PADRAO',label:'Horario padrao'},{value:'MANUAL',label:'Inserir manual'}],dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true,wrapperClass:'employee-modal-span-2'},
                     {label:'Turno da se??o',type:'select',id:'IND_TURNO_ID',value:turnoOptions[0]?.value || '',options:turnoOptions.length?turnoOptions:[{value:'',label:'Nenhum turno cadastrado'}],dependsOn:'IND_MODO_TRABALHO',showWhen:'TURNO',required:true,wrapperClass:'employee-modal-span-2'},
+                    {label:'Horario padrao',type:'select',id:'IND_HORARIO_PADRAO_ID',value:horarioPadraoOptions[0]?.value || '',options:horarioPadraoOptions.length?horarioPadraoOptions:[{value:'',label:'Nenhum horario padrao cadastrado'}],dependsOn:'IND_MODO_TRABALHO',showWhen:'PADRAO',required:true,wrapperClass:'employee-modal-span-2'},
                     {label:'Entrada 1',type:'time',id:'IND_HR_ENT1',value:descansoAtual?'':dia.HR_ENT1||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true},
                     {label:'Sa?da 1',type:'time',id:'IND_HR_SAI1',value:descansoAtual?'':dia.HR_SAI1||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true},
                     {label:'Entrada 2',type:'time',id:'IND_HR_ENT2',value:descansoAtual?'':dia.HR_ENT2||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true},
@@ -3104,7 +3442,7 @@
                 if (!disponiveis.length) return;
                 const domingo = disponiveis.find(item => item.data.getDay()===0);
                 const folgas = [];
-                if (domingo && index % 3 === Number(atual.escfuncId) % 3) folgas.push(domingo);
+                if (domingo && index % 2 === Number(atual.escfuncId) % 2) folgas.push(domingo);
                 const weekdays = disponiveis.filter(item => item.data.getDay()!==0);
                 const candidatos = [Number(atual.escfuncId)+index, Number(atual.escfuncId)+index+3, Number(atual.escfuncId)+index+1];
                 candidatos.forEach(seed => { if (folgas.length>=2 || !weekdays.length) return; const item=weekdays[seed%weekdays.length]; if (!folgas.includes(item)) folgas.push(item); });
@@ -3119,8 +3457,8 @@
         distribuirFolgasFuncionarioBtn?.addEventListener('click',distribuirFolgasFuncionario);
 
         const validarEscalaFuncionarioAtual = () => {
-            const atual=escalaFuncionarioEdicaoAtual;if(!atual)return false; const errors=[]; let consecutivos=0;
-            [...atual.dias].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach(dia=>{if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>Number(regraMaxDiasConsecutivosInput.value||7))errors.push('Mais de '+regraMaxDiasConsecutivosInput.value+' dias consecutivos em '+formatarDataTabela(dia.DT)+'.'); errors.push(...validarTurnoSimples({inicio:dia.HR_ENT1,inicioIntervalo:dia.HR_SAI1,fimIntervalo:dia.HR_ENT2,fim:dia.HR_SAI2}).map(e=>formatarDataTabela(dia.DT)+': '+e));});
+            const atual=escalaFuncionarioEdicaoAtual;if(!atual)return false; const errors=validarDiasEscalaFuncionario(atual.dias, atual.nome); let consecutivos=0;
+            [...atual.dias].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach(dia=>{if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>Number(regraMaxDiasConsecutivosInput.value||7))errors.push('Mais de '+regraMaxDiasConsecutivosInput.value+' dias consecutivos em '+formatarDataTabela(dia.DT)+'.');});
             showInfoModal(errors.length?errors:'A escala do funcionário foi validada com sucesso.',errors.length?'error':'success'); return errors.length===0;
         };
         validarEscalaFuncionarioBtn?.addEventListener('click',validarEscalaFuncionarioAtual);
@@ -3132,13 +3470,14 @@
             tabelaAcessosBody.innerHTML = '';
 
             if (!usuarios || usuarios.length === 0) {
-                tabelaAcessosBody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 py-8">Nenhum usuário encontrado.</td></tr>';
+                tabelaAcessosBody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-8">Nenhum usuário encontrado.</td></tr>';
                 return;
             }
 
             usuarios.forEach(usuario => {
                 const statusLabel = usuario.STATUS === 'A' ? 'Ativo' : 'Inativo';
-                const lojas = Array.isArray(usuario.LOJAS) ? usuario.LOJAS.join(', ') : '';
+                const lojasArray = Array.isArray(usuario.LOJAS) ? usuario.LOJAS : [];
+                const lojas = lojasArray.length <= 4 ? lojasArray.join(', ') : `${lojasArray.length} lojas selecionadas`;
                 const isAdmin = usuarioSessaoCache?.perfil === 'ADMIN';
                 const row = `
                     <tr data-usuario-id="${usuario.USUARIO_ID}">
@@ -3147,8 +3486,10 @@
                         <td data-label="Perfil de Acesso">${usuario.PERFIL || ''}</td>
                         <td data-label="Status">${statusLabel}</td>
                         <td data-label="Lojas Permitidas">
-                            <span>${lojas}</span>
-                            ${isAdmin ? `<div class="actions-cell mt-2">
+                            <span title="${escapeHtml(lojasArray.join(', '))}">${escapeHtml(lojas || '-')}</span>
+                        </td>
+                        <td data-label="Acoes" class="actions-cell">
+                            ${isAdmin ? `
                                 <button class="action-btn-table edit-usuario" data-id="${usuario.USUARIO_ID}" title="Editar usuário">
                                     <span class="material-symbols-outlined">edit</span>
                                     Editar
@@ -3157,7 +3498,7 @@
                                     <span class="material-symbols-outlined">block</span>
                                     ${usuario.STATUS === 'A' ? 'Inativar' : 'Reativar'}
                                 </button>
-                            </div>` : ''}
+                            ` : '-'}
                         </td>
                     </tr>
                 `;
@@ -3524,7 +3865,7 @@
             }).join('');
             container.innerHTML = `
                 <div class="table-card-header creation-card-header inner-card-header">
-                    <div><h2>Perfis cadastrados</h2><p class="table-card-subtitle">Defina visualização, edição e inativação por página.</p></div>
+                    <div><h2>Permissoes por perfil</h2><p class="table-card-subtitle">Defina visualizacao, edicao e inativacao por pagina.</p></div>
                     <button type="button" class="action-button" id="novoPerfilAcessoBtn"><span class="material-symbols-outlined">add</span>Novo Perfil</button>
                 </div>
                 <table class="data-table">
@@ -3730,6 +4071,7 @@
                     chapa: div.dataset.chapa || '',
                     escsecaoId: div.dataset.escsecaoId ? parseInt(div.dataset.escsecaoId, 10) : null,
                     escfuncaoId: div.dataset.escfuncaoId ? parseInt(div.dataset.escfuncaoId, 10) : null,
+                    escsecaoTurnoId: div.dataset.turnoId ? parseInt(div.dataset.turnoId, 10) : null,
                     turnos: {}
                 };
                 div.querySelectorAll('tbody tr').forEach(row => {
@@ -3759,6 +4101,7 @@
                     chapa: colaborador.chapa,
                     escsecaoId: colaborador.escsecaoId || null,
                     escfuncaoId: colaborador.escfuncaoId || null,
+                    escsecaoTurnoId: colaborador.escsecaoTurnoId || null,
                     dias: Object.keys(colaborador.turnos || {}).map(dia => {
                         const turno = colaborador.turnos[dia] || {};
                         const isFolga = String(turno.inicio || '').trim().toUpperCase() === 'F';
@@ -4719,8 +5062,10 @@
                     confirmText: 'Oficializar'
                 });
                 if (!confirmacao) return;
-                await apiRequest('/api/escalas/oficializar', { method: 'POST', body: JSON.stringify({ lojaId: Number(loja), mesRef }) });
-                showInfoModal('Escala oficializada com sucesso.', 'success');
+                const result = await apiRequest('/api/escalas/oficializar', { method: 'POST', body: JSON.stringify({ lojaId: Number(loja), mesRef }) });
+                const rm = result.rm || {};
+                const mensagemRm = rm.enabled ? `RM: ${rm.enviados || 0} evento(s) enviado(s), ${rm.falhas || 0} falha(s).` : 'RM: integracao desabilitada no .env.';
+                showInfoModal(['Escala oficializada com sucesso.', mensagemRm], rm.falhas ? 'error' : 'success');
                 await consultarEscalasBancoLocal();
                 return;
             }
@@ -4842,7 +5187,7 @@
         timelineZoomResetBtn.addEventListener('click', () => { mainTimelineZoomLevel = 1.0; applyMainTimelineZoom(); });
 
 
-        // --- LÓGICA DE CONFIGURAÇÕES ---
+        // --- LOGICA DE CONFIGURACOES ---
         const salvarConfiguracoes = async () => {
             const settingsForm = document.getElementById('settings-form');
             const inputs = settingsForm.querySelectorAll('input');
@@ -4890,7 +5235,7 @@
 
        
 
-        // --- INICIALIZAÇÃO ---
+        // --- INICIALIZACAO ---
         window.onload = async () => { 
             try {
                 popularSeletoresData();
@@ -4922,7 +5267,7 @@
             return;
 
             // ==========================================================
-            // =========== LÓGICA DE BACKUP E RESTAURAÇÃO ================
+            // =========== LOGICA DE BACKUP E RESTAURACAO ================
             // ==========================================================
             const salvarBackupBtn = document.getElementById('salvarBackupBtn');
             const carregarBackupBtn = document.getElementById('carregarBackupBtn');
@@ -5013,7 +5358,7 @@
             });
 
             // =================================================================
-            // === NOVA LÓGICA: IMPORTAÇÃO DE BACKUP INDIVIDUAL DE ESCALA ======
+            // === NOVA LOGICA: IMPORTACAO DE BACKUP INDIVIDUAL DE ESCALA ======
             // =================================================================
             const importarEscalaBtn = document.getElementById('importarEscalaBtn');
             const importarEscalaInput = document.getElementById('importarEscalaInput');
@@ -5071,7 +5416,7 @@
                 reader.readAsText(file);
             });
         };
-// --- LÓGICA 5X2 - 100% CLT + EQUILÍBRIO DE EQUIPE + SEM FOLGAS CASADAS ---
+// --- LOGICA 5X2 - 100% CLT + EQUILIBRIO DE EQUIPE ---
 const EPOCH_MON = new Date(2024, 0, 1); 
 
 const distribuirFolgas5x2Auto = async () => {
@@ -5139,7 +5484,7 @@ const distribuirFolgas5x2Auto = async () => {
                 }
             }
 
-            // PASSO 2: ATRIBUIR FOLGAS OBRIGATÓRIAS (TRAVA DOS 6 DIAS)
+            // PASSO 2: ATRIBUIR FOLGAS OBRIGATORIAS (TRAVA DOS 6 DIAS)
             for (let i = 0; i < total; i++) {
                 for (let dIdx = 0; dIdx < 6; dIdx++) {
                     const diaAtual = weekDays[dIdx];
@@ -5174,14 +5519,6 @@ const distribuirFolgas5x2Auto = async () => {
                                 let peopleOffHoje = offCountPerDay[diaCandidato.toDateString()] || 0;
                                 let score = peopleOffHoje * 100; // Peso base pelo equilíbrio da equipe
 
-                                // VERIFICAÇÃO DE VIZINHANÇA (EVITAR FOLGA CASADA)
-                                const ontem = new Date(diaCandidato); ontem.setDate(diaCandidato.getDate() - 1);
-                                const amanha = new Date(diaCandidato); amanha.setDate(diaCandidato.getDate() + 1);
-                                
-                                if (scheduleMap[i][ontem.toDateString()] === 'F' || scheduleMap[i][amanha.toDateString()] === 'F') {
-                                    score += 500; // Penalidade alta por ser folga consecutiva
-                                }
-
                                 if (score < minScore) {
                                     minScore = score;
                                     bestDay = diaCandidato;
@@ -5204,7 +5541,7 @@ const distribuirFolgas5x2Auto = async () => {
         current.setDate(current.getDate() + 1);
     }
 
-    // --- RENDERIZAÇÃO FINAL ---
+    // --- RENDERIZACAO FINAL ---
     const rows = document.querySelectorAll('#tabela-esqueleto tbody tr');
     rows.forEach((row, colabIdx) => {
         const dayCells = row.querySelectorAll('.escala-cell');
@@ -5242,7 +5579,7 @@ const distribuirFolgas5x2Auto = async () => {
             ...ausenciasAplicadas
         ], "success");
     } else {
-        showInfoModal("Distribuição Concluída: 5x2 equilibrada, sem folgas casadas (exceto se necessário por lei).", "success");
+        showInfoModal("Distribuicao concluida: 5x2 equilibrada com regra de domingo e descansos.", "success");
     }
 };
 

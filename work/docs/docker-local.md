@@ -46,8 +46,16 @@ Os scripts criam as tabelas principais do sistema:
 - SGN_ESC_USUARIO
 - SGN_ESC_USUARIO_LOJA
 - SGN_ESC_AUDITORIA
+- SGN_ESC_HORARIO_PADRAO
+- SGN_ESC_RM_LOG
 
 Tambem sao criados dados de teste para lojas, secoes, turnos, funcionarios, ausencias e usuarios.
+
+O backend e o mesmo usado no Linux. A diferenca fica no `.env`/ambiente:
+
+- Docker usa Oracle local e credenciais locais de desenvolvimento.
+- Linux usa Oracle real e credenciais mantidas somente no servidor.
+- A integracao RM vem desabilitada por padrao com `RM_API_ENABLED=false`; habilite apenas depois de configurar URL, usuario e senha reais no ambiente.
 
 ## Reiniciar mantendo o banco
 

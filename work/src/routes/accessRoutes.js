@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const accessService = require('../services/accessService');
+const auditService = require('../services/auditService');
 
 const router = express.Router();
 
@@ -50,6 +51,13 @@ router.post('/perfis', requireAdmin, async (req, res, next) => {
   try {
     const data = perfilSchema.parse(req.body);
     const perfil = await accessService.createPerfilAcesso(data);
+    await auditService.registerAudit({
+      action: 'CRIAR_PERFIL',
+      entity: 'ACESSO',
+      user: req.user,
+      referenceId: perfil.PERFIL_ID,
+      details: { perfil: perfil.NOME, permissoes: (data.PERMISSOES || []).length }
+    });
     return res.status(201).json({ perfil });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados de perfil invalidos.', details: error.errors });
@@ -62,6 +70,13 @@ router.patch('/perfis/:perfilId', requireAdmin, async (req, res, next) => {
     const data = perfilSchema.partial().parse(req.body);
     const perfil = await accessService.updatePerfilAcesso(Number(req.params.perfilId), data);
     if (!perfil) return res.status(404).json({ error: 'Perfil nao encontrado.' });
+    await auditService.registerAudit({
+      action: data.STATUS === 'I' ? 'INATIVAR_PERFIL' : 'EDITAR_PERFIL',
+      entity: 'ACESSO',
+      user: req.user,
+      referenceId: perfil.PERFIL_ID,
+      details: { perfil: perfil.NOME, status: perfil.STATUS, permissoes: (data.PERMISSOES || []).length }
+    });
     return res.json({ perfil });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados de perfil invalidos.', details: error.errors });
@@ -90,6 +105,13 @@ router.post('/usuarios', requireAdmin, async (req, res, next) => {
       status: data.STATUS || 'A',
       lojas: data.LOJAS
     });
+    await auditService.registerAudit({
+      action: 'CRIAR_USUARIO',
+      entity: 'ACESSO',
+      user: req.user,
+      referenceId: usuario.USUARIO_ID,
+      details: { login: usuario.LOGIN, perfil: usuario.PERFIL, lojas: usuario.LOJAS.length }
+    });
     return res.status(201).json({ usuario });
   } catch (error) {
     if (error.name === 'ZodError') {
@@ -106,6 +128,13 @@ router.patch('/usuarios/:usuarioId', requireAdmin, async (req, res, next) => {
     if (!usuario) {
       return res.status(404).json({ error: 'Usuario nao encontrado.' });
     }
+    await auditService.registerAudit({
+      action: data.STATUS === 'I' ? 'INATIVAR_USUARIO' : 'EDITAR_USUARIO',
+      entity: 'ACESSO',
+      user: req.user,
+      referenceId: usuario.USUARIO_ID,
+      details: { login: usuario.LOGIN, perfil: usuario.PERFIL, status: usuario.STATUS, lojas: usuario.LOJAS.length }
+    });
     return res.json({ usuario });
   } catch (error) {
     if (error.name === 'ZodError') {

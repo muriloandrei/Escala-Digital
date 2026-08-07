@@ -552,25 +552,54 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
   const escfuncaoId = funcionario.escfuncaoId || funcionario.ESCFUNCAO_ID || funcionarioDb.ESCFUNCAO_ID;
   const lojaFuncionario = Number(funcionarioDb.LOJA) || Number(lojaId);
   const chapa = funcionario.chapa || funcionario.CHAPA || funcionarioDb.CHAPA;
+  const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
+  const primeiroDiaTrabalho = (dias || []).find((dia) => String(dia.programacao || dia.PROGRAMACAO || 'TRB').toUpperCase() === 'TRB');
+  const horarioOficial = funcionario.turnoOficial || {
+    escsecaoTurnoId: funcionario.escsecaoTurnoId || funcionario.ESCSECAOTURNO_ID || null,
+    hrEnt1: primeiroDiaTrabalho?.hrEnt1 || primeiroDiaTrabalho?.HR_ENT1 || null,
+    hrSai1: primeiroDiaTrabalho?.hrSai1 || primeiroDiaTrabalho?.HR_SAI1 || null,
+    hrEnt2: primeiroDiaTrabalho?.hrEnt2 || primeiroDiaTrabalho?.HR_ENT2 || null,
+    hrSai2: primeiroDiaTrabalho?.hrSai2 || primeiroDiaTrabalho?.HR_SAI2 || null
+  };
+
+  const headerColumns = ['escprog_id', 'mes_ref', 'escfunc_id', 'escsecao_id', 'escfuncao_id', 'loja', 'chapa'];
+  const headerValues = ['sgn_esc_prog_seq.nextval', "to_date(:mesRef, 'YYYY-MM-DD')", ':escfuncId', ':escsecaoId', ':escfuncaoId', ':lojaId', ':chapa'];
+  const headerBinds = {
+    mesRef,
+    escfuncId,
+    escsecaoId,
+    escfuncaoId,
+    lojaId: lojaFuncionario,
+    chapa,
+    revisao,
+    oficializada,
+    escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
+  };
+
+  const optionalHeaderFields = [
+    ['ESCSECAOTURNO_ID', 'escsecaoTurnoId', horarioOficial.escsecaoTurnoId],
+    ['HR_OFICIAL_ENT1', 'hrOficialEnt1', horarioOficial.hrEnt1],
+    ['HR_OFICIAL_SAI1', 'hrOficialSai1', horarioOficial.hrSai1],
+    ['HR_OFICIAL_ENT2', 'hrOficialEnt2', horarioOficial.hrEnt2],
+    ['HR_OFICIAL_SAI2', 'hrOficialSai2', horarioOficial.hrSai2]
+  ];
+  optionalHeaderFields.forEach(([column, bind, value]) => {
+    if (!progColumns.has(column)) return;
+    headerColumns.push(column.toLowerCase());
+    headerValues.push(`:${bind}`);
+    headerBinds[bind] = value;
+  });
+  headerColumns.push('revisao', 'oficializada', 'dt_hr_incl');
+  headerValues.push(':revisao', ':oficializada', 'sysdate');
 
   const header = await connection.execute(
     `insert into sgn_esc_prog (
-        escprog_id, mes_ref, escfunc_id, escsecao_id, escfuncao_id, loja, chapa, revisao, oficializada, dt_hr_incl
+        ${headerColumns.join(', ')}
      ) values (
-        sgn_esc_prog_seq.nextval, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :escsecaoId, :escfuncaoId, :lojaId, :chapa, :revisao, :oficializada, sysdate
+        ${headerValues.join(', ')}
      )
      returning escprog_id into :escprogId`,
-    {
-      mesRef,
-      escfuncId,
-      escsecaoId,
-      escfuncaoId,
-      lojaId: lojaFuncionario,
-      chapa,
-      revisao,
-      oficializada,
-      escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
-    },
+    headerBinds,
     { autoCommit: false }
   );
 

@@ -42,6 +42,17 @@ const tipoDescansoSchema = z.object({
   STATUS: z.enum(['A', 'I']).optional()
 }).strict();
 
+const horarioPadraoSchema = z.object({
+  DESCR: z.string().trim().min(1).max(100),
+  HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_SAI1: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_SAI2: z.string().regex(/^\d{2}:\d{2}$/),
+  JORNADA_MINUTOS: z.number().int().positive().max(1440).optional(),
+  INTERVALO_MINUTOS: z.number().int().positive().max(480).optional(),
+  STATUS: z.enum(['A', 'I']).optional()
+}).strict();
+
 router.use(requireAuth);
 
 async function resolveLojaParam(req, res, next) {
@@ -91,6 +102,42 @@ router.patch('/tipos-descanso/:tipoId', async (req, res, next) => {
   }
 });
 
+router.get('/horarios-padrao', async (req, res, next) => {
+  try {
+    const horarios = await catalogService.listHorariosPadrao({ includeInactive: req.query.includeInactive === '1' });
+    return res.json({ horarios });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/horarios-padrao', async (req, res, next) => {
+  try {
+    const data = horarioPadraoSchema.parse(req.body);
+    const horario = await catalogService.createHorarioPadrao(data);
+    return res.status(201).json({ horario });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos de horario padrao invalidos.', details: error.errors });
+    }
+    return next(error);
+  }
+});
+
+router.patch('/horarios-padrao/:horarioId', async (req, res, next) => {
+  try {
+    const data = horarioPadraoSchema.partial().parse(req.body);
+    const horario = await catalogService.updateHorarioPadrao(Number(req.params.horarioId), data);
+    if (!horario) return res.status(404).json({ error: 'Horario padrao nao encontrado.' });
+    return res.json({ horario });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Campos de horario padrao invalidos.', details: error.errors });
+    }
+    return next(error);
+  }
+});
+
 router.get('/lojas', async (req, res, next) => {
   try {
     const lojas = await catalogService.listLojas();
@@ -109,7 +156,9 @@ router.get('/lojas', async (req, res, next) => {
 
 router.get('/lojas/:lojaId/funcionarios', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
-    const funcionarios = await catalogService.listFuncionariosByLoja(Number(req.params.lojaId));
+    const funcionarios = await catalogService.listFuncionariosByLoja(Number(req.params.lojaId), {
+      mesRef: req.query.mesRef || null
+    });
     res.json({ funcionarios });
   } catch (error) {
     next(error);

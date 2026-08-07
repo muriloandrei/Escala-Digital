@@ -32,6 +32,8 @@
                             <a href="#/escalas-funcionarios" id="nav-escalas-funcionarios"><span class="nav-child-dot"></span><span class="nav-label">Escalas por Funcionário</span></a>
                             <a href="#/secoes" id="nav-secoes"><span class="nav-child-dot"></span><span class="nav-label">Seções</span></a>
                             <a href="#/turnos-secao" id="nav-turnos-secao"><span class="nav-child-dot"></span><span class="nav-label">Turnos por Seção</span></a>
+
+                            <a href="#/regras" id="nav-regras"><span class="nav-child-dot"></span><span class="nav-label">Regras</span></a>
                         </div>
                     </li>
                     <li class="nav-group">
@@ -45,6 +47,8 @@
                         <div class="nav-children">
                             <a href="#/acessos" id="nav-acessos"><span class="nav-child-dot"></span><span class="nav-label">Controle de Acesso</span></a>
                             <a href="#/roles" id="nav-roles"><span class="nav-child-dot"></span><span class="nav-label">Perfil de Acesso</span></a>
+                            <a href="#/horarios-padrao" id="nav-horarios-padrao"><span class="nav-child-dot"></span><span class="nav-label">Hor&aacute;rios Padr&atilde;o</span></a>
+                            <a href="#/integracao-rm" id="nav-integracao-rm"><span class="nav-child-dot"></span><span class="nav-label">Integra&ccedil;&atilde;o RM</span></a>
                             <a href="#/configuracoes" id="nav-settings"><span class="nav-child-dot"></span><span class="nav-label">Configurações</span></a>
                         </div>
                     </li>
@@ -282,6 +286,8 @@
                         <select id="funcionariosLojaSelect" class="escala-filter-select" aria-label="Filtrar funcionários por loja"></select>
                         <select id="funcionariosSecaoFiltro" class="escala-filter-select"><option value="all">Todas as seções</option></select>
                         <select id="funcionariosFuncaoFiltro" class="escala-filter-select"><option value="all">Todas as funções</option></select>
+                        <select id="funcionariosMesFiltro" class="escala-filter-select" aria-label="M&ecirc;s da escala"></select>
+                        <select id="funcionariosAnoFiltro" class="escala-filter-select" aria-label="Ano da escala"></select>
                     </div>
                     <div class="table-card-header"><h2 id="funcionariosTitulo">Funcionários cadastrados</h2></div>
                     <table class="data-table"><thead><tr><th>Chapa</th><th>Nome</th><th>Loja</th><th>Seção</th><th>Função</th><th>Brigadista</th><th>Entrada 1</th><th>Saída 1</th><th>Entrada 2</th><th>Saída 2</th><th>Ações</th></tr></thead><tbody id="tabela-funcionarios-body"><tr><td colspan="11" class="text-center text-gray-500 py-8">Carregando funcionários...</td></tr></tbody></table>
@@ -311,10 +317,11 @@
                                 <th>Perfil de Acesso</th>
                                 <th>Status</th>
                                 <th>Lojas Permitidas</th>
+                                <th>A&ccedil;&otilde;es</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-acessos-body">
-                            <tr><td colspan="5" class="text-center text-gray-500 py-8">Carregue os usuários com acesso à escala.</td></tr>
+                            <tr><td colspan="6" class="text-center text-gray-500 py-8">Carregue os usuários com acesso à escala.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -481,6 +488,53 @@
             </div>
 
 
+            <div id="regras-page" class="hidden">
+                <header class="main-header">
+                    <div>
+                        <h1>Regras da Escala</h1>
+                        <p class="table-card-subtitle">Lista das regras vigentes usadas na valida&ccedil;&atilde;o antes de salvar ou oficializar.</p>
+                    </div>
+                </header>
+                <div class="table-card">
+                    <table class="data-table"><thead><tr><th>C&oacute;digo</th><th>Regra</th><th>Descri&ccedil;&atilde;o</th></tr></thead><tbody id="tabelaRegrasBody"><tr><td colspan="3" class="text-center text-gray-500 py-8">Carregando regras...</td></tr></tbody></table>
+                </div>
+            </div>
+
+            <div id="horarios-padrao-page" class="hidden">
+                <header class="main-header">
+                    <div>
+                        <h1>Hor&aacute;rios Padr&atilde;o</h1>
+                        <p class="table-card-subtitle">Cadastre jornadas padr&atilde;o para ajustes manuais de funcion&aacute;rios.</p>
+                    </div>
+                    <button class="action-button" id="novoHorarioPadraoBtn"><span class="material-symbols-outlined">add</span>Novo Hor&aacute;rio</button>
+                </header>
+                <div class="table-card">
+                    <div class="catalog-filter-bar two-filters">
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="horariosPadraoPesquisaInput" type="search" placeholder="Pesquisar descri&ccedil;&atilde;o"></label>
+                        <select id="horariosPadraoStatusFiltro" class="escala-filter-select"><option value="all">Todos os status</option><option value="A">Ativos</option><option value="I">Inativos</option></select>
+                    </div>
+                    <table class="data-table"><thead><tr><th>Descri&ccedil;&atilde;o</th><th>Entrada 1</th><th>Sa&iacute;da 1</th><th>Entrada 2</th><th>Sa&iacute;da 2</th><th>Jornada</th><th>Intervalo</th><th>Status</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="tabelaHorariosPadraoBody"><tr><td colspan="9" class="text-center text-gray-500 py-8">Carregando hor&aacute;rios...</td></tr></tbody></table>
+                </div>
+            </div>
+
+            <div id="integracao-rm-page" class="hidden">
+                <header class="main-header">
+                    <div>
+                        <h1>Integra&ccedil;&atilde;o RM</h1>
+                        <p class="table-card-subtitle">Consulte envios, falhas e reprocessamentos de folgas e f&eacute;rias enviados ao RM.</p>
+                    </div>
+                </header>
+                <div class="table-card">
+                    <div class="catalog-filter-bar three-filters">
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="rmPesquisaInput" type="search" placeholder="Pesquisar chapa, a&ccedil;&atilde;o ou mensagem"></label>
+                        <select id="rmLojaSelect" class="escala-filter-select"></select>
+                        <select id="rmMesSelect" class="escala-filter-select"></select>
+                        <select id="rmAnoSelect" class="escala-filter-select"></select>
+                    </div>
+                    <div class="table-card-header"><h2>Logs de envio</h2><p id="rmResumo" class="table-card-subtitle">Carregando logs.</p></div>
+                    <table class="data-table"><thead><tr><th>Data</th><th>Loja</th><th>M&ecirc;s</th><th>Revis&atilde;o</th><th>Chapa</th><th>A&ccedil;&atilde;o</th><th>Status</th><th>Mensagem</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="tabelaRmLogsBody"><tr><td colspan="9" class="text-center text-gray-500 py-8">Carregando logs...</td></tr></tbody></table>
+                </div>
+            </div>
             <div id="tipos-descanso-page" class="hidden">
                 <header class="main-header">
                     <div>
@@ -501,7 +555,7 @@
             <div id="roles-page" class="hidden">
                 <header class="main-header"><h1>Perfil de Acesso</h1></header>
                 <div class="table-card">
-                    <div class="table-card-header"><h2>Perfil de Acesso</h2><p class="table-card-subtitle">Resumo dos perfis cadastrados e lojas associadas.</p></div>
+                    <div class="table-card-header"><h2>Perfis cadastrados</h2><p class="table-card-subtitle">Resumo dos perfis cadastrados e lojas associadas.</p></div>
                     <div id="rolesSettingsContainer"></div>
                 </div>
             </div>
@@ -543,8 +597,7 @@
     <!-- ESCALAS AUTOMATICA - MODAL DO ESQUELETO ATUALIZADO -->
 <div id="esqueletoModal" class="modal-overlay hidden no-print">
     <div id="esqueleto-modal-content" class="bg-white rounded-lg shadow-xl w-11/12 h-[95vh] max-w-none flex flex-col modal-content">
-        
-        <!-- CABEÇALHO COM TODOS OS BOTÕES EM UMA LINHA -->
+        <!-- CABECALHO COM TODOS OS BOTOES EM UMA LINHA -->
         <div id="esqueleto-modal-header" class="flex items-center justify-between p-4 border-b overflow-x-auto overflow-y-hidden no-scrollbar" style="-ms-overflow-style: none; scrollbar-width: none;">
             <h3 class="text-lg font-bold text-gray-800 whitespace-nowrap mr-6">Escala</h3>
             
@@ -557,10 +610,10 @@
                 <select id="anoSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
                   <!-- Regra e Distribuição Automática -->
                 <select id="regraDomingoSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10" title="Regra de Domingo">
-                    <option value="3">Dom. 2×1</option>
-                    <option value="2">Dom. 1×1</option>
+                    <option value="2">Dom. 1x1</option>
+                    <option value="3">Dom. 2x1</option>
                 </select>
-                <button id="autoDistribuirFolgasBtn" class="whitespace-nowrap text-sm bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Distribuir Folgas 5×2</button>
+                <button id="autoDistribuirFolgasBtn" class="whitespace-nowrap text-sm bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Distribuir Folgas 5x2</button>
                 <button id="editarDistribuicaoBtn" class="hidden whitespace-nowrap text-sm bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10"><span class="material-symbols-outlined align-middle text-base">edit</span> Editar</button>
                 <!-- Botões de Visualização -->
                 <button id="visualizarTimelineBtn" class="whitespace-nowrap text-sm bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition h-10">Visualizar Timeline</button>

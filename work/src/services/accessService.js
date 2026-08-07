@@ -26,7 +26,10 @@ const PERFIL_PAGES = [
   { key: 'secoes', label: 'Secoes' },
   { key: 'turnos-secao', label: 'Turnos por Secao' },
   { key: 'historico', label: 'Historico' },
+  { key: 'regras', label: 'Regras da Escala' },
   { key: 'tipos-descanso', label: 'Tipos de Descanso' },
+  { key: 'horarios-padrao', label: 'Horarios Padrao' },
+  { key: 'integracao-rm', label: 'Integracao RM' },
   { key: 'acessos', label: 'Controle de Acesso' },
   { key: 'roles', label: 'Perfil de Acesso' },
   { key: 'configuracoes', label: 'Configuracoes' }
@@ -180,14 +183,32 @@ async function listPerfisAcesso() {
           });
         }
       });
-      return { perfis: Array.from(map.values()), paginas: PERFIL_PAGES };
+      return { perfis: Array.from(map.values()).map(completarPermissoesPerfil), paginas: PERFIL_PAGES };
     } catch (error) {
       if (!isMissingObjectError(error)) throw error;
       const usuarios = await listUsuariosAcesso({ perfil: "ADMIN" });
       const nomes = [...new Set(usuarios.map((usuario) => usuario.PERFIL || "OPERADOR"))];
-      return { perfis: nomes.map((nome, index) => ({ PERFIL_ID: index + 1, NOME: nome, DESCR: "Perfil legado", STATUS: "A", PERMISSOES: [] })), paginas: PERFIL_PAGES };
+      return { perfis: nomes.map((nome, index) => completarPermissoesPerfil({ PERFIL_ID: index + 1, NOME: nome, DESCR: "Perfil legado", STATUS: "A", PERMISSOES: [] })), paginas: PERFIL_PAGES };
     }
   });
+}
+
+function completarPermissoesPerfil(perfil) {
+  const existentes = new Map((perfil.PERMISSOES || []).map((permissao) => [String(permissao.PAGINA), permissao]));
+  const isAdmin = String(perfil.NOME || '').toUpperCase() === 'ADMIN';
+  return {
+    ...perfil,
+    PERMISSOES: PERFIL_PAGES.map((pagina) => {
+      const atual = existentes.get(pagina.key);
+      if (atual) return atual;
+      return {
+        PAGINA: pagina.key,
+        PODE_VISUALIZAR: 1,
+        PODE_EDITAR: isAdmin ? 1 : 0,
+        PODE_EXCLUIR: isAdmin ? 1 : 0
+      };
+    })
+  };
 }
 
 async function createPerfilAcesso(data) {

@@ -32,16 +32,19 @@ insert into SGN_ESC_AUSENCIA (ESCAUSEN_ID, ESCFUNC_ID, CHAPA, DT_INIC, DT_FIM, M
 insert into SGN_ESC_TIPO_DESCANSO (ESCTIPODESC_ID, DESCR, SIGLA, CLASSIFICACAO, STATUS, DT_HR_INCL) values (1, 'Folga', 'F', 'FOLGA', 'A', sysdate);
 insert into SGN_ESC_TIPO_DESCANSO (ESCTIPODESC_ID, DESCR, SIGLA, CLASSIFICACAO, STATUS, DT_HR_INCL) values (2, 'Ferias', 'FER', 'FERIAS', 'A', sysdate);
 
+insert into SGN_ESC_HORARIO_PADRAO (ESCHORPAD_ID, DESCR, HR_ENT1, HR_SAI1, HR_ENT2, HR_SAI2, JORNADA_MINUTOS, INTERVALO_MINUTOS, STATUS, DT_HR_INCL)
+values (1, 'Jornada 08:48 com 1:10 de almoco', '08:00', '12:00', '13:10', '17:58', 528, 70, 'A', sysdate);
+
 insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (1, 'ADMIN', 'Administracao completa', 'A', sysdate);
 insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (2, 'OPERADOR', 'Operacao nas lojas permitidas', 'A', sysdate);
 
 insert into SGN_ESC_PERFIL_PERMISSAO (PERFIL_ID, PAGINA, PODE_VISUALIZAR, PODE_EDITAR, PODE_EXCLUIR, DT_HR_INCL)
 select 1, pagina, 1, 1, 1, sysdate from (
-  select 'escalas' pagina from dual union all select 'escalas-funcionarios' from dual union all select 'funcionarios' from dual union all select 'secoes' from dual union all select 'turnos-secao' from dual union all select 'historico' from dual union all select 'tipos-descanso' from dual union all select 'acessos' from dual union all select 'roles' from dual union all select 'configuracoes' from dual
+  select 'escalas' pagina from dual union all select 'escalas-funcionarios' from dual union all select 'funcionarios' from dual union all select 'secoes' from dual union all select 'turnos-secao' from dual union all select 'historico' from dual union all select 'regras' from dual union all select 'tipos-descanso' from dual union all select 'horarios-padrao' from dual union all select 'integracao-rm' from dual union all select 'acessos' from dual union all select 'roles' from dual union all select 'configuracoes' from dual
 );
 insert into SGN_ESC_PERFIL_PERMISSAO (PERFIL_ID, PAGINA, PODE_VISUALIZAR, PODE_EDITAR, PODE_EXCLUIR, DT_HR_INCL)
 select 2, pagina, 1, editar, 0, sysdate from (
-  select 'escalas' pagina, 1 editar from dual union all select 'escalas-funcionarios', 1 from dual union all select 'funcionarios', 1 from dual union all select 'secoes', 1 from dual union all select 'turnos-secao', 1 from dual union all select 'historico', 0 from dual union all select 'tipos-descanso', 1 from dual union all select 'acessos', 0 from dual union all select 'roles', 0 from dual union all select 'configuracoes', 0 from dual
+  select 'escalas' pagina, 1 editar from dual union all select 'escalas-funcionarios', 1 from dual union all select 'funcionarios', 1 from dual union all select 'secoes', 1 from dual union all select 'turnos-secao', 1 from dual union all select 'historico', 0 from dual union all select 'regras', 0 from dual union all select 'tipos-descanso', 1 from dual union all select 'horarios-padrao', 1 from dual union all select 'integracao-rm', 0 from dual union all select 'acessos', 0 from dual union all select 'roles', 0 from dual union all select 'configuracoes', 0 from dual
 );
 
 insert into SGN_ESC_USUARIO (USUARIO_ID, LOGIN, NOME, SENHA_HASH, PERFIL, STATUS, DT_HR_INCL) values (1, 'admin', 'Administrador', '$2a$10$1N1BKFLNZh7I2s7bkMavhu2RBBJpWqQQXbONkZosobki33EPpzxWe', 'ADMIN', 'A', sysdate);
