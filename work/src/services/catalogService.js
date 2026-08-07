@@ -322,6 +322,15 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
   });
 }
 
+async function listFuncionariosByLojas(lojas, options = {}) {
+  const result = [];
+  for (const loja of [...new Set((lojas || []).map(Number).filter(Boolean))]) {
+    const funcionarios = await listFuncionariosByLoja(loja, options);
+    result.push(...funcionarios);
+  }
+  return result;
+}
+
 async function listSecoesByLoja(lojaId) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
@@ -353,6 +362,21 @@ async function listSecoesByLoja(lojaId) {
 
     return secoesResult.rows.map((row) => normalizeSecao(row, []));
   });
+}
+
+async function listSecoesByLojas(lojas) {
+  const result = [];
+  const seen = new Set();
+  for (const loja of [...new Set((lojas || []).map(Number).filter(Boolean))]) {
+    const secoes = await listSecoesByLoja(loja);
+    secoes.forEach((secao) => {
+      const key = `${secao.ESCSECAO_ID}|${secao.CODFILIAL || secao.LOJA || loja}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push({ ...secao, CODFILIAL: secao.CODFILIAL || loja, LOJA: secao.LOJA || loja });
+    });
+  }
+  return result;
 }
 
 async function listTurnosByLoja(lojaId) {
@@ -400,6 +424,21 @@ async function listTurnosByLoja(lojaId) {
 
     return result.rows.map(normalizeSecaoTurno);
   });
+}
+
+async function listTurnosByLojas(lojas) {
+  const result = [];
+  const seen = new Set();
+  for (const loja of [...new Set((lojas || []).map(Number).filter(Boolean))]) {
+    const turnos = await listTurnosByLoja(loja);
+    turnos.forEach((turno) => {
+      const key = `${turno.ESCSECAOTURNO_ID || `${turno.ESCSECAO_ID}|${turno.HR_ENT1}|${turno.HR_SAI1}|${turno.HR_ENT2}|${turno.HR_SAI2}`}|${turno.LOJA || loja}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push({ ...turno, LOJA: turno.LOJA || loja });
+    });
+  }
+  return result;
 }
 
 async function findSecaoById(connection, { lojaId, escsecaoId }) {
@@ -780,8 +819,11 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
 module.exports = {
   listLojas,
   listFuncionariosByLoja,
+  listFuncionariosByLojas,
   listSecoesByLoja,
+  listSecoesByLojas,
   listTurnosByLoja,
+  listTurnosByLojas,
   createSecao,
   updateSecao,
   listAusenciasByLojaMes,

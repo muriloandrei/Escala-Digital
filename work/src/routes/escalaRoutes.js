@@ -68,6 +68,25 @@ function canAccessLoja(req, loja) {
   return lojas.includes(Number(loja)) || (req.user?.perfil === 'ADMIN' && lojas.length === 0);
 }
 
+async function getLojasPermitidas(req, requestedLojaId = 'all') {
+  if (requestedLojaId && requestedLojaId !== 'all') {
+    const lojaCodigo = await catalogService.resolveLojaCodigo(Number(requestedLojaId));
+    if (!canAccessLoja(req, lojaCodigo)) {
+      const error = new Error('Usuario sem permissao para esta loja.');
+      error.statusCode = 403;
+      throw error;
+    }
+    return [lojaCodigo];
+  }
+
+  if (req.user?.perfil === 'ADMIN' && (!req.user.lojas || req.user.lojas.length === 0)) {
+    const lojas = await catalogService.listLojas();
+    return lojas.map((loja) => Number(loja.LOJA)).filter(Boolean);
+  }
+
+  return [...new Set((req.user?.lojas || []).map(Number).filter(Boolean))];
+}
+
 router.get('/resumo', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
@@ -117,6 +136,25 @@ router.get('/mensal', resolveLojaRequest, requireLojaAccess, async (req, res, ne
 
     const escala = await escalaService.getEscalaMensal({ lojaId, mesRef });
     return res.json({ escala });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/mensal-lote', async (req, res, next) => {
+  try {
+    const mesRef = req.query.mesRef;
+    if (!mesRef) {
+      return res.status(400).json({ error: 'mesRef e obrigatorio.' });
+    }
+
+    const lojas = await getLojasPermitidas(req, req.query.lojaId || 'all');
+    const escalas = [];
+    for (const lojaId of lojas) {
+      const escala = await escalaService.getEscalaMensal({ lojaId, mesRef });
+      escalas.push({ lojaId, escala });
+    }
+    return res.json({ escalas });
   } catch (error) {
     return next(error);
   }

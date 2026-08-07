@@ -903,6 +903,31 @@
             });
         };
 
+        const validarTurnoCadastroSecao = (turno) => {
+            const ent1 = timeToMinutes(turno.HR_ENT1);
+            const sai1 = timeToMinutes(turno.HR_SAI1);
+            const ent2 = timeToMinutes(turno.HR_ENT2);
+            const sai2 = timeToMinutes(turno.HR_SAI2);
+            const errors = [];
+            const primeiraJornada = sai1 - ent1;
+            const intervalo = ent2 - sai1;
+            const segundaJornada = sai2 - ent2;
+            const jornadaTotal = primeiraJornada + segundaJornada;
+
+            if (!turno.HR_ENT1 || !turno.HR_SAI1 || !turno.HR_ENT2 || !turno.HR_SAI2) {
+                errors.push('Informe Entrada 1, Saida 1, Entrada 2 e Saida 2.');
+                return errors;
+            }
+            if (primeiraJornada <= 0) errors.push('Saida 1 deve ser maior que Entrada 1.');
+            if (segundaJornada <= 0) errors.push('Saida 2 deve ser maior que Entrada 2.');
+            if (intervalo <= 0) errors.push('Entrada 2 deve ser maior que Saida 1.');
+            if (primeiraJornada >= 360) errors.push(`Primeiro periodo deve ser menor que 06:00. Atual: ${minutesToTime(primeiraJornada)}.`);
+            if (segundaJornada >= 360) errors.push(`Segundo periodo deve ser menor que 06:00. Atual: ${minutesToTime(segundaJornada)}.`);
+            if (jornadaTotal !== 528) errors.push(`Jornada total deve ser exatamente 08:48. Atual: ${minutesToTime(jornadaTotal)}.`);
+            if (intervalo < 70) errors.push(`Intervalo entre as jornadas deve ter no minimo 01:10. Atual: ${minutesToTime(intervalo)}.`);
+            return errors;
+        };
+
         const hideInfoModal = () => { infoModal.classList.add('hidden'); };
         
         const renderizarTimelineCompleta = (targetElementId = 'timeline-content', customDadosEscala = dadosEscala) => {
@@ -2595,12 +2620,9 @@
         };
 
         const carregarSecoesTela = async () => {
-            const lojas = secoesLojaSelect?.value && secoesLojaSelect.value !== 'all' ? [Number(secoesLojaSelect.value)] : [...lojasPermitidasCache];
-            const resultados = await Promise.all(lojas.map(async loja => {
-                const data = await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/secoes');
-                return (data.secoes || []).map(secao => ({ ...secao, CODFILIAL: secao.CODFILIAL || loja }));
-            }));
-            secoesTelaCache = resultados.flat();
+            const loja = secoesLojaSelect?.value && secoesLojaSelect.value !== 'all' ? secoesLojaSelect.value : 'all';
+            const data = await apiRequest('/api/catalog/secoes?lojaId=' + encodeURIComponent(loja));
+            secoesTelaCache = data.secoes || [];
             aplicarFiltrosSecoesTela();
         };
 
@@ -2681,12 +2703,9 @@
         };
 
         const carregarTurnosSecaoTela = async () => {
-            const lojas = turnosSecaoLojaSelect?.value && turnosSecaoLojaSelect.value !== 'all' ? [Number(turnosSecaoLojaSelect.value)] : [...lojasPermitidasCache];
-            const resultados = await Promise.all(lojas.map(async loja => {
-                const data = await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/turnos-secao');
-                return (data.turnos || []).map(turno => ({ ...turno, LOJA: loja }));
-            }));
-            turnosTelaCache = resultados.flat();
+            const loja = turnosSecaoLojaSelect?.value && turnosSecaoLojaSelect.value !== 'all' ? turnosSecaoLojaSelect.value : 'all';
+            const data = await apiRequest('/api/catalog/turnos-secao?lojaId=' + encodeURIComponent(loja));
+            turnosTelaCache = data.turnos || [];
             popularFiltroSecoesTurnos();
             aplicarFiltrosTurnosTela();
         };
@@ -2737,6 +2756,11 @@
                     HR_ENT2: turnoSecaoFormHrEnt2.value,
                     HR_SAI2: turnoSecaoFormHrSai2.value
                 };
+                const errosTurno = validarTurnoCadastroSecao(payload);
+                if (errosTurno.length > 0) {
+                    showInfoModal(errosTurno, 'error');
+                    return;
+                }
                 const url = turnoId
                     ? `/api/catalog/lojas/${encodeURIComponent(loja)}/turnos-secao/${encodeURIComponent(turnoId)}`
                     : `/api/catalog/lojas/${encodeURIComponent(loja)}/turnos-secao`;
@@ -2748,7 +2772,7 @@
                 showInfoModal('Turno salvo com sucesso.', 'success');
                 window.location.hash = '/turnos-secao';
             } catch (error) {
-                showInfoModal(error.message, 'error');
+                showInfoModal(error.details || error.message, 'error');
             }
         });
 
@@ -2783,13 +2807,12 @@
         };
 
         const carregarFuncionariosTela = async () => {
-            const lojas = funcionariosLojaSelect?.value && funcionariosLojaSelect.value !== 'all' ? [Number(funcionariosLojaSelect.value)] : [...lojasPermitidasCache];
+            const loja = funcionariosLojaSelect?.value && funcionariosLojaSelect.value !== 'all' ? funcionariosLojaSelect.value : 'all';
             const mesRef = funcionariosMesFiltro && funcionariosAnoFiltro ? formatDateForDb(Number(funcionariosAnoFiltro.value), Number(funcionariosMesFiltro.value), 1) : '';
-            const resultados = await Promise.all(lojas.map(async loja => {
-                const data = await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/funcionarios' + (mesRef ? '?mesRef=' + encodeURIComponent(mesRef) : ''));
-                return data.funcionarios || [];
-            }));
-            funcionariosTelaCache = resultados.flat();
+            const params = new URLSearchParams({ lojaId: loja });
+            if (mesRef) params.set('mesRef', mesRef);
+            const data = await apiRequest('/api/catalog/funcionarios?' + params.toString());
+            funcionariosTelaCache = data.funcionarios || [];
             funcionariosLojaCache = funcionariosTelaCache;
             popularFiltrosFuncionarios();
             aplicarFiltrosFuncionariosTela();
@@ -3131,24 +3154,25 @@
             const termo = normalizarTextoFiltro(escalaFuncionarioPesquisa?.value);
             const rows = escalasFuncionariosCache.filter(item => !termo || normalizarTextoFiltro(item.nome + ' ' + item.chapa).includes(termo));
             escalaFuncionarioListaResumo.textContent = rows.length + ' funcionário(s) com escala no período.';
-            tabelaEscalaFuncionariosBody.innerHTML = rows.length ? rows.map(item => '<tr><td>' + escapeHtml(item.chapa) + '</td><td>' + escapeHtml(item.nome) + '</td><td>Loja ' + escapeHtml(item.loja) + '</td><td>' + escapeHtml(item.secao) + '</td><td>' + escapeHtml(item.funcao) + '</td><td>' + escapeHtml(item.revisao ?? '-') + '</td><td><span class="escala-status-chip ' + (item.oficializada ? 'official-chip' : 'pending-chip') + '">' + (item.oficializada ? 'Sim' : 'Nao') + '</span></td><td><span class="escala-status-chip ' + getStatusClassEscala(item.status) + '">' + escapeHtml(item.status) + '</span></td><td class="actions-cell"><button class="action-btn-table banco-action editar-escala-funcionario" data-escfunc-id="' + escapeHtml(item.escfuncId) + '" data-loja="' + escapeHtml(item.loja) + '" data-mes-ref="' + escapeHtml(item.mesRef) + '"><span class="material-symbols-outlined">edit_calendar</span>Editar</button></td></tr>').join('') : '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum funcionário com escala encontrado.</td></tr>';
+            tabelaEscalaFuncionariosBody.innerHTML = rows.length ? rows.map(item => '<tr><td>' + escapeHtml(item.chapa) + '</td><td>' + escapeHtml(item.nome) + '</td><td>Loja ' + escapeHtml(item.loja) + '</td><td>' + escapeHtml(item.secao) + '</td><td>' + escapeHtml(item.funcao) + '</td><td>' + escapeHtml(item.revisao ?? '-') + '</td><td><span class="escala-status-chip ' + (item.oficializada ? 'official-chip' : 'pending-chip') + '">' + (item.oficializada ? 'Sim' : 'Nao') + '</span></td><td><span class="escala-status-chip ' + getStatusClassEscala(item.status) + '">' + escapeHtml(item.status) + '</span></td><td class="actions-cell"><button class="action-btn-table banco-action editar-escala-funcionario" data-escfunc-id="' + escapeHtml(item.escfuncId) + '" data-loja="' + escapeHtml(item.loja) + '" data-mes-ref="' + escapeHtml(item.mesRef) + '"><span class="material-symbols-outlined">edit_calendar</span>Editar</button></td></tr>').join('') : '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhum funcionario com escala encontrado.</td></tr>';
         };
 
         const carregarEscalasFuncionarios = async () => {
             prepararFiltrosEscalaFuncionarios();
             const mesRef = getMesRefEscalaFuncionario();
-            const lojas = escalaFuncionarioLoja?.value && escalaFuncionarioLoja.value !== 'all' ? [Number(escalaFuncionarioLoja.value)] : [...lojasPermitidasCache];
+            const loja = escalaFuncionarioLoja?.value && escalaFuncionarioLoja.value !== 'all' ? escalaFuncionarioLoja.value : 'all';
             tabelaEscalaFuncionariosBody.innerHTML = '<tr><td colspan="9" class="text-center text-gray-500 py-8">Carregando...</td></tr>';
-            const resultados = await Promise.all(lojas.map(async loja => {
-                const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(loja) + '&mesRef=' + encodeURIComponent(mesRef));
-                const escala = data.escala || {};
+            const data = await apiRequest('/api/escalas/mensal-lote?lojaId=' + encodeURIComponent(loja) + '&mesRef=' + encodeURIComponent(mesRef));
+            const resultados = (data.escalas || []).map((item) => {
+                const lojaId = item.lojaId;
+                const escala = item.escala || {};
                 const grupos = new Map();
                 (escala.dias || []).forEach(dia => {
                     const key = String(dia.ESCFUNC_ID || dia.CHAPA || '');
-                    if (!grupos.has(key)) grupos.set(key, { escfuncId: dia.ESCFUNC_ID, chapa: dia.CHAPA, nome: dia.NOME || dia.CHAPA, loja, secao: dia.SECAO_DESCR || dia.COD_SECAO || '', funcao: dia.FUNCAO_DESCR || '', status: escala.status || '-', revisao: dia.REVISAO ?? escala.revisao ?? '-', oficializada: Number(dia.OFICIALIZADA ?? escala.oficializada ?? escala.OFICIALIZADA ?? 0) === 1, mesRef });
+                    if (!grupos.has(key)) grupos.set(key, { escfuncId: dia.ESCFUNC_ID, chapa: dia.CHAPA, nome: dia.NOME || dia.CHAPA, loja: lojaId, secao: dia.SECAO_DESCR || dia.COD_SECAO || '', funcao: dia.FUNCAO_DESCR || '', status: escala.status || '-', revisao: dia.REVISAO ?? escala.revisao ?? '-', oficializada: Number(dia.OFICIALIZADA ?? escala.oficializada ?? escala.OFICIALIZADA ?? 0) === 1, mesRef });
                 });
                 return [...grupos.values()];
-            }));
+            });
             escalasFuncionariosCache = resultados.flat().sort((a,b)=>a.nome.localeCompare(b.nome));
             aplicarFiltroListaEscalaFuncionarios();
         };
