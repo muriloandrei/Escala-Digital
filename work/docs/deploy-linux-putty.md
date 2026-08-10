@@ -146,6 +146,7 @@ Observacoes:
 - Mantenha `RM_API_ENABLED=false` ate validar a URL real, usuario e senha rotacionada da API RM.
 - Nunca versionar usuario, senha, token ou header Basic/Auth real.
 - Se acessar direto por `http://IP:3000`, use `COOKIE_SECURE=false` temporariamente; com HTTPS via Nginx, use `COOKIE_SECURE=true`.
+- Para testar a conectividade RM, rode um `curl` do proprio servidor Linux para `RM_API_BASE_URL + RM_API_FUNCIONARIO_PATH`. Se a aplicacao registrar `fetch failed`, normalmente e rede, firewall, porta, DNS, URL sem `http://` ou timeout, antes de ser erro de payload.
 
 ## 7. Instalar dependencias
 

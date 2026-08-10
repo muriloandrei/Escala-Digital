@@ -19,8 +19,38 @@ function mask(value) {
   return `${text.slice(0, 2)}****${text.slice(-2)}`;
 }
 
+function maskRmPath(value) {
+  return String(value || '')
+    .replace(/CPF(%3D|=)(\d{3})\d+(\d{2})/gi, 'CPF$1$2****$3')
+    .replace(/(parameters=CPF%3D)(\d{3})\d+(\d{2})/gi, '$1$2****$3');
+}
+
 function sanitizeCpf(value) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function describeNetworkError(error, timeoutMs) {
+  if (error?.name === 'AbortError') return `timeout apos ${timeoutMs}ms`;
+
+  const details = [];
+  const collect = (item) => {
+    if (!item || typeof item !== 'object') return;
+    const parts = [
+      item.code,
+      item.errno,
+      item.syscall,
+      item.address,
+      item.port
+    ].filter((part) => part !== undefined && part !== null && part !== '');
+    if (parts.length) details.push(parts.join(' '));
+  };
+
+  collect(error);
+  collect(error?.cause);
+  if (Array.isArray(error?.errors)) error.errors.forEach(collect);
+  if (Array.isArray(error?.cause?.errors)) error.cause.errors.forEach(collect);
+
+  return [...new Set(details)].join('; ');
 }
 
 function toArrayResult(body) {
@@ -104,9 +134,13 @@ function buildAuthHeader(rmConfig) {
 
 async function requestRm(path, options = {}) {
   const rmConfig = getEnv().rm;
+  if (!rmConfig.baseUrl) {
+    throw new Error('RM_API_BASE_URL nao configurado.');
+  }
   const baseUrl = rmConfig.baseUrl.replace(/\/$/, '');
   const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
   const method = options.method || 'GET';
+  const logPath = maskRmPath(path);
   let lastError;
 
   for (let attempt = 0; attempt <= rmConfig.retries; attempt += 1) {
@@ -133,14 +167,15 @@ async function requestRm(path, options = {}) {
       }
       if (!response.ok) {
         const detail = typeof body === 'string' ? body.slice(0, 300) : JSON.stringify(body || {}).slice(0, 300);
-        const error = new Error(`RM retornou HTTP ${response.status} em ${method} ${path}${detail ? `: ${detail}` : ''}`);
+        const error = new Error(`RM retornou HTTP ${response.status} em ${method} ${logPath}${detail ? `: ${detail}` : ''}`);
         error.statusCode = response.status;
         error.body = body;
         throw error;
       }
       return body;
     } catch (error) {
-      lastError = new Error(`Falha ao chamar RM em ${method} ${path}: ${error.message}`);
+      const detail = describeNetworkError(error, rmConfig.timeoutMs);
+      lastError = new Error(`Falha ao chamar RM em ${method} ${logPath}: ${error.message}${detail ? ` (${detail})` : ''}`);
       lastError.cause = error;
       if (attempt >= rmConfig.retries) break;
     } finally {
