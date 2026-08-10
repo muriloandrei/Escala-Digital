@@ -1236,6 +1236,10 @@
             font-size: 0.8rem;
         }
 
+        .print-aware-inline {
+            margin-top: 4px;
+        }
+
         .bank-scale-scroll {
             overflow-x: auto;
         }
@@ -1484,6 +1488,7 @@
         .catalog-filter-bar.two-filters { grid-template-columns: minmax(260px, 1fr) minmax(180px, 240px); }
         .catalog-filter-bar.three-filters { grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(180px, 240px)); }
         .employee-scale-filters { grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(150px, 210px)); }
+        .funcionarios-filter-bar { grid-template-columns: minmax(220px, 1fr) repeat(5, minmax(130px, 170px)); }
         .status-agendada { background: #dbeafe; color: #1d4ed8; }
         .action-btn-table.banco-action { white-space: nowrap; }
         #funcionarios-page .table-card,
@@ -1497,12 +1502,14 @@
             .catalog-filter-bar,
             .catalog-filter-bar.two-filters,
             .catalog-filter-bar.three-filters,
+            .funcionarios-filter-bar,
             .employee-scale-filters { grid-template-columns: 1fr 1fr; }
         }
         @media (max-width: 620px) {
             .catalog-filter-bar,
             .catalog-filter-bar.two-filters,
             .catalog-filter-bar.three-filters,
+            .funcionarios-filter-bar,
             .employee-scale-filters { grid-template-columns: 1fr; }
         }
 

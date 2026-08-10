@@ -113,6 +113,8 @@
         const escalaSecaoDetalheTitulo = document.getElementById('escalaSecaoDetalheTitulo');
         const imprimirTimelineBancoBtn = document.getElementById('imprimirTimelineBancoBtn');
         const imprimirDetalheBancoBtn = document.getElementById('imprimirDetalheBancoBtn');
+        const validarDetalheBancoBtn = document.getElementById('validarDetalheBancoBtn');
+        const salvarDetalheBancoBtn = document.getElementById('salvarDetalheBancoBtn');
         const escalaFuncionarioPesquisa = document.getElementById('escalaFuncionarioPesquisa');
         const escalaFuncionarioLoja = document.getElementById('escalaFuncionarioLoja');
         const escalaFuncionarioMes = document.getElementById('escalaFuncionarioMes');
@@ -751,6 +753,8 @@
         let distribuicaoFolgasBloqueada = false;
         let distribuicaoEdicaoAtiva = false;
         let escalaDetalhadaValidada = false;
+        let escalaDetalheBancoValidada = false;
+        let escalaDetalheBancoAlterados = new Map();
         let currentLoadedScale = null;
         let funcionariosLojaCache = [];
         let ausenciasLojaCache = [];
@@ -1189,7 +1193,7 @@
             atualizarContagemEsqueleto();
         };
         
-        const gerarEscalaDetalhada = () => { escalaCarregadaId = null; const skeletonRows = document.querySelectorAll('#tabela-esqueleto tbody tr'); if (skeletonRows.length === 0) { showInfoModal("Gere o esqueleto da escala primeiro.", "error"); return; } const ano = parseInt(anoSelect.value); const mes = parseInt(mesSelect.value); const diasNoMes = new Date(ano, mes + 1, 0).getDate(); const diasDaSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']; let allDetailsHtml = ''; skeletonRows.forEach(row => { const colabIndex = parseInt(row.dataset.colabIndex); const escfuncId = row.dataset.escfuncId || ''; const chapa = row.dataset.chapa || ''; const escsecaoId = row.dataset.escsecaoId || ''; const escfuncaoId = row.dataset.escfuncaoId || ''; const colaboradorNome = row.querySelector('td[data-name]').dataset.name; const escala = colaboradorShifts[colabIndex]; if (!escala) return; const folgas = new Set(); row.querySelectorAll('.escala-cell').forEach(cell => { if (cell.textContent.toUpperCase() === 'F') { folgas.add(parseInt(cell.dataset.dia)); } }); const intervaloMin = timeToMinutes(escala.fimIntervalo) - timeToMinutes(escala.inicioIntervalo); const hIntervalo = minutesToTime(intervaloMin); const hTrabalhadasMin = (timeToMinutes(escala.fim) - timeToMinutes(escala.inicio)) - intervaloMin; const hTrabalhadas = minutesToTime(hTrabalhadasMin); let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${colabIndex}" data-escfunc-id="${escfuncId}" data-chapa="${chapa}" data-escsecao-id="${escsecaoId}" data-escfuncao-id="${escfuncaoId}" data-turno-id="${escala.turnoId || ''}"><div class="header-info"><h3 class="font-bold text-lg">${colaboradorNome}</h3></div><table class="w-full"><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}"><button type="button" class="detailed-day-button detalhada-dia-edit" data-dia="${i + 1}">${i + 1}</button></th>`).join('')}</tr></thead><tbody>`; const fields = [ { label: 'ENT.', value: escala.inicio, key: 'inicio', editable: true }, { label: 'SAÍ.INT.', value: escala.inicioIntervalo, key: 'inicioIntervalo', editable: true }, { label: 'INTER.', value: hIntervalo, key: 'intervalo', editable: false }, { label: 'RET.INT.', value: escala.fimIntervalo, key: 'fimIntervalo', editable: true }, { label: 'SAÍ.', value: escala.fim, key: 'fim', editable: true }, { label: 'H.TRAB', value: hTrabalhadas, key: 'trabalhadas', bold: true, editable: false }, ]; fields.forEach(field => { detailTable += `<tr class="${field.bold ? 'font-bold bg-gray-50' : ''}" data-key="${field.key}"><td>${field.label}</td>`; for (let dia = 1; dia <= diasNoMes; dia++) { const isDomingo = new Date(ano, mes, dia).getDay() === 0; const isFolga = folgas.has(dia); const cellContent = isFolga ? 'F' : field.value; let bgColor = ''; if (isFolga) { bgColor = isDomingo ? 'bg-orange-500 text-white' : 'bg-red-100'; } else if (isDomingo) { bgColor = 'bg-yellow-100'; } detailTable += `<td class="${bgColor}">${cellContent}</td>`; } detailTable += `</tr>`; }); detailTable += `</tbody></table></div>`; allDetailsHtml += detailTable; }); detalhadaModalBody.innerHTML = allDetailsHtml; detalhadaMesAno.textContent = `${mesSelect.options[mesSelect.selectedIndex].text} / ${ano}`; if (detalhadaModal.classList.contains('hidden')) { detalhadaModal.classList.remove('hidden'); } detailedScaleHasBeenGenerated = true; gerarEscalaDetalhadaBtn.textContent = 'Ver Escala Detalhada'; setSalvarEscalaDisponivel(false); limparCriticasDetalhada(); };
+        const gerarEscalaDetalhada = () => { escalaCarregadaId = null; const skeletonRows = document.querySelectorAll('#tabela-esqueleto tbody tr'); if (skeletonRows.length === 0) { showInfoModal("Gere o esqueleto da escala primeiro.", "error"); return; } const ano = parseInt(anoSelect.value); const mes = parseInt(mesSelect.value); const diasNoMes = new Date(ano, mes + 1, 0).getDate(); const diasDaSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']; let allDetailsHtml = ''; skeletonRows.forEach(row => { const colabIndex = parseInt(row.dataset.colabIndex); const escfuncId = row.dataset.escfuncId || ''; const chapa = row.dataset.chapa || ''; const escsecaoId = row.dataset.escsecaoId || ''; const escfuncaoId = row.dataset.escfuncaoId || ''; const colaboradorNome = row.querySelector('td[data-name]').dataset.name; const escala = colaboradorShifts[colabIndex]; if (!escala) return; const folgas = new Set(); row.querySelectorAll('.escala-cell').forEach(cell => { if (cell.textContent.toUpperCase() === 'F') { folgas.add(parseInt(cell.dataset.dia)); } }); const intervaloMin = timeToMinutes(escala.fimIntervalo) - timeToMinutes(escala.inicioIntervalo); const hIntervalo = minutesToTime(intervaloMin); const hTrabalhadasMin = (timeToMinutes(escala.fim) - timeToMinutes(escala.inicio)) - intervaloMin; const hTrabalhadas = minutesToTime(hTrabalhadasMin); let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${colabIndex}" data-escfunc-id="${escfuncId}" data-chapa="${chapa}" data-escsecao-id="${escsecaoId}" data-escfuncao-id="${escfuncaoId}" data-turno-id="${escala.turnoId || ''}"><div class="header-info"><h3 class="font-bold text-lg">${colaboradorNome}</h3><p class="print-aware-inline">Ciente: ___________________________________________</p></div><table class="w-full"><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}"><button type="button" class="detailed-day-button detalhada-dia-edit" data-dia="${i + 1}">${i + 1}</button></th>`).join('')}</tr></thead><tbody>`; const fields = [ { label: 'ENT.', value: escala.inicio, key: 'inicio', editable: true }, { label: 'SAÍ.INT.', value: escala.inicioIntervalo, key: 'inicioIntervalo', editable: true }, { label: 'INTER.', value: hIntervalo, key: 'intervalo', editable: false }, { label: 'RET.INT.', value: escala.fimIntervalo, key: 'fimIntervalo', editable: true }, { label: 'SAÍ.', value: escala.fim, key: 'fim', editable: true }, { label: 'H.TRAB', value: hTrabalhadas, key: 'trabalhadas', bold: true, editable: false }, ]; fields.forEach(field => { detailTable += `<tr class="${field.bold ? 'font-bold bg-gray-50' : ''}" data-key="${field.key}"><td>${field.label}</td>`; for (let dia = 1; dia <= diasNoMes; dia++) { const isDomingo = new Date(ano, mes, dia).getDay() === 0; const isFolga = folgas.has(dia); const cellContent = isFolga ? 'F' : field.value; let bgColor = ''; if (isFolga) { bgColor = isDomingo ? 'bg-orange-500 text-white' : 'bg-red-100'; } else if (isDomingo) { bgColor = 'bg-yellow-100'; } detailTable += `<td class="${bgColor}">${cellContent}</td>`; } detailTable += `</tr>`; }); detailTable += `</tbody></table></div>`; allDetailsHtml += detailTable; }); detalhadaModalBody.innerHTML = allDetailsHtml; detalhadaMesAno.textContent = `${mesSelect.options[mesSelect.selectedIndex].text} / ${ano}`; if (detalhadaModal.classList.contains('hidden')) { detalhadaModal.classList.remove('hidden'); } detailedScaleHasBeenGenerated = true; gerarEscalaDetalhadaBtn.textContent = 'Ver Escala Detalhada'; setSalvarEscalaDisponivel(false); limparCriticasDetalhada(); };
         
         // =========================================================================
         // FUNCAO DE IMPRESSAO DA TIMELINE (VERSAO CORRIGIDA E MELHORADA)
@@ -3265,7 +3269,7 @@
             tabelaTiposDescansoBody.innerHTML = rows.length ? rows.map((tipo) => `
                 <tr>
                     <td data-label="ID">${escapeHtml(tipo.ESCTIPODESC_ID)}</td>
-                    <td data-label="Descrição">${escapeHtml(tipo.DESCR || "")}</td>
+                    <td data-label="Motivo">${escapeHtml(tipo.DESCR || "")}</td>
                     <td data-label="Sigla"><span class="escala-status-chip pending-chip">${escapeHtml(tipo.SIGLA || "")}</span></td>
                     <td data-label="Classificacao">${escapeHtml(tipo.CLASSIFICACAO || "OUTROS")}</td>
                     <td data-label="Status">${tipo.STATUS === "A" ? "Ativo" : "Inativo"}</td>
@@ -3321,7 +3325,7 @@
             const values = await showInputModal({
                 title: tipo ? "Editar Tipo de Descanso" : "Novo Tipo de Descanso",
                 inputs: [
-                    { label: "Descrição", type: "text", id: "TIPO_DESCR", value: tipo?.DESCR || "", required: true },
+                    { label: "Motivo", type: "text", id: "TIPO_DESCR", value: tipo?.DESCR || "", required: true },
                     { label: "Sigla", type: "text", id: "TIPO_SIGLA", value: tipo?.SIGLA || "", required: true },
                     { label: "Classificacao", type: "select", id: "TIPO_CLASSIFICACAO", value: tipo?.CLASSIFICACAO || "OUTROS", options: [{ value: "FOLGA", label: "Folga" }, { value: "FERIAS", label: "Ferias" }, { value: "AFASTAMENTO", label: "Afastamento" }, { value: "OUTROS", label: "Outros" }], required: true },
                     { label: "Status", type: "select", id: "TIPO_STATUS", value: tipo?.STATUS || "A", options: [{ value: "A", label: "Ativo" }, { value: "I", label: "Inativo" }], required: true }
@@ -3484,7 +3488,7 @@
             const criticas = (atual.criticas && atual.criticas.length) ? atual.criticas : criticasManuais;
             atual.criticas = criticas;
             const criticaButton = criticas.length ? '<button type="button" class="critical-status-chip funcionario-critical-chip" title="Ver criticas do funcionario" aria-label="Ver criticas do funcionario">CRITICA</button>' : '';
-            let table = '<article class="bank-employee-scale"><header><div><h3>' + escapeHtml(atual.nome) + '</h3><p>' + escapeHtml(atual.chapa + ' | ' + atual.secao + ' | ' + atual.funcao) + '</p></div>' + criticaButton + '</header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
+            let table = '<article class="bank-employee-scale"><header><div><h3>' + escapeHtml(atual.nome) + '</h3><p>' + escapeHtml(atual.chapa + ' | ' + atual.secao + ' | ' + atual.funcao) + '</p><p class="print-aware-inline">Ciente: ___________________________________________</p></div>' + criticaButton + '</header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
             for(let d=1;d<=diasNoMes;d++) table += '<th class="employee-day-header">' + diasSemana[new Date(ref.getFullYear(),ref.getMonth(),d).getDay()] + '</th>';
             table += '</tr><tr><th>DIA</th>';
             for(let d=1;d<=diasNoMes;d++) {
@@ -3766,9 +3770,9 @@
             showInfoModal(errors.length?errors:'A escala do funcionário foi validada com sucesso.',errors.length?'error':'success'); return errors.length===0;
         };
         validarEscalaFuncionarioBtn?.addEventListener('click',validarEscalaFuncionarioAtual);
-        imprimirEscalaFuncionarioBtn?.addEventListener('click',()=>{if(!escalaFuncionarioEdicaoAtual)return;printContainer.innerHTML='<div class="print-title">Escala - '+escapeHtml(escalaFuncionarioEdicaoAtual.nome)+'</div>'+escalaFuncionarioDetalhadaContent.innerHTML+'<div class="print-aware-line">Ciente: ___________________________________________ &nbsp;&nbsp; Data: ____/____/________</div>';window.print();});
+        imprimirEscalaFuncionarioBtn?.addEventListener('click',()=>{if(!escalaFuncionarioEdicaoAtual)return;printContainer.innerHTML='<div class="print-title">Escala - '+escapeHtml(escalaFuncionarioEdicaoAtual.nome)+'</div>'+escalaFuncionarioDetalhadaContent.innerHTML;window.print();});
 
-        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB',justificativa:d.JUSTIFICATIVA_ALTERACAO||atual.justificativaAlteracao||null};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:0,justificativa:atual.justificativaAlteracao||null})});showInfoModal('Escala do funcionário salva em uma nova revisão.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):'Não foi possível salvar a escala do funcionário: '+error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
+        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB',justificativa:d.JUSTIFICATIVA_ALTERACAO||atual.justificativaAlteracao||null};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:1,justificativa:atual.justificativaAlteracao||null})});showInfoModal('Escala do funcionário salva em uma nova revisão oficializada.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):'Não foi possível salvar a escala do funcionário: '+error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
 
         function renderizarAcessosTela(usuarios) {
             tabelaAcessosBody.innerHTML = '';
@@ -4252,7 +4256,7 @@
             let allDetailsHtml = '';
 
             dados.forEach((colaborador, index) => {
-                let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${index}" data-escfunc-id="${colaborador.escfuncId || ''}" data-chapa="${colaborador.chapa || ''}" data-escsecao-id="${colaborador.escsecaoId || ''}" data-escfuncao-id="${colaborador.escfuncaoId || ''}"><div class="header-info"><h3 class="font-bold text-lg">${colaborador.nome}</h3></div><table><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}"><button type="button" class="detailed-day-button detalhada-dia-edit" data-dia="${i + 1}">${i + 1}</button></th>`).join('')}</tr></thead><tbody>`;
+                let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${index}" data-escfunc-id="${colaborador.escfuncId || ''}" data-chapa="${colaborador.chapa || ''}" data-escsecao-id="${colaborador.escsecaoId || ''}" data-escfuncao-id="${colaborador.escfuncaoId || ''}"><div class="header-info"><h3 class="font-bold text-lg">${colaborador.nome}</h3><p class="print-aware-inline">Ciente: ___________________________________________</p></div><table><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}"><button type="button" class="detailed-day-button detalhada-dia-edit" data-dia="${i + 1}">${i + 1}</button></th>`).join('')}</tr></thead><tbody>`;
                 const fields = [ 'inicio', 'inicioIntervalo', 'intervalo', 'fimIntervalo', 'fim', 'trabalhadas' ];
                 const labels = { inicio: 'ENT.', inicioIntervalo: 'SAÍ.INT.', intervalo: 'INTER.', fimIntervalo: 'RET.INT.', fim: 'SAÍ.', trabalhadas: 'H.TRAB' };
                 const isBold = { trabalhadas: true };
@@ -4714,6 +4718,26 @@
             return codigo + (dia.SECAO_DESCR || 'Sem seção');
         };
 
+        const resetarEstadoEdicaoBanco = () => {
+            escalaDetalheBancoValidada = false;
+            escalaDetalheBancoAlterados = new Map();
+            salvarDetalheBancoBtn?.classList.add('hidden');
+        };
+
+        const marcarDiaBancoAlterado = (dia) => {
+            if (!dia?.ESCFUNC_ID) return;
+            dia.CRITICA_MANUAL = 1;
+            escalaDetalheAtual.criticasPorFuncionario?.delete(String(dia.ESCFUNC_ID));
+            escalaDetalheBancoAlterados.set(String(dia.ESCFUNC_ID), {
+                escfuncId: Number(dia.ESCFUNC_ID),
+                chapa: dia.CHAPA,
+                escsecaoId: dia.ESCSECAO_ID,
+                escfuncaoId: dia.ESCFUNCAO_ID
+            });
+            escalaDetalheBancoValidada = false;
+            salvarDetalheBancoBtn?.classList.add('hidden');
+        };
+
         const agruparDiasPorFuncionario = (dias) => {
             const grupos = new Map();
             (dias || []).forEach((dia) => {
@@ -4732,6 +4756,35 @@
                 if (numeroDia) grupos.get(key).dias.set(numeroDia, dia);
             });
             return [...grupos.values()].sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+        };
+
+        const getCriticasFuncionarioBanco = (funcionario) => {
+            const criticasValidacao = escalaDetalheAtual.criticasPorFuncionario?.get(String(funcionario.escfuncId)) || [];
+            if (criticasValidacao.length) return criticasValidacao;
+            return [...funcionario.dias.values()]
+                .filter(dia => dia.CRITICA_MANUAL)
+                .map(dia => 'Dia ' + Number(String(dia.DT).slice(8, 10)) + ': ajuste manual pendente de validacao.');
+        };
+
+        const validarDetalheBancoAtual = () => {
+            const errors = [];
+            escalaDetalheAtual.criticasPorFuncionario = new Map();
+            agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).forEach((funcionario) => {
+                const dias = [...funcionario.dias.values()].sort((a, b) => String(a.DT).localeCompare(String(b.DT)));
+                const criticas = validarDiasEscalaFuncionario(dias, funcionario.nome);
+                if (criticas.length) escalaDetalheAtual.criticasPorFuncionario.set(String(funcionario.escfuncId), criticas);
+                errors.push(...criticas);
+            });
+            escalaDetalheBancoValidada = errors.length === 0;
+            if (escalaDetalheBancoValidada) {
+                (escalaDetalheAtual.dias || []).forEach(dia => { delete dia.CRITICA_MANUAL; });
+                salvarDetalheBancoBtn?.classList.toggle('hidden', escalaDetalheBancoAlterados.size === 0);
+            } else {
+                salvarDetalheBancoBtn?.classList.add('hidden');
+            }
+            renderizarSecaoAtivaEscala();
+            showInfoModal(errors.length ? errors : 'A escala foi validada com sucesso.', errors.length ? 'error' : 'success');
+            return escalaDetalheBancoValidada;
         };
 
         const criarTimelineSecaoBanco = (dias) => {
@@ -4790,27 +4843,33 @@
                 { key: 'TRABALHADAS', label: 'H.TRAB', bold: true }
             ];
             const html = agruparDiasPorFuncionario(dias).map((funcionario) => {
-                let table = '<article class="bank-employee-scale"><header><div><h3>' + escapeHtml(funcionario.nome) + '</h3><p>' + escapeHtml(funcionario.chapa) + (funcionario.funcao ? ' | ' + escapeHtml(funcionario.funcao) : '') + '</p></div></header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
+                const criticas = getCriticasFuncionarioBanco(funcionario);
+                const criticaButton = criticas.length ? '<button type="button" class="critical-status-chip banco-critical-chip" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" title="Ver criticas do funcionario">CRITICA</button>' : '';
+                let table = '<article class="bank-employee-scale" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '"><header><div><h3>' + escapeHtml(funcionario.nome) + '</h3><p>' + escapeHtml(funcionario.chapa) + (funcionario.funcao ? ' | ' + escapeHtml(funcionario.funcao) : '') + '</p><p class="print-aware-inline">Ciente: ___________________________________________</p></div>' + criticaButton + '</header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
                 for (let dia = 1; dia <= diasNoMes; dia += 1) table += '<th>' + diasSemana[new Date(ano, mes, dia).getDay()] + '</th>';
                 table += '</tr><tr><th>DIA</th>';
-                for (let dia = 1; dia <= diasNoMes; dia += 1) table += '<th>' + dia + '</th>';
+                for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                    const registro = funcionario.dias.get(dia);
+                    const dayContent = !somenteLeitura && registro ? '<button type="button" class="bank-day-header-button bank-day-edit" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" title="Editar dia ' + dia + '">' + dia + '</button>' : dia;
+                    table += '<th>' + dayContent + '</th>';
+                }
                 table += '</tr></thead><tbody>';
                 fields.forEach((field) => {
                     table += '<tr class="' + [field.bold ? 'font-bold' : '', field.key === 'INTERVALO' ? 'bank-interval-row' : ''].filter(Boolean).join(' ') + '"><th>' + field.label + '</th>'; 
                     for (let numeroDia = 1; numeroDia <= diasNoMes; numeroDia += 1) {
                         const registro = funcionario.dias.get(numeroDia);
                         if (!registro) { table += '<td class="empty">-</td>'; continue; }
-                        const folga = String(registro.PROGRAMACAO || '').toUpperCase() === 'F';
-                        let value = 'F';
+                        const folga = isProgramacaoDescanso(registro.PROGRAMACAO);
+                        let value = getValorDescanso(registro);
                         if (!folga) {
                             if (field.key === 'INTERVALO') value = minutesToTime(Math.max(0, timeToMinutes(registro.HR_ENT2) - timeToMinutes(registro.HR_SAI1)));
                             else if (field.key === 'TRABALHADAS') value = minutesToTime(Math.max(0, (timeToMinutes(registro.HR_SAI2) - timeToMinutes(registro.HR_ENT1)) - (timeToMinutes(registro.HR_ENT2) - timeToMinutes(registro.HR_SAI1))));
                             else value = registro[field.key] || '--';
                         }
                         const domingo = new Date(ano, mes, numeroDia).getDay() === 0;
-                        const cellClass = folga ? (domingo ? 'day-off sunday' : 'day-off') : (domingo ? 'sunday' : '');
-                        const editable = !somenteLeitura && !field.bold && field.key !== 'INTERVALO';
-                        table += '<td class="' + cellClass + '">' + (editable ? '<button type="button" class="bank-day-edit" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" title="Editar dia ' + numeroDia + '">' + escapeHtml(value) + '</button>' : escapeHtml(value)) + '</td>';
+                        const cellClass = [folga ? (domingo ? 'day-off sunday' : 'day-off') : (domingo ? 'sunday' : ''), registro.CRITICA_MANUAL ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
+                        const marker = registro.CRITICA_MANUAL && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Critica: ajuste manual">!</span>' : '';
+                        table += '<td class="' + cellClass + '">' + marker + escapeHtml(value) + '</td>';
                     }
                     table += '</tr>';
                 });
@@ -4843,6 +4902,7 @@
         };
 
         const carregarDetalheEscalaBanco = async (escprogId) => {
+            resetarEstadoEdicaoBanco();
             escalaDetalheAtual = { escprogId, lojaId: null, mesRef: null, modo: 'individual', status: null, dias: [], secoes: [], secaoAtiva: null };
             escalaDetalheTitulo.textContent = 'Escala ' + escprogId;
             escalaDetalheResumo.textContent = 'Carregando dias da escala...';
@@ -4854,6 +4914,7 @@
         };
 
         const carregarDetalheEscalaMensal = async (lojaId, mesRef) => {
+            resetarEstadoEdicaoBanco();
             escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', status: null, dias: [], secoes: [], secaoAtiva: null };
             escalaDetalheTitulo.textContent = 'Escala Loja ' + lojaId + ' - ' + formatarMesTabela(mesRef);
             escalaDetalheResumo.textContent = 'Carregando escala mensal...';
@@ -4881,6 +4942,55 @@
             if (!escalaBancoDetalhadaContent) return;
             printContainer.innerHTML = '<div class="print-title">' + escapeHtml(escalaSecaoDetalheTitulo?.textContent || 'Escala detalhada') + '</div>' + escalaBancoDetalhadaContent.innerHTML;
             window.print();
+        });
+
+        validarDetalheBancoBtn?.addEventListener('click', validarDetalheBancoAtual);
+
+        salvarDetalheBancoBtn?.addEventListener('click', async () => {
+            if (!escalaDetalheBancoAlterados.size) {
+                showInfoModal('Nenhuma alteração pendente para salvar.', 'info');
+                return;
+            }
+            if (!escalaDetalheBancoValidada && !validarDetalheBancoAtual()) return;
+
+            salvarDetalheBancoBtn.disabled = true;
+            try {
+                for (const funcionario of escalaDetalheBancoAlterados.values()) {
+                    const dias = (escalaDetalheAtual.dias || [])
+                        .filter(dia => String(dia.ESCFUNC_ID) === String(funcionario.escfuncId))
+                        .map(dia => {
+                            const descanso = isProgramacaoDescanso(dia.PROGRAMACAO);
+                            const sigla = getValorDescanso(dia);
+                            return {
+                                data: String(dia.DT).slice(0, 10),
+                                hrEnt1: descanso ? null : dia.HR_ENT1,
+                                hrSai1: descanso ? null : dia.HR_SAI1,
+                                hrEnt2: descanso ? null : dia.HR_ENT2,
+                                hrSai2: descanso ? null : dia.HR_SAI2,
+                                programacao: descanso ? sigla : 'TRB',
+                                justificativa: dia.JUSTIFICATIVA_ALTERACAO || null
+                            };
+                        });
+                    await apiRequest('/api/escalas/funcionario/revisao', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            lojaId: Number(escalaDetalheAtual.lojaId),
+                            mesRef: escalaDetalheAtual.mesRef,
+                            funcionarios: [{ ...funcionario, dias }],
+                            oficializada: 1,
+                            justificativa: dias.find(dia => dia.justificativa)?.justificativa || null
+                        })
+                    });
+                }
+                showInfoModal('Alterações salvas em revisão individual e oficializadas.', 'success');
+                const lojaId = escalaDetalheAtual.lojaId;
+                const mesRef = escalaDetalheAtual.mesRef;
+                await carregarDetalheEscalaMensal(lojaId, mesRef);
+            } catch (error) {
+                showInfoModal(error.details?.length ? error.details : 'Não foi possível salvar a revisão individual: ' + error.message, 'error');
+            } finally {
+                salvarDetalheBancoBtn.disabled = false;
+            }
         });
 
         const editarDiaEscalaPorId = async (escprogId, escprogdiaId) => {
@@ -4920,6 +5030,25 @@
                 }
             });
             if (!values) return;
+            const folgaLocal = values.BANCO_TIPO_DIA === 'DESCANSO';
+            const programacaoLocal = folgaLocal ? String(values.BANCO_DESCANSO || 'F').trim().toUpperCase() : 'TRB';
+            if (!folgaLocal) {
+                const erros = validarTurnoCadastroSecao({ HR_ENT1: values.BANCO_HR_ENT1, HR_SAI1: values.BANCO_HR_SAI1, HR_ENT2: values.BANCO_HR_ENT2, HR_SAI2: values.BANCO_HR_SAI2 });
+                if (erros.length) {
+                    showInfoModal(erros, 'error');
+                    return;
+                }
+            }
+            dia.PROGRAMACAO = programacaoLocal;
+            dia.HR_ENT1 = folgaLocal ? programacaoLocal : values.BANCO_HR_ENT1;
+            dia.HR_SAI1 = folgaLocal ? programacaoLocal : values.BANCO_HR_SAI1;
+            dia.HR_ENT2 = folgaLocal ? programacaoLocal : values.BANCO_HR_ENT2;
+            dia.HR_SAI2 = folgaLocal ? programacaoLocal : values.BANCO_HR_SAI2;
+            dia.JUSTIFICATIVA_ALTERACAO = String(values.BANCO_JUSTIFICATIVA || '').trim();
+            marcarDiaBancoAlterado(dia);
+            renderizarSecaoAtivaEscala();
+            showInfoModal('Dia alterado. Valide a escala antes de salvar.', 'info');
+            return;
             try {
                 const folga = values.BANCO_TIPO_DIA === 'DESCANSO';
                 const programacao = folga ? String(values.BANCO_DESCANSO || 'F').trim().toUpperCase() : 'TRB';
@@ -4953,6 +5082,13 @@
         };
 
         escalaBancoDetalhadaContent?.addEventListener('click', (event) => {
+            const criticalButton = event.target.closest('.banco-critical-chip');
+            if (criticalButton) {
+                const funcionario = agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).find(item => String(item.escfuncId) === String(criticalButton.dataset.escfuncId));
+                const criticas = funcionario ? getCriticasFuncionarioBanco(funcionario) : [];
+                showInfoModal(criticas.length ? criticas : 'Nenhuma critica pendente.', criticas.length ? 'error' : 'info');
+                return;
+            }
             const button = event.target.closest('.bank-day-edit');
             if (!button) return;
             editarDiaEscalaPorId(button.dataset.escprogId, button.dataset.escprogdiaId);

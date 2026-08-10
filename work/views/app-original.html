@@ -287,7 +287,7 @@
             <div id="funcionarios-page" class="hidden">
                 <header class="main-header"><h1>Funcionários</h1></header>
                 <div class="table-card">
-                    <div class="catalog-filter-bar">
+                    <div class="catalog-filter-bar funcionarios-filter-bar">
                         <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="funcionariosPesquisaInput" type="search" placeholder="Pesquisar nome, seção, função ou chapa"></label>
                         <select id="funcionariosLojaSelect" class="escala-filter-select" aria-label="Filtrar funcionários por loja"></select>
                         <select id="funcionariosSecaoFiltro" class="escala-filter-select"><option value="all">Todas as seções</option></select>
@@ -440,12 +440,22 @@
                     <div class="table-card-header creation-card-header">
                         <div>
                             <h2 id="escalaSecaoDetalheTitulo">Escala detalhada</h2>
-                            <p class="table-card-subtitle">Clique em um horário do dia para editar o colaborador.</p>
+                            <p class="table-card-subtitle">Clique no dia para editar o colaborador.</p>
                         </div>
-                        <button type="button" class="action-button secondary" id="imprimirDetalheBancoBtn">
-                            <span class="material-symbols-outlined">print</span>
-                            Imprimir Escala
-                        </button>
+                        <div class="header-actions">
+                            <button type="button" class="action-button secondary" id="validarDetalheBancoBtn">
+                                <span class="material-symbols-outlined">fact_check</span>
+                                Validar Escala
+                            </button>
+                            <button type="button" class="action-button hidden" id="salvarDetalheBancoBtn">
+                                <span class="material-symbols-outlined">save</span>
+                                Salvar
+                            </button>
+                            <button type="button" class="action-button secondary" id="imprimirDetalheBancoBtn">
+                                <span class="material-symbols-outlined">print</span>
+                                Imprimir Escala
+                            </button>
+                        </div>
                     </div>
                     <div id="escalaBancoDetalhadaContent" class="bank-detailed-scale"></div>
                 </div>
@@ -545,16 +555,16 @@
                 <header class="main-header">
                     <div>
                         <h1>Tipos de Descanso</h1>
-                        <p class="table-card-subtitle">Cadastre siglas usadas na edição da escala do funcionário.</p>
+                        <p class="table-card-subtitle">Cadastre motivos e siglas usadas na edição da escala do funcionário.</p>
                     </div>
                     <button class="action-button" id="novoTipoDescansoBtn"><span class="material-symbols-outlined">add</span>Novo Tipo</button>
                 </header>
                 <div class="table-card">
                     <div class="catalog-filter-bar two-filters">
-                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="tiposDescansoPesquisaInput" type="search" placeholder="Pesquisar descrição ou sigla"></label>
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="tiposDescansoPesquisaInput" type="search" placeholder="Pesquisar motivo ou sigla"></label>
                         <select id="tiposDescansoStatusFiltro" class="escala-filter-select"><option value="all">Todos os status</option><option value="A">Ativos</option><option value="I">Inativos</option></select>
                     </div>
-                    <table class="data-table"><thead><tr><th>ID</th><th>Descri&ccedil;&atilde;o</th><th>Sigla</th><th>Classifica&ccedil;&atilde;o</th><th>Status</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="tabelaTiposDescansoBody"><tr><td colspan="6" class="text-center text-gray-500 py-8">Carregando tipos...</td></tr></tbody></table>
+                    <table class="data-table"><thead><tr><th>ID</th><th>Motivo</th><th>Sigla</th><th>Classifica&ccedil;&atilde;o</th><th>Status</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="tabelaTiposDescansoBody"><tr><td colspan="6" class="text-center text-gray-500 py-8">Carregando tipos...</td></tr></tbody></table>
                 </div>
             </div>
 

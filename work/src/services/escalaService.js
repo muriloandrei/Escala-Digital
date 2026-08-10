@@ -310,6 +310,7 @@ async function getEscalaMensal({ lojaId, mesRef }) {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
     if (latestRevision === null) return { revisao: null, status: null, dias: [] };
     const ativaSql = await getAtivaSql(connection, 'p');
+    const ativaSubSql = await getAtivaSql(connection, 'px');
 
     const result = await connection.execute(
       `select
@@ -346,16 +347,23 @@ async function getEscalaMensal({ lojaId, mesRef }) {
        left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-         and p.revisao = :latestRevision
+         and p.revisao = (
+           select max(px.revisao)
+           from sgn_esc_prog px
+           where px.loja = p.loja
+             and px.mes_ref = p.mes_ref
+             and px.escfunc_id = p.escfunc_id
+             and ${ativaSubSql}
+         )
          and ${ativaSql}
        order by s.descr, f.nome, p.chapa, d.dt`,
-      { lojaId, mesRef, latestRevision },
+      { lojaId, mesRef },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
     return {
       revisao: latestRevision,
-      status: result.rows[0] ? pick(result.rows[0], 'STATUS', 'status') : null,
+      status: getMesStatus(mesRef, latestRevision),
       dias: result.rows
     };
   });
@@ -751,9 +759,10 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
          where p.loja = :lojaId
            and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
            and p.revisao = :latestRevision
+           and p.escfunc_id = :escfuncId
            and ${ativaSql}
          order by p.escprog_id`,
-        { lojaId, mesRef, latestRevision },
+        { lojaId, mesRef, latestRevision, escfuncId },
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
 
