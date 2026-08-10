@@ -2,7 +2,9 @@ const REGRAS_VIGENTES = [
   { codigo: 'DOMINGO_1X1', titulo: 'Domingo 1x1', descricao: 'O colaborador nao deve trabalhar dois domingos consecutivos.' },
   { codigo: 'INTERJORNADA_11H', titulo: 'Interjornada minima', descricao: 'Entre o fim de um dia trabalhado e o inicio do proximo deve haver ao menos 11 horas.' },
   { codigo: 'DESCANSO_POS_FOLGA_35H', titulo: 'Descanso apos folga', descricao: 'Ao retornar de uma ou mais folgas, o descanso minimo acumulado deve ser de 35 horas.' },
-  { codigo: 'JORNADA_SIMPLES', titulo: 'Jornada e intervalo', descricao: 'Horarios devem ser completos, ordenados e com intervalo coerente.' },
+  { codigo: 'JORNADA_08H48', titulo: 'Jornada padrao', descricao: 'Dias trabalhados devem ter jornada total de 08:48.' },
+  { codigo: 'INTERVALO_01H10', titulo: 'Intervalo minimo', descricao: 'Dias trabalhados devem ter intervalo minimo de 01:10.' },
+  { codigo: 'MAX_06H_CONTINUAS', titulo: 'Jornada continua maxima', descricao: 'Nenhum periodo continuo de trabalho deve passar de 06:00.' },
   { codigo: 'SEM_REGRA_FOLGAS_SEGUIDAS', titulo: 'Folgas seguidas', descricao: 'Nao ha bloqueio automatico para duas folgas seguidas; o sistema valida descanso e domingo.' }
 ];
 
@@ -15,6 +17,13 @@ function timeToMinutes(value) {
 
 function formatDate(value) {
   return String(value || '').slice(0, 10);
+}
+
+function minutesToTime(value) {
+  const safeValue = Math.max(0, Number(value) || 0);
+  const hours = Math.floor(safeValue / 60);
+  const minutes = safeValue % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 function isDescanso(dia) {
@@ -42,11 +51,23 @@ function validarTurnoDia(funcionarioLabel, dia) {
   }
   if (!(horario.entrada < horario.saidaIntervalo && horario.saidaIntervalo < horario.retornoIntervalo && horario.retornoIntervalo < horario.saida)) {
     errors.push(`${funcionarioLabel}: horarios fora de ordem em ${data}.`);
+    return errors;
   }
   const intervalo = horario.retornoIntervalo - horario.saidaIntervalo;
-  const jornada = (horario.saida - horario.entrada) - intervalo;
-  if (intervalo <= 0 || jornada <= 0) {
+  const primeiraJornada = horario.saidaIntervalo - horario.entrada;
+  const segundaJornada = horario.saida - horario.retornoIntervalo;
+  const jornada = primeiraJornada + segundaJornada;
+  if (intervalo <= 0 || primeiraJornada <= 0 || segundaJornada <= 0) {
     errors.push(`${funcionarioLabel}: jornada ou intervalo invalido em ${data}.`);
+  }
+  if (jornada !== 528) {
+    errors.push(`${funcionarioLabel}: jornada total deve ser 08:48 em ${data}. Atual: ${minutesToTime(jornada)}.`);
+  }
+  if (intervalo < 70) {
+    errors.push(`${funcionarioLabel}: intervalo menor que 01:10 em ${data}. Atual: ${minutesToTime(intervalo)}.`);
+  }
+  if (primeiraJornada > 360 || segundaJornada > 360) {
+    errors.push(`${funcionarioLabel}: jornada continua maior que 06:00 em ${data}.`);
   }
   return errors;
 }
@@ -112,4 +133,4 @@ function validateEscalaPayload(payload) {
   return errors;
 }
 
-module.exports = { REGRAS_VIGENTES, validateEscalaPayload, validarRegrasFuncionario };
+module.exports = { REGRAS_VIGENTES, validateEscalaPayload, validarRegrasFuncionario, timeToMinutes, minutesToTime };

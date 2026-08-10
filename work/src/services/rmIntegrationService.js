@@ -251,6 +251,7 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao }) {
   const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
   const cpfSelect = funcionarioColumns.has('CPF') ? 'f.cpf' : funcionarioColumns.has('CPF_FUNCIONARIO') ? 'f.cpf_funcionario as cpf' : 'cast(null as varchar2(20)) as cpf';
   const ativaSql = progColumns.has('ATIVA') ? 'and nvl(p.ativa, 1) = 1' : '';
+  const ativaSubSql = progColumns.has('ATIVA') ? 'and nvl(px.ativa, 1) = 1' : '';
   const result = await connection.execute(
     `select p.loja, p.mes_ref, p.revisao, p.escfunc_id, p.chapa, f.nome, f.codcoligada, ${cpfSelect},
             d.dt, d.programacao
@@ -259,11 +260,18 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao }) {
      join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
      where p.loja = :lojaId
        and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-       and p.revisao = :revisao
+       and p.revisao = (
+         select max(px.revisao)
+         from sgn_esc_prog px
+         where px.loja = p.loja
+           and px.mes_ref = p.mes_ref
+           and px.escfunc_id = p.escfunc_id
+           ${ativaSubSql}
+       )
        ${ativaSql}
        and nvl(d.programacao, 'TRB') <> 'TRB'
      order by p.chapa, d.dt`,
-    { lojaId, mesRef, revisao },
+    { lojaId, mesRef },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
   return result.rows;
@@ -295,6 +303,7 @@ function agruparPorFuncionario(rows) {
         chapa: pick(row, 'CHAPA', 'chapa'),
         cpf: pick(row, 'CPF', 'cpf'),
         codcoligada: pick(row, 'CODCOLIGADA', 'codcoligada'),
+        revisao: pick(row, 'REVISAO', 'revisao'),
         eventos: []
       });
     }
@@ -328,7 +337,7 @@ async function validarPreRequisitosRm({ lojaId, mesRef, revisao }) {
         await registrarRmLog(connection, {
           loja: lojaId,
           mesRef,
-          revisao: revisaoAlvo,
+          revisao: funcionario.revisao ?? revisaoAlvo,
           escfuncId: funcionario.escfuncId,
           chapa: funcionario.chapa,
           cpf: null,
@@ -401,7 +410,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
 
         enviados += funcionario.eventos.length;
         await registrarRmLog(connection, {
-          loja: lojaId, mesRef, revisao, escfuncId: funcionario.escfuncId, chapa: funcionario.chapa, cpf: mask(cpf),
+          loja: lojaId, mesRef, revisao: funcionario.revisao ?? revisao, escfuncId: funcionario.escfuncId, chapa: funcionario.chapa, cpf: mask(cpf),
           acao: 'RM_ENVIAR_DESCANSOS', status: 'SUCESSO',
           mensagem: `${funcionario.eventos.length} evento(s) sincronizado(s).`,
           payloadResumo: `chapa=${funcionario.chapa}; codtabfolga=${codTabFolga}; incluir=${payloadInclusao.length}; existentes=${existentesRows.length}`
@@ -409,7 +418,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
       } catch (error) {
         falhas += 1;
         await registrarRmLog(connection, {
-          loja: lojaId, mesRef, revisao, escfuncId: funcionario.escfuncId, chapa: funcionario.chapa, cpf: mask(funcionario.cpf),
+          loja: lojaId, mesRef, revisao: funcionario.revisao ?? revisao, escfuncId: funcionario.escfuncId, chapa: funcionario.chapa, cpf: mask(funcionario.cpf),
           acao: 'RM_ENVIAR_DESCANSOS', status: 'FALHA',
           mensagem: error.message,
           payloadResumo: `chapa=${funcionario.chapa}`

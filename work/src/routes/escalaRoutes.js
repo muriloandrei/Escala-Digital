@@ -16,6 +16,7 @@ const saveSchema = z.object({
   funcionarios: z.array(z.object({
     escfuncId: z.number().int().positive(),
     chapa: z.string().min(1).max(8),
+    nome: z.string().max(100).optional(),
     escsecaoId: z.coerce.number().int().positive().nullable().optional(),
     ESCSECAO_ID: z.coerce.number().int().positive().nullable().optional(),
     escfuncaoId: z.coerce.number().int().positive().nullable().optional(),
@@ -263,6 +264,24 @@ router.get('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) =>
     const escalas = await escalaService.listEscalas({ lojaId, mesRef });
     return res.json({ escalas });
   } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/validar', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = saveSchema.parse(req.body);
+    const ruleErrors = validateEscalaPayload(payload);
+    const ausenciaErrors = await escalaService.validateAusencias({
+      lojaId: payload.lojaId,
+      funcionarios: payload.funcionarios
+    });
+    const errors = [...ruleErrors, ...ausenciaErrors];
+    return res.json({ ok: errors.length === 0, errors });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Formato da escala invalido.', details: error.errors });
+    }
     return next(error);
   }
 });

@@ -1464,7 +1464,7 @@
         
         // --- LOGICA DE SINCRONIZACAO E VALIDACAO (ATUALIZADA) ---
 
-        validarEscalaBtn.addEventListener('click', () => {
+        if (false) validarEscalaBtn.addEventListener('click', () => {
             let allErrors = [];
             const ausenciasAplicadas = aplicarAusenciasNaDetalhada();
             allErrors = allErrors.concat(validarDescansos());
@@ -1481,19 +1481,49 @@
             }
         });
         
-        const executarValidacaoDetalhada = () => {
+        const executarValidacaoDetalhada = async () => {
             let allErrors = [];
+            const ausenciasAplicadas = aplicarAusenciasNaDetalhada();
             allErrors = allErrors.concat(validarDescansos());
             allErrors = allErrors.concat(validarDomingosDetalhada());
             allErrors = allErrors.concat(validarDiasConsecutivos());
             allErrors = allErrors.concat(validarJornada());
+            const dados = parseEscalaFromModal();
+            if (dados.length > 0) {
+                const lojaId = Number(escalaRascunhoContexto?.loja || lojaEscalaSelect.value);
+                const mes = Number(mesSelect.value);
+                const ano = Number(anoSelect.value);
+                const payload = montarPayloadBancoEscala({ id: Date.now(), lojaId, mes, ano, dados });
+                try {
+                    const backendValidation = await apiRequest('/api/escalas/validar', {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    allErrors = allErrors.concat(backendValidation.errors || []);
+                } catch (error) {
+                    allErrors.push(error.details ? error.details.join(' ') : error.message);
+                }
+            }
+            allErrors = [...new Set(allErrors.filter(Boolean))];
             aplicarCriticasDetalhada(allErrors);
             setSalvarEscalaDisponivel(allErrors.length === 0);
+            if (allErrors.length > 0) {
+                showInfoModal(allErrors, 'error');
+            } else if (ausenciasAplicadas.length > 0) {
+                showInfoModal(['Ausencias aplicadas como folga obrigatoria.', ...ausenciasAplicadas], 'success');
+            } else {
+                showInfoModal('A escala foi validada com sucesso. Nenhuma inconsistencia encontrada.', 'success');
+            }
             return allErrors;
         };
 
-        validarEscalaBtn.addEventListener('click', () => {
-            executarValidacaoDetalhada();
+        validarEscalaBtn.addEventListener('click', async () => {
+            validarEscalaBtn.disabled = true;
+            try {
+                await executarValidacaoDetalhada();
+            } finally {
+                validarEscalaBtn.disabled = false;
+            }
         });
 
         const validarSequenciaParaTraz = (row, folgaIndex) => {
@@ -4407,6 +4437,7 @@
                 .map(colaborador => ({
                     escfuncId: colaborador.escfuncId,
                     chapa: colaborador.chapa,
+                    nome: colaborador.nome || colaborador.chapa,
                     escsecaoId: colaborador.escsecaoId || null,
                     escfuncaoId: colaborador.escfuncaoId || null,
                     escsecaoTurnoId: colaborador.escsecaoTurnoId || null,
