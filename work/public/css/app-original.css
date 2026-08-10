@@ -888,6 +888,7 @@
             #print-container { display: block !important; }
             .print-title { text-align: center; font-size: 1.5rem; font-weight: bold; margin-bottom: 0.5rem; }
             .print-subtitle { text-align: center; font-size: 1.1rem; margin-bottom: 1rem; color: #555; }
+            #print-container .print-aware-inline { display: block; }
             
             /* ====================================================================== */
             /* ESTILOS CORRIGIDOS E MELHORADOS PARA A IMPRESSÃO DA TIMELINE */
@@ -1237,6 +1238,7 @@
         }
 
         .print-aware-inline {
+            display: none;
             margin-top: 4px;
         }
 
