@@ -202,6 +202,15 @@ router.post('/oficializar', resolveLojaRequest, requireLojaAccess, async (req, r
       mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
     }).parse(req.body);
 
+    const preRequisitosRm = await rmIntegrationService.validarPreRequisitosRm(payload);
+    if (preRequisitosRm.errors?.length) {
+      return res.status(422).json({
+        error: 'Existem pendencias antes de oficializar a escala no RM.',
+        errors: preRequisitosRm.errors,
+        details: preRequisitosRm
+      });
+    }
+
     const result = await escalaService.oficializarEscala(payload);
     if (!result.affectedRows) return res.status(404).json({ error: 'Escala ativa nao encontrada.' });
     const rm = await rmIntegrationService.oficializarNoRm({ ...payload, revisao: result.revisao });

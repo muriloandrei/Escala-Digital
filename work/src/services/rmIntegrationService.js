@@ -269,6 +269,22 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao }) {
   return result.rows;
 }
 
+async function getLatestRevisionForRm(connection, { lojaId, mesRef }) {
+  const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
+  const ativaSql = progColumns.has('ATIVA') ? 'and nvl(ativa, 1) = 1' : '';
+  const result = await connection.execute(
+    `select max(revisao) as revisao
+     from sgn_esc_prog
+     where loja = :lojaId
+       and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+       ${ativaSql}`,
+    { lojaId, mesRef },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  const revision = pick(result.rows?.[0], 'REVISAO', 'revisao');
+  return revision === null || revision === undefined ? null : Number(revision);
+}
+
 function agruparPorFuncionario(rows) {
   const map = new Map();
   rows.forEach((row) => {
@@ -288,6 +304,45 @@ function agruparPorFuncionario(rows) {
     });
   });
   return [...map.values()];
+}
+
+async function validarPreRequisitosRm({ lojaId, mesRef, revisao }) {
+  const rmConfig = getEnv().rm;
+  if (!rmConfig.enabled) {
+    return { enabled: false, revisao: revisao ?? null, errors: [] };
+  }
+
+  return withConnection(async (connection) => {
+    const revisaoAlvo = revisao ?? await getLatestRevisionForRm(connection, { lojaId, mesRef });
+    if (revisaoAlvo === null) {
+      return { enabled: true, revisao: null, errors: ['Escala ativa nao encontrada para oficializacao.'] };
+    }
+
+    const funcionarios = agruparPorFuncionario(await getEscalaParaRm(connection, { lojaId, mesRef, revisao: revisaoAlvo }));
+    const errors = [];
+    for (const funcionario of funcionarios) {
+      const cpf = sanitizeCpf(funcionario.cpf);
+      if (!cpf) {
+        const mensagem = `CPF nao cadastrado para o funcionario ${funcionario.chapa}. Atualize SGN_ESC_FUNCIONARIO.CPF antes de oficializar no RM.`;
+        errors.push(mensagem);
+        await registrarRmLog(connection, {
+          loja: lojaId,
+          mesRef,
+          revisao: revisaoAlvo,
+          escfuncId: funcionario.escfuncId,
+          chapa: funcionario.chapa,
+          cpf: null,
+          acao: 'RM_VALIDAR_CPF',
+          status: 'FALHA',
+          mensagem,
+          payloadResumo: `chapa=${funcionario.chapa}`
+        });
+      }
+    }
+    if (errors.length) await connection.commit();
+
+    return { enabled: true, revisao: revisaoAlvo, errors };
+  });
 }
 
 async function oficializarNoRm({ lojaId, mesRef, revisao }) {
@@ -390,4 +445,4 @@ async function listRmLogs({ lojaId, mesRef }) {
   });
 }
 
-module.exports = { oficializarNoRm, listRmLogs };
+module.exports = { oficializarNoRm, listRmLogs, validarPreRequisitosRm };

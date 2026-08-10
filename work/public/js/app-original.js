@@ -966,9 +966,11 @@
                 chip = document.createElement('button');
                 chip.type = 'button';
                 chip.className = 'critical-status-chip';
-                chip.textContent = 'CRITICA';
                 header.appendChild(chip);
             }
+            chip.textContent = 'CRITICA';
+            chip.title = 'Ver criticas do funcionario';
+            chip.setAttribute('aria-label', 'Ver criticas do funcionario');
         };
 
         const aplicarCriticasDetalhada = (errors) => {
@@ -3476,7 +3478,13 @@
             const diasSemana = ['D','S','T','Q','Q','S','S'];
             const map = new Map(atual.dias.map(dia => [Number(String(dia.DT).slice(8,10)), dia]));
             const fields = [{key:'HR_ENT1',label:'ENT.'},{key:'HR_SAI1',label:'SAI.INT.'},{key:'INTERVALO',label:'INTER.'},{key:'HR_ENT2',label:'RET.INT.'},{key:'HR_SAI2',label:'SAI.'},{key:'TRABALHADAS',label:'H.TRAB'}];
-            let table = '<article class="bank-employee-scale"><header><div><h3>' + escapeHtml(atual.nome) + '</h3><p>' + escapeHtml(atual.chapa + ' | ' + atual.secao + ' | ' + atual.funcao) + '</p></div></header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
+            const criticasManuais = atual.dias
+                .filter(dia => dia.CRITICA_MANUAL)
+                .map(dia => 'Dia ' + Number(String(dia.DT).slice(8, 10)) + ': ajuste manual pendente de validacao.');
+            const criticas = (atual.criticas && atual.criticas.length) ? atual.criticas : criticasManuais;
+            atual.criticas = criticas;
+            const criticaButton = criticas.length ? '<button type="button" class="critical-status-chip funcionario-critical-chip" title="Ver criticas do funcionario" aria-label="Ver criticas do funcionario">CRITICA</button>' : '';
+            let table = '<article class="bank-employee-scale"><header><div><h3>' + escapeHtml(atual.nome) + '</h3><p>' + escapeHtml(atual.chapa + ' | ' + atual.secao + ' | ' + atual.funcao) + '</p></div>' + criticaButton + '</header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
             for(let d=1;d<=diasNoMes;d++) table += '<th class="employee-day-header">' + diasSemana[new Date(ref.getFullYear(),ref.getMonth(),d).getDay()] + '</th>';
             table += '</tr><tr><th>DIA</th>';
             for(let d=1;d<=diasNoMes;d++) {
@@ -3661,6 +3669,12 @@
         };
 
         escalaFuncionarioDetalhadaContent?.addEventListener('click', async event => {
+            const criticalButton = event.target.closest('.funcionario-critical-chip');
+            if (criticalButton) {
+                const criticas = escalaFuncionarioEdicaoAtual?.criticas || [];
+                showInfoModal(criticas.length ? criticas : 'Nenhuma critica pendente.', criticas.length ? 'error' : 'info');
+                return;
+            }
             const button=event.target.closest('.funcionario-dia-edit');
             if(!button||!escalaFuncionarioEdicaoAtual)return;
             const dia=escalaFuncionarioEdicaoAtual.dias.find(item=>Number(String(item.DT).slice(8,10))===Number(button.dataset.dia));
@@ -3746,12 +3760,15 @@
         const validarEscalaFuncionarioAtual = () => {
             const atual=escalaFuncionarioEdicaoAtual;if(!atual)return false; const errors=validarDiasEscalaFuncionario(atual.dias, atual.nome); let consecutivos=0;
             [...atual.dias].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach(dia=>{if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>Number(regraMaxDiasConsecutivosInput.value||7))errors.push('Mais de '+regraMaxDiasConsecutivosInput.value+' dias consecutivos em '+formatarDataTabela(dia.DT)+'.');});
+            atual.criticas = errors;
+            if (!errors.length) atual.dias.forEach(dia => { delete dia.CRITICA_MANUAL; });
+            renderizarEscalaFuncionarioEdicao();
             showInfoModal(errors.length?errors:'A escala do funcionário foi validada com sucesso.',errors.length?'error':'success'); return errors.length===0;
         };
         validarEscalaFuncionarioBtn?.addEventListener('click',validarEscalaFuncionarioAtual);
         imprimirEscalaFuncionarioBtn?.addEventListener('click',()=>{if(!escalaFuncionarioEdicaoAtual)return;printContainer.innerHTML='<div class="print-title">Escala - '+escapeHtml(escalaFuncionarioEdicaoAtual.nome)+'</div>'+escalaFuncionarioDetalhadaContent.innerHTML+'<div class="print-aware-line">Ciente: ___________________________________________ &nbsp;&nbsp; Data: ____/____/________</div>';window.print();});
 
-        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB',justificativa:d.JUSTIFICATIVA_ALTERACAO||atual.justificativaAlteracao||null};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:0,justificativa:atual.justificativaAlteracao||null})});showInfoModal('Escala do funcionário salva em uma nova revisão.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
+        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB',justificativa:d.JUSTIFICATIVA_ALTERACAO||atual.justificativaAlteracao||null};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:0,justificativa:atual.justificativaAlteracao||null})});showInfoModal('Escala do funcionário salva em uma nova revisão.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):'Não foi possível salvar a escala do funcionário: '+error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
 
         function renderizarAcessosTela(usuarios) {
             tabelaAcessosBody.innerHTML = '';
@@ -4931,7 +4948,7 @@
                     renderizarSecaoAtivaEscala();
                 }
             } catch (error) {
-                showInfoModal(error.message, 'error');
+                showInfoModal('Não foi possível atualizar o dia da escala: ' + error.message, 'error');
             }
         };
 
@@ -4990,7 +5007,7 @@
                         await carregarDetalheEscalaBanco(escprogId);
                     }
                 } catch (error) {
-                    showInfoModal(error.message, 'error');
+                    showInfoModal('Não foi possível atualizar o dia da escala: ' + error.message, 'error');
                 }
                 return;
             }
@@ -5028,7 +5045,7 @@
                     await carregarDetalheEscalaBanco(escprogId);
                 }
             } catch (error) {
-                showInfoModal(error.message, 'error');
+                showInfoModal('Não foi possível atualizar o dia da escala: ' + error.message, 'error');
             }
         });
 
@@ -5449,11 +5466,15 @@
                     confirmText: 'Oficializar'
                 });
                 if (!confirmacao) return;
-                const result = await apiRequest('/api/escalas/oficializar', { method: 'POST', body: JSON.stringify({ lojaId: Number(loja), mesRef }) });
-                const rm = result.rm || {};
-                const mensagemRm = rm.enabled ? `RM: ${rm.enviados || 0} evento(s) enviado(s), ${rm.falhas || 0} falha(s).` : 'RM: integracao desabilitada no .env.';
-                showInfoModal(['Escala oficializada com sucesso.', mensagemRm], rm.falhas ? 'error' : 'success');
-                await consultarEscalasBancoLocal();
+                try {
+                    const result = await apiRequest('/api/escalas/oficializar', { method: 'POST', body: JSON.stringify({ lojaId: Number(loja), mesRef }) });
+                    const rm = result.rm || {};
+                    const mensagemRm = rm.enabled ? `RM: ${rm.enviados || 0} evento(s) enviado(s), ${rm.falhas || 0} falha(s).` : 'RM: integracao desabilitada no .env.';
+                    showInfoModal(['Escala oficializada com sucesso.', mensagemRm], rm.falhas ? 'error' : 'success');
+                    await consultarEscalasBancoLocal();
+                } catch (error) {
+                    showInfoModal(error.details?.length ? error.details : error.message, 'error');
+                }
                 return;
             }
 
