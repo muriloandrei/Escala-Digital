@@ -3,13 +3,14 @@
     visualizar: 'PODE_VISUALIZAR',
     listar: 'PODE_VISUALIZAR',
     consultar: 'PODE_VISUALIZAR',
-    criar: 'PODE_EDITAR',
+    criar: 'PODE_CRIAR',
     editar: 'PODE_EDITAR',
     salvar: 'PODE_EDITAR',
-    oficializar: 'PODE_EDITAR',
-    reprocessar: 'PODE_EDITAR',
+    oficializar: 'PODE_OFICIALIZAR',
+    reprocessar: 'PODE_REPROCESSAR',
     excluir: 'PODE_EXCLUIR',
-    inativar: 'PODE_EXCLUIR'
+    inativar: 'PODE_EXCLUIR',
+    administrar: 'PODE_ADMINISTRAR'
   };
 
   let currentUser = null;
@@ -33,7 +34,10 @@
     if (normalize(currentUser?.perfil).toUpperCase() === 'ADMIN') return true;
     const permission = permissions.get(normalize(page));
     const field = ACTION_FIELD[normalize(action).toLowerCase()] || 'PODE_EDITAR';
-    return Number(permission?.[field] || 0) === 1;
+    const fallbackField = field === 'PODE_CRIAR' || field === 'PODE_OFICIALIZAR' || field === 'PODE_REPROCESSAR'
+      ? 'PODE_EDITAR'
+      : field;
+    return Number(permission?.[field] ?? permission?.[fallbackField] ?? 0) === 1;
   }
 
   function applyDocument(root = document) {

@@ -173,7 +173,7 @@ router.get('/rm/logs', requirePermission('integracao-rm', 'visualizar'), resolve
   }
 });
 
-router.post('/rm/reprocessar', requirePermission('integracao-rm', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/rm/reprocessar', requirePermission('integracao-rm', 'reprocessar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = z.object({
       lojaId: z.number().int().positive(),
@@ -196,7 +196,7 @@ router.post('/rm/reprocessar', requirePermission('integracao-rm', 'editar'), res
   }
 });
 
-router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/oficializar', requirePermission('escalas', 'oficializar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = z.object({
       lojaId: z.number().int().positive(),
@@ -391,7 +391,7 @@ router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'edi
   }
 });
 
-router.post('/', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/', requirePermission('escalas', 'criar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = saveSchema.parse(req.body);
     const ruleErrors = validateEscalaPayload(payload);

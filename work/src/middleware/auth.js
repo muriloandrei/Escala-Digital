@@ -51,8 +51,11 @@ function requireAdmin(req, res, next) {
 function getPermissionField(action) {
   const normalized = String(action || 'visualizar').toLowerCase();
   if (['visualizar', 'listar', 'consultar'].includes(normalized)) return 'PODE_VISUALIZAR';
+  if (['criar', 'novo', 'cadastrar'].includes(normalized)) return 'PODE_CRIAR';
+  if (['oficializar'].includes(normalized)) return 'PODE_OFICIALIZAR';
+  if (['reprocessar'].includes(normalized)) return 'PODE_REPROCESSAR';
   if (['excluir', 'inativar'].includes(normalized)) return 'PODE_EXCLUIR';
-  if (['administrar'].includes(normalized)) return 'ADMIN';
+  if (['administrar'].includes(normalized)) return 'PODE_ADMINISTRAR';
   return 'PODE_EDITAR';
 }
 
@@ -61,10 +64,6 @@ function requirePermission(page, action = 'visualizar') {
     if (req.user?.perfil === 'ADMIN') return next();
 
     const field = getPermissionField(action);
-    if (field === 'ADMIN') {
-      return res.status(403).json({ error: 'Acesso restrito a administradores.' });
-    }
-
     try {
       const permission = await accessService.getPermissaoPerfil(req.user?.perfil, page);
       if (Number(permission?.[field] || 0) === 1) return next();

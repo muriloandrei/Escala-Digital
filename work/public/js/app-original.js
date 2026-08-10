@@ -230,15 +230,15 @@
             ['nav-horarios-padrao', 'horarios-padrao', 'visualizar'],
             ['nav-integracao-rm', 'integracao-rm', 'visualizar'],
             ['nav-settings', 'configuracoes', 'visualizar'],
-            ['goToTimelineBtn', 'escalas', 'editar'],
-            ['novoTurnoCriacaoBtn', 'turnos-secao', 'editar'],
+            ['goToTimelineBtn', 'escalas', 'criar'],
+            ['novoTurnoCriacaoBtn', 'turnos-secao', 'criar'],
             ['gerarTimelineCriacaoBtn', 'escalas', 'editar'],
             ['carregarFuncionariosCriacaoBtn', 'escalas', 'editar'],
             ['salvarDetalheBancoBtn', 'escalas', 'editar'],
             ['salvarEscalaFuncionarioBtn', 'escalas-funcionarios', 'editar'],
             ['distribuirFolgasFuncionarioBtn', 'escalas-funcionarios', 'editar'],
-            ['novoHorarioPadraoBtn', 'horarios-padrao', 'editar'],
-            ['novoTipoDescansoBtn', 'tipos-descanso', 'editar'],
+            ['novoHorarioPadraoBtn', 'horarios-padrao', 'criar'],
+            ['novoTipoDescansoBtn', 'tipos-descanso', 'criar'],
             ['salvarSettingsBtn', 'configuracoes', 'editar']
         ];
 
@@ -728,7 +728,7 @@
         });
         goToTimelineBtn.addEventListener('click', async (e) => {
             e.preventDefault();
-            if (!hasPermission('escalas', 'editar')) return showInfoModal('Usuario sem permissao para criar escalas.', 'error');
+            if (!hasPermission('escalas', 'criar')) return showInfoModal('Usuario sem permissao para criar escalas.', 'error');
             iniciarNovaEscalaRascunho().catch(error => showInfoModal(error.message, 'error'));
         });
         iniciarCriacaoEscalaBtn?.addEventListener('click', async (e) => { e.preventDefault(); iniciarCriacaoEscalaPagina().catch(error => showInfoModal(error.message, 'error')); });
@@ -2804,14 +2804,14 @@
         };
 
         const configurarAcoesAdmin = () => {
-            if (!hasPermission('acessos', 'editar') || novoUsuarioBtn) return;
+            if (!hasPermission('acessos', 'criar') || novoUsuarioBtn) return;
 
             novoUsuarioBtn = document.createElement('button');
             novoUsuarioBtn.type = 'button';
             novoUsuarioBtn.id = 'novoUsuarioBtn';
             novoUsuarioBtn.className = 'action-button';
             novoUsuarioBtn.dataset.permissionPage = 'acessos';
-            novoUsuarioBtn.dataset.permissionAction = 'editar';
+            novoUsuarioBtn.dataset.permissionAction = 'criar';
             novoUsuarioBtn.innerHTML = '<span class="material-symbols-outlined">person_add</span>Novo Usuário';
             carregarAcessosBtn.parentElement.appendChild(novoUsuarioBtn);
             window.EscalaPermissions?.applyDocument(novoUsuarioBtn.parentElement);
@@ -3077,7 +3077,7 @@
         });
 
         novaSecaoBtn?.addEventListener('click', () => {
-            if (!hasPermission('secoes', 'editar')) return showInfoModal('Usuario sem permissao para criar secoes.', 'error');
+            if (!hasPermission('secoes', 'criar')) return showInfoModal('Usuario sem permissao para criar secoes.', 'error');
             window.location.hash = '/secoes/nova';
         });
 
@@ -3170,7 +3170,7 @@
         });
 
         novoTurnoSecaoBtn?.addEventListener('click', () => {
-            if (!hasPermission('turnos-secao', 'editar')) return showInfoModal('Usuario sem permissao para criar turnos por secao.', 'error');
+            if (!hasPermission('turnos-secao', 'criar')) return showInfoModal('Usuario sem permissao para criar turnos por secao.', 'error');
             window.location.hash = '/turnos-secao/novo';
         });
 
@@ -3446,7 +3446,7 @@
                         <td data-label="Acao">${escapeHtml(log.ACAO || '-')}</td>
                         <td data-label="Status"><span class="escala-status-chip ${falha ? 'danger-chip' : 'official-chip'}">${escapeHtml(log.STATUS || '-')}</span></td>
                         <td data-label="Mensagem">${escapeHtml(log.MENSAGEM || '-')}</td>
-                        <td data-label="Acoes" class="actions-cell">${falha && hasPermission('integracao-rm', 'editar') ? `<button class="action-btn-table banco-action rm-reprocessar" data-loja="${escapeHtml(log.LOJA || '')}" data-mes-ref="${escapeHtml(mesRef)}" data-revisao="${escapeHtml(log.REVISAO ?? 0)}"><span class="material-symbols-outlined">sync</span>Reprocessar</button>` : '-'}</td>
+                        <td data-label="Acoes" class="actions-cell">${falha && hasPermission('integracao-rm', 'reprocessar') ? `<button class="action-btn-table banco-action rm-reprocessar" data-loja="${escapeHtml(log.LOJA || '')}" data-mes-ref="${escapeHtml(mesRef)}" data-revisao="${escapeHtml(log.REVISAO ?? 0)}"><span class="material-symbols-outlined">sync</span>Reprocessar</button>` : '-'}</td>
                     </tr>`;
             }).join('') : '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhum log encontrado.</td></tr>';
         };
@@ -3508,7 +3508,7 @@
         horariosPadraoPesquisaInput?.addEventListener('input', renderizarHorariosPadraoTela);
         horariosPadraoStatusFiltro?.addEventListener('change', renderizarHorariosPadraoTela);
         novoHorarioPadraoBtn?.addEventListener('click', () => {
-            if (!hasPermission('horarios-padrao', 'editar')) return showInfoModal('Usuario sem permissao para editar horarios padrao.', 'error');
+            if (!hasPermission('horarios-padrao', horario ? 'editar' : 'criar')) return showInfoModal('Usuario sem permissao para salvar horarios padrao.', 'error');
             abrirModalHorarioPadrao().catch(error => showInfoModal(error.message, 'error'));
         });
         tabelaHorariosPadraoBody?.addEventListener('click', async (event) => {
@@ -3536,7 +3536,7 @@
         tabelaRmLogsBody?.addEventListener('click', async (event) => {
             const button = event.target.closest('.rm-reprocessar');
             if (!button) return;
-            if (!hasPermission('integracao-rm', 'editar')) {
+            if (!hasPermission('integracao-rm', 'reprocessar')) {
                 showInfoModal('Usuario sem permissao para reprocessar integracao RM.', 'error');
                 return;
             }
@@ -3577,7 +3577,7 @@
         tiposDescansoPesquisaInput?.addEventListener('input', renderizarTiposDescansoTela);
         tiposDescansoStatusFiltro?.addEventListener('change', renderizarTiposDescansoTela);
         novoTipoDescansoBtn?.addEventListener('click', () => {
-            if (!hasPermission('tipos-descanso', 'editar')) return showInfoModal('Usuario sem permissao para editar tipos de descanso.', 'error');
+            if (!hasPermission('tipos-descanso', tipo ? 'editar' : 'criar')) return showInfoModal('Usuario sem permissao para salvar tipos de descanso.', 'error');
             abrirModalTipoDescanso().catch(error => showInfoModal(error.message, 'error'));
         });
         tabelaTiposDescansoBody?.addEventListener('click', async (event) => {
@@ -4336,12 +4336,17 @@
             const existentes = new Map((perfil?.PERMISSOES || []).map(p => [String(p.PAGINA), p]));
             return perfilPaginasCache.map((pagina) => {
                 const atual = existentes.get(String(pagina.key)) || {};
+                const podeEditar = Number(atual.PODE_EDITAR ?? 0);
                 return {
                     PAGINA: pagina.key,
                     LABEL: pagina.label,
                     PODE_VISUALIZAR: Number(atual.PODE_VISUALIZAR ?? 1),
-                    PODE_EDITAR: Number(atual.PODE_EDITAR ?? 0),
-                    PODE_EXCLUIR: Number(atual.PODE_EXCLUIR ?? 0)
+                    PODE_CRIAR: Number(atual.PODE_CRIAR ?? podeEditar),
+                    PODE_EDITAR: podeEditar,
+                    PODE_OFICIALIZAR: Number(atual.PODE_OFICIALIZAR ?? podeEditar),
+                    PODE_REPROCESSAR: Number(atual.PODE_REPROCESSAR ?? podeEditar),
+                    PODE_EXCLUIR: Number(atual.PODE_EXCLUIR ?? 0),
+                    PODE_ADMINISTRAR: Number(atual.PODE_ADMINISTRAR ?? 0)
                 };
             });
         };
@@ -4352,8 +4357,12 @@
                 <div class="permission-row" data-page="${escapeHtml(permissao.PAGINA)}">
                     <strong>${escapeHtml(permissao.LABEL)}</strong>
                     <label><input type="checkbox" data-perm="PODE_VISUALIZAR" ${permissao.PODE_VISUALIZAR ? 'checked' : ''}> Visualizar</label>
+                    <label><input type="checkbox" data-perm="PODE_CRIAR" ${permissao.PODE_CRIAR ? 'checked' : ''}> Criar</label>
                     <label><input type="checkbox" data-perm="PODE_EDITAR" ${permissao.PODE_EDITAR ? 'checked' : ''}> Editar</label>
+                    <label><input type="checkbox" data-perm="PODE_OFICIALIZAR" ${permissao.PODE_OFICIALIZAR ? 'checked' : ''}> Oficializar</label>
+                    <label><input type="checkbox" data-perm="PODE_REPROCESSAR" ${permissao.PODE_REPROCESSAR ? 'checked' : ''}> Reprocessar</label>
                     <label><input type="checkbox" data-perm="PODE_EXCLUIR" ${permissao.PODE_EXCLUIR ? 'checked' : ''}> Inativar</label>
+                    <label><input type="checkbox" data-perm="PODE_ADMINISTRAR" ${permissao.PODE_ADMINISTRAR ? 'checked' : ''}> Administrar</label>
                 </div>`).join('') + '</div>';
             const values = await showInputModal({
                 title: perfil ? 'Editar Perfil de Acesso' : 'Novo Perfil de Acesso',
@@ -4374,8 +4383,12 @@
                 PERMISSOES: rows.map(row => ({
                     PAGINA: row.dataset.page,
                     PODE_VISUALIZAR: row.querySelector('[data-perm="PODE_VISUALIZAR"]')?.checked ? 1 : 0,
+                    PODE_CRIAR: row.querySelector('[data-perm="PODE_CRIAR"]')?.checked ? 1 : 0,
                     PODE_EDITAR: row.querySelector('[data-perm="PODE_EDITAR"]')?.checked ? 1 : 0,
-                    PODE_EXCLUIR: row.querySelector('[data-perm="PODE_EXCLUIR"]')?.checked ? 1 : 0
+                    PODE_OFICIALIZAR: row.querySelector('[data-perm="PODE_OFICIALIZAR"]')?.checked ? 1 : 0,
+                    PODE_REPROCESSAR: row.querySelector('[data-perm="PODE_REPROCESSAR"]')?.checked ? 1 : 0,
+                    PODE_EXCLUIR: row.querySelector('[data-perm="PODE_EXCLUIR"]')?.checked ? 1 : 0,
+                    PODE_ADMINISTRAR: row.querySelector('[data-perm="PODE_ADMINISTRAR"]')?.checked ? 1 : 0
                 }))
             };
             if (perfil) {
@@ -4392,10 +4405,11 @@
             const container = document.getElementById('rolesSettingsContainer');
             if (!container) return;
             await carregarPerfisAcesso();
+            const canCreateRoles = hasPermission('roles', 'criar');
             const canEditRoles = hasPermission('roles', 'editar');
             const canInactivateRoles = hasPermission('roles', 'inativar');
             const rows = perfisAcessoCache.map((perfil) => {
-                const permissoesAtivas = (perfil.PERMISSOES || []).filter(p => Number(p.PODE_VISUALIZAR) || Number(p.PODE_EDITAR) || Number(p.PODE_EXCLUIR)).length;
+                const permissoesAtivas = (perfil.PERMISSOES || []).filter(p => Number(p.PODE_VISUALIZAR) || Number(p.PODE_CRIAR) || Number(p.PODE_EDITAR) || Number(p.PODE_OFICIALIZAR) || Number(p.PODE_REPROCESSAR) || Number(p.PODE_EXCLUIR) || Number(p.PODE_ADMINISTRAR)).length;
                 return `
                     <tr>
                         <td data-label="Perfil de Acesso">${escapeHtml(perfil.NOME || '')}</td>
@@ -4417,8 +4431,10 @@
                     <thead><tr><th>Perfil de Acesso</th><th>Descrição</th><th>Status</th><th>Permissões</th><th>Ações</th></tr></thead>
                     <tbody>${rows || '<tr><td colspan="5" class="text-center text-gray-500 py-8">Nenhum perfil encontrado.</td></tr>'}</tbody>
                 </table>`;
-            if (!canEditRoles) {
+            if (!canCreateRoles) {
                 container.querySelector('#novoPerfilAcessoBtn')?.remove();
+            }
+            if (!canEditRoles) {
                 container.querySelectorAll('.editar-perfil-acesso').forEach(button => button.remove());
             }
             if (!canInactivateRoles) {
@@ -4435,7 +4451,7 @@
             const edit = event.target.closest('.editar-perfil-acesso');
             const toggle = event.target.closest('.toggle-perfil-acesso');
             try {
-                if (novo && !hasPermission('roles', 'editar')) {
+                if (novo && !hasPermission('roles', 'criar')) {
                     showInfoModal('Usuario sem permissao para criar perfis.', 'error');
                     return;
                 }
@@ -4847,9 +4863,9 @@
                 const status = String(escala.STATUS || '-').toUpperCase();
                 const finalizada = status === 'FINALIZADA';
                 const oficializada = Number(escala.OFICIALIZADA || 0) === 1;
-                const canEditEscalas = hasPermission('escalas', 'editar');
+                const canOfficializeEscalas = hasPermission('escalas', 'oficializar');
                 const canInactivateEscalas = hasPermission('escalas', 'inativar');
-                const oficializarAction = !canEditEscalas
+                const oficializarAction = !canOfficializeEscalas
                     ? ''
                     : finalizada
                     ? '<button class="action-btn-table banco-action" disabled title="Escala finalizada"><span class="material-symbols-outlined">lock</span>Finalizada</button>'
@@ -5561,8 +5577,9 @@
         };
 
         const abrirModalTurnoSecaoCriacao = async (turno = null) => {
-            if (!hasPermission('turnos-secao', 'editar')) {
-                showInfoModal('Usuario sem permissao para editar turnos por secao.', 'error');
+            const action = turno ? 'editar' : 'criar';
+            if (!hasPermission('turnos-secao', action)) {
+                showInfoModal('Usuario sem permissao para salvar turnos por secao.', 'error');
                 return;
             }
             const loja = criacaoEscalaLoja?.value || lojaEscalaSelect.value;
@@ -5897,7 +5914,7 @@
                 if (escalasFiltroAno) escalasFiltroAno.value = String(dataRef.getFullYear());
             }
             if (criarButton) {
-                if (!hasPermission('escalas', 'editar')) {
+                if (!hasPermission('escalas', 'criar')) {
                     showInfoModal('Usuario sem permissao para criar escalas.', 'error');
                     return;
                 }
@@ -5906,7 +5923,7 @@
             }
 
             if (oficializarButton) {
-                if (!hasPermission('escalas', 'editar')) {
+                if (!hasPermission('escalas', 'oficializar')) {
                     showInfoModal('Usuario sem permissao para oficializar escalas.', 'error');
                     return;
                 }

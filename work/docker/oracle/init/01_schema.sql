@@ -215,14 +215,22 @@ create table SGN_ESC_PERFIL_PERMISSAO (
   PERFIL_ID number(15) not null,
   PAGINA varchar2(60) not null,
   PODE_VISUALIZAR number(1) default 1 not null,
+  PODE_CRIAR number(1) default 0 not null,
   PODE_EDITAR number(1) default 0 not null,
+  PODE_OFICIALIZAR number(1) default 0 not null,
+  PODE_REPROCESSAR number(1) default 0 not null,
   PODE_EXCLUIR number(1) default 0 not null,
+  PODE_ADMINISTRAR number(1) default 0 not null,
   DT_HR_INCL date default sysdate not null,
   constraint SGN_ESC_PERFIL_PERM_PK primary key (PERFIL_ID, PAGINA),
   constraint SGN_ESC_PERFIL_PERM_FK foreign key (PERFIL_ID) references SGN_ESC_PERFIL (PERFIL_ID),
   constraint SGN_ESC_PERFIL_VIS_CK check (PODE_VISUALIZAR in (0, 1)),
+  constraint SGN_ESC_PERFIL_CRIAR_CK check (PODE_CRIAR in (0, 1)),
   constraint SGN_ESC_PERFIL_EDIT_CK check (PODE_EDITAR in (0, 1)),
-  constraint SGN_ESC_PERFIL_EXCL_CK check (PODE_EXCLUIR in (0, 1))
+  constraint SGN_ESC_PERFIL_OFIC_CK check (PODE_OFICIALIZAR in (0, 1)),
+  constraint SGN_ESC_PERFIL_REPROC_CK check (PODE_REPROCESSAR in (0, 1)),
+  constraint SGN_ESC_PERFIL_EXCL_CK check (PODE_EXCLUIR in (0, 1)),
+  constraint SGN_ESC_PERFIL_ADMIN_CK check (PODE_ADMINISTRAR in (0, 1))
 );
 
 create sequence SGN_ESC_LOJA_SEQ start with 100 increment by 1 nocache;

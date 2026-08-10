@@ -25,8 +25,12 @@ const usuarioCreateSchema = z.object({
 const permissaoSchema = z.object({
   PAGINA: z.string().min(1).max(60),
   PODE_VISUALIZAR: z.number().int().min(0).max(1).optional(),
+  PODE_CRIAR: z.number().int().min(0).max(1).optional(),
   PODE_EDITAR: z.number().int().min(0).max(1).optional(),
-  PODE_EXCLUIR: z.number().int().min(0).max(1).optional()
+  PODE_OFICIALIZAR: z.number().int().min(0).max(1).optional(),
+  PODE_REPROCESSAR: z.number().int().min(0).max(1).optional(),
+  PODE_EXCLUIR: z.number().int().min(0).max(1).optional(),
+  PODE_ADMINISTRAR: z.number().int().min(0).max(1).optional()
 }).strict();
 
 const perfilSchema = z.object({
@@ -47,7 +51,7 @@ router.get('/perfis', requirePermission('roles', 'visualizar'), async (req, res,
   }
 });
 
-router.post('/perfis', requirePermission('roles', 'editar'), async (req, res, next) => {
+router.post('/perfis', requirePermission('roles', 'criar'), async (req, res, next) => {
   try {
     const data = perfilSchema.parse(req.body);
     const perfil = await accessService.createPerfilAcesso(data);
@@ -94,7 +98,7 @@ router.get('/usuarios', requirePermission('acessos', 'visualizar'), async (req, 
   }
 });
 
-router.post('/usuarios', requirePermission('acessos', 'editar'), async (req, res, next) => {
+router.post('/usuarios', requirePermission('acessos', 'criar'), async (req, res, next) => {
   try {
     const data = usuarioCreateSchema.parse(req.body);
     const usuario = await accessService.createUsuarioAcesso({

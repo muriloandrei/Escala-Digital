@@ -166,6 +166,7 @@ sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260630_
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260701_add_tipo_descanso_classificacao.sql
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260807_rm_rules_horarios.sql
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260810_add_funcionario_cpf.sql
+sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260810_add_permissoes_granulares.sql
 ```
 
 A migration `20260807_rm_rules_horarios.sql` cria:
@@ -176,6 +177,8 @@ A migration `20260807_rm_rules_horarios.sql` cria:
 - permissoes das novas telas para perfis existentes.
 
 A migration `20260810_add_funcionario_cpf.sql` adiciona `SGN_ESC_FUNCIONARIO.CPF`. Preencha esse campo antes de habilitar a integracao RM, pois a oficializacao consulta o funcionario no RM pelo CPF para obter `CODCOLIGADA` e `CODTABFOLGA`.
+
+A migration `20260810_add_permissoes_granulares.sql` adiciona os campos `PODE_CRIAR`, `PODE_OFICIALIZAR`, `PODE_REPROCESSAR` e `PODE_ADMINISTRAR` na tabela de permissao. O codigo continua compativel com bancos ainda nao migrados, mas a tela de Perfil de Acesso so persistira essas permissoes novas apos a migration.
 
 ## 8. Teste manual antes do servico
 

@@ -35,8 +35,67 @@ const PERFIL_PAGES = [
   { key: 'configuracoes', label: 'Configuracoes' }
 ];
 
+const BASE_PERMISSION_FIELDS = ['PODE_VISUALIZAR', 'PODE_EDITAR', 'PODE_EXCLUIR'];
+const EXTRA_PERMISSION_FIELDS = ['PODE_CRIAR', 'PODE_OFICIALIZAR', 'PODE_REPROCESSAR', 'PODE_ADMINISTRAR'];
+const ALL_PERMISSION_FIELDS = [...BASE_PERMISSION_FIELDS, ...EXTRA_PERMISSION_FIELDS];
+const permissionColumnsCache = new Map();
+
 function isMissingObjectError(error) {
   return error?.errorNum === 942 || error?.code === 'ORA-00942';
+}
+
+async function getTableColumns(connection, tableName) {
+  const key = String(tableName || '').toUpperCase();
+  if (permissionColumnsCache.has(key)) return permissionColumnsCache.get(key);
+  const result = await connection.execute(
+    `select column_name from user_tab_columns where table_name = :tableName`,
+    { tableName: key },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  const columns = new Set(result.rows.map((row) => pick(row, 'COLUMN_NAME', 'column_name')));
+  permissionColumnsCache.set(key, columns);
+  return columns;
+}
+
+async function getPermissionColumns(connection) {
+  const columns = await getTableColumns(connection, 'SGN_ESC_PERFIL_PERMISSAO');
+  return ALL_PERMISSION_FIELDS.filter((field) => columns.has(field));
+}
+
+function buildPermissionSelect(permissionColumns) {
+  return permissionColumns
+    .map((field) => `pp.${field.toLowerCase()}`)
+    .join(', ');
+}
+
+function normalizePermission(rawPermission = {}, perfilNome = '') {
+  const isAdmin = String(perfilNome || '').toUpperCase() === 'ADMIN';
+  if (isAdmin) {
+    return {
+      PAGINA: rawPermission.PAGINA,
+      PODE_VISUALIZAR: 1,
+      PODE_CRIAR: 1,
+      PODE_EDITAR: 1,
+      PODE_OFICIALIZAR: 1,
+      PODE_REPROCESSAR: 1,
+      PODE_EXCLUIR: 1,
+      PODE_ADMINISTRAR: 1
+    };
+  }
+  const editar = Number(rawPermission.PODE_EDITAR ?? (isAdmin ? 1 : 0));
+  const visualizar = Number(rawPermission.PODE_VISUALIZAR ?? 1);
+  const excluir = Number(rawPermission.PODE_EXCLUIR ?? (isAdmin ? 1 : 0));
+
+  return {
+    PAGINA: rawPermission.PAGINA,
+    PODE_VISUALIZAR: visualizar,
+    PODE_CRIAR: Number(rawPermission.PODE_CRIAR ?? editar),
+    PODE_EDITAR: editar,
+    PODE_OFICIALIZAR: Number(rawPermission.PODE_OFICIALIZAR ?? editar),
+    PODE_REPROCESSAR: Number(rawPermission.PODE_REPROCESSAR ?? editar),
+    PODE_EXCLUIR: excluir,
+    PODE_ADMINISTRAR: Number(rawPermission.PODE_ADMINISTRAR ?? (isAdmin ? 1 : 0))
+  };
 }
 
 function canSeeUser(requestUser, lojas) {
@@ -151,9 +210,11 @@ async function createUsuarioAcesso({ login, nome, password, perfil, status = 'A'
 async function listPerfisAcesso() {
   return withConnection(async (connection) => {
     try {
+      const permissionColumns = await getPermissionColumns(connection);
+      const permissionSelect = buildPermissionSelect(permissionColumns);
       const result = await connection.execute(
         `select p.perfil_id, p.nome, p.descr, p.status, p.dt_hr_incl,
-                pp.pagina, pp.pode_visualizar, pp.pode_editar, pp.pode_excluir
+                pp.pagina${permissionSelect ? `, ${permissionSelect}` : ''}
          from sgn_esc_perfil p
          left join sgn_esc_perfil_permissao pp on pp.perfil_id = p.perfil_id
          order by p.nome, pp.pagina`,
@@ -175,12 +236,13 @@ async function listPerfisAcesso() {
         }
         const pagina = pick(row, "PAGINA", "pagina");
         if (pagina) {
-          map.get(String(id)).PERMISSOES.push({
+          const permission = {
             PAGINA: pagina,
-            PODE_VISUALIZAR: Number(pick(row, "PODE_VISUALIZAR", "pode_visualizar") || 0),
-            PODE_EDITAR: Number(pick(row, "PODE_EDITAR", "pode_editar") || 0),
-            PODE_EXCLUIR: Number(pick(row, "PODE_EXCLUIR", "pode_excluir") || 0)
+          };
+          permissionColumns.forEach((field) => {
+            permission[field] = Number(pick(row, field, field.toLowerCase()) || 0);
           });
+          map.get(String(id)).PERMISSOES.push(normalizePermission(permission, pick(row, "NOME", "nome")));
         }
       });
       return { perfis: Array.from(map.values()).map(completarPermissoesPerfil), paginas: PERFIL_PAGES };
@@ -200,13 +262,13 @@ function completarPermissoesPerfil(perfil) {
     ...perfil,
     PERMISSOES: PERFIL_PAGES.map((pagina) => {
       const atual = existentes.get(pagina.key);
-      if (atual) return atual;
-      return {
+      if (atual) return normalizePermission(atual, perfil.NOME);
+      return normalizePermission({
         PAGINA: pagina.key,
         PODE_VISUALIZAR: 1,
         PODE_EDITAR: isAdmin ? 1 : 0,
         PODE_EXCLUIR: isAdmin ? 1 : 0
-      };
+      }, perfil.NOME);
     })
   };
 }
@@ -228,18 +290,22 @@ async function createPerfilAcesso(data) {
 }
 
 async function savePerfilPermissoesInConnection(connection, perfilId, permissoes) {
+  const permissionColumns = await getPermissionColumns(connection);
   await connection.execute("delete from sgn_esc_perfil_permissao where perfil_id = :perfilId", { perfilId }, { autoCommit: false });
   if (!Array.isArray(permissoes) || permissoes.length === 0) return;
+  const insertColumns = ['perfil_id', 'pagina', ...permissionColumns.map((field) => field.toLowerCase()), 'dt_hr_incl'];
+  const insertValues = [':perfilId', ':pagina', ...permissionColumns.map((field) => `:${field.toLowerCase()}`), 'sysdate'];
   await connection.executeMany(
-    `insert into sgn_esc_perfil_permissao (perfil_id, pagina, pode_visualizar, pode_editar, pode_excluir, dt_hr_incl)
-     values (:perfilId, :pagina, :visualizar, :editar, :excluir, sysdate)`,
-    permissoes.map((permissao) => ({
-      perfilId,
-      pagina: permissao.PAGINA,
-      visualizar: permissao.PODE_VISUALIZAR ? 1 : 0,
-      editar: permissao.PODE_EDITAR ? 1 : 0,
-      excluir: permissao.PODE_EXCLUIR ? 1 : 0
-    })),
+    `insert into sgn_esc_perfil_permissao (${insertColumns.join(', ')})
+     values (${insertValues.join(', ')})`,
+    permissoes.map((permissao) => {
+      const normalized = normalizePermission(permissao);
+      return {
+        perfilId,
+        pagina: normalized.PAGINA,
+        ...Object.fromEntries(permissionColumns.map((field) => [field.toLowerCase(), normalized[field] ? 1 : 0]))
+      };
+    }),
     { autoCommit: false }
   );
 }
@@ -265,34 +331,34 @@ async function updatePerfilAcesso(perfilId, data) {
 async function getPermissaoPerfil(perfilNome, pagina) {
   const normalizedPerfil = String(perfilNome || '').trim().toUpperCase();
   if (normalizedPerfil === 'ADMIN') {
-    return { PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 1, PODE_EXCLUIR: 1 };
+    return normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 1, PODE_EXCLUIR: 1 }, 'ADMIN');
   }
 
   const { perfis } = await listPerfisAcesso();
   const perfil = perfis.find((item) => String(item.NOME || '').trim().toUpperCase() === normalizedPerfil);
   if (!perfil) {
-    return { PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 0, PODE_EXCLUIR: 0 };
+    return normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 0, PODE_EXCLUIR: 0 });
   }
 
   return (perfil.PERMISSOES || []).find((permissao) => String(permissao.PAGINA) === String(pagina))
-    || { PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 0, PODE_EXCLUIR: 0 };
+    || normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 0, PODE_EXCLUIR: 0 });
 }
 
 async function getPermissoesPerfil(perfilNome) {
   const normalizedPerfil = String(perfilNome || '').trim().toUpperCase();
   if (normalizedPerfil === 'ADMIN') {
-    return PERFIL_PAGES.map((pagina) => ({
+    return PERFIL_PAGES.map((pagina) => normalizePermission({
       PAGINA: pagina.key,
       LABEL: pagina.label,
       PODE_VISUALIZAR: 1,
       PODE_EDITAR: 1,
       PODE_EXCLUIR: 1
-    }));
+    }, 'ADMIN'));
   }
 
   const { perfis } = await listPerfisAcesso();
   const perfil = perfis.find((item) => String(item.NOME || '').trim().toUpperCase() === normalizedPerfil);
-  return perfil?.PERMISSOES || PERFIL_PAGES.map((pagina) => ({
+  return perfil?.PERMISSOES || PERFIL_PAGES.map((pagina) => normalizePermission({
     PAGINA: pagina.key,
     LABEL: pagina.label,
     PODE_VISUALIZAR: 1,
