@@ -243,13 +243,19 @@
                 <div class="table-card" id="criacaoSecoesCard">
                     <div class="table-card-header creation-card-header">
                         <div>
-                            <h2>Se&ccedil;&otilde;es da escala</h2>
-                            <p class="table-card-subtitle">Marque ou desmarque se&ccedil;&otilde;es antes de finalizar a escala.</p>
+                            <h2>Se&ccedil;&otilde;es e Turno</h2>
+                            <p class="table-card-subtitle">Marque, revise ou cadastre turnos antes de finalizar a escala.</p>
                         </div>
-                        <button type="button" class="action-button" id="gerarTimelineCriacaoBtn">
-                            <span class="material-symbols-outlined">timeline</span>
-                            Atualizar Timeline
-                        </button>
+                        <div class="header-actions">
+                            <button type="button" class="action-button secondary" id="novoTurnoCriacaoBtn">
+                                <span class="material-symbols-outlined">add</span>
+                                Turnos por Se&ccedil;&atilde;o
+                            </button>
+                            <button type="button" class="action-button" id="gerarTimelineCriacaoBtn">
+                                <span class="material-symbols-outlined">timeline</span>
+                                Atualizar Timeline
+                            </button>
+                        </div>
                     </div>
                     <div id="criacaoSecoesLista" class="section-choice-grid"></div>
                 </div>
@@ -555,7 +561,6 @@
             <div id="roles-page" class="hidden">
                 <header class="main-header"><h1>Perfil de Acesso</h1></header>
                 <div class="table-card">
-                    <div class="table-card-header"><h2>Perfis cadastrados</h2><p class="table-card-subtitle">Resumo dos perfis cadastrados e lojas associadas.</p></div>
                     <div id="rolesSettingsContainer"></div>
                 </div>
             </div>
@@ -649,7 +654,7 @@
                 <div class="flex items-center gap-2 md:gap-4 no-print flex-wrap">
                      <span id="detalhadaMesAno" class="text-sm font-semibold text-gray-700"></span>
                      <button id="validarEscalaBtn" class="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Validar Escala</button>
-                     <button id="salvarEscalaBtn" class="text-sm bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Salvar Escala</button>
+                     <button id="salvarEscalaBtn" class="hidden text-sm bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Salvar Escala</button>
                     <button id="imprimirDetalhadaBtn" class="text-sm bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Imprimir Escala Detalhada</button>
                     <button id="closeDetalhadaModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl font-bold">&times;</button>
                 </div>

@@ -99,6 +99,7 @@
         const turnoSecaoFormHrSai1 = document.getElementById('turnoSecaoFormHrSai1');
         const turnoSecaoFormHrEnt2 = document.getElementById('turnoSecaoFormHrEnt2');
         const turnoSecaoFormHrSai2 = document.getElementById('turnoSecaoFormHrSai2');
+        const novoTurnoCriacaoBtn = document.getElementById('novoTurnoCriacaoBtn');
         const detalheMesSelect = document.getElementById('detalheMesSelect');
         const detalheFuncionarioSelect = document.getElementById('detalheFuncionarioSelect');
         const voltarEscalasBtn = document.getElementById('voltarEscalasBtn');
@@ -748,6 +749,8 @@
         let escalaCarregadaParaVisualizacao = null;
         let detailedScaleHasBeenGenerated = false;
         let distribuicaoFolgasBloqueada = false;
+        let distribuicaoEdicaoAtiva = false;
+        let escalaDetalhadaValidada = false;
         let currentLoadedScale = null;
         let funcionariosLojaCache = [];
         let ausenciasLojaCache = [];
@@ -928,6 +931,60 @@
             return errors;
         };
 
+        const calcularHorarioCompletoPorEntrada = (entrada1) => {
+            const inicio = timeToMinutes(entrada1);
+            if (Number.isNaN(inicio)) return null;
+            return {
+                HR_ENT1: minutesToTime(inicio),
+                HR_SAI1: minutesToTime(inicio + 240),
+                HR_ENT2: minutesToTime(inicio + 310),
+                HR_SAI2: minutesToTime(inicio + 598)
+            };
+        };
+
+        const setSalvarEscalaDisponivel = (disponivel) => {
+            escalaDetalhadaValidada = !!disponivel;
+            salvarEscalaBtn?.classList.toggle('hidden', !escalaDetalhadaValidada);
+        };
+
+        const limparCriticasDetalhada = () => {
+            detalhadaModalBody.querySelectorAll('.critical-status-chip').forEach(chip => chip.remove());
+            detalhadaModalBody.querySelectorAll('.colaborador-escala-detalhada').forEach(colabDiv => {
+                delete colabDiv.dataset.criticas;
+            });
+        };
+
+        const registrarCriticasColaborador = (colabDiv, criticas) => {
+            if (!colabDiv || !criticas?.length) return;
+            const header = colabDiv.querySelector('.header-info');
+            const title = header?.querySelector('h3');
+            if (!header || !title) return;
+            header.classList.add('detailed-employee-header');
+            colabDiv.dataset.criticas = JSON.stringify(criticas);
+            let chip = header.querySelector('.critical-status-chip');
+            if (!chip) {
+                chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'critical-status-chip';
+                chip.textContent = 'CRITICA';
+                header.appendChild(chip);
+            }
+        };
+
+        const aplicarCriticasDetalhada = (errors) => {
+            limparCriticasDetalhada();
+            if (!errors.length) return;
+            detalhadaModalBody.querySelectorAll('.colaborador-escala-detalhada').forEach(colabDiv => {
+                const nome = colabDiv.querySelector('h3')?.textContent || '';
+                const criticas = errors.filter(error => String(error).startsWith(nome + ':') || String(error).startsWith(nome + ' no dia'));
+                registrarCriticasColaborador(colabDiv, criticas);
+            });
+        };
+
+        const invalidarValidacaoDetalhada = () => {
+            setSalvarEscalaDisponivel(false);
+        };
+
         const hideInfoModal = () => { infoModal.classList.add('hidden'); };
         
         const renderizarTimelineCompleta = (targetElementId = 'timeline-content', customDadosEscala = dadosEscala) => {
@@ -979,7 +1036,7 @@
 
 
         const renderizarCabecalho = (config, duracaoTotalTimeline) => { let markersHtml = ''; for (let min = config.inicioTimeline; min <= config.fimTimeline; min += config.intervaloMarcacao) { const percentLeft = ((min - config.inicioTimeline) / duracaoTotalTimeline) * 100; markersHtml += `<div class="absolute text-xs text-gray-500" style="left: ${percentLeft}%;"><span class="transform -translate-x-1/2 inline-block">${minutesToTime(min)}</span></div>`; } return `<div class="relative z-10 mb-3"><div class="flex items-center h-10"><div class="w-48 flex-shrink-0 pr-4"></div><div class="flex-1 h-full relative border-b-2 border-gray-200">${markersHtml}</div></div></div>`; };
-        const renderizarCorpo = (config, duracaoTotalTimeline, customDadosEscala, targetElementId) => { let bodyHtml = '<div>'; if (customDadosEscala.length === 0) { bodyHtml += `<p class="text-center text-gray-500 mt-4">Nenhum turno adicionado.</p>`; } else { customDadosEscala.forEach((escala, index) => { const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); let barsHtml = ''; const createBar = (startMin, endMin, color) => { if (endMin <= startMin) return ''; const duration = endMin - startMin; const leftPercent = ((startMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (leftPercent < 0 || widthPercent <= 0) return ''; return `<div class="absolute h-full ${color} rounded" style="left: ${leftPercent}%; width: ${widthPercent}%;"></div>`; }; if (inicioIntervaloMin < fimIntervaloMin && inicioIntervaloMin > inicioEscalaMin && fimIntervaloMin < fimEscalaMin) { barsHtml += createBar(inicioEscalaMin, inicioIntervaloMin, 'bg-green-500'); barsHtml += createBar(inicioIntervaloMin, fimIntervaloMin, 'bg-yellow-500'); barsHtml += createBar(fimIntervaloMin, fimEscalaMin, 'bg-green-500'); } else { barsHtml += createBar(inicioEscalaMin, fimEscalaMin, 'bg-green-500'); } let tempoInfoHtml = `<span class="text-xs text-gray-500 block">${escala.inicio} -<span class="text-gray-400"> ${escala.inicioIntervalo} - ${escala.fimIntervalo}</span> - ${escala.fim}</span>`; let actionsHtml = ''; if (targetElementId === 'timeline-content') { actionsHtml = `<div class="row-actions hidden mt-2 space-x-2"><button class="action-btn edit-btn" data-index="${index}">Editar</button><button class="action-btn delete-btn" data-index="${index}">Excluir</button></div>`; } else if (targetElementId === 'criacaoTimelineContent') { actionsHtml = `<div class="row-actions creation-row-actions mt-2"><button class="action-btn delete-btn" data-index="${index}"><span class="material-symbols-outlined">remove_circle</span>Remover secao</button></div>`; } bodyHtml += `<div class="timeline-row flex items-center py-1 ${targetElementId === 'timeline-content' ? 'cursor-pointer' : ''}"><div class="w-48 flex-shrink-0 pr-4 flex flex-col justify-center"><div><span class="font-bold text-gray-700">${escala.quantidade} Colab.</span><span class="text-xs text-gray-600 block">${escapeHtml(escala.secaoNome || "Sem secao")}</span>${tempoInfoHtml}</div>${actionsHtml}</div><div class="flex-1 h-8 bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${barsHtml}</div></div>`; }); } bodyHtml += `</div>`; return bodyHtml; };
+        const renderizarCorpo = (config, duracaoTotalTimeline, customDadosEscala, targetElementId) => { let bodyHtml = '<div>'; if (customDadosEscala.length === 0) { bodyHtml += `<p class="text-center text-gray-500 mt-4">Nenhum turno adicionado.</p>`; } else { customDadosEscala.forEach((escala, index) => { const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); let barsHtml = ''; const createBar = (startMin, endMin, color) => { if (endMin <= startMin) return ''; const duration = endMin - startMin; const leftPercent = ((startMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (leftPercent < 0 || widthPercent <= 0) return ''; return `<div class="absolute h-full ${color} rounded" style="left: ${leftPercent}%; width: ${widthPercent}%;"></div>`; }; if (inicioIntervaloMin < fimIntervaloMin && inicioIntervaloMin > inicioEscalaMin && fimIntervaloMin < fimEscalaMin) { barsHtml += createBar(inicioEscalaMin, inicioIntervaloMin, 'bg-green-500'); barsHtml += createBar(inicioIntervaloMin, fimIntervaloMin, 'bg-yellow-500'); barsHtml += createBar(fimIntervaloMin, fimEscalaMin, 'bg-green-500'); } else { barsHtml += createBar(inicioEscalaMin, fimEscalaMin, 'bg-green-500'); } let tempoInfoHtml = `<span class="text-xs text-gray-500 block">${escala.inicio} -<span class="text-gray-400"> ${escala.inicioIntervalo} - ${escala.fimIntervalo}</span> - ${escala.fim}</span>`; let actionsHtml = ''; if (targetElementId === 'timeline-content') { actionsHtml = `<div class="row-actions hidden mt-2 space-x-2"><button class="action-btn edit-btn" data-index="${index}">Editar</button><button class="action-btn delete-btn" data-index="${index}">Excluir</button></div>`; } else if (targetElementId === 'criacaoTimelineContent') { actionsHtml = `<div class="row-actions creation-row-actions mt-2"><button class="action-btn edit-btn" data-index="${index}"><span class="material-symbols-outlined">edit</span>Editar turno</button><button class="action-btn delete-btn" data-index="${index}"><span class="material-symbols-outlined">remove_circle</span>Remover secao</button></div>`; } bodyHtml += `<div class="timeline-row flex items-center py-1 ${targetElementId === 'timeline-content' ? 'cursor-pointer' : ''}"><div class="w-48 flex-shrink-0 pr-4 flex flex-col justify-center"><div><span class="font-bold text-gray-700">${escala.quantidade} Colab.</span><span class="text-xs text-gray-600 block">${escapeHtml(escala.secaoNome || "Sem secao")}</span>${tempoInfoHtml}</div>${actionsHtml}</div><div class="flex-1 h-8 bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${barsHtml}</div></div>`; }); } bodyHtml += `</div>`; return bodyHtml; };
         const renderizarLinhaDeSoma = (config, duracaoTotalTimeline, customDadosEscala) => { if (customDadosEscala.length === 0) return ''; const perfilCarga = new Array(duracaoTotalTimeline + 1).fill(0); customDadosEscala.forEach(escala => { const quantidade = parseInt(escala.quantidade); const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); for (let min = inicioEscalaMin; min < fimEscalaMin; min++) { const isBreak = (inicioIntervaloMin < fimIntervaloMin && min >= inicioIntervaloMin && min < fimIntervaloMin); if (!isBreak) { const index = min - config.inicioTimeline; if (index >= 0 && index < perfilCarga.length) perfilCarga[index] += quantidade; } } }); let summaryHtml = ''; let lastCount = -1; let blockStartMin = config.inicioTimeline; for (let i = 0; i <= duracaoTotalTimeline; i++) { const currentCount = perfilCarga[i] || 0; const currentMin = config.inicioTimeline + i; if (currentCount !== lastCount && i > 0) { const duration = currentMin - blockStartMin; const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (widthPercent > 0) { const color = lastCount > 0 ? 'bg-blue-600' : 'bg-transparent'; summaryHtml += `<div class="absolute h-full ${color} flex items-center justify-center" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount > 0 ? lastCount : ''}</span></div>`; } blockStartMin = currentMin; } lastCount = currentCount; } const duration = (config.inicioTimeline + duracaoTotalTimeline) - blockStartMin; const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (widthPercent > 0) { const color = lastCount > 0 ? 'bg-blue-600' : 'bg-transparent'; summaryHtml += `<div class="absolute h-full ${color} flex items-center justify-center" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount > 0 ? lastCount : ''}</span></div>`; } return `<div class="summary-row border-t-2 border-gray-300 mt-4 pt-4"><div class="flex items-center my-2 h-10"><div class="w-48 flex-shrink-0 text-center pr-4"><span class="font-bold text-lg text-gray-700">Total</span><span class="text-xs text-gray-500 block">Ativos</span></div><div class="flex-1 h-full bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${summaryHtml}</div></div></div>`; };
         
         const manipularEnvioFormulario = () => { let errors = []; const secaoOption = secaoTurnoSelect?.selectedOptions?.[0]; const novaEscala = { secaoId: secaoTurnoSelect?.value || '', secaoNome: secaoOption?.textContent || '', quantidade: quantidadeInput.value, inicio: inicioEscalaInput.value, fim: fimEscalaInput.value, inicioIntervalo: inicioIntervaloInput.value, fimIntervalo: fimIntervaloInput.value }; if (!novaEscala.secaoId) errors.push("Selecione uma secao com turno cadastrado."); if (!novaEscala.quantidade || !novaEscala.inicio || !novaEscala.fim) errors.push("A secao selecionada precisa ter quantidade, entrada e saida cadastradas."); if (timeToMinutes(novaEscala.fim) <= timeToMinutes(novaEscala.inicio)) errors.push("A saida do turno deve ser maior que a entrada."); const quantidadeNova = parseInt(novaEscala.quantidade, 10) || 0; const totalProjetado = contarTurnosCriados(modoEdicao.ativo ? modoEdicao.index : null) + quantidadeNova; if (funcionariosLojaCache.length > 0 && totalProjetado > funcionariosLojaCache.length) errors.push(`A loja possui ${funcionariosLojaCache.length} funcionario(s) carregado(s). Reduza a quantidade para nao ultrapassar o total disponivel.`); errors = errors.concat(validarTurnoSimples(novaEscala)); if (errors.length > 0) { showInfoModal(errors, 'error'); return; } if(modoEdicao.ativo) { dadosEscala[modoEdicao.index] = novaEscala; } else { dadosEscala.push(novaEscala); } dadosEscala.sort((a, b) => timeToMinutes(a.inicio) - timeToMinutes(b.inicio)); cancelarModoEdicao(); renderizarTimelineCompleta('timeline-content'); atualizarContadoresHome(); fecharModalTurno(); };
@@ -1130,7 +1187,7 @@
             atualizarContagemEsqueleto();
         };
         
-        const gerarEscalaDetalhada = () => { escalaCarregadaId = null; const skeletonRows = document.querySelectorAll('#tabela-esqueleto tbody tr'); if (skeletonRows.length === 0) { showInfoModal("Gere o esqueleto da escala primeiro.", "error"); return; } const ano = parseInt(anoSelect.value); const mes = parseInt(mesSelect.value); const diasNoMes = new Date(ano, mes + 1, 0).getDate(); const diasDaSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']; let allDetailsHtml = ''; skeletonRows.forEach(row => { const colabIndex = parseInt(row.dataset.colabIndex); const escfuncId = row.dataset.escfuncId || ''; const chapa = row.dataset.chapa || ''; const escsecaoId = row.dataset.escsecaoId || ''; const escfuncaoId = row.dataset.escfuncaoId || ''; const colaboradorNome = row.querySelector('td[data-name]').dataset.name; const escala = colaboradorShifts[colabIndex]; if (!escala) return; const folgas = new Set(); row.querySelectorAll('.escala-cell').forEach(cell => { if (cell.textContent.toUpperCase() === 'F') { folgas.add(parseInt(cell.dataset.dia)); } }); const intervaloMin = timeToMinutes(escala.fimIntervalo) - timeToMinutes(escala.inicioIntervalo); const hIntervalo = minutesToTime(intervaloMin); const hTrabalhadasMin = (timeToMinutes(escala.fim) - timeToMinutes(escala.inicio)) - intervaloMin; const hTrabalhadas = minutesToTime(hTrabalhadasMin); let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${colabIndex}" data-escfunc-id="${escfuncId}" data-chapa="${chapa}" data-escsecao-id="${escsecaoId}" data-escfuncao-id="${escfuncaoId}" data-turno-id="${escala.turnoId || ''}"><div class="header-info"><h3 class="font-bold text-lg" contenteditable="true">${colaboradorNome}</h3></div><table class="w-full"><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}">${i + 1}</th>`).join('')}</tr></thead><tbody>`; const fields = [ { label: 'ENT.', value: escala.inicio, key: 'inicio', editable: true }, { label: 'SAÍ.INT.', value: escala.inicioIntervalo, key: 'inicioIntervalo', editable: true }, { label: 'INTER.', value: hIntervalo, key: 'intervalo', editable: false }, { label: 'RET.INT.', value: escala.fimIntervalo, key: 'fimIntervalo', editable: true }, { label: 'SAÍ.', value: escala.fim, key: 'fim', editable: true }, { label: 'H.TRAB', value: hTrabalhadas, key: 'trabalhadas', bold: true, editable: false }, ]; fields.forEach(field => { detailTable += `<tr class="${field.bold ? 'font-bold bg-gray-50' : ''}" data-key="${field.key}"><td>${field.label}</td>`; for (let dia = 1; dia <= diasNoMes; dia++) { const isDomingo = new Date(ano, mes, dia).getDay() === 0; const isFolga = folgas.has(dia); const cellContent = isFolga ? 'F' : field.value; const isEditable = field.editable && !isFolga; const editableAttribute = isEditable ? 'contenteditable="true"' : ''; let bgColor = ''; if (isFolga) { bgColor = isDomingo ? 'bg-orange-500 text-white' : 'bg-red-100'; } else if (isDomingo) { bgColor = 'bg-yellow-100'; } detailTable += `<td class="${bgColor}" ${editableAttribute}>${cellContent}</td>`; } detailTable += `</tr>`; }); detailTable += `</tbody></table></div>`; allDetailsHtml += detailTable; }); detalhadaModalBody.innerHTML = allDetailsHtml; detalhadaMesAno.textContent = `${mesSelect.options[mesSelect.selectedIndex].text} / ${ano}`; if (detalhadaModal.classList.contains('hidden')) { detalhadaModal.classList.remove('hidden'); } detailedScaleHasBeenGenerated = true; gerarEscalaDetalhadaBtn.textContent = 'Ver Escala Detalhada'; };
+        const gerarEscalaDetalhada = () => { escalaCarregadaId = null; const skeletonRows = document.querySelectorAll('#tabela-esqueleto tbody tr'); if (skeletonRows.length === 0) { showInfoModal("Gere o esqueleto da escala primeiro.", "error"); return; } const ano = parseInt(anoSelect.value); const mes = parseInt(mesSelect.value); const diasNoMes = new Date(ano, mes + 1, 0).getDate(); const diasDaSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']; let allDetailsHtml = ''; skeletonRows.forEach(row => { const colabIndex = parseInt(row.dataset.colabIndex); const escfuncId = row.dataset.escfuncId || ''; const chapa = row.dataset.chapa || ''; const escsecaoId = row.dataset.escsecaoId || ''; const escfuncaoId = row.dataset.escfuncaoId || ''; const colaboradorNome = row.querySelector('td[data-name]').dataset.name; const escala = colaboradorShifts[colabIndex]; if (!escala) return; const folgas = new Set(); row.querySelectorAll('.escala-cell').forEach(cell => { if (cell.textContent.toUpperCase() === 'F') { folgas.add(parseInt(cell.dataset.dia)); } }); const intervaloMin = timeToMinutes(escala.fimIntervalo) - timeToMinutes(escala.inicioIntervalo); const hIntervalo = minutesToTime(intervaloMin); const hTrabalhadasMin = (timeToMinutes(escala.fim) - timeToMinutes(escala.inicio)) - intervaloMin; const hTrabalhadas = minutesToTime(hTrabalhadasMin); let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${colabIndex}" data-escfunc-id="${escfuncId}" data-chapa="${chapa}" data-escsecao-id="${escsecaoId}" data-escfuncao-id="${escfuncaoId}" data-turno-id="${escala.turnoId || ''}"><div class="header-info"><h3 class="font-bold text-lg">${colaboradorNome}</h3></div><table class="w-full"><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}"><button type="button" class="detailed-day-button detalhada-dia-edit" data-dia="${i + 1}">${i + 1}</button></th>`).join('')}</tr></thead><tbody>`; const fields = [ { label: 'ENT.', value: escala.inicio, key: 'inicio', editable: true }, { label: 'SAÍ.INT.', value: escala.inicioIntervalo, key: 'inicioIntervalo', editable: true }, { label: 'INTER.', value: hIntervalo, key: 'intervalo', editable: false }, { label: 'RET.INT.', value: escala.fimIntervalo, key: 'fimIntervalo', editable: true }, { label: 'SAÍ.', value: escala.fim, key: 'fim', editable: true }, { label: 'H.TRAB', value: hTrabalhadas, key: 'trabalhadas', bold: true, editable: false }, ]; fields.forEach(field => { detailTable += `<tr class="${field.bold ? 'font-bold bg-gray-50' : ''}" data-key="${field.key}"><td>${field.label}</td>`; for (let dia = 1; dia <= diasNoMes; dia++) { const isDomingo = new Date(ano, mes, dia).getDay() === 0; const isFolga = folgas.has(dia); const cellContent = isFolga ? 'F' : field.value; let bgColor = ''; if (isFolga) { bgColor = isDomingo ? 'bg-orange-500 text-white' : 'bg-red-100'; } else if (isDomingo) { bgColor = 'bg-yellow-100'; } detailTable += `<td class="${bgColor}">${cellContent}</td>`; } detailTable += `</tr>`; }); detailTable += `</tbody></table></div>`; allDetailsHtml += detailTable; }); detalhadaModalBody.innerHTML = allDetailsHtml; detalhadaMesAno.textContent = `${mesSelect.options[mesSelect.selectedIndex].text} / ${ano}`; if (detalhadaModal.classList.contains('hidden')) { detalhadaModal.classList.remove('hidden'); } detailedScaleHasBeenGenerated = true; gerarEscalaDetalhadaBtn.textContent = 'Ver Escala Detalhada'; setSalvarEscalaDisponivel(false); limparCriticasDetalhada(); };
         
         // =========================================================================
         // FUNCAO DE IMPRESSAO DA TIMELINE (VERSAO CORRIGIDA E MELHORADA)
@@ -1271,6 +1328,7 @@
 
         const definirBloqueioDistribuicao = (bloqueada) => {
             distribuicaoFolgasBloqueada = !!bloqueada;
+            distribuicaoEdicaoAtiva = false;
             const table = document.getElementById('tabela-esqueleto');
             table?.classList.toggle('is-readonly', distribuicaoFolgasBloqueada);
             table?.querySelectorAll('.collaborator-select').forEach(select => { select.disabled = distribuicaoFolgasBloqueada; });
@@ -1280,19 +1338,57 @@
             if (autoDistribuirFolgasBtn) autoDistribuirFolgasBtn.disabled = distribuicaoFolgasBloqueada;
             gerarEscalaDetalhadaBtn?.classList.toggle('hidden', !distribuicaoFolgasBloqueada);
             editarDistribuicaoBtn?.classList.toggle('hidden', !distribuicaoFolgasBloqueada);
+            if (editarDistribuicaoBtn) editarDistribuicaoBtn.innerHTML = '<span class="material-symbols-outlined align-middle text-base">edit</span> Editar';
+            autoDistribuirFolgasBtn?.classList.remove('hidden');
             esqueletoModal?.classList.toggle('distribution-locked', distribuicaoFolgasBloqueada);
         };
 
         const liberarEdicaoDistribuicao = () => {
-            definirBloqueioDistribuicao(false);
+            distribuicaoFolgasBloqueada = false;
+            distribuicaoEdicaoAtiva = true;
+            const table = document.getElementById('tabela-esqueleto');
+            table?.classList.remove('is-readonly');
+            table?.querySelectorAll('.collaborator-select').forEach(select => { select.disabled = false; });
+            criacaoSecoesLista?.querySelectorAll('input[type="checkbox"]').forEach(input => { input.disabled = false; });
+            document.querySelectorAll('#criacaoTimelineContent .delete-btn').forEach(button => { button.disabled = false; });
+            if (gerarTimelineCriacaoBtn) gerarTimelineCriacaoBtn.disabled = false;
+            autoDistribuirFolgasBtn?.classList.add('hidden');
+            if (editarDistribuicaoBtn) {
+                editarDistribuicaoBtn.classList.remove('hidden');
+                editarDistribuicaoBtn.innerHTML = '<span class="material-symbols-outlined align-middle text-base">save</span> Salvar';
+            }
+            gerarEscalaDetalhadaBtn?.classList.add('hidden');
             detailedScaleHasBeenGenerated = false;
             detalhadaModalBody.innerHTML = '';
             detalhadaModal.classList.add('hidden');
             gerarEscalaDetalhadaBtn.textContent = 'Gerar Escala Detalhada';
+            invalidarValidacaoDetalhada();
             showInfoModal('Edição liberada. Distribua novamente as folgas 5x2 antes de gerar a escala detalhada.', 'info');
         };
 
-        editarDistribuicaoBtn?.addEventListener('click', liberarEdicaoDistribuicao);
+        const salvarEdicaoDistribuicao = () => {
+            const semFuncionario = Array.from(document.querySelectorAll('#tabela-esqueleto tbody tr')).filter(row => !row.dataset.escfuncId || !row.dataset.chapa);
+            if (semFuncionario.length) {
+                showInfoModal('Selecione todos os funcionarios antes de salvar a distribuicao.', 'error');
+                return;
+            }
+            definirBloqueioDistribuicao(true);
+            gerarEscalaDetalhada();
+            const errors = executarValidacaoDetalhada();
+            if (errors.length) {
+                showInfoModal(errors, 'error');
+                return;
+            }
+            showInfoModal('Distribuicao salva e escala detalhada validada.', 'success');
+        };
+
+        editarDistribuicaoBtn?.addEventListener('click', () => {
+            if (distribuicaoFolgasBloqueada && !distribuicaoEdicaoAtiva) {
+                liberarEdicaoDistribuicao();
+                return;
+            }
+            salvarEdicaoDistribuicao();
+        });
 
         const resetSkeletonModalState = () => {
             escalaCarregadaParaVisualizacao = null;
@@ -1379,6 +1475,21 @@
             }
         });
         
+        const executarValidacaoDetalhada = () => {
+            let allErrors = [];
+            allErrors = allErrors.concat(validarDescansos());
+            allErrors = allErrors.concat(validarDomingosDetalhada());
+            allErrors = allErrors.concat(validarDiasConsecutivos());
+            allErrors = allErrors.concat(validarJornada());
+            aplicarCriticasDetalhada(allErrors);
+            setSalvarEscalaDisponivel(allErrors.length === 0);
+            return allErrors;
+        };
+
+        validarEscalaBtn.addEventListener('click', () => {
+            executarValidacaoDetalhada();
+        });
+
         const validarSequenciaParaTraz = (row, folgaIndex) => {
             const maxDias = parseInt(regraMaxDiasConsecutivosInput.value);
             const nomeColab = row.querySelector('.collaborator-name-span').textContent;
@@ -1554,8 +1665,103 @@
             return errors;
         };
 
+        const atualizarDiaDetalhada = (colabDiv, dia, dadosDia) => {
+            const rows = {
+                inicio: colabDiv.querySelector('tbody tr[data-key="inicio"]'),
+                inicioIntervalo: colabDiv.querySelector('tbody tr[data-key="inicioIntervalo"]'),
+                intervalo: colabDiv.querySelector('tbody tr[data-key="intervalo"]'),
+                fimIntervalo: colabDiv.querySelector('tbody tr[data-key="fimIntervalo"]'),
+                fim: colabDiv.querySelector('tbody tr[data-key="fim"]'),
+                trabalhadas: colabDiv.querySelector('tbody tr[data-key="trabalhadas"]')
+            };
+            const isDomingo = new Date(Number(anoSelect.value), Number(mesSelect.value), dia).getDay() === 0;
+            const setCell = (row, value, descanso) => {
+                const cell = row?.cells[dia];
+                if (!cell) return;
+                cell.textContent = value;
+                cell.classList.remove('bg-red-100', 'bg-orange-500', 'bg-yellow-100', 'text-white');
+                if (descanso) cell.classList.add(isDomingo ? 'bg-orange-500' : 'bg-red-100');
+                if (descanso && isDomingo) cell.classList.add('text-white');
+                if (!descanso && isDomingo) cell.classList.add('bg-yellow-100');
+            };
+            if (dadosDia.tipo === 'DESCANSO') {
+                ['inicio', 'inicioIntervalo', 'intervalo', 'fimIntervalo', 'fim', 'trabalhadas'].forEach(key => setCell(rows[key], dadosDia.sigla, true));
+                return;
+            }
+            const intervalo = timeToMinutes(dadosDia.HR_ENT2) - timeToMinutes(dadosDia.HR_SAI1);
+            const trabalhadas = (timeToMinutes(dadosDia.HR_SAI2) - timeToMinutes(dadosDia.HR_ENT1)) - intervalo;
+            setCell(rows.inicio, dadosDia.HR_ENT1, false);
+            setCell(rows.inicioIntervalo, dadosDia.HR_SAI1, false);
+            setCell(rows.intervalo, minutesToTime(intervalo), false);
+            setCell(rows.fimIntervalo, dadosDia.HR_ENT2, false);
+            setCell(rows.fim, dadosDia.HR_SAI2, false);
+            setCell(rows.trabalhadas, minutesToTime(trabalhadas), false);
+        };
+
+        const abrirModalEdicaoDiaDetalhada = async (colabDiv, dia) => {
+            const inicioCell = colabDiv.querySelector('tbody tr[data-key="inicio"]')?.cells[dia];
+            if (!inicioCell) return;
+            if (!tiposDescansoCache.length) await carregarTiposDescansoCache(false);
+            const descansoAtual = !/^\d{2}:\d{2}$/.test(inicioCell.textContent.trim());
+            const tipoOptions = tiposDescansoCache.filter(tipo => tipo.STATUS !== 'I').map(tipo => ({ value: tipo.SIGLA, label: tipo.DESCR + ' (' + tipo.SIGLA + ')' }));
+            const values = await showInputModal({
+                title: 'Editar dia ' + dia,
+                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-3xl flex flex-col employee-day-modal',
+                inputs: [
+                    { label: 'Tipo do dia', type: 'choice-group', id: 'DET_TIPO_DIA', value: descansoAtual ? 'DESCANSO' : 'TRABALHO', options: [{ value: 'TRABALHO', label: 'Trabalho' }, { value: 'DESCANSO', label: 'Descanso' }], required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Justificativa da mudanca', type: 'textarea', id: 'DET_JUSTIFICATIVA', rows: 3, required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Tipo de descanso', type: 'select', id: 'DET_DESCANSO', value: 'F', options: tipoOptions.length ? tipoOptions : [{ value: 'F', label: 'Folga (F)' }], dependsOn: 'DET_TIPO_DIA', showWhen: 'DESCANSO', required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Entrada 1', type: 'time', id: 'DET_HR_ENT1', value: descansoAtual ? '08:00' : inicioCell.textContent.trim(), dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
+                    { label: 'Saida 1', type: 'time', id: 'DET_HR_SAI1', value: '', dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
+                    { label: 'Entrada 2', type: 'time', id: 'DET_HR_ENT2', value: '', dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
+                    { label: 'Saida 2', type: 'time', id: 'DET_HR_SAI2', value: '', dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true }
+                ],
+                confirmText: 'Salvar Dia',
+                onRender: (body) => {
+                    const ent1 = body.querySelector('#DET_HR_ENT1');
+                    const preencher = () => {
+                        const calculado = calcularHorarioCompletoPorEntrada(ent1.value);
+                        if (!calculado) return;
+                        body.querySelector('#DET_HR_SAI1').value = calculado.HR_SAI1;
+                        body.querySelector('#DET_HR_ENT2').value = calculado.HR_ENT2;
+                        body.querySelector('#DET_HR_SAI2').value = calculado.HR_SAI2;
+                    };
+                    ent1?.addEventListener('input', preencher);
+                    preencher();
+                }
+            });
+            if (!values) return;
+            if (values.DET_TIPO_DIA === 'DESCANSO') {
+                atualizarDiaDetalhada(colabDiv, dia, { tipo: 'DESCANSO', sigla: String(values.DET_DESCANSO || 'F').toUpperCase() });
+            } else {
+                const turno = { HR_ENT1: values.DET_HR_ENT1, HR_SAI1: values.DET_HR_SAI1, HR_ENT2: values.DET_HR_ENT2, HR_SAI2: values.DET_HR_SAI2 };
+                const erros = validarTurnoCadastroSecao(turno);
+                if (erros.length) {
+                    showInfoModal(erros, 'error');
+                    return;
+                }
+                atualizarDiaDetalhada(colabDiv, dia, { tipo: 'TRABALHO', ...turno });
+            }
+            invalidarValidacaoDetalhada();
+            registrarCriticasColaborador(colabDiv, ['Ajuste manual pendente de Validar Escala.']);
+        };
+
 
         // --- LOGICA DE EDICAO, SELECAO E COPIAR/COLAR ---
+
+        detalhadaModalBody.addEventListener('click', (event) => {
+            const criticalChip = event.target.closest('.critical-status-chip');
+            if (criticalChip) {
+                const colabDiv = criticalChip.closest('.colaborador-escala-detalhada');
+                const criticas = JSON.parse(colabDiv?.dataset.criticas || '[]');
+                showInfoModal(criticas.length ? criticas : 'Nenhuma critica pendente.', criticas.length ? 'error' : 'info');
+                return;
+            }
+            const dayButton = event.target.closest('.detalhada-dia-edit');
+            if (!dayButton) return;
+            const colabDiv = dayButton.closest('.colaborador-escala-detalhada');
+            abrirModalEdicaoDiaDetalhada(colabDiv, Number(dayButton.dataset.dia)).catch(error => showInfoModal(error.message, 'error'));
+        });
 
         detalhadaModalBody.addEventListener('input', (e) => {
             const targetCell = e.target;
@@ -2248,6 +2454,39 @@
                         return;
                     }
 
+                    if (input.type === 'choice-group') {
+                        const wrapper = document.createElement('div');
+                        wrapper.id = input.id;
+                        wrapper.dataset.inputType = 'choice-group';
+                        wrapper.dataset.requiredOriginal = input.required ? '1' : '0';
+                        wrapper.className = 'choice-group mt-2';
+                        Object.defineProperty(wrapper, 'value', {
+                            get() { return wrapper.dataset.value || ''; }
+                        });
+                        (input.options || []).forEach(option => {
+                            const row = document.createElement('label');
+                            row.className = 'choice-pill';
+                            const radio = document.createElement('input');
+                            radio.type = 'radio';
+                            radio.name = input.id;
+                            radio.value = option.value;
+                            radio.checked = String(option.value) === String(input.value || '');
+                            if (radio.checked) wrapper.dataset.value = option.value;
+                            radio.addEventListener('change', () => {
+                                wrapper.dataset.value = radio.value;
+                                wrapper.dispatchEvent(new Event('change'));
+                            });
+                            const span = document.createElement('span');
+                            span.textContent = option.label;
+                            row.appendChild(radio);
+                            row.appendChild(span);
+                            wrapper.appendChild(row);
+                        });
+                        if (!wrapper.dataset.value && input.options?.[0]) wrapper.dataset.value = input.options[0].value;
+                        appendField(input, wrapper);
+                        return;
+                    }
+
                     if (input.type === 'textarea') {
                         const textareaEl = setInputBaseProps(document.createElement('textarea'), input);
                         textareaEl.rows = input.rows || 3;
@@ -2275,8 +2514,9 @@
                     });
                 };
 
-                inputModalBody.querySelectorAll('select').forEach(select => select.addEventListener('change', applyConditionalFields));
+                inputModalBody.querySelectorAll('select, [data-input-type="choice-group"]').forEach(select => select.addEventListener('change', applyConditionalFields));
                 applyConditionalFields();
+                if (typeof config.onRender === 'function') config.onRender(inputModalBody);
 
                 const hideModal = () => {
                     inputModal.classList.add('hidden');
@@ -2296,6 +2536,11 @@
                             const checked = Array.from(inputEl.querySelectorAll('input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
                             if (input.required && checked.length === 0) allValid = false;
                             values[input.id] = checked;
+                            return;
+                        }
+                        if (input.type === 'choice-group') {
+                            if (input.required && !inputEl.value) allValid = false;
+                            values[input.id] = inputEl.value;
                             return;
                         }
                         if (inputEl.required && !String(inputEl.value || '').trim()) allValid = false;
@@ -3432,22 +3677,36 @@
                 title:'Editar dia '+formatarDataTabela(dia.DT)+(dia.AUSENCIA_OBRIGATORIA ? ' - ausencia obrigatoria' : ''),
                 panelClass:'bg-white rounded-lg shadow-xl w-11/12 max-w-5xl flex flex-col employee-day-modal',
                 inputs:[
-                    {label:'Aplicar do dia',type:'number',id:'IND_APLICAR_DE',value:String(numeroDia),required:true},
-                    {label:'Aplicar ate o dia',type:'number',id:'IND_APLICAR_ATE',value:String(numeroDia),required:true},
-                    {label:'Tipo do dia',type:'select',id:'IND_TIPO_DIA',value:descansoAtual?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true,wrapperClass:'employee-modal-span-2'},
+                    {label:'Tipo do dia',type:'choice-group',id:'IND_TIPO_DIA',value:descansoAtual?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true,wrapperClass:'employee-modal-span-2'},
                     {label:'Justificativa da mudan\u00e7a',type:'textarea',id:'IND_JUSTIFICATIVA',value:dia.JUSTIFICATIVA_ALTERACAO||'',required:true,rows:3,placeholder:'Descreva o motivo da altera\u00e7\u00e3o deste dia.',wrapperClass:'employee-modal-span-2'},
                     {label:'Tipo de descanso',type:'select',id:'IND_TIPO_DESCANSO',value:descansoAtual?getValorDescanso(dia):'F',options:tipoOptions.length?tipoOptions:[{value:'F',label:'Folga (F)'}],dependsOn:'IND_TIPO_DIA',showWhen:'DESCANSO',required:true,wrapperClass:'employee-modal-span-2'},
-                    {label:'Modo de trabalho',type:'select',id:'IND_MODO_TRABALHO',value:'MANUAL',options:[{value:'TURNO',label:'Selecionar turno'},{value:'PADRAO',label:'Horario padrao'},{value:'MANUAL',label:'Inserir manual'}],dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true,wrapperClass:'employee-modal-span-2'},
-                    {label:'Turno da se??o',type:'select',id:'IND_TURNO_ID',value:turnoOptions[0]?.value || '',options:turnoOptions.length?turnoOptions:[{value:'',label:'Nenhum turno cadastrado'}],dependsOn:'IND_MODO_TRABALHO',showWhen:'TURNO',required:true,wrapperClass:'employee-modal-span-2'},
-                    {label:'Horario padrao',type:'select',id:'IND_HORARIO_PADRAO_ID',value:horarioPadraoOptions[0]?.value || '',options:horarioPadraoOptions.length?horarioPadraoOptions:[{value:'',label:'Nenhum horario padrao cadastrado'}],dependsOn:'IND_MODO_TRABALHO',showWhen:'PADRAO',required:true,wrapperClass:'employee-modal-span-2'},
-                    {label:'Entrada 1',type:'time',id:'IND_HR_ENT1',value:descansoAtual?'':dia.HR_ENT1||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true},
-                    {label:'Sa?da 1',type:'time',id:'IND_HR_SAI1',value:descansoAtual?'':dia.HR_SAI1||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true},
-                    {label:'Entrada 2',type:'time',id:'IND_HR_ENT2',value:descansoAtual?'':dia.HR_ENT2||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true},
-                    {label:'Sa?da 2',type:'time',id:'IND_HR_SAI2',value:descansoAtual?'':dia.HR_SAI2||'',dependsOn:'IND_MODO_TRABALHO',showWhen:'MANUAL',required:true}
+                    {label:'Entrada 1',type:'time',id:'IND_HR_ENT1',value:descansoAtual?'08:00':dia.HR_ENT1||'08:00',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
+                    {label:'Saida 1',type:'time',id:'IND_HR_SAI1',value:descansoAtual?'':dia.HR_SAI1||'',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
+                    {label:'Entrada 2',type:'time',id:'IND_HR_ENT2',value:descansoAtual?'':dia.HR_ENT2||'',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
+                    {label:'Saida 2',type:'time',id:'IND_HR_SAI2',value:descansoAtual?'':dia.HR_SAI2||'',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true}
                 ],
-                confirmText:'Aplicar'
+                confirmText:'Salvar Dia',
+                onRender: (body) => {
+                    const ent1 = body.querySelector('#IND_HR_ENT1');
+                    const preencher = () => {
+                        const calculado = calcularHorarioCompletoPorEntrada(ent1.value);
+                        if (!calculado) return;
+                        body.querySelector('#IND_HR_SAI1').value = calculado.HR_SAI1;
+                        body.querySelector('#IND_HR_ENT2').value = calculado.HR_ENT2;
+                        body.querySelector('#IND_HR_SAI2').value = calculado.HR_SAI2;
+                    };
+                    ent1?.addEventListener('input', preencher);
+                    preencher();
+                }
             });
             if(!values)return;
+            if (values.IND_TIPO_DIA === 'TRABALHO') {
+                const erros = validarTurnoCadastroSecao({ HR_ENT1: values.IND_HR_ENT1, HR_SAI1: values.IND_HR_SAI1, HR_ENT2: values.IND_HR_ENT2, HR_SAI2: values.IND_HR_SAI2 });
+                if (erros.length) {
+                    showInfoModal(erros, 'error');
+                    return;
+                }
+            }
             aplicarEdicaoDiasFuncionario(numeroDia, values);
         });
 
@@ -3893,7 +4152,7 @@
             }).join('');
             container.innerHTML = `
                 <div class="table-card-header creation-card-header inner-card-header">
-                    <div><h2>Permissoes por perfil</h2><p class="table-card-subtitle">Defina visualizacao, edicao e inativacao por pagina.</p></div>
+                    <p class="table-card-subtitle">Defina visualizacao, edicao e inativacao por pagina.</p>
                     <button type="button" class="action-button" id="novoPerfilAcessoBtn"><span class="material-symbols-outlined">add</span>Novo Perfil</button>
                 </div>
                 <table class="data-table">
@@ -3976,7 +4235,7 @@
             let allDetailsHtml = '';
 
             dados.forEach((colaborador, index) => {
-                let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${index}" data-escfunc-id="${colaborador.escfuncId || ''}" data-chapa="${colaborador.chapa || ''}" data-escsecao-id="${colaborador.escsecaoId || ''}" data-escfuncao-id="${colaborador.escfuncaoId || ''}"><div class="header-info"><h3 class="font-bold text-lg" contenteditable="true">${colaborador.nome}</h3></div><table><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}">${i + 1}</th>`).join('')}</tr></thead><tbody>`;
+                let detailTable = `<div class="colaborador-escala-detalhada" data-colab-index="${index}" data-escfunc-id="${colaborador.escfuncId || ''}" data-chapa="${colaborador.chapa || ''}" data-escsecao-id="${colaborador.escsecaoId || ''}" data-escfuncao-id="${colaborador.escfuncaoId || ''}"><div class="header-info"><h3 class="font-bold text-lg">${colaborador.nome}</h3></div><table><thead><tr class="bg-gray-50"><th>D.SEM</th>${Array.from({length: diasNoMes}, (_, i) => `<th>${diasDaSemana[new Date(ano, mes, i + 1).getDay()]}</th>`).join('')}</tr><tr class="bg-gray-50"><th>DIA</th>${Array.from({length: diasNoMes}, (_, i) => `<th data-day-col="${i + 1}"><button type="button" class="detailed-day-button detalhada-dia-edit" data-dia="${i + 1}">${i + 1}</button></th>`).join('')}</tr></thead><tbody>`;
                 const fields = [ 'inicio', 'inicioIntervalo', 'intervalo', 'fimIntervalo', 'fim', 'trabalhadas' ];
                 const labels = { inicio: 'ENT.', inicioIntervalo: 'SAÍ.INT.', intervalo: 'INTER.', fimIntervalo: 'RET.INT.', fim: 'SAÍ.', trabalhadas: 'H.TRAB' };
                 const isBold = { trabalhadas: true };
@@ -3994,7 +4253,7 @@
                         } else if (isDomingo) {
                             bgColor = 'bg-yellow-100';
                         }
-                        const editableAttr = (key !== 'intervalo' && key !== 'trabalhadas') ? 'contenteditable="true"' : '';
+                        const editableAttr = '';
                         detailTable += `<td class="${bgColor}" ${editableAttr}>${cellContent}</td>`;
                     }
                     detailTable += `</tr>`;
@@ -4132,14 +4391,15 @@
                     escsecaoTurnoId: colaborador.escsecaoTurnoId || null,
                     dias: Object.keys(colaborador.turnos || {}).map(dia => {
                         const turno = colaborador.turnos[dia] || {};
-                        const isFolga = String(turno.inicio || '').trim().toUpperCase() === 'F';
+                        const programacaoDia = String(turno.inicio || '').trim().toUpperCase();
+                        const isFolga = !/^\d{2}:\d{2}$/.test(programacaoDia);
                         return {
                             data: formatDateForDb(escalaSalva.ano, escalaSalva.mes, parseInt(dia, 10)),
                             hrEnt1: isFolga ? null : (turno.inicio || null),
                             hrSai1: isFolga ? null : (turno.inicioIntervalo || null),
                             hrEnt2: isFolga ? null : (turno.fimIntervalo || null),
                             hrSai2: isFolga ? null : (turno.fim || null),
-                            programacao: isFolga ? 'F' : 'TRB'
+                            programacao: isFolga ? (programacaoDia || 'F') : 'TRB'
                         };
                     })
                 }));
@@ -4613,32 +4873,54 @@
             }
             const dia = (escalaDetalheAtual.dias || []).find(item => String(item.ESCPROGDIA_ID || '') === String(escprogdiaId));
             if (!escprogId || !escprogdiaId || !dia) return;
+            if (!tiposDescansoCache.length) await carregarTiposDescansoCache(false);
+            const tipoOptions = tiposDescansoCache.filter(tipo => tipo.STATUS !== 'I').map(tipo => ({ value: tipo.SIGLA, label: tipo.DESCR + ' (' + tipo.SIGLA + ')' }));
+            const descansoAtual = isProgramacaoDescanso(dia.PROGRAMACAO);
             const values = await showInputModal({
                 title: 'Editar dia ' + formatarDataTabela(dia.DT),
+                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-3xl flex flex-col employee-day-modal',
                 inputs: [
-                    { label: 'Programação', type: 'select', id: 'PROGRAMACAO_TAB', value: dia.PROGRAMACAO || 'TRB', options: [
-                        { value: 'TRB', label: 'Trabalho' },
-                        { value: 'F', label: 'Folga' }
-                    ], required: true },
-                    { label: 'Entrada 1', type: 'time', id: 'HR_ENT1_TAB', value: dia.HR_ENT1 === 'F' ? '' : dia.HR_ENT1 || '' },
-                    { label: 'Saída 1', type: 'time', id: 'HR_SAI1_TAB', value: dia.HR_SAI1 === 'F' ? '' : dia.HR_SAI1 || '' },
-                    { label: 'Entrada 2', type: 'time', id: 'HR_ENT2_TAB', value: dia.HR_ENT2 === 'F' ? '' : dia.HR_ENT2 || '' },
-                    { label: 'Saída 2', type: 'time', id: 'HR_SAI2_TAB', value: dia.HR_SAI2 === 'F' ? '' : dia.HR_SAI2 || '' }
+                    { label: 'Tipo do dia', type: 'choice-group', id: 'BANCO_TIPO_DIA', value: descansoAtual ? 'DESCANSO' : 'TRABALHO', options: [{ value: 'TRABALHO', label: 'Trabalho' }, { value: 'DESCANSO', label: 'Descanso' }], required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Justificativa da mudanca', type: 'textarea', id: 'BANCO_JUSTIFICATIVA', rows: 3, required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Tipo de descanso', type: 'select', id: 'BANCO_DESCANSO', value: descansoAtual ? getValorDescanso(dia) : 'F', options: tipoOptions.length ? tipoOptions : [{ value: 'F', label: 'Folga (F)' }], dependsOn: 'BANCO_TIPO_DIA', showWhen: 'DESCANSO', required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Entrada 1', type: 'time', id: 'BANCO_HR_ENT1', value: descansoAtual ? '08:00' : dia.HR_ENT1 || '08:00', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
+                    { label: 'Saida 1', type: 'time', id: 'BANCO_HR_SAI1', value: descansoAtual ? '' : dia.HR_SAI1 || '', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
+                    { label: 'Entrada 2', type: 'time', id: 'BANCO_HR_ENT2', value: descansoAtual ? '' : dia.HR_ENT2 || '', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
+                    { label: 'Saida 2', type: 'time', id: 'BANCO_HR_SAI2', value: descansoAtual ? '' : dia.HR_SAI2 || '', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true }
                 ],
-                confirmText: 'Salvar dia'
+                confirmText: 'Salvar dia',
+                onRender: (body) => {
+                    const ent1 = body.querySelector('#BANCO_HR_ENT1');
+                    const preencher = () => {
+                        const calculado = calcularHorarioCompletoPorEntrada(ent1.value);
+                        if (!calculado) return;
+                        body.querySelector('#BANCO_HR_SAI1').value = calculado.HR_SAI1;
+                        body.querySelector('#BANCO_HR_ENT2').value = calculado.HR_ENT2;
+                        body.querySelector('#BANCO_HR_SAI2').value = calculado.HR_SAI2;
+                    };
+                    ent1?.addEventListener('input', preencher);
+                    preencher();
+                }
             });
             if (!values) return;
             try {
-                const programacao = String(values.PROGRAMACAO_TAB || 'TRB').trim().toUpperCase();
-                const folga = programacao === 'F';
+                const folga = values.BANCO_TIPO_DIA === 'DESCANSO';
+                const programacao = folga ? String(values.BANCO_DESCANSO || 'F').trim().toUpperCase() : 'TRB';
+                if (!folga) {
+                    const erros = validarTurnoCadastroSecao({ HR_ENT1: values.BANCO_HR_ENT1, HR_SAI1: values.BANCO_HR_SAI1, HR_ENT2: values.BANCO_HR_ENT2, HR_SAI2: values.BANCO_HR_SAI2 });
+                    if (erros.length) {
+                        showInfoModal(erros, 'error');
+                        return;
+                    }
+                }
                 await apiRequest('/api/escalas/' + encodeURIComponent(escprogId) + '/dias/' + encodeURIComponent(escprogdiaId), {
                     method: 'PATCH',
                     body: JSON.stringify({
                         PROGRAMACAO: programacao,
-                        HR_ENT1: folga ? 'F' : values.HR_ENT1_TAB || dia.HR_ENT1 || '00:00',
-                        HR_SAI1: folga ? 'F' : values.HR_SAI1_TAB || dia.HR_SAI1 || '00:00',
-                        HR_ENT2: folga ? 'F' : values.HR_ENT2_TAB || dia.HR_ENT2 || '00:00',
-                        HR_SAI2: folga ? 'F' : values.HR_SAI2_TAB || dia.HR_SAI2 || '00:00'
+                        HR_ENT1: folga ? programacao : values.BANCO_HR_ENT1,
+                        HR_SAI1: folga ? programacao : values.BANCO_HR_SAI1,
+                        HR_ENT2: folga ? programacao : values.BANCO_HR_ENT2,
+                        HR_SAI2: folga ? programacao : values.BANCO_HR_SAI2
                     })
                 });
                 const secaoAtiva = escalaDetalheAtual.secaoAtiva;
@@ -4806,11 +5088,72 @@
                 const id = String(turno.ESCSECAOTURNO_ID || turno.ESCSECAO_ID || '');
                 const codigo = turno.COD_SECAO ? turno.COD_SECAO + ' - ' : '';
                 const periodo = (turno.HR_ENT1 || '') + ' - ' + (turno.HR_SAI1 || '') + ' / ' + (turno.HR_ENT2 || '') + ' - ' + (turno.HR_SAI2 || '');
-                const label = document.createElement('label');
-                label.className = 'section-choice-card';
-                label.innerHTML = '<input type="checkbox" value="' + escapeHtml(id) + '" checked><strong>' + escapeHtml(codigo + (turno.DESCR || 'Secao')) + '</strong><span>' + escapeHtml(periodo) + '</span><small>' + escapeHtml(turno.QTDE_COLABORADORES || 1) + ' colaborador(es)</small>';
-                criacaoSecoesLista.appendChild(label);
+                const card = document.createElement('article');
+                card.className = 'section-choice-card';
+                card.innerHTML = '<label class="section-choice-main"><input type="checkbox" value="' + escapeHtml(id) + '" checked><strong>' + escapeHtml(codigo + (turno.DESCR || 'Secao')) + '</strong></label><span>' + escapeHtml(periodo) + '</span><small>' + escapeHtml(turno.QTDE_COLABORADORES || 1) + ' colaborador(es)</small><button type="button" class="action-btn-table banco-action editar-turno-criacao" data-id="' + escapeHtml(turno.ESCSECAOTURNO_ID || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button>';
+                criacaoSecoesLista.appendChild(card);
             });
+        };
+
+        const sincronizarDadosEscalaComTurnosCache = () => {
+            dadosEscala = dadosEscala.map(item => {
+                const turno = turnosSecaoCache.find(cache => String(cache.ESCSECAOTURNO_ID || cache.ESCSECAO_ID) === String(item.turnoId || item.secaoId));
+                return turno ? criarTimelineTurnosSelecionados([turno])[0] || item : item;
+            });
+            renderizarTimelineCompleta('criacaoTimelineContent', dadosEscala);
+            renderizarTimelineCompleta('timeline-content', dadosEscala);
+            invalidarValidacaoDetalhada();
+            detailedScaleHasBeenGenerated = false;
+            detalhadaModal?.classList.add('hidden');
+        };
+
+        const abrirModalTurnoSecaoCriacao = async (turno = null) => {
+            const loja = criacaoEscalaLoja?.value || lojaEscalaSelect.value;
+            if (!loja) {
+                showInfoModal('Selecione uma loja antes de cadastrar turnos.', 'error');
+                return;
+            }
+            if (!secoesLojaCache.length) await carregarSecoesDaLoja(true, loja);
+            const secaoOptions = secoesLojaCache.map(secao => ({ value: secao.ESCSECAO_ID, label: getSecaoLabel(secao) }));
+            if (!secaoOptions.length) {
+                showInfoModal('Nenhuma secao cadastrada para esta loja.', 'error');
+                return;
+            }
+            const values = await showInputModal({
+                title: turno ? 'Editar Turno por Secao' : 'Novo Turno por Secao',
+                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-3xl flex flex-col employee-day-modal',
+                inputs: [
+                    { label: 'Secao', type: 'select', id: 'CRI_TURNO_SECAO', value: turno?.ESCSECAO_ID || secaoOptions[0]?.value || '', options: secaoOptions, required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Colaboradores previstos', type: 'number', id: 'CRI_TURNO_QTDE', value: turno?.QTDE_COLABORADORES || 1, required: true },
+                    { label: 'Entrada 1', type: 'time', id: 'CRI_TURNO_ENT1', value: turno?.HR_ENT1 || '08:00', required: true },
+                    { label: 'Saida 1', type: 'time', id: 'CRI_TURNO_SAI1', value: turno?.HR_SAI1 || '12:00', required: true },
+                    { label: 'Entrada 2', type: 'time', id: 'CRI_TURNO_ENT2', value: turno?.HR_ENT2 || '13:10', required: true },
+                    { label: 'Saida 2', type: 'time', id: 'CRI_TURNO_SAI2', value: turno?.HR_SAI2 || '17:58', required: true }
+                ],
+                confirmText: 'Salvar Turno'
+            });
+            if (!values) return;
+            const payload = {
+                ESCSECAO_ID: Number(values.CRI_TURNO_SECAO),
+                QTDE_COLABORADORES: Number(values.CRI_TURNO_QTDE),
+                HR_ENT1: values.CRI_TURNO_ENT1,
+                HR_SAI1: values.CRI_TURNO_SAI1,
+                HR_ENT2: values.CRI_TURNO_ENT2,
+                HR_SAI2: values.CRI_TURNO_SAI2
+            };
+            const erros = validarTurnoCadastroSecao(payload);
+            if (erros.length) {
+                showInfoModal(erros, 'error');
+                return;
+            }
+            const url = turno?.ESCSECAOTURNO_ID
+                ? `/api/catalog/lojas/${encodeURIComponent(loja)}/turnos-secao/${encodeURIComponent(turno.ESCSECAOTURNO_ID)}`
+                : `/api/catalog/lojas/${encodeURIComponent(loja)}/turnos-secao`;
+            await apiRequest(url, { method: turno?.ESCSECAOTURNO_ID ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+            await carregarTurnosSecaoDaLoja(true, loja);
+            renderizarSecoesCriacao();
+            sincronizarDadosEscalaComTurnosCache();
+            showInfoModal('Turno salvo e atualizado na escala.', 'success');
         };
 
         const iniciarCriacaoEscalaPagina = async () => {
@@ -4869,6 +5212,18 @@
             detailedScaleHasBeenGenerated = false;
             if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Timeline atualizada. Revise as seções e distribua os funcionários.';
         };
+
+        novoTurnoCriacaoBtn?.addEventListener('click', () => {
+            abrirModalTurnoSecaoCriacao().catch(error => showInfoModal(error.message, 'error'));
+        });
+
+        criacaoSecoesLista?.addEventListener('click', (event) => {
+            const button = event.target.closest('.editar-turno-criacao');
+            if (!button) return;
+            event.preventDefault();
+            const turno = turnosSecaoCache.find(item => String(item.ESCSECAOTURNO_ID || '') === String(button.dataset.id));
+            abrirModalTurnoSecaoCriacao(turno).catch(error => showInfoModal(error.message, 'error'));
+        });
 
         const iniciarNovaEscalaRascunho = async (opcoes = {}) => {
             const dataPadrao = opcoes.mesRef ? new Date(opcoes.mesRef + 'T00:00:00') : null;
@@ -4954,6 +5309,10 @@
         });
 
         salvarEscalaBtn.addEventListener('click', async () => {
+            if (!escalaDetalhadaValidada) {
+                showInfoModal('Valide a escala e corrija todas as criticas antes de salvar.', 'error');
+                return;
+            }
             const dados = parseEscalaFromModal();
             if (!dados.length) {
                 showInfoModal('Gere a escala detalhada antes de salvar.', 'error');
@@ -5168,6 +5527,15 @@
 
 
         document.getElementById('criacaoTimelineContent')?.addEventListener('click', async (event) => {
+            const editButton = event.target.closest('.edit-btn');
+            if (editButton && !distribuicaoFolgasBloqueada) {
+                event.preventDefault();
+                const index = Number(editButton.dataset.index);
+                const item = dadosEscala[index];
+                const turno = turnosSecaoCache.find(cache => String(cache.ESCSECAOTURNO_ID || cache.ESCSECAO_ID) === String(item?.turnoId || item?.secaoId));
+                await abrirModalTurnoSecaoCriacao(turno);
+                return;
+            }
             const deleteButton = event.target.closest('.delete-btn');
             if (!deleteButton || distribuicaoFolgasBloqueada) return;
             event.preventDefault();

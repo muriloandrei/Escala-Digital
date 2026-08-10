@@ -602,22 +602,35 @@
             background: #f8fafc;
             border: 1px solid var(--cor-borda);
             border-radius: 8px;
-            cursor: pointer;
             display: grid;
             gap: 4px;
-            grid-template-columns: auto minmax(0, 1fr);
+            grid-template-columns: minmax(0, 1fr) auto;
             padding: 12px;
         }
 
-        .section-choice-card input {
-            grid-row: span 3;
-            margin-top: 4px;
+        .section-choice-main {
+            align-items: center;
+            cursor: pointer;
+            display: flex;
+            gap: 8px;
+            min-width: 0;
         }
 
         .section-choice-card strong,
         .section-choice-card span,
         .section-choice-card small {
             min-width: 0;
+        }
+
+        .section-choice-card > span,
+        .section-choice-card > small {
+            grid-column: 1 / -1;
+        }
+
+        .section-choice-card .editar-turno-criacao {
+            grid-column: 2;
+            grid-row: 1 / span 2;
+            justify-self: end;
         }
 
         .section-choice-card span,
@@ -1696,6 +1709,58 @@
             font-weight: 700;
         }
 
+        .choice-group {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .choice-pill {
+            align-items: center;
+            border: 1px solid var(--cor-borda);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            gap: 8px;
+            min-height: 42px;
+            padding: 9px 12px;
+        }
+
+        .choice-pill:has(input:checked) {
+            background: #eff6ff;
+            border-color: var(--cor-principal);
+            color: var(--cor-principal);
+            font-weight: 700;
+        }
+
+        .detailed-employee-header {
+            align-items: center;
+            display: flex;
+            gap: 10px;
+        }
+
+        .critical-status-chip {
+            background: #dc2626;
+            border: 0;
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0;
+            padding: 4px 8px;
+        }
+
+        .detailed-day-button {
+            color: inherit;
+            display: inline-flex;
+            font: inherit;
+            justify-content: center;
+            min-width: 26px;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+
         @media (max-width: 980px) {
             .settings-grid { grid-template-columns: 1fr; }
         }
@@ -1703,6 +1768,8 @@
         @media (max-width: 620px) {
             .compact-form,
             #inputModalBody [data-input-type="checkbox-group"] { grid-template-columns: 1fr; }
+
+            .choice-group { grid-template-columns: 1fr; }
 
             #inputModalPanel.input-modal-wide {
                 max-width: calc(100vw - 24px);
