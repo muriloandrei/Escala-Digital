@@ -278,4 +278,37 @@ async function getPermissaoPerfil(perfilNome, pagina) {
     || { PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 0, PODE_EXCLUIR: 0 };
 }
 
-module.exports = { listUsuariosAcesso, updateUsuarioAcesso, createUsuarioAcesso, listPerfisAcesso, createPerfilAcesso, updatePerfilAcesso, getPermissaoPerfil };
+async function getPermissoesPerfil(perfilNome) {
+  const normalizedPerfil = String(perfilNome || '').trim().toUpperCase();
+  if (normalizedPerfil === 'ADMIN') {
+    return PERFIL_PAGES.map((pagina) => ({
+      PAGINA: pagina.key,
+      LABEL: pagina.label,
+      PODE_VISUALIZAR: 1,
+      PODE_EDITAR: 1,
+      PODE_EXCLUIR: 1
+    }));
+  }
+
+  const { perfis } = await listPerfisAcesso();
+  const perfil = perfis.find((item) => String(item.NOME || '').trim().toUpperCase() === normalizedPerfil);
+  return perfil?.PERMISSOES || PERFIL_PAGES.map((pagina) => ({
+    PAGINA: pagina.key,
+    LABEL: pagina.label,
+    PODE_VISUALIZAR: 1,
+    PODE_EDITAR: 0,
+    PODE_EXCLUIR: 0
+  }));
+}
+
+module.exports = {
+  PERFIL_PAGES,
+  listUsuariosAcesso,
+  updateUsuarioAcesso,
+  createUsuarioAcesso,
+  listPerfisAcesso,
+  createPerfilAcesso,
+  updatePerfilAcesso,
+  getPermissaoPerfil,
+  getPermissoesPerfil
+};

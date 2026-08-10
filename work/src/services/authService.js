@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { withConnection, oracledb } = require('../db/oracle');
 const { getEnv } = require('../config/env');
+const accessService = require('./accessService');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -83,13 +84,15 @@ async function getSessionUserById(usuarioId) {
 
   const currentUsuarioId = pick(user, 'USUARIO_ID', 'usuario_id');
   const lojas = await findUserStores(currentUsuarioId);
-  return {
+  const sessionUser = {
     sub: String(currentUsuarioId),
     login: pick(user, 'LOGIN', 'login'),
     nome: pick(user, 'NOME', 'nome'),
     perfil: pick(user, 'PERFIL', 'perfil'),
     lojas
   };
+  sessionUser.permissoes = await getUserPermissions(sessionUser.perfil);
+  return sessionUser;
 }
 
 async function login({ login, password }) {
@@ -119,9 +122,19 @@ async function login({ login, password }) {
     perfil: pick(user, 'PERFIL', 'perfil'),
     lojas
   };
+  payload.permissoes = await getUserPermissions(payload.perfil);
 
   const token = jwt.sign(payload, auth.jwtSecret, { expiresIn: auth.jwtExpiresIn });
   return { token, user: payload };
+}
+
+async function getUserPermissions(perfil) {
+  try {
+    return await accessService.getPermissoesPerfil(perfil);
+  } catch (error) {
+    console.warn(`Permissoes do perfil ${perfil || '-'} indisponiveis: ${error.message}`);
+    return [];
+  }
 }
 
 module.exports = { login, getSessionUserById };

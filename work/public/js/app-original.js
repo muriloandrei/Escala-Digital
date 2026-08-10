@@ -218,6 +218,94 @@
             configuracoes: 'Configurações'
         };
 
+        const permissionBindings = [
+            ['nav-registros', 'escalas', 'visualizar'],
+            ['nav-escalas-funcionarios', 'escalas-funcionarios', 'visualizar'],
+            ['nav-secoes', 'secoes', 'visualizar'],
+            ['nav-turnos-secao', 'turnos-secao', 'visualizar'],
+            ['nav-regras', 'regras', 'visualizar'],
+            ['nav-funcionarios', 'funcionarios', 'visualizar'],
+            ['nav-acessos', 'acessos', 'visualizar'],
+            ['nav-roles', 'roles', 'visualizar'],
+            ['nav-horarios-padrao', 'horarios-padrao', 'visualizar'],
+            ['nav-integracao-rm', 'integracao-rm', 'visualizar'],
+            ['nav-settings', 'configuracoes', 'visualizar'],
+            ['goToTimelineBtn', 'escalas', 'editar'],
+            ['novoTurnoCriacaoBtn', 'turnos-secao', 'editar'],
+            ['gerarTimelineCriacaoBtn', 'escalas', 'editar'],
+            ['carregarFuncionariosCriacaoBtn', 'escalas', 'editar'],
+            ['salvarDetalheBancoBtn', 'escalas', 'editar'],
+            ['salvarEscalaFuncionarioBtn', 'escalas-funcionarios', 'editar'],
+            ['distribuirFolgasFuncionarioBtn', 'escalas-funcionarios', 'editar'],
+            ['novoHorarioPadraoBtn', 'horarios-padrao', 'editar'],
+            ['novoTipoDescansoBtn', 'tipos-descanso', 'editar'],
+            ['salvarSettingsBtn', 'configuracoes', 'editar']
+        ];
+
+        const permissionPageByRoute = {
+            '/home': 'escalas',
+            '/timeline': 'escalas',
+            '/escalas-geradas': 'escalas',
+            '/criar-escala': 'escalas',
+            '/escalas-funcionarios': 'escalas-funcionarios',
+            '/escala-funcionario': 'escalas-funcionarios',
+            '/funcionarios': 'funcionarios',
+            '/secoes': 'secoes',
+            '/secao': 'secoes',
+            '/turnos-secao': 'turnos-secao',
+            '/turno-secao': 'turnos-secao',
+            '/regras': 'regras',
+            '/historico': 'historico',
+            '/tipos-descanso': 'tipos-descanso',
+            '/horarios-padrao': 'horarios-padrao',
+            '/integracao-rm': 'integracao-rm',
+            '/acessos': 'acessos',
+            '/roles': 'roles',
+            '/configuracoes': 'configuracoes'
+        };
+
+        const hasPermission = (page, action = 'visualizar') => window.EscalaPermissions?.can(page, action) !== false;
+
+        const applyPermissionBindings = () => {
+            permissionBindings.forEach(([id, page, action]) => {
+                const element = document.getElementById(id);
+                if (!element) return;
+                element.dataset.permissionPage = page;
+                element.dataset.permissionAction = action;
+            });
+            window.EscalaPermissions?.applyDocument();
+        };
+
+        const buildPermissionDeniedButton = (page, action = 'editar') => {
+            if (hasPermission(page, action)) return '';
+            return '<button type="button" class="action-btn-table" disabled title="Usuario sem permissao"><span class="material-symbols-outlined">lock</span>Sem permissao</button>';
+        };
+
+        const getDefaultAllowedRoute = () => {
+            const entry = [
+                ['/escalas-geradas', 'escalas'],
+                ['/escalas-funcionarios', 'escalas-funcionarios'],
+                ['/funcionarios', 'funcionarios'],
+                ['/secoes', 'secoes'],
+                ['/turnos-secao', 'turnos-secao'],
+                ['/regras', 'regras'],
+                ['/acessos', 'acessos'],
+                ['/configuracoes', 'configuracoes']
+            ].find(([, page]) => hasPermission(page, 'visualizar'));
+            return entry?.[0] || '/escalas-geradas';
+        };
+
+        const checkRoutePermission = (route) => {
+            const page = Object.entries(permissionPageByRoute)
+                .sort((a, b) => b[0].length - a[0].length)
+                .find(([prefix]) => route.startsWith(prefix))?.[1];
+            if (!page || hasPermission(page, 'visualizar')) return true;
+            const fallback = getDefaultAllowedRoute();
+            if (route !== fallback) window.location.hash = fallback;
+            showInfoModal('Usuario sem permissao para acessar esta pagina.', 'error');
+            return false;
+        };
+
         const setCurrentPageTitle = (key) => {
             if (currentPageTitle) currentPageTitle.textContent = pageTitles[key] || pageTitles.home;
             if (currentPageParent) currentPageParent.textContent = pageParents[key] || pageParents.home;
@@ -510,6 +598,9 @@
         }
 
         function navigateToPage(pageKey) {
+            const routeForPermission = '/' + pageKey;
+            if (!checkRoutePermission(routeForPermission)) return;
+
             if (pageKey.startsWith('escalas/nova/')) {
                 const [, , loja, mesRef] = pageKey.split('/');
                 const dataRef = mesRef ? new Date(mesRef + 'T00:00:00') : null;
@@ -630,15 +721,25 @@
         voltarEscalasCriacaoBtn?.addEventListener('click', () => { window.location.hash = '/escalas-geradas'; });
         voltarTurnosSecaoBtn?.addEventListener('click', () => { window.location.hash = '/turnos-secao'; });
         window.addEventListener('hashchange', handleHashNavigation);
-        salvarSettingsBtn.addEventListener('click', (e) => { e.preventDefault(); salvarConfiguracoes(); });
+        salvarSettingsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (!hasPermission('configuracoes', 'editar')) return showInfoModal('Usuario sem permissao para editar configuracoes.', 'error');
+            salvarConfiguracoes();
+        });
         goToTimelineBtn.addEventListener('click', async (e) => {
             e.preventDefault();
+            if (!hasPermission('escalas', 'editar')) return showInfoModal('Usuario sem permissao para criar escalas.', 'error');
             iniciarNovaEscalaRascunho().catch(error => showInfoModal(error.message, 'error'));
         });
         iniciarCriacaoEscalaBtn?.addEventListener('click', async (e) => { e.preventDefault(); iniciarCriacaoEscalaPagina().catch(error => showInfoModal(error.message, 'error')); });
-        gerarTimelineCriacaoBtn?.addEventListener('click', async (e) => { e.preventDefault(); gerarTimelineCriacaoPagina().catch(error => showInfoModal(error.message, 'error')); });
+        gerarTimelineCriacaoBtn?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            if (!hasPermission('escalas', 'editar')) return showInfoModal('Usuario sem permissao para editar escalas.', 'error');
+            gerarTimelineCriacaoPagina().catch(error => showInfoModal(error.message, 'error'));
+        });
         carregarFuncionariosCriacaoBtn?.addEventListener('click', async (e) => {
             e.preventDefault();
+            if (!hasPermission('escalas', 'editar')) return showInfoModal('Usuario sem permissao para editar escalas.', 'error');
             try {
                 await carregarFuncionariosDaLoja(true, escalaRascunhoContexto?.loja || criacaoEscalaLoja?.value || '');
                 prepararPaineisCriacao();
@@ -2647,6 +2748,10 @@
         const getLojaContextoEscala = () => String(escalaRascunhoContexto?.loja || lojaEscalaSelect?.value || '');
 
         const apiRequest = async (url, options = {}) => {
+            if (window.EscalaApi?.request) {
+                return window.EscalaApi.request(url, options);
+            }
+
             const { timeoutMs = 20000, signal, ...fetchOptions } = options;
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -2676,6 +2781,8 @@
             const data = await apiRequest('/api/auth/me');
             const user = data.user || {};
             usuarioSessaoCache = user;
+            window.EscalaPermissions?.setUser(user);
+            applyPermissionBindings();
             const lojas = Array.isArray(user.lojas) ? user.lojas : [];
 
             if (loggedUserName) {
@@ -2697,14 +2804,17 @@
         };
 
         const configurarAcoesAdmin = () => {
-            if (usuarioSessaoCache?.perfil !== 'ADMIN' || novoUsuarioBtn) return;
+            if (!hasPermission('acessos', 'editar') || novoUsuarioBtn) return;
 
             novoUsuarioBtn = document.createElement('button');
             novoUsuarioBtn.type = 'button';
             novoUsuarioBtn.id = 'novoUsuarioBtn';
             novoUsuarioBtn.className = 'action-button';
+            novoUsuarioBtn.dataset.permissionPage = 'acessos';
+            novoUsuarioBtn.dataset.permissionAction = 'editar';
             novoUsuarioBtn.innerHTML = '<span class="material-symbols-outlined">person_add</span>Novo Usuário';
             carregarAcessosBtn.parentElement.appendChild(novoUsuarioBtn);
+            window.EscalaPermissions?.applyDocument(novoUsuarioBtn.parentElement);
         };
 
         logoutAppBtn?.addEventListener('click', async () => {
@@ -2939,6 +3049,12 @@
                 '<td data-label="Loja">Loja ' + escapeHtml(secao.CODFILIAL || secao.LOJA || '') + '</td>' +
                 '<td data-label="Codcoligada">' + escapeHtml(secao.CODCOLIGADA || '') + '</td>' +
                 '<td data-label="Ações" class="actions-cell"><button class="action-btn-table banco-action edit-secao" data-id="' + escapeHtml(secao.ESCSECAO_ID || '') + '" data-loja="' + escapeHtml(secao.CODFILIAL || secao.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button></td></tr>').join('') : '<tr><td colspan="5" class="text-center text-gray-500 py-8">Nenhuma seção encontrada.</td></tr>';
+            if (!hasPermission('secoes', 'editar')) {
+                tabelaSecoesBody.querySelectorAll('.edit-secao').forEach(button => button.remove());
+            }
+            tabelaSecoesBody.querySelectorAll('.actions-cell').forEach(cell => {
+                if (!cell.textContent.trim()) cell.textContent = '-';
+            });
         };
 
         const carregarSecoesTela = async () => {
@@ -2954,12 +3070,14 @@
         tabelaSecoesBody?.addEventListener('click', async (event) => {
             const editButton = event.target.closest('.edit-secao');
             if (!editButton) return;
+            if (!hasPermission('secoes', 'editar')) return showInfoModal('Usuario sem permissao para editar secoes.', 'error');
 
             if (editButton.dataset.loja) secoesLojaSelect.value = editButton.dataset.loja;
             window.location.hash = `/secoes/${editButton.dataset.id}`;
         });
 
         novaSecaoBtn?.addEventListener('click', () => {
+            if (!hasPermission('secoes', 'editar')) return showInfoModal('Usuario sem permissao para criar secoes.', 'error');
             window.location.hash = '/secoes/nova';
         });
 
@@ -2969,6 +3087,7 @@
 
         secaoForm?.addEventListener('submit', async (event) => {
             event.preventDefault();
+            if (!hasPermission('secoes', 'editar')) return showInfoModal('Usuario sem permissao para salvar secoes.', 'error');
             const loja = secaoFormLoja.value;
             const escsecaoId = secaoFormId.value;
             if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
@@ -3022,6 +3141,12 @@
                 '<td data-label="Seção">' + escapeHtml((turno.COD_SECAO ? turno.COD_SECAO + ' - ' : '') + (turno.DESCR || '')) + '</td>' +
                 '<td data-label="Colaboradores">' + escapeHtml(turno.QTDE_COLABORADORES || '') + '</td><td data-label="Entrada 1">' + escapeHtml(turno.HR_ENT1 || '') + '</td><td data-label="Saída 1">' + escapeHtml(turno.HR_SAI1 || '') + '</td><td data-label="Entrada 2">' + escapeHtml(turno.HR_ENT2 || '') + '</td><td data-label="Saída 2">' + escapeHtml(turno.HR_SAI2 || '') + '</td>' +
                 '<td data-label="Ações" class="actions-cell"><button class="action-btn-table banco-action edit-turno-secao" data-id="' + escapeHtml(turno.ESCSECAOTURNO_ID || '') + '" data-loja="' + escapeHtml(turno.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button></td></tr>').join('') : '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum turno encontrado.</td></tr>';
+            if (!hasPermission('turnos-secao', 'editar')) {
+                tabelaTurnosSecaoBody.querySelectorAll('.edit-turno-secao').forEach(button => button.remove());
+            }
+            tabelaTurnosSecaoBody.querySelectorAll('.actions-cell').forEach(cell => {
+                if (!cell.textContent.trim()) cell.textContent = '-';
+            });
         };
 
         const carregarTurnosSecaoTela = async () => {
@@ -3039,11 +3164,13 @@
         tabelaTurnosSecaoBody?.addEventListener('click', (event) => {
             const editButton = event.target.closest('.edit-turno-secao');
             if (!editButton) return;
+            if (!hasPermission('turnos-secao', 'editar')) return showInfoModal('Usuario sem permissao para editar turnos por secao.', 'error');
             if (editButton.dataset.loja) turnosSecaoLojaSelect.value = editButton.dataset.loja;
             window.location.hash = `/turnos-secao/${editButton.dataset.id}`;
         });
 
         novoTurnoSecaoBtn?.addEventListener('click', () => {
+            if (!hasPermission('turnos-secao', 'editar')) return showInfoModal('Usuario sem permissao para criar turnos por secao.', 'error');
             window.location.hash = '/turnos-secao/novo';
         });
 
@@ -3057,6 +3184,7 @@
 
         turnoSecaoForm?.addEventListener('submit', async (event) => {
             event.preventDefault();
+            if (!hasPermission('turnos-secao', 'editar')) return showInfoModal('Usuario sem permissao para salvar turnos por secao.', 'error');
             const loja = turnosSecaoLojaSelect?.value || lojaEscalaSelect.value;
             const turnoId = turnoSecaoFormId.value;
             const escsecaoId = turnoSecaoFormSecao.value;
@@ -3126,6 +3254,12 @@
             tabelaFuncionariosBody.innerHTML = filtrados.length ? filtrados.map(f => '<tr data-escfunc-id="' + escapeHtml(f.ESCFUNC_ID || '') + '">' +
                 '<td data-label="Chapa">' + escapeHtml(f.CHAPA || '') + '</td><td data-label="Nome">' + escapeHtml(f.NOME || '') + '</td><td data-label="Loja">' + escapeHtml(f.LOJA || '') + '</td><td data-label="Seção">' + escapeHtml(f.SECAO_DESCR || f.ESCSECAO_ID || '') + '</td><td data-label="Função">' + escapeHtml(f.FUNCAO_DESCR || f.ESCFUNCAO_ID || '') + '</td><td data-label="Brigadista">' + escapeHtml(f.BRIGADISTA || '') + '</td><td data-label="Entrada 1">' + escapeHtml(f.HR_ENT1 || '') + '</td><td data-label="Saída 1">' + escapeHtml(f.HR_SAI1 || '') + '</td><td data-label="Entrada 2">' + escapeHtml(f.HR_ENT2 || '') + '</td><td data-label="Saída 2">' + escapeHtml(f.HR_SAI2 || '') + '</td>' +
                 '<td data-label="Ações" class="actions-cell"><button class="action-btn-table banco-action edit-funcionario" data-id="' + escapeHtml(f.ESCFUNC_ID || '') + '" data-loja="' + escapeHtml(f.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button></td></tr>').join('') : '<tr><td colspan="11" class="text-center text-gray-500 py-8">Nenhum funcionário encontrado.</td></tr>';
+            if (!hasPermission('funcionarios', 'editar')) {
+                tabelaFuncionariosBody.querySelectorAll('.edit-funcionario').forEach(button => button.remove());
+            }
+            tabelaFuncionariosBody.querySelectorAll('.actions-cell').forEach(cell => {
+                if (!cell.textContent.trim()) cell.textContent = '-';
+            });
         };
 
         const carregarFuncionariosTela = async () => {
@@ -3150,6 +3284,7 @@
         tabelaFuncionariosBody.addEventListener('click', async (event) => {
             const editButton = event.target.closest('.edit-funcionario');
             if (!editButton) return;
+            if (!hasPermission('funcionarios', 'editar')) return showInfoModal('Usuario sem permissao para editar funcionarios.', 'error');
 
             const funcionario = funcionariosTelaCache.find(item => Number(item.ESCFUNC_ID) === Number(editButton.dataset.id));
             const loja = funcionario?.LOJA;
@@ -3241,6 +3376,15 @@
                         <button class="action-btn-table banco-action danger-action toggle-horario-padrao" data-id="${escapeHtml(horario.ESCHORPAD_ID)}" data-status="${escapeHtml(horario.STATUS)}"><span class="material-symbols-outlined">block</span>${horario.STATUS === 'A' ? 'Inativar' : 'Reativar'}</button>
                     </td>
                 </tr>`).join('') : '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhum hor&aacute;rio encontrado.</td></tr>';
+            if (!hasPermission('horarios-padrao', 'editar')) {
+                tabelaHorariosPadraoBody.querySelectorAll('.editar-horario-padrao').forEach(button => button.remove());
+            }
+            if (!hasPermission('horarios-padrao', 'inativar')) {
+                tabelaHorariosPadraoBody.querySelectorAll('.toggle-horario-padrao').forEach(button => button.remove());
+            }
+            tabelaHorariosPadraoBody.querySelectorAll('.actions-cell').forEach(cell => {
+                if (!cell.textContent.trim()) cell.textContent = '-';
+            });
         };
 
         const carregarHorariosPadraoTela = async () => {
@@ -3302,7 +3446,7 @@
                         <td data-label="Acao">${escapeHtml(log.ACAO || '-')}</td>
                         <td data-label="Status"><span class="escala-status-chip ${falha ? 'danger-chip' : 'official-chip'}">${escapeHtml(log.STATUS || '-')}</span></td>
                         <td data-label="Mensagem">${escapeHtml(log.MENSAGEM || '-')}</td>
-                        <td data-label="Acoes" class="actions-cell">${falha ? `<button class="action-btn-table banco-action rm-reprocessar" data-loja="${escapeHtml(log.LOJA || '')}" data-mes-ref="${escapeHtml(mesRef)}" data-revisao="${escapeHtml(log.REVISAO ?? 0)}"><span class="material-symbols-outlined">sync</span>Reprocessar</button>` : '-'}</td>
+                        <td data-label="Acoes" class="actions-cell">${falha && hasPermission('integracao-rm', 'editar') ? `<button class="action-btn-table banco-action rm-reprocessar" data-loja="${escapeHtml(log.LOJA || '')}" data-mes-ref="${escapeHtml(mesRef)}" data-revisao="${escapeHtml(log.REVISAO ?? 0)}"><span class="material-symbols-outlined">sync</span>Reprocessar</button>` : '-'}</td>
                     </tr>`;
             }).join('') : '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhum log encontrado.</td></tr>';
         };
@@ -3345,6 +3489,15 @@
                         <button class="action-btn-table banco-action danger-action toggle-tipo-descanso" data-id="${escapeHtml(tipo.ESCTIPODESC_ID)}" data-status="${escapeHtml(tipo.STATUS)}"><span class="material-symbols-outlined">block</span>${tipo.STATUS === "A" ? "Inativar" : "Reativar"}</button>
                     </td>
                 </tr>`).join("") : '<tr><td colspan="5" class="text-center text-gray-500 py-8">Nenhum tipo de descanso encontrado.</td></tr>';
+            if (!hasPermission('tipos-descanso', 'editar')) {
+                tabelaTiposDescansoBody.querySelectorAll('.editar-tipo-descanso').forEach(button => button.remove());
+            }
+            if (!hasPermission('tipos-descanso', 'inativar')) {
+                tabelaTiposDescansoBody.querySelectorAll('.toggle-tipo-descanso').forEach(button => button.remove());
+            }
+            tabelaTiposDescansoBody.querySelectorAll('.actions-cell').forEach(cell => {
+                if (!cell.textContent.trim()) cell.textContent = '-';
+            });
         };
 
         const carregarTiposDescansoTela = async () => {
@@ -3354,12 +3507,19 @@
 
         horariosPadraoPesquisaInput?.addEventListener('input', renderizarHorariosPadraoTela);
         horariosPadraoStatusFiltro?.addEventListener('change', renderizarHorariosPadraoTela);
-        novoHorarioPadraoBtn?.addEventListener('click', () => abrirModalHorarioPadrao().catch(error => showInfoModal(error.message, 'error')));
+        novoHorarioPadraoBtn?.addEventListener('click', () => {
+            if (!hasPermission('horarios-padrao', 'editar')) return showInfoModal('Usuario sem permissao para editar horarios padrao.', 'error');
+            abrirModalHorarioPadrao().catch(error => showInfoModal(error.message, 'error'));
+        });
         tabelaHorariosPadraoBody?.addEventListener('click', async (event) => {
             const edit = event.target.closest('.editar-horario-padrao');
             const toggle = event.target.closest('.toggle-horario-padrao');
             const button = edit || toggle;
             if (!button) return;
+            if (!hasPermission('horarios-padrao', toggle ? 'inativar' : 'editar')) {
+                showInfoModal('Usuario sem permissao para alterar horarios padrao.', 'error');
+                return;
+            }
             const horario = horariosPadraoCache.find(item => Number(item.ESCHORPAD_ID) === Number(button.dataset.id));
             if (!horario) return;
             try {
@@ -3376,6 +3536,10 @@
         tabelaRmLogsBody?.addEventListener('click', async (event) => {
             const button = event.target.closest('.rm-reprocessar');
             if (!button) return;
+            if (!hasPermission('integracao-rm', 'editar')) {
+                showInfoModal('Usuario sem permissao para reprocessar integracao RM.', 'error');
+                return;
+            }
             try {
                 await apiRequest('/api/escalas/rm/reprocessar', {
                     method: 'POST',
@@ -3412,12 +3576,19 @@
 
         tiposDescansoPesquisaInput?.addEventListener('input', renderizarTiposDescansoTela);
         tiposDescansoStatusFiltro?.addEventListener('change', renderizarTiposDescansoTela);
-        novoTipoDescansoBtn?.addEventListener('click', () => abrirModalTipoDescanso().catch(error => showInfoModal(error.message, 'error')));
+        novoTipoDescansoBtn?.addEventListener('click', () => {
+            if (!hasPermission('tipos-descanso', 'editar')) return showInfoModal('Usuario sem permissao para editar tipos de descanso.', 'error');
+            abrirModalTipoDescanso().catch(error => showInfoModal(error.message, 'error'));
+        });
         tabelaTiposDescansoBody?.addEventListener('click', async (event) => {
             const edit = event.target.closest('.editar-tipo-descanso');
             const toggle = event.target.closest('.toggle-tipo-descanso');
             const button = edit || toggle;
             if (!button) return;
+            if (!hasPermission('tipos-descanso', toggle ? 'inativar' : 'editar')) {
+                showInfoModal('Usuario sem permissao para alterar tipos de descanso.', 'error');
+                return;
+            }
             const tipo = tiposDescansoCache.find(item => Number(item.ESCTIPODESC_ID) === Number(button.dataset.id));
             if (!tipo) return;
             try {
@@ -3477,6 +3648,12 @@
             const rows = escalasFuncionariosCache.filter(item => !termo || normalizarTextoFiltro(item.nome + ' ' + item.chapa).includes(termo));
             escalaFuncionarioListaResumo.textContent = rows.length + ' funcionário(s) com escala no período.';
             tabelaEscalaFuncionariosBody.innerHTML = rows.length ? rows.map(item => '<tr><td>' + escapeHtml(item.chapa) + '</td><td>' + escapeHtml(item.nome) + '</td><td>Loja ' + escapeHtml(item.loja) + '</td><td>' + escapeHtml(item.secao) + '</td><td>' + escapeHtml(item.funcao) + '</td><td>' + escapeHtml(item.revisao ?? '-') + '</td><td><span class="escala-status-chip ' + (item.oficializada ? 'official-chip' : 'pending-chip') + '">' + (item.oficializada ? 'Sim' : 'Nao') + '</span></td><td><span class="escala-status-chip ' + getStatusClassEscala(item.status) + '">' + escapeHtml(item.status) + '</span></td><td class="actions-cell"><button class="action-btn-table banco-action editar-escala-funcionario" data-escfunc-id="' + escapeHtml(item.escfuncId) + '" data-loja="' + escapeHtml(item.loja) + '" data-mes-ref="' + escapeHtml(item.mesRef) + '"><span class="material-symbols-outlined">edit_calendar</span>Editar</button></td></tr>').join('') : '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhum funcionario com escala encontrado.</td></tr>';
+            if (!hasPermission('escalas-funcionarios', 'editar')) {
+                tabelaEscalaFuncionariosBody.querySelectorAll('.editar-escala-funcionario').forEach(button => button.remove());
+            }
+            tabelaEscalaFuncionariosBody.querySelectorAll('.actions-cell').forEach(cell => {
+                if (!cell.textContent.trim()) cell.textContent = '-';
+            });
         };
 
         const carregarEscalasFuncionarios = async () => {
@@ -3503,7 +3680,10 @@
         escalaFuncionarioPesquisa?.addEventListener('input', aplicarFiltroListaEscalaFuncionarios);
         tabelaEscalaFuncionariosBody?.addEventListener('click', event => {
             const button = event.target.closest('.editar-escala-funcionario');
-            if (button) window.location.hash = '/escala-funcionario/' + button.dataset.escfuncId + '/' + button.dataset.loja + '/' + button.dataset.mesRef;
+            if (button) {
+                if (!hasPermission('escalas-funcionarios', 'editar')) return showInfoModal('Usuario sem permissao para editar escala do funcionario.', 'error');
+                window.location.hash = '/escala-funcionario/' + button.dataset.escfuncId + '/' + button.dataset.loja + '/' + button.dataset.mesRef;
+            }
         });
         voltarEscalaFuncionariosBtn?.addEventListener('click', () => { window.location.hash = '/escalas-funcionarios'; });
 
@@ -3763,6 +3943,10 @@
         });
 
         const distribuirFolgasFuncionario = () => {
+            if (!hasPermission('escalas-funcionarios', 'editar')) {
+                showInfoModal('Usuario sem permissao para editar escala do funcionario.', 'error');
+                return;
+            }
             const atual = escalaFuncionarioEdicaoAtual;
             if (!atual) return;
             const dias = [...atual.dias].sort((a,b) => String(a.DT).localeCompare(String(b.DT)));
@@ -3806,7 +3990,7 @@
         validarEscalaFuncionarioBtn?.addEventListener('click',validarEscalaFuncionarioAtual);
         imprimirEscalaFuncionarioBtn?.addEventListener('click',()=>{if(!escalaFuncionarioEdicaoAtual)return;printContainer.innerHTML='<div class="print-title">Escala - '+escapeHtml(escalaFuncionarioEdicaoAtual.nome)+'</div>'+escalaFuncionarioDetalhadaContent.innerHTML;window.print();});
 
-        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB',justificativa:d.JUSTIFICATIVA_ALTERACAO||atual.justificativaAlteracao||null};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:1,justificativa:atual.justificativaAlteracao||null})});showInfoModal('Escala do funcionário salva em uma nova revisão oficializada.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):'Não foi possível salvar a escala do funcionário: '+error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
+        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{if(!hasPermission('escalas-funcionarios','editar'))return showInfoModal('Usuario sem permissao para salvar escala do funcionario.','error');const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB',justificativa:d.JUSTIFICATIVA_ALTERACAO||atual.justificativaAlteracao||null};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:1,justificativa:atual.justificativaAlteracao||null})});showInfoModal('Escala do funcionário salva em uma nova revisão oficializada.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):'Não foi possível salvar a escala do funcionário: '+error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
 
         function renderizarAcessosTela(usuarios) {
             tabelaAcessosBody.innerHTML = '';
@@ -3820,7 +4004,7 @@
                 const statusLabel = usuario.STATUS === 'A' ? 'Ativo' : 'Inativo';
                 const lojasArray = Array.isArray(usuario.LOJAS) ? usuario.LOJAS : [];
                 const lojas = lojasArray.length <= 4 ? lojasArray.join(', ') : `${lojasArray.length} lojas selecionadas`;
-                const isAdmin = usuarioSessaoCache?.perfil === 'ADMIN';
+                const isAdmin = hasPermission('acessos', 'editar') || hasPermission('acessos', 'inativar');
                 const row = `
                     <tr data-usuario-id="${usuario.USUARIO_ID}">
                         <td data-label="Login">${usuario.LOGIN || ''}</td>
@@ -3846,6 +4030,15 @@
                 `;
                 tabelaAcessosBody.innerHTML += row;
             });
+            if (!hasPermission('acessos', 'editar')) {
+                tabelaAcessosBody.querySelectorAll('.edit-usuario').forEach(button => button.remove());
+            }
+            if (!hasPermission('acessos', 'inativar')) {
+                tabelaAcessosBody.querySelectorAll('.toggle-usuario').forEach(button => button.remove());
+            }
+            tabelaAcessosBody.querySelectorAll('.actions-cell').forEach(cell => {
+                if (!cell.textContent.trim()) cell.textContent = '-';
+            });
         
         }
 
@@ -3864,6 +4057,14 @@
             const toggleButton = event.target.closest('.toggle-usuario');
             const actionButton = editButton || toggleButton;
             if (!actionButton) return;
+            if (editButton && !hasPermission('acessos', 'editar')) {
+                showInfoModal('Usuario sem permissao para editar usuarios.', 'error');
+                return;
+            }
+            if (toggleButton && !hasPermission('acessos', 'inativar')) {
+                showInfoModal('Usuario sem permissao para inativar usuarios.', 'error');
+                return;
+            }
 
             const usuario = usuariosAcessoCache.find(item => Number(item.USUARIO_ID) === Number(actionButton.dataset.id));
             if (!usuario) {
@@ -4187,10 +4388,12 @@
         };
 
         async function renderizarRolesSettings() {
-            if (usuarioSessaoCache?.perfil !== 'ADMIN') return;
+            if (!hasPermission('roles', 'visualizar')) return;
             const container = document.getElementById('rolesSettingsContainer');
             if (!container) return;
             await carregarPerfisAcesso();
+            const canEditRoles = hasPermission('roles', 'editar');
+            const canInactivateRoles = hasPermission('roles', 'inativar');
             const rows = perfisAcessoCache.map((perfil) => {
                 const permissoesAtivas = (perfil.PERMISSOES || []).filter(p => Number(p.PODE_VISUALIZAR) || Number(p.PODE_EDITAR) || Number(p.PODE_EXCLUIR)).length;
                 return `
@@ -4214,6 +4417,16 @@
                     <thead><tr><th>Perfil de Acesso</th><th>Descrição</th><th>Status</th><th>Permissões</th><th>Ações</th></tr></thead>
                     <tbody>${rows || '<tr><td colspan="5" class="text-center text-gray-500 py-8">Nenhum perfil encontrado.</td></tr>'}</tbody>
                 </table>`;
+            if (!canEditRoles) {
+                container.querySelector('#novoPerfilAcessoBtn')?.remove();
+                container.querySelectorAll('.editar-perfil-acesso').forEach(button => button.remove());
+            }
+            if (!canInactivateRoles) {
+                container.querySelectorAll('.toggle-perfil-acesso').forEach(button => button.remove());
+            }
+            container.querySelectorAll('.actions-cell').forEach(cell => {
+                if (!cell.textContent.trim()) cell.textContent = '-';
+            });
         
         }
 
@@ -4222,6 +4435,18 @@
             const edit = event.target.closest('.editar-perfil-acesso');
             const toggle = event.target.closest('.toggle-perfil-acesso');
             try {
+                if (novo && !hasPermission('roles', 'editar')) {
+                    showInfoModal('Usuario sem permissao para criar perfis.', 'error');
+                    return;
+                }
+                if (edit && !hasPermission('roles', 'editar')) {
+                    showInfoModal('Usuario sem permissao para editar perfis.', 'error');
+                    return;
+                }
+                if (toggle && !hasPermission('roles', 'inativar')) {
+                    showInfoModal('Usuario sem permissao para inativar perfis.', 'error');
+                    return;
+                }
                 if (novo) return abrirModalPerfilAcesso();
                 const button = edit || toggle;
                 if (!button) return;
@@ -4622,12 +4847,16 @@
                 const status = String(escala.STATUS || '-').toUpperCase();
                 const finalizada = status === 'FINALIZADA';
                 const oficializada = Number(escala.OFICIALIZADA || 0) === 1;
-                const oficializarAction = finalizada
+                const canEditEscalas = hasPermission('escalas', 'editar');
+                const canInactivateEscalas = hasPermission('escalas', 'inativar');
+                const oficializarAction = !canEditEscalas
+                    ? ''
+                    : finalizada
                     ? '<button class="action-btn-table banco-action" disabled title="Escala finalizada"><span class="material-symbols-outlined">lock</span>Finalizada</button>'
                     : oficializada
                         ? '<button class="action-btn-table banco-action officialize-action" disabled title="Escala oficializada"><span class="material-symbols-outlined">verified</span>Oficializada</button>'
                         : '<button class="action-btn-table banco-action officialize-action banco-oficializar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Oficializar escala"><span class="material-symbols-outlined">verified</span>Oficializar</button>';
-                const inativarAction = finalizada
+                const inativarAction = !canInactivateEscalas || finalizada
                     ? ''
                     : '<button class="action-btn-table banco-action danger-action banco-inativar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Inativar escala"><span class="material-symbols-outlined">delete</span>Inativar</button>';
                 const row = [
@@ -5038,6 +5267,10 @@
         });
 
         salvarDetalheBancoBtn?.addEventListener('click', async () => {
+            if (!hasPermission('escalas', 'editar')) {
+                showInfoModal('Usuario sem permissao para salvar escalas.', 'error');
+                return;
+            }
             if (!escalaDetalheBancoAlterados.size) {
                 showInfoModal('Nenhuma alteração pendente para salvar.', 'info');
                 return;
@@ -5308,6 +5541,9 @@
                 const card = document.createElement('article');
                 card.className = 'section-choice-card';
                 card.innerHTML = '<label class="section-choice-main"><input type="checkbox" value="' + escapeHtml(id) + '" checked><strong>' + escapeHtml(codigo + (turno.DESCR || 'Secao')) + '</strong></label><span>' + escapeHtml(periodo) + '</span><small>' + escapeHtml(turno.QTDE_COLABORADORES || 1) + ' colaborador(es)</small><button type="button" class="action-btn-table banco-action editar-turno-criacao" data-id="' + escapeHtml(turno.ESCSECAOTURNO_ID || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button>';
+                if (!hasPermission('turnos-secao', 'editar')) {
+                    card.querySelector('.editar-turno-criacao')?.remove();
+                }
                 criacaoSecoesLista.appendChild(card);
             });
         };
@@ -5325,6 +5561,10 @@
         };
 
         const abrirModalTurnoSecaoCriacao = async (turno = null) => {
+            if (!hasPermission('turnos-secao', 'editar')) {
+                showInfoModal('Usuario sem permissao para editar turnos por secao.', 'error');
+                return;
+            }
             const loja = criacaoEscalaLoja?.value || lojaEscalaSelect.value;
             if (!loja) {
                 showInfoModal('Selecione uma loja antes de cadastrar turnos.', 'error');
@@ -5431,6 +5671,7 @@
         };
 
         novoTurnoCriacaoBtn?.addEventListener('click', () => {
+            if (!hasPermission('turnos-secao', 'editar')) return showInfoModal('Usuario sem permissao para editar turnos por secao.', 'error');
             abrirModalTurnoSecaoCriacao().catch(error => showInfoModal(error.message, 'error'));
         });
 
@@ -5438,6 +5679,7 @@
             const button = event.target.closest('.editar-turno-criacao');
             if (!button) return;
             event.preventDefault();
+            if (!hasPermission('turnos-secao', 'editar')) return showInfoModal('Usuario sem permissao para editar turnos por secao.', 'error');
             const turno = turnosSecaoCache.find(item => String(item.ESCSECAOTURNO_ID || '') === String(button.dataset.id));
             abrirModalTurnoSecaoCriacao(turno).catch(error => showInfoModal(error.message, 'error'));
         });
@@ -5655,11 +5897,19 @@
                 if (escalasFiltroAno) escalasFiltroAno.value = String(dataRef.getFullYear());
             }
             if (criarButton) {
+                if (!hasPermission('escalas', 'editar')) {
+                    showInfoModal('Usuario sem permissao para criar escalas.', 'error');
+                    return;
+                }
                 window.location.hash = '/escalas/nova/' + loja + '/' + mesRef;
                 return;
             }
 
             if (oficializarButton) {
+                if (!hasPermission('escalas', 'editar')) {
+                    showInfoModal('Usuario sem permissao para oficializar escalas.', 'error');
+                    return;
+                }
                 const confirmacao = await showInputModal({
                     title: 'Oficializar escala',
                     inputs: [{ type: 'message', text: 'A escala sera marcada como oficial. Qualquer alteracao futura criara uma nova revisao nao oficializada.' }],
@@ -5679,6 +5929,10 @@
             }
 
             if (inativarButton) {
+                if (!hasPermission('escalas', 'inativar')) {
+                    showInfoModal('Usuario sem permissao para inativar escalas.', 'error');
+                    return;
+                }
                 const confirmacao = await showInputModal({
                     title: 'Inativar escala',
                     inputs: [{ type: 'message', text: 'A escala sera inativada e nao aparecera nos relatorios nem bloqueara nova escala para o mesmo mes.' }],

@@ -72,3 +72,5 @@ const api = {
     });
   }
 };
+
+window.EscalaApi = api;
