@@ -1667,6 +1667,21 @@
             grid-template-columns: repeat(2, minmax(140px, 1fr));
         }
 
+        #inputModalPanel.input-modal-wide {
+            max-width: min(940px, calc(100vw - 32px));
+            width: min(94vw, 940px);
+        }
+
+        #inputModalPanel.input-modal-wide #inputModalBody {
+            max-height: min(68vh, 620px);
+            overflow-y: auto;
+        }
+
+        #inputModalPanel.input-modal-wide #inputModalBody [data-input-type="checkbox-group"] {
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            max-height: 360px;
+        }
+
         #inputModalBody [data-input-type="checkbox-group"] label {
             align-items: center;
             border: 1px solid var(--cor-borda);
@@ -1688,4 +1703,9 @@
         @media (max-width: 620px) {
             .compact-form,
             #inputModalBody [data-input-type="checkbox-group"] { grid-template-columns: 1fr; }
+
+            #inputModalPanel.input-modal-wide {
+                max-width: calc(100vw - 24px);
+                width: calc(100vw - 24px);
+            }
         }

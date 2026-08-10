@@ -155,6 +155,7 @@ cd /opt/escala-app
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260630_add_prog_ativa.sql
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260701_add_tipo_descanso_classificacao.sql
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260807_rm_rules_horarios.sql
+sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260810_add_funcionario_cpf.sql
 ```
 
 A migration `20260807_rm_rules_horarios.sql` cria:
@@ -163,6 +164,8 @@ A migration `20260807_rm_rules_horarios.sql` cria:
 - `SGN_ESC_RM_LOG` e `SGN_ESC_RM_LOG_SEQ`;
 - campos opcionais em `SGN_ESC_PROG` para guardar o turno oficial inicial do funcionario;
 - permissoes das novas telas para perfis existentes.
+
+A migration `20260810_add_funcionario_cpf.sql` adiciona `SGN_ESC_FUNCIONARIO.CPF`. Preencha esse campo antes de habilitar a integracao RM, pois a oficializacao consulta o funcionario no RM pelo CPF para obter `CODCOLIGADA` e `CODTABFOLGA`.
 
 ## 8. Teste manual antes do servico
 

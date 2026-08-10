@@ -56,6 +56,7 @@ O backend e o mesmo usado no Linux. A diferenca fica no `.env`/ambiente:
 - Docker usa Oracle local e credenciais locais de desenvolvimento.
 - Linux usa Oracle real e credenciais mantidas somente no servidor.
 - A integracao RM vem desabilitada por padrao com `RM_API_ENABLED=false`; habilite apenas depois de configurar URL, usuario e senha reais no ambiente.
+- Para testar oficializacao integrada ao RM, preencha `SGN_ESC_FUNCIONARIO.CPF`; sem CPF o envio sera registrado como falha controlada no log RM.
 
 ## Reiniciar mantendo o banco
 

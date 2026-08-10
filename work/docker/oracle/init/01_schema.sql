@@ -39,6 +39,7 @@ create table SGN_ESC_FUNCIONARIO (
   LOJA number(10) not null,
   CHAPA varchar2(8) not null,
   NOME varchar2(100) not null,
+  CPF varchar2(20),
   SEXO varchar2(1) not null,
   DT_ADMISS date not null,
   BRIGADISTA varchar2(1) not null,

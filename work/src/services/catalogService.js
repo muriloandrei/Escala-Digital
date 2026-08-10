@@ -24,6 +24,7 @@ function normalizeFuncionario(row) {
     LOJA: pick(row, 'LOJA', 'loja'),
     CHAPA: pick(row, 'CHAPA', 'chapa'),
     NOME: pick(row, 'NOME', 'nome'),
+    CPF: pick(row, 'CPF', 'cpf', 'CPF_FUNCIONARIO', 'cpf_funcionario'),
     DT_ADMISS: pick(row, 'DT_ADMISS', 'dt_admiss'),
     BRIGADISTA: pick(row, 'BRIGADISTA', 'brigadista'),
     ESCSECAO_ID: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
@@ -250,6 +251,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
     const secaoLojaColumn = await getSecaoLojaColumn(connection);
+    const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
     const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
     const funcaoColumns = await getTableColumns(connection, 'SGN_ESC_FUNCAO');
     const lojaCodcoligada = await getLojaCodcoligada(connection, lojaCodigo);
@@ -257,6 +259,11 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
     const secaoJoinColigada = secaoColumns.has('CODCOLIGADA') ? 'and s.codcoligada = f.codcoligada' : '';
     const funcaoJoinColigada = funcaoColumns.has('CODCOLIGADA') ? 'and fu.codcoligada = f.codcoligada' : '';
     const funcionarioColigadaWhere = lojaCodcoligada !== null ? 'and f.codcoligada = :codcoligada' : '';
+    const cpfSelect = funcionarioColumns.has('CPF')
+      ? 'f.cpf'
+      : funcionarioColumns.has('CPF_FUNCIONARIO')
+        ? 'f.cpf_funcionario as cpf'
+        : 'cast(null as varchar2(20)) as cpf';
     const binds = { lojaId: lojaCodigo };
     if (lojaCodcoligada !== null) binds.codcoligada = lojaCodcoligada;
     const baseSql = `select
@@ -265,6 +272,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
           f.loja,
           f.chapa,
           f.nome,
+          ${cpfSelect},
           f.dt_admiss,
           f.brigadista,
           f.escsecao_id,

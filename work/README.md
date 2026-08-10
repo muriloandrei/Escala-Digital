@@ -121,6 +121,8 @@ Antes de subir a versao Linux em um banco ja existente, execute as migrations em
 20260630_add_prog_ativa.sql
 20260701_add_tipo_descanso_classificacao.sql
 20260807_rm_rules_horarios.sql
+20260810_add_funcionario_cpf.sql
 ```
 
 A migration `20260807_rm_rules_horarios.sql` adiciona horarios padrao, log de integracao RM e campos opcionais de turno oficial na escala mensal.
+A migration `20260810_add_funcionario_cpf.sql` adiciona `SGN_ESC_FUNCIONARIO.CPF`, necessario para buscar o funcionario no RM durante a oficializacao.

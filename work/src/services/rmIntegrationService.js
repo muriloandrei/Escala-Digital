@@ -19,6 +19,10 @@ function mask(value) {
   return `${text.slice(0, 2)}****${text.slice(-2)}`;
 }
 
+function sanitizeCpf(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
 async function getTableColumns(connection, tableName) {
   const result = await connection.execute(
     `select column_name from user_tab_columns where table_name = :tableName`,
@@ -65,6 +69,7 @@ async function requestRm(path, options = {}) {
   const rmConfig = getEnv().rm;
   const baseUrl = rmConfig.baseUrl.replace(/\/$/, '');
   const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  const method = options.method || 'GET';
   let lastError;
 
   for (let attempt = 0; attempt <= rmConfig.retries; attempt += 1) {
@@ -81,16 +86,25 @@ async function requestRm(path, options = {}) {
         }
       });
       const text = await response.text();
-      const body = text ? JSON.parse(text) : null;
+      let body = null;
+      if (text) {
+        try {
+          body = JSON.parse(text);
+        } catch (_) {
+          body = text;
+        }
+      }
       if (!response.ok) {
-        const error = new Error(`RM retornou HTTP ${response.status}`);
+        const detail = typeof body === 'string' ? body.slice(0, 300) : JSON.stringify(body || {}).slice(0, 300);
+        const error = new Error(`RM retornou HTTP ${response.status} em ${method} ${path}${detail ? `: ${detail}` : ''}`);
         error.statusCode = response.status;
         error.body = body;
         throw error;
       }
       return body;
     } catch (error) {
-      lastError = error;
+      lastError = new Error(`Falha ao chamar RM em ${method} ${path}: ${error.message}`);
+      lastError.cause = error;
       if (attempt >= rmConfig.retries) break;
     } finally {
       clearTimeout(timeout);
@@ -166,15 +180,23 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
     let falhas = 0;
     for (const funcionario of agruparPorFuncionario(rows)) {
       try {
-        const cpf = funcionario.cpf || '';
-        const funcionarioRm = cpf
-          ? await requestRm(`/funcionarios/${encodeURIComponent(cpf)}`)
-          : { codColigada: funcionario.codcoligada, codTabFolga: null };
+        const cpf = sanitizeCpf(funcionario.cpf);
+        if (!cpf) {
+          throw new Error(`CPF nao cadastrado para o funcionario ${funcionario.chapa}. Atualize SGN_ESC_FUNCIONARIO.CPF antes de oficializar no RM.`);
+        }
+
+        const funcionarioRm = await requestRm(`/funcionarios/${encodeURIComponent(cpf)}`);
+        const codColigadaRm = pick(funcionarioRm, 'codColigada', 'CODCOLIGADA', 'CodColigada') || funcionario.codcoligada;
+        const codTabFolga = pick(funcionarioRm, 'codTabFolga', 'CODTABFOLGA', 'CodTabFolga');
+        if (!codTabFolga) {
+          throw new Error(`RM nao retornou CODTABFOLGA para o CPF ${mask(cpf)}.`);
+        }
+
         const inicio = formatDate(mesRef);
         const fimDate = new Date(`${inicio}T00:00:00`);
         fimDate.setMonth(fimDate.getMonth() + 1, 0);
         const fim = formatDate(fimDate);
-        const existentes = await requestRm(`/folgas?codColigada=${encodeURIComponent(funcionarioRm.codColigada || funcionario.codcoligada)}&chapa=${encodeURIComponent(funcionario.chapa)}&inicio=${inicio}&fim=${fim}`);
+        const existentes = await requestRm(`/folgas?codColigada=${encodeURIComponent(codColigadaRm)}&chapa=${encodeURIComponent(funcionario.chapa)}&inicio=${inicio}&fim=${fim}`);
         const desejadas = new Set(funcionario.eventos.map((evento) => `${evento.data}|${evento.programacao}`));
         const existentesRows = Array.isArray(existentes) ? existentes : existentes?.items || [];
 
@@ -193,8 +215,8 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
               body: JSON.stringify({
                 cpf,
                 chapa: funcionario.chapa,
-                codColigada: funcionarioRm.codColigada || funcionario.codcoligada,
-                codTabFolga: funcionarioRm.codTabFolga || funcionarioRm.CODTABFOLGA || null,
+                codColigada: codColigadaRm,
+                codTabFolga,
                 data: evento.data,
                 tipo: evento.programacao
               })

@@ -2154,7 +2154,11 @@
         const showInputModal = (config) => {
             return new Promise((resolve) => {
                 const basePanelClass = 'bg-white rounded-lg shadow-xl w-11/12 max-w-sm flex flex-col';
-                if (inputModalPanel) inputModalPanel.className = (config.panelClass || basePanelClass).trim();
+                const hasWideInput = (config.inputs || []).some(input => input.type === 'checkbox-group');
+                const panelClass = (config.panelClass || basePanelClass).trim();
+                if (inputModalPanel) {
+                    inputModalPanel.className = hasWideInput ? `${panelClass} input-modal-wide` : panelClass;
+                }
                 inputModalTitle.textContent = config.title;
                 inputModalConfirmBtn.textContent = config.confirmText || 'Confirmar';
                 

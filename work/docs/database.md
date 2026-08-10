@@ -2,7 +2,7 @@
 
 ## Tabelas existentes esperadas
 
-- `SGN_ESC_FUNCIONARIO`: funcionarios.
+- `SGN_ESC_FUNCIONARIO`: funcionarios. Para integracao RM, a coluna `CPF varchar2(20)` deve existir e estar preenchida.
 - `SGN_ESC_AUSENCIA`: ausencias.
 - `SGN_ESC_LOJA`: lojas.
 - `SGN_ESC_FUNCAO`: funcoes.
