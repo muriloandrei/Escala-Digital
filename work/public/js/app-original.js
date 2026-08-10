@@ -946,6 +946,64 @@
             };
         };
 
+        const getTipoDescansoOptions = () => {
+            const ativos = tiposDescansoCache.filter(tipo => tipo.STATUS !== 'I');
+            return ativos.length
+                ? ativos.map(tipo => ({ value: tipo.SIGLA, label: tipo.DESCR + ' (' + tipo.SIGLA + ')' }))
+                : [{ value: 'F', label: 'Folga (F)' }];
+        };
+
+        const abrirModalEdicaoDiaPadrao = async ({
+            title,
+            ids,
+            dia = {},
+            descansoAtual = false,
+            panelClass = 'bg-white rounded-lg shadow-xl w-11/12 max-w-5xl flex flex-col employee-day-modal'
+        }) => {
+            if (!tiposDescansoCache.length) await carregarTiposDescansoCache(false);
+            const getDiaValue = (key, fallback = '') => dia[key] || fallback;
+            const values = await showInputModal({
+                title,
+                panelClass,
+                inputs: [
+                    { label: 'Tipo do dia', type: 'choice-group', id: ids.tipoDia, value: descansoAtual ? 'DESCANSO' : 'TRABALHO', options: [{ value: 'TRABALHO', label: 'Trabalho' }, { value: 'DESCANSO', label: 'Descanso' }], required: true, wrapperClass: 'employee-modal-span-4' },
+                    { label: 'Tipo de descanso', type: 'select', id: ids.descanso, value: descansoAtual ? getValorDescanso(dia) : 'F', options: getTipoDescansoOptions(), dependsOn: ids.tipoDia, showWhen: 'DESCANSO', required: true, wrapperClass: 'employee-modal-span-4' },
+                    { label: 'Entrada 1', type: 'time', id: ids.hrEnt1, value: descansoAtual ? '08:00' : getDiaValue('HR_ENT1', '08:00'), dependsOn: ids.tipoDia, showWhen: 'TRABALHO', required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Saida 1', type: 'time', id: ids.hrSai1, value: descansoAtual ? '' : getDiaValue('HR_SAI1'), dependsOn: ids.tipoDia, showWhen: 'TRABALHO', required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Entrada 2', type: 'time', id: ids.hrEnt2, value: descansoAtual ? '' : getDiaValue('HR_ENT2'), dependsOn: ids.tipoDia, showWhen: 'TRABALHO', required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Saida 2', type: 'time', id: ids.hrSai2, value: descansoAtual ? '' : getDiaValue('HR_SAI2'), dependsOn: ids.tipoDia, showWhen: 'TRABALHO', required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Justificativa da mudanca', type: 'textarea', id: ids.justificativa, value: dia.JUSTIFICATIVA_ALTERACAO || '', required: true, rows: 3, placeholder: 'Descreva o motivo da alteracao deste dia.', wrapperClass: 'employee-modal-span-4' }
+                ],
+                confirmText: 'Salvar Dia',
+                onRender: (body) => {
+                    const ent1 = body.querySelector('#' + ids.hrEnt1);
+                    const preencher = () => {
+                        const calculado = calcularHorarioCompletoPorEntrada(ent1?.value);
+                        if (!calculado) return;
+                        body.querySelector('#' + ids.hrSai1).value = calculado.HR_SAI1;
+                        body.querySelector('#' + ids.hrEnt2).value = calculado.HR_ENT2;
+                        body.querySelector('#' + ids.hrSai2).value = calculado.HR_SAI2;
+                    };
+                    ent1?.addEventListener('input', preencher);
+                    preencher();
+                }
+            });
+            if (!values) return null;
+            if (values[ids.tipoDia] === 'TRABALHO') {
+                const erros = validarTurnoCadastroSecao({
+                    HR_ENT1: values[ids.hrEnt1],
+                    HR_SAI1: values[ids.hrSai1],
+                    HR_ENT2: values[ids.hrEnt2],
+                    HR_SAI2: values[ids.hrSai2]
+                });
+                if (erros.length) {
+                    showInfoModal(erros, 'error');
+                    return null;
+                }
+            }
+            return values;
+        };
+
         const setSalvarEscalaDisponivel = (disponivel) => {
             escalaDetalhadaValidada = !!disponivel;
             salvarEscalaBtn?.classList.toggle('hidden', !escalaDetalhadaValidada);
@@ -1737,45 +1795,24 @@
         const abrirModalEdicaoDiaDetalhada = async (colabDiv, dia) => {
             const inicioCell = colabDiv.querySelector('tbody tr[data-key="inicio"]')?.cells[dia];
             if (!inicioCell) return;
-            if (!tiposDescansoCache.length) await carregarTiposDescansoCache(false);
             const descansoAtual = !/^\d{2}:\d{2}$/.test(inicioCell.textContent.trim());
-            const tipoOptions = tiposDescansoCache.filter(tipo => tipo.STATUS !== 'I').map(tipo => ({ value: tipo.SIGLA, label: tipo.DESCR + ' (' + tipo.SIGLA + ')' }));
-            const values = await showInputModal({
+            const values = await abrirModalEdicaoDiaPadrao({
                 title: 'Editar dia ' + dia,
-                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-3xl flex flex-col employee-day-modal',
-                inputs: [
-                    { label: 'Tipo do dia', type: 'choice-group', id: 'DET_TIPO_DIA', value: descansoAtual ? 'DESCANSO' : 'TRABALHO', options: [{ value: 'TRABALHO', label: 'Trabalho' }, { value: 'DESCANSO', label: 'Descanso' }], required: true, wrapperClass: 'employee-modal-span-4' },
-                    { label: 'Tipo de descanso', type: 'select', id: 'DET_DESCANSO', value: 'F', options: tipoOptions.length ? tipoOptions : [{ value: 'F', label: 'Folga (F)' }], dependsOn: 'DET_TIPO_DIA', showWhen: 'DESCANSO', required: true, wrapperClass: 'employee-modal-span-4' },
-                    { label: 'Entrada 1', type: 'time', id: 'DET_HR_ENT1', value: descansoAtual ? '08:00' : inicioCell.textContent.trim(), dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
-                    { label: 'Saida 1', type: 'time', id: 'DET_HR_SAI1', value: '', dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
-                    { label: 'Entrada 2', type: 'time', id: 'DET_HR_ENT2', value: '', dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
-                    { label: 'Saida 2', type: 'time', id: 'DET_HR_SAI2', value: '', dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
-                    { label: 'Justificativa da mudanca', type: 'textarea', id: 'DET_JUSTIFICATIVA', rows: 3, required: true, wrapperClass: 'employee-modal-span-4' }
-                ],
-                confirmText: 'Salvar Dia',
-                onRender: (body) => {
-                    const ent1 = body.querySelector('#DET_HR_ENT1');
-                    const preencher = () => {
-                        const calculado = calcularHorarioCompletoPorEntrada(ent1.value);
-                        if (!calculado) return;
-                        body.querySelector('#DET_HR_SAI1').value = calculado.HR_SAI1;
-                        body.querySelector('#DET_HR_ENT2').value = calculado.HR_ENT2;
-                        body.querySelector('#DET_HR_SAI2').value = calculado.HR_SAI2;
-                    };
-                    ent1?.addEventListener('input', preencher);
-                    preencher();
-                }
+                ids: { tipoDia: 'DET_TIPO_DIA', descanso: 'DET_DESCANSO', hrEnt1: 'DET_HR_ENT1', hrSai1: 'DET_HR_SAI1', hrEnt2: 'DET_HR_ENT2', hrSai2: 'DET_HR_SAI2', justificativa: 'DET_JUSTIFICATIVA' },
+                dia: {
+                    HR_ENT1: inicioCell.textContent.trim(),
+                    HR_SAI1: colabDiv.querySelector('tbody tr[data-key="inicioIntervalo"]')?.cells[dia]?.textContent.trim(),
+                    HR_ENT2: colabDiv.querySelector('tbody tr[data-key="fimIntervalo"]')?.cells[dia]?.textContent.trim(),
+                    HR_SAI2: colabDiv.querySelector('tbody tr[data-key="fim"]')?.cells[dia]?.textContent.trim()
+                },
+                descansoAtual,
+                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-5xl flex flex-col employee-day-modal'
             });
             if (!values) return;
             if (values.DET_TIPO_DIA === 'DESCANSO') {
                 atualizarDiaDetalhada(colabDiv, dia, { tipo: 'DESCANSO', sigla: String(values.DET_DESCANSO || 'F').toUpperCase() });
             } else {
                 const turno = { HR_ENT1: values.DET_HR_ENT1, HR_SAI1: values.DET_HR_SAI1, HR_ENT2: values.DET_HR_ENT2, HR_SAI2: values.DET_HR_SAI2 };
-                const erros = validarTurnoCadastroSecao(turno);
-                if (erros.length) {
-                    showInfoModal(erros, 'error');
-                    return;
-                }
                 atualizarDiaDetalhada(colabDiv, dia, { tipo: 'TRABALHO', ...turno });
             }
             invalidarValidacaoDetalhada();
@@ -3714,47 +3751,14 @@
             const dia=escalaFuncionarioEdicaoAtual.dias.find(item=>Number(String(item.DT).slice(8,10))===Number(button.dataset.dia));
             if(!dia)return;
             const numeroDia = Number(button.dataset.dia);
-            if (!tiposDescansoCache.length) await carregarTiposDescansoCache(false);
-            if (!horariosPadraoCache.length) await carregarHorariosPadraoCache(false);
-            const turnos = getTurnosFuncionarioAtual();
-            const tipoOptions = tiposDescansoCache.filter(tipo => tipo.STATUS !== 'I').map(tipo => ({ value: tipo.SIGLA, label: tipo.DESCR + ' (' + tipo.SIGLA + ')' }));
-            const turnoOptions = turnos.map(turno => ({ value: turno.ESCSECAOTURNO_ID, label: (turno.DESCR || 'Turno') + ' | ' + turno.HR_ENT1 + '-' + turno.HR_SAI1 + ' / ' + turno.HR_ENT2 + '-' + turno.HR_SAI2 }));
-            const horarioPadraoOptions = horariosPadraoCache.filter(horario => horario.STATUS !== 'I').map(horario => ({ value: horario.ESCHORPAD_ID, label: horario.DESCR + ' | ' + horario.HR_ENT1 + '-' + horario.HR_SAI1 + ' / ' + horario.HR_ENT2 + '-' + horario.HR_SAI2 }));
             const descansoAtual = isProgramacaoDescanso(dia.PROGRAMACAO);
-            const values=await showInputModal({
+            const values=await abrirModalEdicaoDiaPadrao({
                 title:'Editar dia '+formatarDataTabela(dia.DT)+(dia.AUSENCIA_OBRIGATORIA ? ' - ausencia obrigatoria' : ''),
-                panelClass:'bg-white rounded-lg shadow-xl w-11/12 max-w-5xl flex flex-col employee-day-modal',
-                inputs:[
-                    {label:'Tipo do dia',type:'choice-group',id:'IND_TIPO_DIA',value:descansoAtual?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true,wrapperClass:'employee-modal-span-4'},
-                    {label:'Tipo de descanso',type:'select',id:'IND_TIPO_DESCANSO',value:descansoAtual?getValorDescanso(dia):'F',options:tipoOptions.length?tipoOptions:[{value:'F',label:'Folga (F)'}],dependsOn:'IND_TIPO_DIA',showWhen:'DESCANSO',required:true,wrapperClass:'employee-modal-span-4'},
-                    {label:'Entrada 1',type:'time',id:'IND_HR_ENT1',value:descansoAtual?'08:00':dia.HR_ENT1||'08:00',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
-                    {label:'Saida 1',type:'time',id:'IND_HR_SAI1',value:descansoAtual?'':dia.HR_SAI1||'',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
-                    {label:'Entrada 2',type:'time',id:'IND_HR_ENT2',value:descansoAtual?'':dia.HR_ENT2||'',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
-                    {label:'Saida 2',type:'time',id:'IND_HR_SAI2',value:descansoAtual?'':dia.HR_SAI2||'',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
-                    {label:'Justificativa da mudan\u00e7a',type:'textarea',id:'IND_JUSTIFICATIVA',value:dia.JUSTIFICATIVA_ALTERACAO||'',required:true,rows:3,placeholder:'Descreva o motivo da altera\u00e7\u00e3o deste dia.',wrapperClass:'employee-modal-span-4'}
-                ],
-                confirmText:'Salvar Dia',
-                onRender: (body) => {
-                    const ent1 = body.querySelector('#IND_HR_ENT1');
-                    const preencher = () => {
-                        const calculado = calcularHorarioCompletoPorEntrada(ent1.value);
-                        if (!calculado) return;
-                        body.querySelector('#IND_HR_SAI1').value = calculado.HR_SAI1;
-                        body.querySelector('#IND_HR_ENT2').value = calculado.HR_ENT2;
-                        body.querySelector('#IND_HR_SAI2').value = calculado.HR_SAI2;
-                    };
-                    ent1?.addEventListener('input', preencher);
-                    preencher();
-                }
+                ids:{ tipoDia:'IND_TIPO_DIA', descanso:'IND_TIPO_DESCANSO', hrEnt1:'IND_HR_ENT1', hrSai1:'IND_HR_SAI1', hrEnt2:'IND_HR_ENT2', hrSai2:'IND_HR_SAI2', justificativa:'IND_JUSTIFICATIVA' },
+                dia,
+                descansoAtual
             });
             if(!values)return;
-            if (values.IND_TIPO_DIA === 'TRABALHO') {
-                const erros = validarTurnoCadastroSecao({ HR_ENT1: values.IND_HR_ENT1, HR_SAI1: values.IND_HR_SAI1, HR_ENT2: values.IND_HR_ENT2, HR_SAI2: values.IND_HR_SAI2 });
-                if (erros.length) {
-                    showInfoModal(erros, 'error');
-                    return;
-                }
-            }
             aplicarEdicaoDiasFuncionario(numeroDia, values);
         });
 
@@ -4789,6 +4793,41 @@
             return [...grupos.values()].sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
         };
 
+        const montarPayloadDetalheBancoAtual = () => {
+            const funcionarios = agruparDiasPorFuncionario(escalaDetalheAtual.dias || [])
+                .filter(funcionario => funcionario.escfuncId && funcionario.chapa)
+                .map(funcionario => {
+                    const diasOrdenados = [...funcionario.dias.values()].sort((a, b) => String(a.DT).localeCompare(String(b.DT)));
+                    const base = diasOrdenados[0] || {};
+                    return {
+                        escfuncId: Number(funcionario.escfuncId),
+                        chapa: funcionario.chapa,
+                        nome: funcionario.nome,
+                        escsecaoId: base.ESCSECAO_ID || null,
+                        escfuncaoId: base.ESCFUNCAO_ID || null,
+                        dias: diasOrdenados.map(dia => {
+                            const descanso = isProgramacaoDescanso(dia.PROGRAMACAO);
+                            const sigla = getValorDescanso(dia);
+                            return {
+                                data: String(dia.DT).slice(0, 10),
+                                hrEnt1: descanso ? null : dia.HR_ENT1,
+                                hrSai1: descanso ? null : dia.HR_SAI1,
+                                hrEnt2: descanso ? null : dia.HR_ENT2,
+                                hrSai2: descanso ? null : dia.HR_SAI2,
+                                programacao: descanso ? sigla : 'TRB',
+                                justificativa: dia.JUSTIFICATIVA_ALTERACAO || null
+                            };
+                        })
+                    };
+                });
+            return {
+                lojaId: Number(escalaDetalheAtual.lojaId),
+                mesRef: escalaDetalheAtual.mesRef,
+                funcionarios,
+                oficializada: 0
+            };
+        };
+
         const getCriticasFuncionarioBanco = (funcionario) => {
             const criticasValidacao = escalaDetalheAtual.criticasPorFuncionario?.get(String(funcionario.escfuncId)) || [];
             if (criticasValidacao.length) return criticasValidacao;
@@ -4797,7 +4836,7 @@
                 .map(dia => 'Dia ' + Number(String(dia.DT).slice(8, 10)) + ': ajuste manual pendente de validacao.');
         };
 
-        const validarDetalheBancoAtual = () => {
+        const validarDetalheBancoAtual = async () => {
             const errors = [];
             escalaDetalheAtual.criticasPorFuncionario = new Map();
             agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).forEach((funcionario) => {
@@ -4806,7 +4845,21 @@
                 if (criticas.length) escalaDetalheAtual.criticasPorFuncionario.set(String(funcionario.escfuncId), criticas);
                 errors.push(...criticas);
             });
-            escalaDetalheBancoValidada = errors.length === 0;
+            try {
+                const backendValidation = await apiRequest('/api/escalas/validar', {
+                    method: 'POST',
+                    body: JSON.stringify(montarPayloadDetalheBancoAtual())
+                });
+                errors.push(...(backendValidation.errors || []));
+            } catch (error) {
+                errors.push(error.details ? error.details.join(' ') : error.message);
+            }
+            const uniqueErrors = [...new Set(errors.filter(Boolean))];
+            agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).forEach((funcionario) => {
+                const criticasFuncionario = uniqueErrors.filter(error => String(error).startsWith(funcionario.nome + ':') || String(error).startsWith(funcionario.nome + ' no dia'));
+                if (criticasFuncionario.length) escalaDetalheAtual.criticasPorFuncionario.set(String(funcionario.escfuncId), criticasFuncionario);
+            });
+            escalaDetalheBancoValidada = uniqueErrors.length === 0;
             if (escalaDetalheBancoValidada) {
                 (escalaDetalheAtual.dias || []).forEach(dia => { delete dia.CRITICA_MANUAL; });
                 salvarDetalheBancoBtn?.classList.toggle('hidden', escalaDetalheBancoAlterados.size === 0);
@@ -4814,7 +4867,7 @@
                 salvarDetalheBancoBtn?.classList.add('hidden');
             }
             renderizarSecaoAtivaEscala();
-            showInfoModal(errors.length ? errors : 'A escala foi validada com sucesso.', errors.length ? 'error' : 'success');
+            showInfoModal(uniqueErrors.length ? uniqueErrors : 'A escala foi validada com sucesso.', uniqueErrors.length ? 'error' : 'success');
             return escalaDetalheBancoValidada;
         };
 
@@ -4975,14 +5028,21 @@
             window.print();
         });
 
-        validarDetalheBancoBtn?.addEventListener('click', validarDetalheBancoAtual);
+        validarDetalheBancoBtn?.addEventListener('click', async () => {
+            validarDetalheBancoBtn.disabled = true;
+            try {
+                await validarDetalheBancoAtual();
+            } finally {
+                validarDetalheBancoBtn.disabled = false;
+            }
+        });
 
         salvarDetalheBancoBtn?.addEventListener('click', async () => {
             if (!escalaDetalheBancoAlterados.size) {
                 showInfoModal('Nenhuma alteração pendente para salvar.', 'info');
                 return;
             }
-            if (!escalaDetalheBancoValidada && !validarDetalheBancoAtual()) return;
+            if (!escalaDetalheBancoValidada && !(await validarDetalheBancoAtual())) return;
 
             salvarDetalheBancoBtn.disabled = true;
             try {
@@ -5031,45 +5091,16 @@
             }
             const dia = (escalaDetalheAtual.dias || []).find(item => String(item.ESCPROGDIA_ID || '') === String(escprogdiaId));
             if (!escprogId || !escprogdiaId || !dia) return;
-            if (!tiposDescansoCache.length) await carregarTiposDescansoCache(false);
-            const tipoOptions = tiposDescansoCache.filter(tipo => tipo.STATUS !== 'I').map(tipo => ({ value: tipo.SIGLA, label: tipo.DESCR + ' (' + tipo.SIGLA + ')' }));
             const descansoAtual = isProgramacaoDescanso(dia.PROGRAMACAO);
-            const values = await showInputModal({
+            const values = await abrirModalEdicaoDiaPadrao({
                 title: 'Editar dia ' + formatarDataTabela(dia.DT),
-                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-3xl flex flex-col employee-day-modal',
-                inputs: [
-                    { label: 'Tipo do dia', type: 'choice-group', id: 'BANCO_TIPO_DIA', value: descansoAtual ? 'DESCANSO' : 'TRABALHO', options: [{ value: 'TRABALHO', label: 'Trabalho' }, { value: 'DESCANSO', label: 'Descanso' }], required: true, wrapperClass: 'employee-modal-span-4' },
-                    { label: 'Tipo de descanso', type: 'select', id: 'BANCO_DESCANSO', value: descansoAtual ? getValorDescanso(dia) : 'F', options: tipoOptions.length ? tipoOptions : [{ value: 'F', label: 'Folga (F)' }], dependsOn: 'BANCO_TIPO_DIA', showWhen: 'DESCANSO', required: true, wrapperClass: 'employee-modal-span-4' },
-                    { label: 'Entrada 1', type: 'time', id: 'BANCO_HR_ENT1', value: descansoAtual ? '08:00' : dia.HR_ENT1 || '08:00', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
-                    { label: 'Saida 1', type: 'time', id: 'BANCO_HR_SAI1', value: descansoAtual ? '' : dia.HR_SAI1 || '', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
-                    { label: 'Entrada 2', type: 'time', id: 'BANCO_HR_ENT2', value: descansoAtual ? '' : dia.HR_ENT2 || '', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
-                    { label: 'Saida 2', type: 'time', id: 'BANCO_HR_SAI2', value: descansoAtual ? '' : dia.HR_SAI2 || '', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
-                    { label: 'Justificativa da mudanca', type: 'textarea', id: 'BANCO_JUSTIFICATIVA', rows: 3, required: true, wrapperClass: 'employee-modal-span-4' }
-                ],
-                confirmText: 'Salvar dia',
-                onRender: (body) => {
-                    const ent1 = body.querySelector('#BANCO_HR_ENT1');
-                    const preencher = () => {
-                        const calculado = calcularHorarioCompletoPorEntrada(ent1.value);
-                        if (!calculado) return;
-                        body.querySelector('#BANCO_HR_SAI1').value = calculado.HR_SAI1;
-                        body.querySelector('#BANCO_HR_ENT2').value = calculado.HR_ENT2;
-                        body.querySelector('#BANCO_HR_SAI2').value = calculado.HR_SAI2;
-                    };
-                    ent1?.addEventListener('input', preencher);
-                    preencher();
-                }
+                ids: { tipoDia: 'BANCO_TIPO_DIA', descanso: 'BANCO_DESCANSO', hrEnt1: 'BANCO_HR_ENT1', hrSai1: 'BANCO_HR_SAI1', hrEnt2: 'BANCO_HR_ENT2', hrSai2: 'BANCO_HR_SAI2', justificativa: 'BANCO_JUSTIFICATIVA' },
+                dia,
+                descansoAtual
             });
             if (!values) return;
             const folgaLocal = values.BANCO_TIPO_DIA === 'DESCANSO';
             const programacaoLocal = folgaLocal ? String(values.BANCO_DESCANSO || 'F').trim().toUpperCase() : 'TRB';
-            if (!folgaLocal) {
-                const erros = validarTurnoCadastroSecao({ HR_ENT1: values.BANCO_HR_ENT1, HR_SAI1: values.BANCO_HR_SAI1, HR_ENT2: values.BANCO_HR_ENT2, HR_SAI2: values.BANCO_HR_SAI2 });
-                if (erros.length) {
-                    showInfoModal(erros, 'error');
-                    return;
-                }
-            }
             dia.PROGRAMACAO = programacaoLocal;
             dia.HR_ENT1 = folgaLocal ? programacaoLocal : values.BANCO_HR_ENT1;
             dia.HR_SAI1 = folgaLocal ? programacaoLocal : values.BANCO_HR_SAI1;
@@ -5137,6 +5168,8 @@
                 const escprogdiaId = editDayButton.dataset.escprogdiaId;
                 const dia = (escalaDetalheAtual.dias || []).find(item => String(item.ESCPROGDIA_ID || '') === String(escprogdiaId));
                 if (!escprogId || !escprogdiaId || !dia) return;
+                await editarDiaEscalaPorId(escprogId, escprogdiaId);
+                return;
 
                 const values = await showInputModal({
                     title: 'Editar dia ' + formatarDataTabela(dia.DT),
