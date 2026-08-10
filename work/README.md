@@ -98,6 +98,7 @@ Para validar a integracao real com Oracle, use o login da aplicacao e o diagnost
 ## Roteiros do projeto
 
 - [Escopo restante](docs/alteracoes-restantes.md)
+- [Especificacao de desenvolvimento completo](docs/especificacao-desenvolvimento-completo.md)
 - [Escopo de desenvolvimento Savegnago](docs/escopo-dev-savegnago.md)
 - [Banco Oracle](docs/database.md)
 - [Requisicoes de banco](docs/requisicoes-banco.md)
