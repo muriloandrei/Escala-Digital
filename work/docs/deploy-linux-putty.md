@@ -302,6 +302,22 @@ Com `COOKIE_SECURE=true` em HTTP direto, o navegador ignora o cookie de login e 
 13. Tela de horarios padrao lista a jornada 08:48 com intervalo 1:10.
 14. Oficializacao grava auditoria e log RM como enviado, falha ou ignorado.
 15. Logs nao mostram senha, token ou dados sensiveis.
+16. Smoke test de API passa em loja/mes controlado.
+
+Para executar o smoke test no servidor, escolha uma loja e um mes futuro reservado para validacao. O teste cria a escala, gera revisao individual, oficializa e inativa ao final:
+
+```bash
+cd /opt/escala-app
+SMOKE_BASE_URL=http://127.0.0.1:3000 \
+SMOKE_LOGIN=admin \
+SMOKE_PASSWORD='senha_do_admin' \
+SMOKE_LOJA_ID=1 \
+SMOKE_MES_REF=2028-01-01 \
+SMOKE_ALLOW_WRITE=true \
+npm run smoke:api
+```
+
+Nao use uma loja/mes operacional real nesse smoke.
 
 ## 11.1 Diagnostico Oracle
 

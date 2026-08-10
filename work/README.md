@@ -89,6 +89,28 @@ Os testes automatizados mantidos nesta branch cobrem regras puras de calculo, se
 npm test
 ```
 
+## Smoke test de fluxo real
+
+Com a aplicacao rodando, execute o smoke test de API para validar login, catalogos, criacao de escala, revisao individual, auditoria, oficializacao e inativacao:
+
+```bash
+npm run smoke:api
+```
+
+Por padrao, o teste usa `http://127.0.0.1:3000`, `admin/admin123`, loja `1` e mes `2028-01-01`. Ele grava uma escala de teste e inativa ao final, portanto fora de localhost exige liberacao explicita:
+
+```bash
+SMOKE_BASE_URL=http://servidor:3000 \
+SMOKE_LOGIN=admin \
+SMOKE_PASSWORD=senha \
+SMOKE_LOJA_ID=1 \
+SMOKE_MES_REF=2028-01-01 \
+SMOKE_ALLOW_WRITE=true \
+npm run smoke:api
+```
+
+Nao execute o smoke contra base produtiva sem escolher uma loja/mes de teste e sem alinhar previamente com a operacao.
+
 Para validar a integracao real com Oracle, use o login da aplicacao e o diagnostico protegido:
 
 ```txt
