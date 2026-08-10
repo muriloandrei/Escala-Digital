@@ -23,6 +23,43 @@ function sanitizeCpf(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
+function toArrayResult(body) {
+  if (Array.isArray(body)) return body;
+  if (!body || typeof body !== 'object') return [];
+  for (const key of ['items', 'Itens', 'data', 'Data', 'rows', 'Rows', 'result', 'Result', 'resultado', 'Resultado']) {
+    if (Array.isArray(body[key])) return body[key];
+  }
+  return [body];
+}
+
+function formatRmDate(value, options = {}) {
+  const date = formatDate(value);
+  const time = options.endOfDay ? '23:59:59' : '00:00:00';
+  return `${date}T${time}${options.offset || ''}`;
+}
+
+function getMonthEnd(value) {
+  const inicio = formatDate(value);
+  const fimDate = new Date(`${inicio}T00:00:00`);
+  fimDate.setMonth(fimDate.getMonth() + 1, 0);
+  return formatDate(fimDate);
+}
+
+function getFuncionarioRmData(body) {
+  const rows = toArrayResult(body);
+  return rows.find((row) => pick(row, 'CODTABFOLGA', 'codTabFolga', 'codtabfolga'))
+    || rows[0]
+    || {};
+}
+
+function getCodTabFolga(funcionarioRm) {
+  return pick(funcionarioRm, 'CODTABFOLGA', 'codTabFolga', 'codtabfolga', 'CodTabFolga');
+}
+
+function getCodColigada(funcionarioRm, fallback) {
+  return pick(funcionarioRm, 'CODCOLIGADA', 'codColigada', 'codcoligada', 'CodColigada') || fallback;
+}
+
 async function getTableColumns(connection, tableName) {
   const result = await connection.execute(
     `select column_name from user_tab_columns where table_name = :tableName`,
@@ -114,6 +151,66 @@ async function requestRm(path, options = {}) {
   throw lastError;
 }
 
+async function getFuncionarioRmPorCpf(cpf) {
+  const rmConfig = getEnv().rm;
+  const parameters = encodeURIComponent(`CPF=${cpf}`);
+  return getFuncionarioRmData(await requestRm(`${rmConfig.funcionarioPath}?parameters=${parameters}`));
+}
+
+async function getFolgasExistentes({ codTabFolga, inicio, fim }) {
+  const rmConfig = getEnv().rm;
+  const filter = JSON.stringify([
+    'ADTTABFOLGA.CODTABFOLGA=:codtabfolga AND ADTTABFOLGA.DATA>=:dataInicio AND ADTTABFOLGA.DATA<=:dataFim',
+    String(codTabFolga),
+    formatRmDate(inicio),
+    formatRmDate(fim, { endOfDay: true })
+  ]);
+  return toArrayResult(await requestRm(`${rmConfig.folgasPath}?filter=${encodeURIComponent(filter)}`));
+}
+
+function getFolgaKey(folga) {
+  const data = formatDate(pick(folga, 'DATA', 'data', 'DT', 'dt'));
+  const horaInicio = Number(pick(folga, 'HORAINICIO', 'horainicio', 'HORA_INICIO', 'hora_inicio') ?? getEnv().rm.folgaHoraInicio);
+  return `${data}|${horaInicio}`;
+}
+
+function buildDeleteFolgaPath(folga, defaults) {
+  const rmConfig = getEnv().rm;
+  const codColigada = pick(folga, 'CODCOLIGADA', 'codColigada', 'codcoligada') || defaults.codColigada;
+  const codTabFolga = pick(folga, 'CODTABFOLGA', 'codTabFolga', 'codtabfolga') || defaults.codTabFolga;
+  const data = formatRmDate(pick(folga, 'DATA', 'data', 'DT', 'dt'));
+  const horaInicio = Number(pick(folga, 'HORAINICIO', 'horainicio', 'HORA_INICIO', 'hora_inicio') ?? rmConfig.folgaHoraInicio);
+  const id = `${codColigada}$_$${codTabFolga}$_$${data}$_$${horaInicio}`;
+  return `${rmConfig.folgasPath}/${id}`;
+}
+
+function buildFolgaPayload({ evento, codColigada, codTabFolga }) {
+  const rmConfig = getEnv().rm;
+  return {
+    CODCOLIGADA: Number(codColigada),
+    CODTABFOLGA: String(codTabFolga),
+    DATA: formatRmDate(evento.data, { offset: rmConfig.timezoneOffset }),
+    HORAINICIO: rmConfig.folgaHoraInicio,
+    HORAFIM: rmConfig.folgaHoraFim,
+    HORAINICIOSTR: rmConfig.folgaHoraInicioStr,
+    HORAFIMSTR: rmConfig.folgaHoraFimStr,
+    CONSEXTRAINTER: 0,
+    RECCREATEDBY: null,
+    RECCREATEDON: null,
+    RECMODIFIEDBY: null,
+    RECMODIFIEDON: null
+  };
+}
+
+async function postFolgas(payload) {
+  if (!payload.length) return null;
+  const rmConfig = getEnv().rm;
+  return requestRm(`${rmConfig.folgasPath}?codcoligada=${encodeURIComponent(rmConfig.folgasPostCodcoligada)}`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 async function getEscalaParaRm(connection, { lojaId, mesRef, revisao }) {
   const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
   const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
@@ -185,51 +282,39 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
           throw new Error(`CPF nao cadastrado para o funcionario ${funcionario.chapa}. Atualize SGN_ESC_FUNCIONARIO.CPF antes de oficializar no RM.`);
         }
 
-        const funcionarioRm = await requestRm(`/funcionarios/${encodeURIComponent(cpf)}`);
-        const codColigadaRm = pick(funcionarioRm, 'codColigada', 'CODCOLIGADA', 'CodColigada') || funcionario.codcoligada;
-        const codTabFolga = pick(funcionarioRm, 'codTabFolga', 'CODTABFOLGA', 'CodTabFolga');
+        const funcionarioRm = await getFuncionarioRmPorCpf(cpf);
+        const codColigadaRm = getCodColigada(funcionarioRm, funcionario.codcoligada);
+        const codTabFolga = getCodTabFolga(funcionarioRm);
         if (!codTabFolga) {
           throw new Error(`RM nao retornou CODTABFOLGA para o CPF ${mask(cpf)}.`);
         }
 
         const inicio = formatDate(mesRef);
-        const fimDate = new Date(`${inicio}T00:00:00`);
-        fimDate.setMonth(fimDate.getMonth() + 1, 0);
-        const fim = formatDate(fimDate);
-        const existentes = await requestRm(`/folgas?codColigada=${encodeURIComponent(codColigadaRm)}&chapa=${encodeURIComponent(funcionario.chapa)}&inicio=${inicio}&fim=${fim}`);
-        const desejadas = new Set(funcionario.eventos.map((evento) => `${evento.data}|${evento.programacao}`));
-        const existentesRows = Array.isArray(existentes) ? existentes : existentes?.items || [];
+        const fim = getMonthEnd(mesRef);
+        const existentesRows = await getFolgasExistentes({ codTabFolga, inicio, fim });
+        const desejadas = new Set(funcionario.eventos.map((evento) => `${evento.data}|${rmConfig.folgaHoraInicio}`));
 
         for (const folga of existentesRows) {
-          const key = `${formatDate(folga.data || folga.dt)}|${String(folga.programacao || folga.tipo || 'F').toUpperCase()}`;
-          if (!desejadas.has(key) && folga.id) {
-            await requestRm(`/folgas/${encodeURIComponent(folga.id)}`, { method: 'DELETE' });
+          if (!desejadas.has(getFolgaKey(folga))) {
+            await requestRm(buildDeleteFolgaPath(folga, { codColigada: codColigadaRm, codTabFolga }), { method: 'DELETE' });
           }
         }
 
+        const payloadInclusao = [];
         for (const evento of funcionario.eventos) {
-          const alreadyExists = existentesRows.some((folga) => `${formatDate(folga.data || folga.dt)}|${String(folga.programacao || folga.tipo || 'F').toUpperCase()}` === `${evento.data}|${evento.programacao}`);
+          const alreadyExists = existentesRows.some((folga) => getFolgaKey(folga) === `${evento.data}|${rmConfig.folgaHoraInicio}`);
           if (!alreadyExists) {
-            await requestRm('/folgas', {
-              method: 'POST',
-              body: JSON.stringify({
-                cpf,
-                chapa: funcionario.chapa,
-                codColigada: codColigadaRm,
-                codTabFolga,
-                data: evento.data,
-                tipo: evento.programacao
-              })
-            });
+            payloadInclusao.push(buildFolgaPayload({ evento, codColigada: codColigadaRm, codTabFolga }));
           }
         }
+        await postFolgas(payloadInclusao);
 
         enviados += funcionario.eventos.length;
         await registrarRmLog(connection, {
           loja: lojaId, mesRef, revisao, escfuncId: funcionario.escfuncId, chapa: funcionario.chapa, cpf: mask(cpf),
           acao: 'RM_ENVIAR_DESCANSOS', status: 'SUCESSO',
           mensagem: `${funcionario.eventos.length} evento(s) sincronizado(s).`,
-          payloadResumo: `chapa=${funcionario.chapa}; eventos=${funcionario.eventos.length}`
+          payloadResumo: `chapa=${funcionario.chapa}; codtabfolga=${codTabFolga}; incluir=${payloadInclusao.length}; existentes=${existentesRows.length}`
         });
       } catch (error) {
         falhas += 1;

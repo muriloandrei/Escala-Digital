@@ -51,6 +51,13 @@ Observacao: quando `SGN_ESC_SECAO` nao possui coluna `LOJA`, o backend trata sec
 | Logs RM | `/api/escalas/rm/logs?lojaId=:lojaId&mesRef=:mesRef` | `GET` | `rmIntegrationService.listRmLogs` | Lista envio, falha ou ignorado da integracao RM | `SGN_ESC_RM_LOG` |
 | Reprocessar RM | `/api/escalas/rm/reprocessar` | `POST` | `rmIntegrationService.oficializarNoRm` | Reenvia folgas/ferias da escala oficializada para o RM. Requer `SGN_ESC_FUNCIONARIO.CPF` preenchido para cada funcionario enviado | `SGN_ESC_PROG`, `SGN_ESC_PROG_DIA`, `SGN_ESC_FUNCIONARIO`, `SGN_ESC_RM_LOG`, `SGN_ESC_AUDITORIA` |
 
+Fluxo externo RM usado pela oficializacao/reprocessamento:
+
+- `GET /api/framework/v1/consultaSQLServer/RealizaConsulta/INTEG_ESCALA/0/P?parameters=CPF%3D...`: busca dados do funcionario por CPF e le `CODCOLIGADA`/`CODTABFOLGA`.
+- `GET /rmsrestdataserver/rest/PtoAdtTabFolgaData?filter=...`: consulta folgas existentes por `CODTABFOLGA` e periodo.
+- `DELETE /rmsrestdataserver/rest/PtoAdtTabFolgaData/{CODCOLIGADA}$_${CODTABFOLGA}$_${DATA}$_${HORAINICIO}`: remove folgas que nao existem mais na escala.
+- `POST /rmsrestdataserver/rest/PtoAdtTabFolgaData?codcoligada=0`: envia novas folgas em array no formato esperado pelo RM.
+
 ## Controle de acesso
 
 | Tela/fluxo | Endpoint | Metodo | Servico | Operacao no banco | Tabelas |

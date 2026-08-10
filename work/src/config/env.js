@@ -46,7 +46,15 @@ function getEnv() {
       username: process.env.RM_API_USER || '',
       password: process.env.RM_API_PASSWORD || '',
       timeoutMs: Number(process.env.RM_API_TIMEOUT_MS || 15000),
-      retries: Number(process.env.RM_API_RETRIES || 2)
+      retries: Number(process.env.RM_API_RETRIES || 2),
+      funcionarioPath: process.env.RM_API_FUNCIONARIO_PATH || '/api/framework/v1/consultaSQLServer/RealizaConsulta/INTEG_ESCALA/0/P',
+      folgasPath: process.env.RM_API_FOLGAS_PATH || '/rmsrestdataserver/rest/PtoAdtTabFolgaData',
+      folgasPostCodcoligada: process.env.RM_API_FOLGAS_POST_CODCOLIGADA || '0',
+      folgaHoraInicio: Number(process.env.RM_API_FOLGA_HORA_INICIO || 480),
+      folgaHoraFim: Number(process.env.RM_API_FOLGA_HORA_FIM || 720),
+      folgaHoraInicioStr: process.env.RM_API_FOLGA_HORA_INICIO_STR || '08:00',
+      folgaHoraFimStr: process.env.RM_API_FOLGA_HORA_FIM_STR || '12:00',
+      timezoneOffset: process.env.RM_API_TIMEZONE_OFFSET || '-03:00'
     },
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY)
   };
