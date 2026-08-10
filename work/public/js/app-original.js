@@ -1708,13 +1708,13 @@
                 title: 'Editar dia ' + dia,
                 panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-3xl flex flex-col employee-day-modal',
                 inputs: [
-                    { label: 'Tipo do dia', type: 'choice-group', id: 'DET_TIPO_DIA', value: descansoAtual ? 'DESCANSO' : 'TRABALHO', options: [{ value: 'TRABALHO', label: 'Trabalho' }, { value: 'DESCANSO', label: 'Descanso' }], required: true, wrapperClass: 'employee-modal-span-2' },
-                    { label: 'Justificativa da mudanca', type: 'textarea', id: 'DET_JUSTIFICATIVA', rows: 3, required: true, wrapperClass: 'employee-modal-span-2' },
-                    { label: 'Tipo de descanso', type: 'select', id: 'DET_DESCANSO', value: 'F', options: tipoOptions.length ? tipoOptions : [{ value: 'F', label: 'Folga (F)' }], dependsOn: 'DET_TIPO_DIA', showWhen: 'DESCANSO', required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Tipo do dia', type: 'choice-group', id: 'DET_TIPO_DIA', value: descansoAtual ? 'DESCANSO' : 'TRABALHO', options: [{ value: 'TRABALHO', label: 'Trabalho' }, { value: 'DESCANSO', label: 'Descanso' }], required: true, wrapperClass: 'employee-modal-span-4' },
+                    { label: 'Tipo de descanso', type: 'select', id: 'DET_DESCANSO', value: 'F', options: tipoOptions.length ? tipoOptions : [{ value: 'F', label: 'Folga (F)' }], dependsOn: 'DET_TIPO_DIA', showWhen: 'DESCANSO', required: true, wrapperClass: 'employee-modal-span-4' },
                     { label: 'Entrada 1', type: 'time', id: 'DET_HR_ENT1', value: descansoAtual ? '08:00' : inicioCell.textContent.trim(), dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
                     { label: 'Saida 1', type: 'time', id: 'DET_HR_SAI1', value: '', dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
                     { label: 'Entrada 2', type: 'time', id: 'DET_HR_ENT2', value: '', dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
-                    { label: 'Saida 2', type: 'time', id: 'DET_HR_SAI2', value: '', dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true }
+                    { label: 'Saida 2', type: 'time', id: 'DET_HR_SAI2', value: '', dependsOn: 'DET_TIPO_DIA', showWhen: 'TRABALHO', required: true },
+                    { label: 'Justificativa da mudanca', type: 'textarea', id: 'DET_JUSTIFICATIVA', rows: 3, required: true, wrapperClass: 'employee-modal-span-4' }
                 ],
                 confirmText: 'Salvar Dia',
                 onRender: (body) => {
@@ -3677,13 +3677,13 @@
                 title:'Editar dia '+formatarDataTabela(dia.DT)+(dia.AUSENCIA_OBRIGATORIA ? ' - ausencia obrigatoria' : ''),
                 panelClass:'bg-white rounded-lg shadow-xl w-11/12 max-w-5xl flex flex-col employee-day-modal',
                 inputs:[
-                    {label:'Tipo do dia',type:'choice-group',id:'IND_TIPO_DIA',value:descansoAtual?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true,wrapperClass:'employee-modal-span-2'},
-                    {label:'Justificativa da mudan\u00e7a',type:'textarea',id:'IND_JUSTIFICATIVA',value:dia.JUSTIFICATIVA_ALTERACAO||'',required:true,rows:3,placeholder:'Descreva o motivo da altera\u00e7\u00e3o deste dia.',wrapperClass:'employee-modal-span-2'},
-                    {label:'Tipo de descanso',type:'select',id:'IND_TIPO_DESCANSO',value:descansoAtual?getValorDescanso(dia):'F',options:tipoOptions.length?tipoOptions:[{value:'F',label:'Folga (F)'}],dependsOn:'IND_TIPO_DIA',showWhen:'DESCANSO',required:true,wrapperClass:'employee-modal-span-2'},
+                    {label:'Tipo do dia',type:'choice-group',id:'IND_TIPO_DIA',value:descansoAtual?'DESCANSO':'TRABALHO',options:[{value:'TRABALHO',label:'Trabalho'},{value:'DESCANSO',label:'Descanso'}],required:true,wrapperClass:'employee-modal-span-4'},
+                    {label:'Tipo de descanso',type:'select',id:'IND_TIPO_DESCANSO',value:descansoAtual?getValorDescanso(dia):'F',options:tipoOptions.length?tipoOptions:[{value:'F',label:'Folga (F)'}],dependsOn:'IND_TIPO_DIA',showWhen:'DESCANSO',required:true,wrapperClass:'employee-modal-span-4'},
                     {label:'Entrada 1',type:'time',id:'IND_HR_ENT1',value:descansoAtual?'08:00':dia.HR_ENT1||'08:00',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
                     {label:'Saida 1',type:'time',id:'IND_HR_SAI1',value:descansoAtual?'':dia.HR_SAI1||'',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
                     {label:'Entrada 2',type:'time',id:'IND_HR_ENT2',value:descansoAtual?'':dia.HR_ENT2||'',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
-                    {label:'Saida 2',type:'time',id:'IND_HR_SAI2',value:descansoAtual?'':dia.HR_SAI2||'',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true}
+                    {label:'Saida 2',type:'time',id:'IND_HR_SAI2',value:descansoAtual?'':dia.HR_SAI2||'',dependsOn:'IND_TIPO_DIA',showWhen:'TRABALHO',required:true},
+                    {label:'Justificativa da mudan\u00e7a',type:'textarea',id:'IND_JUSTIFICATIVA',value:dia.JUSTIFICATIVA_ALTERACAO||'',required:true,rows:3,placeholder:'Descreva o motivo da altera\u00e7\u00e3o deste dia.',wrapperClass:'employee-modal-span-4'}
                 ],
                 confirmText:'Salvar Dia',
                 onRender: (body) => {
@@ -4880,13 +4880,13 @@
                 title: 'Editar dia ' + formatarDataTabela(dia.DT),
                 panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-3xl flex flex-col employee-day-modal',
                 inputs: [
-                    { label: 'Tipo do dia', type: 'choice-group', id: 'BANCO_TIPO_DIA', value: descansoAtual ? 'DESCANSO' : 'TRABALHO', options: [{ value: 'TRABALHO', label: 'Trabalho' }, { value: 'DESCANSO', label: 'Descanso' }], required: true, wrapperClass: 'employee-modal-span-2' },
-                    { label: 'Justificativa da mudanca', type: 'textarea', id: 'BANCO_JUSTIFICATIVA', rows: 3, required: true, wrapperClass: 'employee-modal-span-2' },
-                    { label: 'Tipo de descanso', type: 'select', id: 'BANCO_DESCANSO', value: descansoAtual ? getValorDescanso(dia) : 'F', options: tipoOptions.length ? tipoOptions : [{ value: 'F', label: 'Folga (F)' }], dependsOn: 'BANCO_TIPO_DIA', showWhen: 'DESCANSO', required: true, wrapperClass: 'employee-modal-span-2' },
+                    { label: 'Tipo do dia', type: 'choice-group', id: 'BANCO_TIPO_DIA', value: descansoAtual ? 'DESCANSO' : 'TRABALHO', options: [{ value: 'TRABALHO', label: 'Trabalho' }, { value: 'DESCANSO', label: 'Descanso' }], required: true, wrapperClass: 'employee-modal-span-4' },
+                    { label: 'Tipo de descanso', type: 'select', id: 'BANCO_DESCANSO', value: descansoAtual ? getValorDescanso(dia) : 'F', options: tipoOptions.length ? tipoOptions : [{ value: 'F', label: 'Folga (F)' }], dependsOn: 'BANCO_TIPO_DIA', showWhen: 'DESCANSO', required: true, wrapperClass: 'employee-modal-span-4' },
                     { label: 'Entrada 1', type: 'time', id: 'BANCO_HR_ENT1', value: descansoAtual ? '08:00' : dia.HR_ENT1 || '08:00', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
                     { label: 'Saida 1', type: 'time', id: 'BANCO_HR_SAI1', value: descansoAtual ? '' : dia.HR_SAI1 || '', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
                     { label: 'Entrada 2', type: 'time', id: 'BANCO_HR_ENT2', value: descansoAtual ? '' : dia.HR_ENT2 || '', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
-                    { label: 'Saida 2', type: 'time', id: 'BANCO_HR_SAI2', value: descansoAtual ? '' : dia.HR_SAI2 || '', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true }
+                    { label: 'Saida 2', type: 'time', id: 'BANCO_HR_SAI2', value: descansoAtual ? '' : dia.HR_SAI2 || '', dependsOn: 'BANCO_TIPO_DIA', showWhen: 'TRABALHO', required: true },
+                    { label: 'Justificativa da mudanca', type: 'textarea', id: 'BANCO_JUSTIFICATIVA', rows: 3, required: true, wrapperClass: 'employee-modal-span-4' }
                 ],
                 confirmText: 'Salvar dia',
                 onRender: (body) => {

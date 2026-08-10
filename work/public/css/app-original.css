@@ -1423,6 +1423,10 @@
             grid-column: span 2;
         }
 
+        #inputModalPanel.employee-day-modal .employee-modal-span-4 {
+            grid-column: 1 / -1;
+        }
+
         #inputModalPanel.employee-day-modal textarea {
             min-height: 90px;
             resize: vertical;
@@ -1438,6 +1442,7 @@
             .employee-day-modal #inputModalBody,
             #inputModalPanel.employee-day-modal #inputModalBody { grid-template-columns: 1fr; }
             #inputModalPanel.employee-day-modal .employee-modal-span-2 { grid-column: auto; }
+            #inputModalPanel.employee-day-modal .employee-modal-span-4 { grid-column: auto; }
         }
 
 
