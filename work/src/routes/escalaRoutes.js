@@ -1,6 +1,6 @@
 const express = require('express');
 const { z } = require('zod');
-const { requireAuth, requireLojaAccess } = require('../middleware/auth');
+const { requireAuth, requireLojaAccess, requirePermission } = require('../middleware/auth');
 const escalaService = require('../services/escalaService');
 const catalogService = require('../services/catalogService');
 const auditService = require('../services/auditService');
@@ -45,7 +45,7 @@ const diaSchema = z.object({
 
 router.use(requireAuth);
 
-router.get('/regras', async (req, res) => {
+router.get('/regras', requirePermission('regras', 'visualizar'), async (req, res) => {
   res.json({ regras: REGRAS_VIGENTES });
 });
 
@@ -88,7 +88,7 @@ async function getLojasPermitidas(req, requestedLojaId = 'all') {
   return [...new Set((req.user?.lojas || []).map(Number).filter(Boolean))];
 }
 
-router.get('/resumo', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.get('/resumo', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
     const mesRef = req.query.mesRef || null;
@@ -99,7 +99,7 @@ router.get('/resumo', resolveLojaRequest, requireLojaAccess, async (req, res, ne
   }
 });
 
-router.get('/revisoes', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.get('/revisoes', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = Number(req.query.lojaId);
     const mesRef = req.query.mesRef;
@@ -115,7 +115,7 @@ router.get('/revisoes', resolveLojaRequest, requireLojaAccess, async (req, res, 
 });
 
 
-router.get('/historico', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.get('/historico', requirePermission('historico', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
     const mesRef = req.query.mesRef || null;
@@ -127,7 +127,7 @@ router.get('/historico', resolveLojaRequest, requireLojaAccess, async (req, res,
   }
 });
 
-router.get('/mensal', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.get('/mensal', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = Number(req.query.lojaId);
     const mesRef = req.query.mesRef;
@@ -142,7 +142,7 @@ router.get('/mensal', resolveLojaRequest, requireLojaAccess, async (req, res, ne
   }
 });
 
-router.get('/mensal-lote', async (req, res, next) => {
+router.get('/mensal-lote', requirePermission('escalas', 'visualizar'), async (req, res, next) => {
   try {
     const mesRef = req.query.mesRef;
     if (!mesRef) {
@@ -161,7 +161,7 @@ router.get('/mensal-lote', async (req, res, next) => {
   }
 });
 
-router.get('/rm/logs', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.get('/rm/logs', requirePermission('integracao-rm', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const logs = await rmIntegrationService.listRmLogs({
       lojaId: req.query.lojaId ? Number(req.query.lojaId) : null,
@@ -173,7 +173,7 @@ router.get('/rm/logs', resolveLojaRequest, requireLojaAccess, async (req, res, n
   }
 });
 
-router.post('/rm/reprocessar', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/rm/reprocessar', requirePermission('integracao-rm', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = z.object({
       lojaId: z.number().int().positive(),
@@ -196,7 +196,7 @@ router.post('/rm/reprocessar', resolveLojaRequest, requireLojaAccess, async (req
   }
 });
 
-router.post('/oficializar', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = z.object({
       lojaId: z.number().int().positive(),
@@ -230,7 +230,7 @@ router.post('/oficializar', resolveLojaRequest, requireLojaAccess, async (req, r
   }
 });
 
-router.post('/inativar', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/inativar', requirePermission('escalas', 'inativar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = z.object({
       lojaId: z.number().int().positive(),
@@ -253,7 +253,7 @@ router.post('/inativar', resolveLojaRequest, requireLojaAccess, async (req, res,
     return next(error);
   }
 });
-router.get('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.get('/', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = Number(req.query.lojaId);
     const mesRef = req.query.mesRef;
@@ -268,7 +268,7 @@ router.get('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) =>
   }
 });
 
-router.post('/validar', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/validar', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = saveSchema.parse(req.body);
     const ruleErrors = validateEscalaPayload(payload);
@@ -286,7 +286,7 @@ router.post('/validar', resolveLojaRequest, requireLojaAccess, async (req, res, 
   }
 });
 
-router.post('/funcionario/revisao', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = saveSchema.parse(req.body);
     if (payload.funcionarios.length !== 1) {
@@ -326,7 +326,7 @@ router.post('/funcionario/revisao', resolveLojaRequest, requireLojaAccess, async
   }
 });
 
-router.get('/:escprogId/dias', async (req, res, next) => {
+router.get('/:escprogId/dias', requirePermission('escalas', 'visualizar'), async (req, res, next) => {
   try {
     const header = await escalaService.getEscalaHeader(Number(req.params.escprogId));
     if (!header) {
@@ -345,7 +345,7 @@ router.get('/:escprogId/dias', async (req, res, next) => {
   }
 });
 
-router.patch('/:escprogId/dias/:escprogdiaId', async (req, res, next) => {
+router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'editar'), async (req, res, next) => {
   try {
     const header = await escalaService.getEscalaHeader(Number(req.params.escprogId));
     if (!header) {
@@ -391,7 +391,7 @@ router.patch('/:escprogId/dias/:escprogdiaId', async (req, res, next) => {
   }
 });
 
-router.post('/', resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = saveSchema.parse(req.body);
     const ruleErrors = validateEscalaPayload(payload);

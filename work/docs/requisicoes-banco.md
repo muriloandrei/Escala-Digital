@@ -74,6 +74,7 @@ Fluxo externo RM usado pela oficializacao/reprocessamento:
 | Tela/fluxo | Endpoint | Metodo | Servico | Operacao no banco | Tabelas/views |
 | --- | --- | --- | --- | --- | --- |
 | Diagnostico Oracle | `/api/diagnostics/oracle` | `GET` | `diagnosticsService.checkOracle` | Confere schema atual, tabelas e sequences esperadas | `DUAL`, `USER_TABLES`, `USER_SEQUENCES` |
+| Diagnostico RM | `/api/diagnostics/rm` | `GET` | `diagnosticsService.checkRm` | Testa conectividade HTTP basica com a URL RM configurada, sem expor credenciais | Nao acessa Oracle |
 
 ## Estado local de UI
 

@@ -1,5 +1,5 @@
 function notFound(req, res) {
-  res.status(404).json({ error: 'Recurso nao encontrado.' });
+  res.status(404).json({ error: 'Recurso nao encontrado.', requestId: req.id || null });
 }
 
 function errorHandler(err, req, res, next) {
@@ -9,10 +9,10 @@ function errorHandler(err, req, res, next) {
   const message = status >= 500 ? 'Erro interno do servidor.' : err.message;
 
   if (status >= 500) {
-    console.error(err);
+    console.error({ requestId: req.id || null, error: err });
   }
 
-  return res.status(status).json({ error: message });
+  return res.status(status).json({ error: message, requestId: req.id || null });
 }
 
 module.exports = { notFound, errorHandler };

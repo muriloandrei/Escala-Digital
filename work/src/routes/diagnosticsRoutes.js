@@ -16,4 +16,13 @@ router.get('/oracle', async (req, res, next) => {
   }
 });
 
+router.get('/rm', async (req, res, next) => {
+  try {
+    const result = await diagnosticsService.checkRm();
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

@@ -259,6 +259,9 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
     const secaoJoinColigada = secaoColumns.has('CODCOLIGADA') ? 'and s.codcoligada = f.codcoligada' : '';
     const funcaoJoinColigada = funcaoColumns.has('CODCOLIGADA') ? 'and fu.codcoligada = f.codcoligada' : '';
     const funcionarioColigadaWhere = lojaCodcoligada !== null ? 'and f.codcoligada = :codcoligada' : '';
+    const progColumns = options.mesRef ? await getTableColumns(connection, 'SGN_ESC_PROG') : new Set();
+    const escalaAtivaSql = progColumns.has('ATIVA') ? 'and nvl(p.ativa, 1) = 1' : '';
+    const escalaAtivaInnerSql = progColumns.has('ATIVA') ? 'and nvl(px.ativa, 1) = 1' : '';
     const cpfSelect = funcionarioColumns.has('CPF')
       ? 'f.cpf'
       : funcionarioColumns.has('CPF_FUNCIONARIO')
@@ -301,8 +304,15 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
           join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
           where p.loja = :lojaId
             and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-            and p.revisao = :latestRevision
-            ${await getTableColumns(connection, 'SGN_ESC_PROG').then((columns) => columns.has('ATIVA') ? 'and nvl(p.ativa, 1) = 1' : '')}
+            ${escalaAtivaSql}
+            and p.revisao = (
+              select max(px.revisao)
+              from sgn_esc_prog px
+              where px.loja = p.loja
+                and px.mes_ref = p.mes_ref
+                and px.escfunc_id = p.escfunc_id
+                ${escalaAtivaInnerSql}
+            )
           group by p.escfunc_id, p.revisao, p.oficializada
        ) e on e.escfunc_id = f.escfunc_id` : ''}
        where f.loja = :lojaId
@@ -310,9 +320,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
        order by f.nome`;
 
     if (options.mesRef) {
-      const latestRevision = await getLatestRevision(connection, { lojaId: lojaCodigo, mesRef: options.mesRef });
       binds.mesRef = options.mesRef;
-      binds.latestRevision = latestRevision ?? -1;
     }
 
     const result = await connection.execute(

@@ -262,4 +262,20 @@ async function updatePerfilAcesso(perfilId, data) {
   });
 }
 
-module.exports = { listUsuariosAcesso, updateUsuarioAcesso, createUsuarioAcesso, listPerfisAcesso, createPerfilAcesso, updatePerfilAcesso };
+async function getPermissaoPerfil(perfilNome, pagina) {
+  const normalizedPerfil = String(perfilNome || '').trim().toUpperCase();
+  if (normalizedPerfil === 'ADMIN') {
+    return { PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 1, PODE_EXCLUIR: 1 };
+  }
+
+  const { perfis } = await listPerfisAcesso();
+  const perfil = perfis.find((item) => String(item.NOME || '').trim().toUpperCase() === normalizedPerfil);
+  if (!perfil) {
+    return { PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 0, PODE_EXCLUIR: 0 };
+  }
+
+  return (perfil.PERMISSOES || []).find((permissao) => String(permissao.PAGINA) === String(pagina))
+    || { PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 0, PODE_EXCLUIR: 0 };
+}
+
+module.exports = { listUsuariosAcesso, updateUsuarioAcesso, createUsuarioAcesso, listPerfisAcesso, createPerfilAcesso, updatePerfilAcesso, getPermissaoPerfil };

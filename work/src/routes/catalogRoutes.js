@@ -1,6 +1,6 @@
 const express = require('express');
 const { z } = require('zod');
-const { requireAuth, requireLojaAccess } = require('../middleware/auth');
+const { requireAuth, requireLojaAccess, requirePermission } = require('../middleware/auth');
 const catalogService = require('../services/catalogService');
 
 const router = express.Router();
@@ -145,7 +145,7 @@ router.get('/tipos-descanso', async (req, res, next) => {
   }
 });
 
-router.post('/tipos-descanso', async (req, res, next) => {
+router.post('/tipos-descanso', requirePermission('tipos-descanso', 'editar'), async (req, res, next) => {
   try {
     const data = tipoDescansoSchema.parse(req.body);
     const tipo = await catalogService.createTipoDescanso(data);
@@ -158,7 +158,7 @@ router.post('/tipos-descanso', async (req, res, next) => {
   }
 });
 
-router.patch('/tipos-descanso/:tipoId', async (req, res, next) => {
+router.patch('/tipos-descanso/:tipoId', requirePermission('tipos-descanso', 'editar'), async (req, res, next) => {
   try {
     const data = tipoDescansoSchema.partial().parse(req.body);
     const tipo = await catalogService.updateTipoDescanso(Number(req.params.tipoId), data);
@@ -181,7 +181,7 @@ router.get('/horarios-padrao', async (req, res, next) => {
   }
 });
 
-router.post('/horarios-padrao', async (req, res, next) => {
+router.post('/horarios-padrao', requirePermission('horarios-padrao', 'editar'), async (req, res, next) => {
   try {
     const data = horarioPadraoSchema.parse(req.body);
     const horario = await catalogService.createHorarioPadrao(data);
@@ -194,7 +194,7 @@ router.post('/horarios-padrao', async (req, res, next) => {
   }
 });
 
-router.patch('/horarios-padrao/:horarioId', async (req, res, next) => {
+router.patch('/horarios-padrao/:horarioId', requirePermission('horarios-padrao', 'editar'), async (req, res, next) => {
   try {
     const data = horarioPadraoSchema.partial().parse(req.body);
     const horario = await catalogService.updateHorarioPadrao(Number(req.params.horarioId), data);
@@ -276,7 +276,7 @@ router.get('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async (
   }
 });
 
-router.post('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+router.post('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, requirePermission('secoes', 'editar'), async (req, res, next) => {
   try {
     const data = secaoCadastroSchema.parse(req.body);
     const secao = await catalogService.createSecao({
@@ -292,7 +292,7 @@ router.post('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async 
   }
 });
 
-router.put('/lojas/:lojaId/secoes/:escsecaoId', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+router.put('/lojas/:lojaId/secoes/:escsecaoId', resolveLojaParam, requireLojaAccess, requirePermission('secoes', 'editar'), async (req, res, next) => {
   try {
     const data = secaoCadastroSchema.parse(req.body);
     const secao = await catalogService.updateSecao({
@@ -323,7 +323,7 @@ router.get('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, a
   }
 });
 
-router.post('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+router.post('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, requirePermission('turnos-secao', 'editar'), async (req, res, next) => {
   try {
     const data = turnoSecaoSchema.parse(req.body);
     assertValidSecaoTurno(data);
@@ -349,7 +349,7 @@ router.post('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, 
   }
 });
 
-router.put('/lojas/:lojaId/turnos-secao/:escsecaoTurnoId', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+router.put('/lojas/:lojaId/turnos-secao/:escsecaoTurnoId', resolveLojaParam, requireLojaAccess, requirePermission('turnos-secao', 'editar'), async (req, res, next) => {
   try {
     const data = turnoSecaoSchema.parse(req.body);
     assertValidSecaoTurno(data);
@@ -376,7 +376,7 @@ router.put('/lojas/:lojaId/turnos-secao/:escsecaoTurnoId', resolveLojaParam, req
   }
 });
 
-router.patch('/lojas/:lojaId/secoes/:escsecaoId/turno', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+router.patch('/lojas/:lojaId/secoes/:escsecaoId/turno', resolveLojaParam, requireLojaAccess, requirePermission('turnos-secao', 'editar'), async (req, res, next) => {
   try {
     const data = secaoTurnoSchema.parse(req.body);
     assertValidSecaoTurno(data);
@@ -402,7 +402,7 @@ router.patch('/lojas/:lojaId/secoes/:escsecaoId/turno', resolveLojaParam, requir
   }
 });
 
-router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, requireLojaAccess, requirePermission('funcionarios', 'editar'), async (req, res, next) => {
   try {
     const data = funcionarioEscalaSchema.parse(req.body);
     const funcionario = await catalogService.updateFuncionarioEscala({

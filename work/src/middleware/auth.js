@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { getEnv } = require('../config/env');
 const authService = require('../services/authService');
+const accessService = require('../services/accessService');
 
 async function requireAuth(req, res, next) {
   const { auth } = getEnv();
@@ -47,4 +48,31 @@ function requireAdmin(req, res, next) {
   return res.status(403).json({ error: 'Acesso restrito a administradores.' });
 }
 
-module.exports = { requireAuth, requireLojaAccess, requireAdmin };
+function getPermissionField(action) {
+  const normalized = String(action || 'visualizar').toLowerCase();
+  if (['visualizar', 'listar', 'consultar'].includes(normalized)) return 'PODE_VISUALIZAR';
+  if (['excluir', 'inativar'].includes(normalized)) return 'PODE_EXCLUIR';
+  if (['administrar'].includes(normalized)) return 'ADMIN';
+  return 'PODE_EDITAR';
+}
+
+function requirePermission(page, action = 'visualizar') {
+  return async (req, res, next) => {
+    if (req.user?.perfil === 'ADMIN') return next();
+
+    const field = getPermissionField(action);
+    if (field === 'ADMIN') {
+      return res.status(403).json({ error: 'Acesso restrito a administradores.' });
+    }
+
+    try {
+      const permission = await accessService.getPermissaoPerfil(req.user?.perfil, page);
+      if (Number(permission?.[field] || 0) === 1) return next();
+      return res.status(403).json({ error: 'Usuario sem permissao para esta acao.' });
+    } catch (error) {
+      return next(error);
+    }
+  };
+}
+
+module.exports = { requireAuth, requireLojaAccess, requireAdmin, requirePermission };

@@ -1,4 +1,5 @@
 const { withConnection, oracledb } = require('../db/oracle');
+const { getEnv } = require('../config/env');
 const REQUIRED_TABLES = [
   'SGN_ESC_FUNCIONARIO',
   'SGN_ESC_AUSENCIA',
@@ -10,7 +11,12 @@ const REQUIRED_TABLES = [
   'SGN_ESC_PROG_DIA',
   'SGN_ESC_USUARIO',
   'SGN_ESC_USUARIO_LOJA',
-  'SGN_ESC_AUDITORIA'
+  'SGN_ESC_AUDITORIA',
+  'SGN_ESC_PERFIL',
+  'SGN_ESC_PERFIL_PERMISSAO',
+  'SGN_ESC_TIPO_DESCANSO',
+  'SGN_ESC_HORARIO_PADRAO',
+  'SGN_ESC_RM_LOG'
 ];
 
 const REQUIRED_SEQUENCES = [
@@ -19,7 +25,11 @@ const REQUIRED_SEQUENCES = [
   'SGN_ESC_PROG_SEQ',
   'SGN_ESC_PROG_DIA_SEQ',
   'SGN_ESC_USUARIO_SEQ',
-  'SGN_ESC_AUDITORIA_SEQ'
+  'SGN_ESC_AUDITORIA_SEQ',
+  'SGN_ESC_PERFIL_SEQ',
+  'SGN_ESC_TIPO_DESCANSO_SEQ',
+  'SGN_ESC_HORARIO_PADRAO_SEQ',
+  'SGN_ESC_RM_LOG_SEQ'
 ];
 
 async function checkOracle() {
@@ -67,6 +77,68 @@ async function checkOracle() {
   });
 }
 
+async function checkRm() {
+  const env = getEnv();
+  const rm = env.rm;
+  if (!rm.enabled) {
+    return {
+      integration: 'rm',
+      enabled: false,
+      status: 'disabled'
+    };
+  }
+
+  if (!rm.baseUrl) {
+    return {
+      integration: 'rm',
+      enabled: true,
+      status: 'error',
+      error: 'RM_API_BASE_URL nao configurada.'
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.min(rm.timeoutMs || 15000, 15000));
+  const startedAt = Date.now();
+
+  try {
+    const response = await fetch(rm.baseUrl, {
+      method: 'GET',
+      signal: controller.signal
+    });
+
+    return {
+      integration: 'rm',
+      enabled: true,
+      status: 'reachable',
+      baseUrl: maskBaseUrl(rm.baseUrl),
+      httpStatus: response.status,
+      durationMs: Date.now() - startedAt
+    };
+  } catch (error) {
+    return {
+      integration: 'rm',
+      enabled: true,
+      status: 'unreachable',
+      baseUrl: maskBaseUrl(rm.baseUrl),
+      error: error.name === 'AbortError' ? 'timeout' : error.message,
+      durationMs: Date.now() - startedAt
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function maskBaseUrl(value) {
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}`;
+  } catch (error) {
+    return String(value || '').replace(/\/\/([^/@]+)@/, '//***@');
+  }
+}
+
 module.exports = {
-  checkOracle
+  checkOracle,
+  checkRm
 };

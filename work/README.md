@@ -95,6 +95,12 @@ Para validar a integracao real com Oracle, use o login da aplicacao e o diagnost
 /api/diagnostics/oracle
 ```
 
+Para validar conectividade basica com o RM sem expor credenciais:
+
+```txt
+/api/diagnostics/rm
+```
+
 ## Roteiros do projeto
 
 - [Escopo restante](docs/alteracoes-restantes.md)

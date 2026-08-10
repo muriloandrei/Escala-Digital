@@ -1,6 +1,6 @@
 const express = require('express');
 const { z } = require('zod');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requirePermission } = require('../middleware/auth');
 const accessService = require('../services/accessService');
 const auditService = require('../services/auditService');
 
@@ -38,7 +38,7 @@ const perfilSchema = z.object({
 
 router.use(requireAuth);
 
-router.get('/perfis', requireAdmin, async (req, res, next) => {
+router.get('/perfis', requirePermission('roles', 'visualizar'), async (req, res, next) => {
   try {
     const result = await accessService.listPerfisAcesso();
     return res.json(result);
@@ -47,7 +47,7 @@ router.get('/perfis', requireAdmin, async (req, res, next) => {
   }
 });
 
-router.post('/perfis', requireAdmin, async (req, res, next) => {
+router.post('/perfis', requirePermission('roles', 'editar'), async (req, res, next) => {
   try {
     const data = perfilSchema.parse(req.body);
     const perfil = await accessService.createPerfilAcesso(data);
@@ -65,7 +65,7 @@ router.post('/perfis', requireAdmin, async (req, res, next) => {
   }
 });
 
-router.patch('/perfis/:perfilId', requireAdmin, async (req, res, next) => {
+router.patch('/perfis/:perfilId', requirePermission('roles', 'editar'), async (req, res, next) => {
   try {
     const data = perfilSchema.partial().parse(req.body);
     const perfil = await accessService.updatePerfilAcesso(Number(req.params.perfilId), data);
@@ -85,7 +85,7 @@ router.patch('/perfis/:perfilId', requireAdmin, async (req, res, next) => {
 });
 
 
-router.get('/usuarios', async (req, res, next) => {
+router.get('/usuarios', requirePermission('acessos', 'visualizar'), async (req, res, next) => {
   try {
     const usuarios = await accessService.listUsuariosAcesso(req.user);
     res.json({ usuarios });
@@ -94,7 +94,7 @@ router.get('/usuarios', async (req, res, next) => {
   }
 });
 
-router.post('/usuarios', requireAdmin, async (req, res, next) => {
+router.post('/usuarios', requirePermission('acessos', 'editar'), async (req, res, next) => {
   try {
     const data = usuarioCreateSchema.parse(req.body);
     const usuario = await accessService.createUsuarioAcesso({
@@ -121,7 +121,7 @@ router.post('/usuarios', requireAdmin, async (req, res, next) => {
   }
 });
 
-router.patch('/usuarios/:usuarioId', requireAdmin, async (req, res, next) => {
+router.patch('/usuarios/:usuarioId', requirePermission('acessos', 'editar'), async (req, res, next) => {
   try {
     const data = usuarioUpdateSchema.parse(req.body);
     const usuario = await accessService.updateUsuarioAcesso(Number(req.params.usuarioId), data);

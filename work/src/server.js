@@ -1,4 +1,5 @@
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
@@ -26,6 +27,30 @@ app.use(helmet({
 }));
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
+app.use((req, res, next) => {
+  const requestId = req.headers['x-request-id'] || crypto.randomUUID();
+  const startedAt = Date.now();
+  req.id = requestId;
+  res.setHeader('X-Request-Id', requestId);
+
+  res.on('finish', () => {
+    if (req.path === '/favicon.ico' || (!req.path.startsWith('/api') && req.path !== '/app' && req.path !== '/health')) {
+      return;
+    }
+
+    console.log(JSON.stringify({
+      event: 'http_request',
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      user: req.user?.login || null
+    }));
+  });
+
+  next();
+});
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/favicon.ico', (req, res) => res.status(204).end());

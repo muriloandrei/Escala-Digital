@@ -16,12 +16,38 @@ function normalizeDate(value) {
   return String(value || '').slice(0, 10);
 }
 
+function maskSensitiveValue(key, value) {
+  if (/senha|password|token|authorization|auth|secret|cookie/i.test(String(key))) {
+    return value ? '***' : value;
+  }
+  return value;
+}
+
+function sanitizeDetails(value, key = '') {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeDetails(item, key));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [entryKey, sanitizeDetails(entryValue, entryKey)])
+    );
+  }
+
+  return maskSensitiveValue(key, value);
+}
+
 function compactDetails(details = {}) {
-  return Object.entries(details)
-    .filter(([, value]) => value !== undefined && value !== null && value !== '')
-    .map(([key, value]) => `${key}=${value}`)
-    .join('; ')
-    .slice(0, 1000);
+  const sanitized = sanitizeDetails(details);
+  if (sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized)) {
+    return Object.entries(sanitized)
+      .filter(([, value]) => value !== undefined && value !== null && value !== '')
+      .map(([key, value]) => `${key}=${typeof value === 'object' ? JSON.stringify(value) : value}`)
+      .join('; ')
+      .slice(0, 1000);
+  }
+
+  return String(sanitized || '').slice(0, 1000);
 }
 
 async function tableExists(connection) {
