@@ -82,6 +82,14 @@ test('backend rejects continuous period greater than 06:00', () => {
   assert.ok(errors.some((error) => error.includes('jornada continua maior que 06:00')));
 });
 
+test('backend allows continuous period exactly equal to 06:00', () => {
+  const errors = validateEscalaPayload(buildPayload([
+    trabalho('2026-09-01', { hrEnt1: '06:00', hrSai1: '12:00', hrEnt2: '13:10', hrSai2: '15:58' })
+  ]));
+
+  assert.deepEqual(errors, []);
+});
+
 test('backend treats vacation and custom absence as rest days', () => {
   const errors = validateEscalaPayload(buildPayload([
     descanso('2026-09-01', 'FER'),

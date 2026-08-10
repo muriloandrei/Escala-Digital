@@ -1029,8 +1029,8 @@
             if (primeiraJornada <= 0) errors.push('Saida 1 deve ser maior que Entrada 1.');
             if (segundaJornada <= 0) errors.push('Saida 2 deve ser maior que Entrada 2.');
             if (intervalo <= 0) errors.push('Entrada 2 deve ser maior que Saida 1.');
-            if (primeiraJornada >= 360) errors.push(`Primeiro periodo deve ser menor que 06:00. Atual: ${minutesToTime(primeiraJornada)}.`);
-            if (segundaJornada >= 360) errors.push(`Segundo periodo deve ser menor que 06:00. Atual: ${minutesToTime(segundaJornada)}.`);
+            if (primeiraJornada > 360) errors.push(`Primeiro periodo nao pode passar de 06:00. Atual: ${minutesToTime(primeiraJornada)}.`);
+            if (segundaJornada > 360) errors.push(`Segundo periodo nao pode passar de 06:00. Atual: ${minutesToTime(segundaJornada)}.`);
             if (jornadaTotal !== 528) errors.push(`Jornada total deve ser exatamente 08:48. Atual: ${minutesToTime(jornadaTotal)}.`);
             if (intervalo < 70) errors.push(`Intervalo entre as jornadas deve ter no minimo 01:10. Atual: ${minutesToTime(intervalo)}.`);
             return errors;
