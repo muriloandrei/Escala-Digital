@@ -725,6 +725,8 @@
         let distribuicaoFolgasBloqueada = false;
         let distribuicaoEdicaoAtiva = false;
         let escalaDetalhadaValidada = false;
+        let escalaFuncionarioEdicaoValidada = false;
+        let escalaFuncionarioEdicaoAlterada = false;
         let escalaDetalheBancoValidada = false;
         let escalaDetalheBancoAlterados = new Map();
         let currentLoadedScale = null;
@@ -2961,6 +2963,21 @@
             return (turnosSecaoCache || []).filter(turno => Number(turno.ESCSECAO_ID) === Number(atual.escsecaoId));
         };
 
+        const isEscalaFuncionarioFinalizada = () => escalaFuncionarioEdicaoAtual?.status === 'FINALIZADA';
+
+        const atualizarBotaoSalvarEscalaFuncionario = () => {
+            const podeSalvar = escalaFuncionarioEdicaoAlterada && escalaFuncionarioEdicaoValidada && !isEscalaFuncionarioFinalizada();
+            salvarEscalaFuncionarioBtn?.classList.toggle('hidden', !podeSalvar);
+            if (salvarEscalaFuncionarioBtn) salvarEscalaFuncionarioBtn.disabled = !podeSalvar;
+        };
+
+        const invalidarValidacaoEscalaFuncionario = (critica = 'Ajuste manual pendente de validação.') => {
+            escalaFuncionarioEdicaoValidada = false;
+            escalaFuncionarioEdicaoAlterada = true;
+            if (escalaFuncionarioEdicaoAtual) escalaFuncionarioEdicaoAtual.criticas = [critica];
+            atualizarBotaoSalvarEscalaFuncionario();
+        };
+
         const renderizarEscalaFuncionarioEdicao = () => {
             const atual = escalaFuncionarioEdicaoAtual;
             if (!atual) return;
@@ -3061,10 +3078,14 @@
             if (!dias.length) throw new Error('Escala do funcionário não encontrada.');
             const base=dias[0];
             escalaFuncionarioEdicaoAtual={escfuncId:Number(escfuncId),lojaId:Number(lojaId),mesRef,status:escala.status,revisao:escala.revisao,chapa:base.CHAPA,nome:base.NOME||base.CHAPA,secao:base.SECAO_DESCR||base.COD_SECAO||'',funcao:base.FUNCAO_DESCR||'',escsecaoId:base.ESCSECAO_ID,escfuncaoId:base.ESCFUNCAO_ID,dias};
+            escalaFuncionarioEdicaoValidada = false;
+            escalaFuncionarioEdicaoAlterada = false;
+            atualizarBotaoSalvarEscalaFuncionario();
             escalaFuncionarioEdicaoTitulo.textContent='Escala - '+escalaFuncionarioEdicaoAtual.nome;
             escalaFuncionarioEdicaoResumo.textContent='Loja '+lojaId+' | '+getNomeMesTabela(mesRef)+' '+mesRef.slice(0,4)+' | Revisão '+escala.revisao+' | '+escala.status;
             const finalizada=escala.status==='FINALIZADA';
-            [distribuirFolgasFuncionarioBtn,salvarEscalaFuncionarioBtn].forEach(btn=>{if(btn)btn.disabled=finalizada;});
+            if (distribuirFolgasFuncionarioBtn) distribuirFolgasFuncionarioBtn.disabled = finalizada;
+            atualizarBotaoSalvarEscalaFuncionario();
             await carregarTiposDescansoCache(false);
             await carregarMesesDisponiveisFuncionario(escfuncId, lojaId, Number(mesRef.slice(0, 4)));
             await carregarAusenciasDaLoja(lojaId, mesRef);
@@ -3156,6 +3177,7 @@
                     dia.HR_SAI2 = values.IND_HR_SAI2;
                 }
             });
+            invalidarValidacaoEscalaFuncionario('Ajuste manual pendente de validação.');
             renderizarEscalaFuncionarioEdicao();
         };
 
@@ -3214,8 +3236,9 @@
             });
             let consecutivos=0;
             dias.forEach(dia => { if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>5){dia.PROGRAMACAO='F';dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F';consecutivos=0;} });
+            invalidarValidacaoEscalaFuncionario('Distribuição de folgas pendente de validação.');
             renderizarEscalaFuncionarioEdicao();
-            showInfoModal('Folgas 5x2 distribu?das. Revise e valide antes de salvar.','success');
+            showInfoModal('Folgas 5x2 distribuídas. Revise e valide antes de salvar.','success');
         };
         distribuirFolgasFuncionarioBtn?.addEventListener('click',distribuirFolgasFuncionario);
 
@@ -3223,14 +3246,71 @@
             const atual=escalaFuncionarioEdicaoAtual;if(!atual)return false; const errors=validarDiasEscalaFuncionario(atual.dias, atual.nome); let consecutivos=0;
             [...atual.dias].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach(dia=>{if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>Number(regraMaxDiasConsecutivosInput.value||7))errors.push('Mais de '+regraMaxDiasConsecutivosInput.value+' dias consecutivos em '+formatarDataTabela(dia.DT)+'.');});
             atual.criticas = errors;
+            escalaFuncionarioEdicaoValidada = errors.length === 0;
             if (!errors.length) atual.dias.forEach(dia => { delete dia.CRITICA_MANUAL; });
             renderizarEscalaFuncionarioEdicao();
+            atualizarBotaoSalvarEscalaFuncionario();
             showInfoModal(errors.length?errors:'A escala do funcionário foi validada com sucesso.',errors.length?'error':'success'); return errors.length===0;
         };
         validarEscalaFuncionarioBtn?.addEventListener('click',validarEscalaFuncionarioAtual);
         imprimirEscalaFuncionarioBtn?.addEventListener('click',()=>{if(!escalaFuncionarioEdicaoAtual)return;printContainer.innerHTML='<div class="print-title">Escala - '+escapeHtml(escalaFuncionarioEdicaoAtual.nome)+'</div>'+escalaFuncionarioDetalhadaContent.innerHTML;window.print();});
 
-        salvarEscalaFuncionarioBtn?.addEventListener('click',async()=>{if(!hasPermission('escalas-funcionarios','editar'))return showInfoModal('Usuario sem permissao para salvar escala do funcionario.','error');const atual=escalaFuncionarioEdicaoAtual;if(!atual||!validarEscalaFuncionarioAtual())return; const funcionario={escfuncId:atual.escfuncId,chapa:atual.chapa,escsecaoId:atual.escsecaoId,escfuncaoId:atual.escfuncaoId,dias:atual.dias.map(d=>{const descanso=isProgramacaoDescanso(d.PROGRAMACAO);const sigla=getValorDescanso(d);return{data:String(d.DT).slice(0,10),hrEnt1:descanso?null:d.HR_ENT1,hrSai1:descanso?null:d.HR_SAI1,hrEnt2:descanso?null:d.HR_ENT2,hrSai2:descanso?null:d.HR_SAI2,programacao:descanso?sigla:'TRB',justificativa:d.JUSTIFICATIVA_ALTERACAO||atual.justificativaAlteracao||null};})}; salvarEscalaFuncionarioBtn.disabled=true;try{await apiRequest('/api/escalas/funcionario/revisao',{method:'POST',body:JSON.stringify({lojaId:atual.lojaId,mesRef:atual.mesRef,funcionarios:[funcionario],oficializada:1,justificativa:atual.justificativaAlteracao||null})});showInfoModal('Escala do funcionário salva em uma nova revisão oficializada.','success');await carregarEscalaFuncionarioEdicao(atual.escfuncId,atual.lojaId,atual.mesRef);}catch(error){showInfoModal(error.details?error.details.join(' '):'Não foi possível salvar a escala do funcionário: '+error.message,'error');}finally{salvarEscalaFuncionarioBtn.disabled=false;}});
+        salvarEscalaFuncionarioBtn?.addEventListener('click', async () => {
+            if (!hasPermission('escalas-funcionarios', 'editar')) {
+                showInfoModal('Usuário sem permissão para salvar escala do funcionário.', 'error');
+                return;
+            }
+            const atual = escalaFuncionarioEdicaoAtual;
+            if (!atual) return;
+            if (!escalaFuncionarioEdicaoAlterada) {
+                showInfoModal('Nenhuma alteração pendente para salvar.', 'info');
+                atualizarBotaoSalvarEscalaFuncionario();
+                return;
+            }
+            if (!escalaFuncionarioEdicaoValidada || (atual.criticas || []).length) {
+                showInfoModal('Valide a escala e corrija todas as críticas antes de salvar.', 'error');
+                atualizarBotaoSalvarEscalaFuncionario();
+                return;
+            }
+            const funcionario = {
+                escfuncId: atual.escfuncId,
+                chapa: atual.chapa,
+                escsecaoId: atual.escsecaoId,
+                escfuncaoId: atual.escfuncaoId,
+                dias: atual.dias.map((dia) => {
+                    const descanso = isProgramacaoDescanso(dia.PROGRAMACAO);
+                    const sigla = getValorDescanso(dia);
+                    return {
+                        data: String(dia.DT).slice(0, 10),
+                        hrEnt1: descanso ? null : dia.HR_ENT1,
+                        hrSai1: descanso ? null : dia.HR_SAI1,
+                        hrEnt2: descanso ? null : dia.HR_ENT2,
+                        hrSai2: descanso ? null : dia.HR_SAI2,
+                        programacao: descanso ? sigla : 'TRB',
+                        justificativa: dia.JUSTIFICATIVA_ALTERACAO || atual.justificativaAlteracao || null
+                    };
+                })
+            };
+            salvarEscalaFuncionarioBtn.disabled = true;
+            try {
+                await apiRequest('/api/escalas/funcionario/revisao', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        lojaId: atual.lojaId,
+                        mesRef: atual.mesRef,
+                        funcionarios: [funcionario],
+                        oficializada: 1,
+                        justificativa: atual.justificativaAlteracao || null
+                    })
+                });
+                showInfoModal('Escala do funcionário salva em uma nova revisão oficializada.', 'success');
+                await carregarEscalaFuncionarioEdicao(atual.escfuncId, atual.lojaId, atual.mesRef);
+            } catch (error) {
+                showInfoModal(error.details ? error.details.join(' ') : 'Não foi possível salvar a escala do funcionário: ' + error.message, 'error');
+            } finally {
+                atualizarBotaoSalvarEscalaFuncionario();
+            }
+        });
 
         function renderizarAcessosTela(usuarios) {
             tabelaAcessosBody.innerHTML = '';
