@@ -54,3 +54,25 @@ test('nao monta DELETE do RM sem data valida', () => {
   assert.equal(_private.getFolgaKey({ CODTABFOLGA: '999.8537' }), null);
   assert.equal(path, null);
 });
+
+test('seleciona cadastro ativo do funcionario retornado pelo RM', () => {
+  const funcionario = _private.getFuncionarioRmData([
+    {
+      CPF: '25657613848',
+      CODCOLIGADA: 1,
+      CHAPA: '001.8537',
+      CODSITUACAO: 'D',
+      CODTABFOLGA: '01.8537'
+    },
+    {
+      CPF: '25657613848',
+      CODCOLIGADA: 1,
+      CHAPA: '999.8537',
+      CODSITUACAO: 'A',
+      CODTABFOLGA: '999.8537'
+    }
+  ]);
+
+  assert.equal(funcionario.CHAPA, '999.8537');
+  assert.equal(funcionario.CODTABFOLGA, '999.8537');
+});

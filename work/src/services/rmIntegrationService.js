@@ -99,13 +99,21 @@ function getMonthEnd(value) {
 
 function getFuncionarioRmData(body) {
   const rows = toArrayResult(body);
-  return rows.find((row) => pick(row, 'CODTABFOLGA', 'codTabFolga', 'codtabfolga'))
+  return rows.find((row) => isFuncionarioRmAtivo(row) && getCodTabFolga(row))
+    || rows.find(isFuncionarioRmAtivo)
+    || rows.find((row) => getCodTabFolga(row))
     || rows[0]
     || {};
 }
 
 function getCodTabFolga(funcionarioRm) {
   return pick(funcionarioRm, 'CODTABFOLGA', 'codTabFolga', 'codtabfolga', 'CodTabFolga');
+}
+
+function isFuncionarioRmAtivo(funcionarioRm) {
+  return String(pick(funcionarioRm, 'CODSITUACAO', 'codSituacao', 'codsituacao', 'CodSituacao') || '')
+    .trim()
+    .toUpperCase() === 'A';
 }
 
 function getCodColigada(funcionarioRm, fallback) {
@@ -561,6 +569,7 @@ module.exports = {
   validarPreRequisitosRm,
   _private: {
     buildDeleteFolgaPath,
+    getFuncionarioRmData,
     getFolgaKey,
     pick
   }
