@@ -173,96 +173,7 @@
         const turnosCriadosCount = document.getElementById('turnosCriadosCount');
         const turnosRestantesCount = document.getElementById('turnosRestantesCount');
 
-        const pageTitles = {
-            home: 'Home',
-            escalasCriadas: 'Escalas Criadas',
-            escalasGeradas: 'Escalas Geradas',
-            funcionarios: 'Funcionarios',
-            secoes: 'Secoes',
-            secaoForm: 'Cadastro de Secao',
-            turnosSecao: 'Turnos por Secao',
-            turnoSecaoForm: 'Cadastro de Turno',
-            escalaBanco: 'Detalhamento da Escala',
-            escalasFuncionarios: 'Escalas por Funcionário',
-            escalaFuncionarioEdicao: 'Editar Escala do Funcionário',
-            historico: 'Historico',
-            tiposDescanso: 'Tipos de Descanso',
-            regras: 'Regras da Escala',
-            horariosPadrao: 'Horarios Padrao',
-            integracaoRm: 'Integracao RM',
-            acessos: 'Controle de Acesso',
-            roles: 'Perfil de Acesso',
-            configuracoes: 'Configuracoes'
-        };
-
-        const pageParents = {
-            home: 'Escalas',
-            escalasCriadas: 'Escalas',
-            escalasGeradas: 'Escalas',
-            escalaBanco: 'Escalas',
-            escalasFuncionarios: 'Escalas',
-            escalaFuncionarioEdicao: 'Escalas',
-            secoes: 'Escalas',
-            secaoForm: 'Escalas',
-            turnosSecao: 'Escalas',
-            turnoSecaoForm: 'Escalas',
-            regras: 'Escalas',
-            historico: 'Escalas',
-            tiposDescanso: 'Funcionários',
-            funcionarios: 'Funcionários',
-            horariosPadrao: 'Configurações',
-            integracaoRm: 'Configurações',
-            acessos: 'Configurações',
-            roles: 'Configurações',
-            configuracoes: 'Configurações'
-        };
-
-        const permissionBindings = [
-            ['nav-registros', 'escalas', 'visualizar'],
-            ['nav-escalas-funcionarios', 'escalas-funcionarios', 'visualizar'],
-            ['nav-secoes', 'secoes', 'visualizar'],
-            ['nav-turnos-secao', 'turnos-secao', 'visualizar'],
-            ['nav-regras', 'regras', 'visualizar'],
-            ['nav-funcionarios', 'funcionarios', 'visualizar'],
-            ['nav-acessos', 'acessos', 'visualizar'],
-            ['nav-roles', 'roles', 'visualizar'],
-            ['nav-horarios-padrao', 'horarios-padrao', 'visualizar'],
-            ['nav-integracao-rm', 'integracao-rm', 'visualizar'],
-            ['nav-settings', 'configuracoes', 'visualizar'],
-            ['goToTimelineBtn', 'escalas', 'criar'],
-            ['novoTurnoCriacaoBtn', 'turnos-secao', 'criar'],
-            ['gerarTimelineCriacaoBtn', 'escalas', 'editar'],
-            ['carregarFuncionariosCriacaoBtn', 'escalas', 'editar'],
-            ['salvarDetalheBancoBtn', 'escalas', 'editar'],
-            ['salvarEscalaFuncionarioBtn', 'escalas-funcionarios', 'editar'],
-            ['distribuirFolgasFuncionarioBtn', 'escalas-funcionarios', 'editar'],
-            ['novoHorarioPadraoBtn', 'horarios-padrao', 'criar'],
-            ['novoTipoDescansoBtn', 'tipos-descanso', 'criar'],
-            ['salvarSettingsBtn', 'configuracoes', 'editar']
-        ];
-
-        const permissionPageByRoute = {
-            '/home': 'escalas',
-            '/timeline': 'escalas',
-            '/escalas-geradas': 'escalas',
-            '/criar-escala': 'escalas',
-            '/escalas-funcionarios': 'escalas-funcionarios',
-            '/escala-funcionario': 'escalas-funcionarios',
-            '/funcionarios': 'funcionarios',
-            '/secoes': 'secoes',
-            '/secao': 'secoes',
-            '/turnos-secao': 'turnos-secao',
-            '/turno-secao': 'turnos-secao',
-            '/regras': 'regras',
-            '/historico': 'historico',
-            '/tipos-descanso': 'tipos-descanso',
-            '/horarios-padrao': 'horarios-padrao',
-            '/integracao-rm': 'integracao-rm',
-            '/acessos': 'acessos',
-            '/roles': 'roles',
-            '/configuracoes': 'configuracoes'
-        };
-
+        const { pageTitles, pageParents, permissionBindings, permissionPageByRoute } = window.EscalaNavigationConfig;
         const hasPermission = (page, action = 'visualizar') => window.EscalaPermissions?.can(page, action) !== false;
 
         const applyPermissionBindings = () => {
@@ -813,11 +724,6 @@
         const regraDescansoEntreTurnosInput = document.getElementById('regraDescansoEntreTurnos');
         const regraDescansoPosFolgaInput = document.getElementById('regraDescansoPosFolga');
         const regraMaxDiasConsecutivosInput = document.getElementById('regraMaxDiasConsecutivos');
-        const infoModal = document.getElementById('infoModal');
-        const infoModalHeader = document.getElementById('infoModalHeader');
-        const infoModalTitle = document.getElementById('infoModalTitle');
-        const infoMessagesList = document.getElementById('infoMessagesList');
-        const closeInfoModalBtn = document.getElementById('closeInfoModalBtn');
         const visualizarTimelineBtn = document.getElementById('visualizarTimelineBtn');
         const timelineVisualizerModal = document.getElementById('timelineVisualizerModal');
         const closeTimelineVisualizerBtn = document.getElementById('closeTimelineVisualizerBtn');
@@ -880,7 +786,8 @@
         const getLojaCodigo = (loja) => loja?.LOJA ?? loja?.loja;
         
         const { timeToMinutes, minutesToTime, hoursToMinutes } = window.EscalaRulesCore;
-        const showInfoModal = (messages, type = 'info') => { infoMessagesList.innerHTML = ''; const panel = infoModal?.querySelector('.modal-content') || infoModal?.querySelector('div'); if (panel) panel.classList.add('info-modal-wide'); if (type === 'error') { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-red-500'; infoModalTitle.textContent = 'Atenção: Erros Encontrados'; } else if (type === 'success') { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-green-500'; infoModalTitle.textContent = 'Sucesso'; } else { infoModalHeader.className = 'flex justify-between items-center p-4 text-white rounded-t-lg bg-blue-500'; infoModalTitle.textContent = 'Informação'; } if (Array.isArray(messages)) { messages.forEach(msg => { const li = document.createElement('li'); li.textContent = msg; infoMessagesList.appendChild(li); }); } else { const li = document.createElement('li'); li.textContent = messages; infoMessagesList.appendChild(li); } infoModal.classList.remove('hidden'); };
+        const { showInfoModal, hideInfoModal, showInputModal } = window.EscalaModal;
+        const { escapeHtml, formatarDataTabela, formatarMesTabela } = window.EscalaFormatters;
         
         const contarTurnosCriados = (ignorarIndex = null) => dadosEscala.reduce((total, escala, index) => {
             if (index === ignorarIndex) return total;
@@ -905,13 +812,6 @@
         const fecharModalTurno = () => {
             if (turnoModal) turnoModal.classList.add('hidden');
         };
-
-        const escapeHtml = (value) => String(value ?? '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
 
         const getSecaoTurnoPadrao = (secao) => (secao?.TURNOS || [])[0] || null;
 
@@ -1144,7 +1044,6 @@
             setSalvarEscalaDisponivel(false);
         };
 
-        const hideInfoModal = () => { infoModal.classList.add('hidden'); };
         
         const renderizarTimelineCompleta = (targetElementId = 'timeline-content', customDadosEscala = dadosEscala) => {
             const timelineContent = document.getElementById(targetElementId);
@@ -1601,8 +1500,6 @@
             imprimirTimelineMelhorado(tempDataSource, visualizerTitle);
         });
         
-        closeInfoModalBtn.addEventListener('click', hideInfoModal);
-        infoModal.addEventListener('click', (e) => { if (e.target === infoModal) hideInfoModal(); });
         
         visualizarTimelineBtn.addEventListener('click', () => {
             const visualizerContent = document.getElementById('timeline-visualizer-content');
@@ -2238,221 +2135,6 @@
             }
         });
         
-        // --- SISTEMA DE MODAL DE INPUT ---
-        const inputModal = document.getElementById('inputModal');
-        const inputModalTitle = document.getElementById('inputModalTitle');
-        const inputModalBody = document.getElementById('inputModalBody');
-        const inputModalConfirmBtn = document.getElementById('inputModalConfirmBtn');
-        const inputModalCancelBtn = document.getElementById('inputModalCancelBtn');
-        const inputModalPanel = document.getElementById('inputModalPanel');
-
-        const showInputModal = (config) => {
-            return new Promise((resolve) => {
-                const basePanelClass = 'bg-white rounded-lg shadow-xl w-11/12 max-w-sm flex flex-col';
-                const hasWideInput = (config.inputs || []).some(input => input.type === 'checkbox-group');
-                const panelClass = (config.panelClass || basePanelClass).trim();
-                if (inputModalPanel) {
-                    inputModalPanel.className = hasWideInput ? `${panelClass} input-modal-wide` : panelClass;
-                }
-                inputModalTitle.textContent = config.title;
-                inputModalConfirmBtn.textContent = config.confirmText || 'Confirmar';
-                
-                if (config.cancelText === '') {
-                    inputModalCancelBtn.classList.add('hidden');
-                } else {
-                    inputModalCancelBtn.classList.remove('hidden');
-                    inputModalCancelBtn.textContent = config.cancelText || 'Cancelar';
-                }
-
-                inputModalBody.innerHTML = '';
-
-                const setInputBaseProps = (field, input) => {
-                    field.id = input.id;
-                    field.required = Boolean(input.required);
-                    field.dataset.requiredOriginal = input.required ? '1' : '0';
-                    if (input.placeholder) field.placeholder = input.placeholder;
-                    field.className = input.className || 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
-                    return field;
-                };
-
-                const appendField = (input, field) => {
-                    const wrapper = document.createElement('div');
-                    wrapper.dataset.fieldWrapper = input.id;
-                    if (input.dependsOn) wrapper.dataset.dependsOn = input.dependsOn;
-                    if (input.showWhen) wrapper.dataset.showWhen = Array.isArray(input.showWhen) ? input.showWhen.join('|') : String(input.showWhen);
-                    if (input.wrapperClass) wrapper.className = input.wrapperClass;
-                    const label = document.createElement('label');
-                    label.className = 'block text-sm font-medium text-gray-700';
-                    label.textContent = input.label;
-                    wrapper.appendChild(label);
-                    wrapper.appendChild(field);
-                    inputModalBody.appendChild(wrapper);
-                    return wrapper;
-                };
-
-                config.inputs.forEach(input => {
-                    if (input.type === 'message') {
-                        const p = document.createElement('p');
-                        p.textContent = input.text;
-                        p.className = input.className || 'text-gray-700';
-                        inputModalBody.appendChild(p);
-                        return;
-                    }
-
-                    if (input.type === 'html') {
-                        const wrapper = document.createElement('div');
-                        wrapper.innerHTML = input.html || '';
-                        inputModalBody.appendChild(wrapper);
-                        return;
-                    }
-
-                    if (input.type === 'select') {
-                        const selectEl = setInputBaseProps(document.createElement('select'), input);
-                        (input.options || []).forEach(option => {
-                            const optionEl = document.createElement('option');
-                            optionEl.value = option.value;
-                            optionEl.textContent = option.label;
-                            if (String(option.value) === String(input.value || '')) optionEl.selected = true;
-                            selectEl.appendChild(optionEl);
-                        });
-                        appendField(input, selectEl);
-                        return;
-                    }
-
-                    if (input.type === 'checkbox-group') {
-                        const wrapper = document.createElement('div');
-                        wrapper.id = input.id;
-                        wrapper.dataset.inputType = 'checkbox-group';
-                        wrapper.dataset.requiredOriginal = input.required ? '1' : '0';
-                        wrapper.className = 'mt-2 max-h-64 overflow-auto rounded-md border border-gray-200 bg-white p-3 space-y-2';
-                        (input.options || []).forEach(option => {
-                            const row = document.createElement('label');
-                            row.className = 'flex items-start gap-2 text-sm text-gray-700';
-                            const checkbox = document.createElement('input');
-                            checkbox.type = 'checkbox';
-                            checkbox.value = option.value;
-                            checkbox.checked = input.value ? input.value.map(String).includes(String(option.value)) : option.checked !== false;
-                            checkbox.className = 'mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500';
-                            const span = document.createElement('span');
-                            span.textContent = option.label;
-                            row.appendChild(checkbox);
-                            row.appendChild(span);
-                            wrapper.appendChild(row);
-                        });
-                        appendField(input, wrapper);
-                        return;
-                    }
-
-                    if (input.type === 'choice-group') {
-                        const wrapper = document.createElement('div');
-                        wrapper.id = input.id;
-                        wrapper.dataset.inputType = 'choice-group';
-                        wrapper.dataset.requiredOriginal = input.required ? '1' : '0';
-                        wrapper.className = 'choice-group mt-2';
-                        Object.defineProperty(wrapper, 'value', {
-                            get() { return wrapper.dataset.value || ''; }
-                        });
-                        (input.options || []).forEach(option => {
-                            const row = document.createElement('label');
-                            row.className = 'choice-pill';
-                            const radio = document.createElement('input');
-                            radio.type = 'radio';
-                            radio.name = input.id;
-                            radio.value = option.value;
-                            radio.checked = String(option.value) === String(input.value || '');
-                            if (radio.checked) wrapper.dataset.value = option.value;
-                            radio.addEventListener('change', () => {
-                                wrapper.dataset.value = radio.value;
-                                wrapper.dispatchEvent(new Event('change'));
-                            });
-                            const span = document.createElement('span');
-                            span.textContent = option.label;
-                            row.appendChild(radio);
-                            row.appendChild(span);
-                            wrapper.appendChild(row);
-                        });
-                        if (!wrapper.dataset.value && input.options?.[0]) wrapper.dataset.value = input.options[0].value;
-                        appendField(input, wrapper);
-                        return;
-                    }
-
-                    if (input.type === 'textarea') {
-                        const textareaEl = setInputBaseProps(document.createElement('textarea'), input);
-                        textareaEl.rows = input.rows || 3;
-                        textareaEl.value = input.value || '';
-                        appendField(input, textareaEl);
-                        return;
-                    }
-
-                    const inputEl = setInputBaseProps(document.createElement('input'), input);
-                    inputEl.type = input.type;
-                    inputEl.value = input.value || '';
-                    appendField(input, inputEl);
-                });
-
-                const applyConditionalFields = () => {
-                    inputModalBody.querySelectorAll('[data-depends-on]').forEach(wrapper => {
-                        const controller = document.getElementById(wrapper.dataset.dependsOn);
-                        const allowed = String(wrapper.dataset.showWhen || '').split('|').filter(Boolean);
-                        const visible = controller && !controller.disabled && allowed.includes(String(controller.value));
-                        wrapper.classList.toggle('hidden', !visible);
-                        wrapper.querySelectorAll('input, select, textarea').forEach(field => {
-                            field.disabled = !visible;
-                            field.required = visible && field.dataset.requiredOriginal === '1';
-                        });
-                    });
-                };
-
-                inputModalBody.querySelectorAll('select, [data-input-type="choice-group"]').forEach(select => select.addEventListener('change', applyConditionalFields));
-                applyConditionalFields();
-                if (typeof config.onRender === 'function') config.onRender(inputModalBody);
-
-                const hideModal = () => {
-                    inputModal.classList.add('hidden');
-                    inputModalConfirmBtn.onclick = null;
-                    inputModalCancelBtn.onclick = null;
-                    if (inputModalPanel) inputModalPanel.className = basePanelClass;
-                };
-
-                inputModalConfirmBtn.onclick = () => {
-                    const values = {};
-                    let allValid = true;
-                    config.inputs.forEach(input => {
-                        if (input.type === 'message' || input.type === 'html') return;
-                        const inputEl = document.getElementById(input.id);
-                        if (!inputEl || inputEl.disabled) return;
-                        if (input.type === 'checkbox-group') {
-                            const checked = Array.from(inputEl.querySelectorAll('input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
-                            if (input.required && checked.length === 0) allValid = false;
-                            values[input.id] = checked;
-                            return;
-                        }
-                        if (input.type === 'choice-group') {
-                            if (input.required && !inputEl.value) allValid = false;
-                            values[input.id] = inputEl.value;
-                            return;
-                        }
-                        if (inputEl.required && !String(inputEl.value || '').trim()) allValid = false;
-                        values[input.id] = inputEl.value;
-                    });
-
-                    if (allValid) {
-                        hideModal();
-                        resolve(values);
-                    } else {
-                        showInfoModal('Por favor, preencha todos os campos obrigatorios.', 'error');
-                    }
-                };
-
-                inputModalCancelBtn.onclick = () => {
-                    hideModal();
-                    resolve(null);
-                };
-
-                inputModal.classList.remove('hidden');
-            });
-        };
-        
         // --- L?GICA DE SALVAR/CARREGAR/DELETAR ---
         const salvarEscalaBtn = document.getElementById('salvarEscalaBtn');
         const tabelaRegistrosBody = document.getElementById('tabela-registros-body');
@@ -2462,36 +2144,7 @@
         let escalaRascunhoContexto = null;
         const getLojaContextoEscala = () => String(escalaRascunhoContexto?.loja || lojaEscalaSelect?.value || '');
 
-        const apiRequest = async (url, options = {}) => {
-            if (window.EscalaApi?.request) {
-                return window.EscalaApi.request(url, options);
-            }
-
-            const { timeoutMs = 20000, signal, ...fetchOptions } = options;
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-            const response = await fetch(url, {
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json', ...(fetchOptions.headers || {}) },
-                ...fetchOptions,
-                signal: signal || controller.signal
-            }).catch((error) => {
-                if (error.name === 'AbortError') {
-                    throw new Error('Tempo limite excedido ao comunicar com o servidor.');
-                }
-                throw error;
-            }).finally(() => clearTimeout(timeout));
-
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                const error = new Error(data.error || 'Erro ao comunicar com o servidor.');
-                error.details = data.errors || data.details || null;
-                throw error;
-            }
-            return data;
-        };
-
+        const apiRequest = window.EscalaApi.request.bind(window.EscalaApi);
         const carregarUsuarioSessao = async () => {
             const data = await apiRequest('/api/auth/me');
             const user = data.user || {};
@@ -4479,20 +4132,6 @@
 
             const hasError = resultados.some(resultado => !resultado.ok);
             showInfoModal(mensagens, hasError ? 'error' : 'success');
-        };
-
-        const formatarDataTabela = (value) => {
-            const iso = String(value || '').slice(0, 10);
-            if (!iso) return '-';
-            const partes = iso.split('-');
-            return partes.length >= 3 ? partes[2] + '/' + partes[1] + '/' + partes[0] : iso;
-        };
-
-        const formatarMesTabela = (value) => {
-            const iso = String(value || '').slice(0, 10);
-            if (!iso) return '-';
-            const partes = iso.split('-');
-            return partes.length >= 2 ? partes[1] + '/' + partes[0] : iso;
         };
 
         const popularFiltrosEscalas = () => {
