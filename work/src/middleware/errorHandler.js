@@ -9,7 +9,16 @@ function errorHandler(err, req, res, next) {
   const message = status >= 500 ? 'Erro interno do servidor.' : err.message;
 
   if (status >= 500) {
-    console.error({ requestId: req.id || null, error: err });
+    console.error(JSON.stringify({
+      event: 'server_error',
+      requestId: req.id || null,
+      method: req.method,
+      path: req.originalUrl,
+      status,
+      code: err.code || null,
+      errorNum: err.errorNum || null,
+      message: err.message
+    }));
   }
 
   return res.status(status).json({ error: message, requestId: req.id || null });

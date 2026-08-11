@@ -444,6 +444,51 @@ async function getEscalaDias(escprogId) {
   });
 }
 
+async function getEscalaFuncionarioAtual({ lojaId, mesRef, escfuncId }) {
+  return withConnection(async (connection) => {
+    const latestFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId });
+    if (latestFuncionarioRevision === null) return null;
+    const ativaSql = await getAtivaSql(connection, 'p');
+    const result = await connection.execute(
+      `select
+          p.escprog_id,
+          p.mes_ref,
+          p.revisao,
+          p.oficializada,
+          p.loja,
+          p.chapa,
+          p.escfunc_id,
+          p.escsecao_id,
+          p.escfuncao_id,
+          d.escprogdia_id,
+          d.dt,
+          d.hr_ent1,
+          d.hr_sai1,
+          d.hr_ent2,
+          d.hr_sai2,
+          d.programacao
+       from sgn_esc_prog p
+       left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
+       where p.loja = :lojaId
+         and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+         and p.escfunc_id = :escfuncId
+         and p.revisao = :latestFuncionarioRevision
+         and ${ativaSql}
+       order by d.dt`,
+      { lojaId, mesRef, escfuncId, latestFuncionarioRevision },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    const rows = result.rows || [];
+    if (!rows.length) return null;
+    return {
+      header: rows[0],
+      revisao: latestFuncionarioRevision,
+      dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id'))
+    };
+  });
+}
+
 async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
   return withConnection(async (connection) => {
     try {
@@ -913,6 +958,7 @@ module.exports = {
   getEscalaMensal,
   getEscalaHeader,
   getEscalaDias,
+  getEscalaFuncionarioAtual,
   updateEscalaDia,
   saveEscala,
   saveEscalasBatch,

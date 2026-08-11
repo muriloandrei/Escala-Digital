@@ -6,6 +6,7 @@ const catalogService = require('../services/catalogService');
 const auditService = require('../services/auditService');
 const rmIntegrationService = require('../services/rmIntegrationService');
 const { REGRAS_VIGENTES, validateEscalaPayload } = require('../rules/escalaRules');
+const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
 
 const router = express.Router();
 
@@ -305,11 +306,18 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
     if (ausenciaErrors.length > 0) return res.status(422).json({ errors: ausenciaErrors });
 
+    const funcionarioPayload = payload.funcionarios[0];
+    const escalaAnterior = await escalaService.getEscalaFuncionarioAtual({
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      escfuncId: funcionarioPayload.escfuncId
+    });
+    const alteracoes = buildDiaAlteracoes(escalaAnterior?.dias || [], funcionarioPayload.dias);
     const saved = await escalaService.saveEscalaFuncionarioRevision({
       lojaId: payload.lojaId,
       mesRef: payload.mesRef,
-      funcionario: payload.funcionarios[0],
-      dias: payload.funcionarios[0].dias,
+      funcionario: funcionarioPayload,
+      dias: funcionarioPayload.dias,
       oficializada: payload.oficializada || 0
     });
     await auditService.registerAudit({
@@ -320,11 +328,15 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
       revisao: saved.revisao,
       referenceId: saved.escprogId,
       details: {
-        escfuncId: payload.funcionarios[0].escfuncId,
-        chapa: payload.funcionarios[0].chapa,
-        diasAlterados: payload.funcionarios[0].dias.length,
-        programacoes: [...new Set(payload.funcionarios[0].dias.map((dia) => dia.programacao || 'TRB'))],
-        justificativa: payload.justificativa || payload.funcionarios[0].dias.find((dia) => dia.justificativa)?.justificativa || null
+        escfuncId: funcionarioPayload.escfuncId,
+        chapa: funcionarioPayload.chapa,
+        revisaoAnterior: escalaAnterior?.revisao ?? null,
+        revisaoNova: saved.revisao,
+        diasRecebidos: funcionarioPayload.dias.length,
+        diasAlterados: alteracoes.length,
+        alteracoes,
+        programacoes: [...new Set(funcionarioPayload.dias.map((dia) => dia.programacao || 'TRB'))],
+        justificativa: payload.justificativa || funcionarioPayload.dias.find((dia) => dia.justificativa)?.justificativa || null
       }
     });
     return res.status(201).json({ saved: [saved] });
@@ -366,6 +378,8 @@ router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'edi
     }
 
     const data = diaSchema.parse(req.body);
+    const diasAntes = await escalaService.getEscalaDias(Number(req.params.escprogId));
+    const diaAnterior = diasAntes.find((item) => Number(item.ESCPROGDIA_ID || item.escprogdia_id) === Number(req.params.escprogdiaId));
     const dia = await escalaService.updateEscalaDia({
       escprogId: Number(req.params.escprogId),
       escprogdiaId: Number(req.params.escprogdiaId),
@@ -376,6 +390,7 @@ router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'edi
       return res.status(404).json({ error: 'Dia da escala nao encontrado.' });
     }
 
+    const alteracoes = buildDiaAlteracoes(diaAnterior ? [diaAnterior] : [], [dia]);
     await auditService.registerAudit({
       action: 'EDITAR_DIA_ESCALA',
       user: req.user,
@@ -386,6 +401,9 @@ router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'edi
       details: {
         escprogId: Number(req.params.escprogId),
         escprogdiaId: Number(req.params.escprogdiaId),
+        revisaoAnterior: header.REVISAO,
+        revisaoNova: dia.REVISAO || header.REVISAO,
+        alteracoes,
         programacao: data.PROGRAMACAO
       }
     });
