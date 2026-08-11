@@ -178,8 +178,8 @@
         const navigationController = window.EscalaNavigation.createNavigationController({
             config: { pageTitles, pageParents, permissionBindings, permissionPageByRoute },
             hasPermission,
-            showInfoModal,
-            showInputModal
+            showInfoModal: (...args) => showInfoModal(...args),
+            showInputModal: (...args) => showInputModal(...args)
         });
         const applyPermissionBindings = navigationController.bindPermissionElements;
         const buildPermissionDeniedButton = navigationController.buildPermissionDeniedButton;
