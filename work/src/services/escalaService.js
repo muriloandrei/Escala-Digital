@@ -122,6 +122,35 @@ function isMesFinalizado(mesRef) {
   return getMesStatus(mesRef, 1) === 'FINALIZADA';
 }
 
+function isUniqueConstraintError(error) {
+  return error?.errorNum === 1 || error?.code === 'ORA-00001';
+}
+
+function normalizeOracleSaveError(error) {
+  if (!isUniqueConstraintError(error)) return error;
+  const normalized = new Error('Ja existe programacao gravada para um funcionario nesta loja, mes e revisao. Recarregue as escalas e tente salvar novamente.');
+  normalized.statusCode = 409;
+  normalized.cause = error;
+  return normalized;
+}
+
+function assertUniqueFuncionarios(funcionarios = []) {
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const funcionario of funcionarios) {
+    const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID || 0);
+    if (!escfuncId) continue;
+    if (seen.has(escfuncId)) duplicates.add(escfuncId);
+    seen.add(escfuncId);
+  }
+  if (duplicates.size > 0) {
+    const error = new Error('A escala possui funcionario duplicado no mesmo lote. Revise a distribuicao antes de salvar.');
+    error.statusCode = 422;
+    error.details = [...duplicates].map((escfuncId) => `ESCFUNC_ID ${escfuncId}`);
+    throw error;
+  }
+}
+
 async function hasProgAtivaColumn(connection) {
   const columns = await getTableColumns(connection, 'SGN_ESC_PROG');
   return columns.has('ATIVA');
@@ -531,7 +560,8 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
       const targetDay = targetDayResult.rows[0];
       if (!targetDay) return null;
       const targetDate = pick(targetDay, 'DT', 'dt');
-      const nextRevision = latestFuncionarioRevision + 1;
+      const latestAnyFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId: loja, mesRef: mesRefKey, escfuncId, includeInactive: true });
+      const nextRevision = latestAnyFuncionarioRevision === null ? latestFuncionarioRevision + 1 : latestAnyFuncionarioRevision + 1;
 
       const headerInsert = await connection.execute(
         `insert into sgn_esc_prog (
@@ -599,7 +629,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
       return updatedRow;
     } catch (error) {
       await connection.rollback();
-      throw error;
+      throw normalizeOracleSaveError(error);
     }
   });
 }
@@ -754,14 +784,17 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
 async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0 }) {
   return withConnection(async (connection) => {
     try {
+      assertUniqueFuncionarios(funcionarios);
+
       if (isMesFinalizado(mesRef)) {
         const error = new Error('Escala finalizada nao pode ser editada.');
         error.statusCode = 422;
         throw error;
       }
 
-      const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
-      const nextRevision = latestRevision === null ? 0 : latestRevision + 1;
+      const latestActiveRevision = await getLatestRevision(connection, { lojaId, mesRef });
+      const latestAnyRevision = await getLatestRevision(connection, { lojaId, mesRef, includeInactive: true });
+      const nextRevision = latestAnyRevision === null ? 0 : latestAnyRevision + 1;
       const secoesAlteradas = [...new Set((funcionarios || [])
         .map((funcionario) => Number(funcionario.escsecaoId || funcionario.ESCSECAO_ID || 0))
         .filter(Boolean))];
@@ -769,7 +802,7 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
       await copyPreviousRevision(connection, {
         lojaId,
         mesRef,
-        latestRevision,
+        latestRevision: latestActiveRevision,
         nextRevision,
         secoesAlteradas,
         oficializada: 0
@@ -791,7 +824,7 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
       return saved;
     } catch (error) {
       await connection.rollback();
-      throw error;
+      throw normalizeOracleSaveError(error);
     }
   });
 }
@@ -818,7 +851,8 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
         error.statusCode = 404;
         throw error;
       }
-      const nextRevision = latestFuncionarioRevision + 1;
+      const latestAnyFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
+      const nextRevision = latestAnyFuncionarioRevision === null ? latestFuncionarioRevision + 1 : latestAnyFuncionarioRevision + 1;
       const ativaSql = await getAtivaSql(connection, 'p');
       const headers = await connection.execute(
         `select p.escprog_id, p.mes_ref, p.escfunc_id, p.escsecao_id, p.escfuncao_id, p.loja, p.chapa, p.oficializada
@@ -865,7 +899,7 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
       return saved;
     } catch (error) {
       await connection.rollback();
-      throw error;
+      throw normalizeOracleSaveError(error);
     }
   });
 }
