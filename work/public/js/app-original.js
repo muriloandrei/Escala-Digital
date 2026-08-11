@@ -175,51 +175,22 @@
 
         const { pageTitles, pageParents, permissionBindings, permissionPageByRoute } = window.EscalaNavigationConfig;
         const hasPermission = (page, action = 'visualizar') => window.EscalaPermissions?.can(page, action) !== false;
-
-        const applyPermissionBindings = () => {
-            permissionBindings.forEach(([id, page, action]) => {
-                const element = document.getElementById(id);
-                if (!element) return;
-                element.dataset.permissionPage = page;
-                element.dataset.permissionAction = action;
-            });
-            window.EscalaPermissions?.applyDocument();
-        };
-
-        const buildPermissionDeniedButton = (page, action = 'editar') => {
-            if (hasPermission(page, action)) return '';
-            return '<button type="button" class="action-btn-table" disabled title="Usuario sem permissao"><span class="material-symbols-outlined">lock</span>Sem permissao</button>';
-        };
-
-        const getDefaultAllowedRoute = () => {
-            const entry = [
-                ['/escalas-geradas', 'escalas'],
-                ['/escalas-funcionarios', 'escalas-funcionarios'],
-                ['/funcionarios', 'funcionarios'],
-                ['/secoes', 'secoes'],
-                ['/turnos-secao', 'turnos-secao'],
-                ['/regras', 'regras'],
-                ['/acessos', 'acessos'],
-                ['/configuracoes', 'configuracoes']
-            ].find(([, page]) => hasPermission(page, 'visualizar'));
-            return entry?.[0] || '/escalas-geradas';
-        };
-
-        const checkRoutePermission = (route) => {
-            const page = Object.entries(permissionPageByRoute)
-                .sort((a, b) => b[0].length - a[0].length)
-                .find(([prefix]) => route.startsWith(prefix))?.[1];
-            if (!page || hasPermission(page, 'visualizar')) return true;
-            const fallback = getDefaultAllowedRoute();
-            if (route !== fallback) window.location.hash = fallback;
-            showInfoModal('Usuario sem permissao para acessar esta pagina.', 'error');
-            return false;
-        };
-
-        const setCurrentPageTitle = (key) => {
-            if (currentPageTitle) currentPageTitle.textContent = pageTitles[key] || pageTitles.home;
-            if (currentPageParent) currentPageParent.textContent = pageParents[key] || pageParents.home;
-        };
+        const navigationController = window.EscalaNavigation.createNavigationController({
+            config: { pageTitles, pageParents, permissionBindings, permissionPageByRoute },
+            hasPermission,
+            showInfoModal,
+            showInputModal
+        });
+        const applyPermissionBindings = navigationController.bindPermissionElements;
+        const buildPermissionDeniedButton = navigationController.buildPermissionDeniedButton;
+        const checkRoutePermission = navigationController.checkRoutePermission;
+        const setCurrentPageTitle = (key) => navigationController.setTitle({ titleElement: currentPageTitle, parentElement: currentPageParent }, key);
+        let escalaCriacaoPageController = null;
+        let escalaDetalhePageController = null;
+        let escalaFuncionarioPageController = null;
+        let catalogosPageController = null;
+        let accessPageController = null;
+        let rmPageController = null;
 
         function hideAllPages() {
             timelinePage.classList.add('hidden');
@@ -290,8 +261,8 @@
             navEscalasFuncionarios?.classList.add('active');
             expandActiveNavGroup(navEscalasFuncionarios);
             setCurrentPageTitle('escalasFuncionarios');
-            prepararFiltrosEscalaFuncionarios();
-            carregarEscalasFuncionarios().catch(error => showInfoModal(error.message, 'error'));
+            escalaFuncionarioPageController?.prepararFiltros?.();
+            escalaFuncionarioPageController?.carregarLista?.().catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showEscalaFuncionarioEdicaoPage(escfuncId, lojaId, mesRef) {
@@ -300,7 +271,7 @@
             navEscalasFuncionarios?.classList.add('active');
             expandActiveNavGroup(navEscalasFuncionarios);
             setCurrentPageTitle('escalaFuncionarioEdicao');
-            carregarEscalaFuncionarioEdicao(escfuncId, lojaId, mesRef).catch(error => showInfoModal(error.message, 'error'));
+            escalaFuncionarioPageController?.carregarEdicao?.(escfuncId, lojaId, mesRef).catch(error => showInfoModal(error.message, 'error'));
         }
 
         function copiarOptionsSelect(origem, destino, selectedValue = '') {
@@ -327,13 +298,13 @@
             navRegistros.classList.add('active');
             expandActiveNavGroup(navRegistros);
             setCurrentPageTitle('escalasGeradas');
-            prepararPaineisCriacao();
+            escalaCriacaoPageController?.prepararPaineis?.();
 
             if (escalaRascunhoAtivo && escalaRascunhoContexto) {
                 copiarOptionsSelect(lojaEscalaSelect, criacaoEscalaLoja, escalaRascunhoContexto.loja);
                 copiarOptionsSelect(mesSelect, criacaoEscalaMes, String(new Date(escalaRascunhoContexto.mesRef + 'T00:00:00').getMonth()));
                 copiarOptionsSelect(anoSelect, criacaoEscalaAno, String(new Date(escalaRascunhoContexto.mesRef + 'T00:00:00').getFullYear()));
-                renderizarSecoesCriacao();
+                escalaCriacaoPageController?.renderizarSecoes?.();
                 criacaoSecoesCard?.classList.remove('hidden');
                 criacaoTimelineCard?.classList.toggle('hidden', dadosEscala.length === 0);
                 if (dadosEscala.length > 0) renderizarTimelineCompleta('criacaoTimelineContent', dadosEscala);
@@ -352,7 +323,7 @@
             setCurrentPageTitle('funcionarios');
             if (funcionariosMesFiltro && !funcionariosMesFiltro.options.length) copiarOptionsSelect(mesSelect, funcionariosMesFiltro, String(new Date().getMonth()));
             if (funcionariosAnoFiltro && !funcionariosAnoFiltro.options.length) copiarOptionsSelect(anoSelect, funcionariosAnoFiltro, String(new Date().getFullYear()));
-            carregarFuncionariosTela(false).catch(error => showInfoModal(error.message, 'error'));
+            catalogosPageController?.carregarFuncionarios?.(false).catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showSecoesPage() {
@@ -361,7 +332,7 @@
             navSecoes.classList.add('active');
             expandActiveNavGroup(navSecoes);
             setCurrentPageTitle('secoes');
-            carregarSecoesTela(false).catch(error => showInfoModal(error.message, 'error'));
+            catalogosPageController?.carregarSecoes?.(false).catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showSecaoFormPage(escsecaoId = '') {
@@ -370,7 +341,7 @@
             navSecoes.classList.add('active');
             expandActiveNavGroup(navSecoes);
             setCurrentPageTitle('secaoForm');
-            prepararFormularioSecao(escsecaoId);
+            catalogosPageController?.prepararFormularioSecao?.(escsecaoId);
         }
 
         function showTurnosSecaoPage() {
@@ -379,7 +350,7 @@
             navTurnosSecao.classList.add('active');
             expandActiveNavGroup(navTurnosSecao);
             setCurrentPageTitle('turnosSecao');
-            carregarTurnosSecaoTela(false).catch(error => showInfoModal(error.message, 'error'));
+            catalogosPageController?.carregarTurnosSecao?.(false).catch(error => showInfoModal(error.message, 'error'));
         }
 
         async function showTurnoSecaoFormPage(escsecaoturnoId = '') {
@@ -426,12 +397,12 @@
 
         function showEscalaDetalhePage(escprogId) {
             abrirPaginaDetalheEscala();
-            carregarDetalheEscalaBanco(escprogId).catch(error => showInfoModal(error.message, 'error'));
+            escalaDetalhePageController?.carregarIndividual?.(escprogId).catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showEscalaDetalheMensalPage(lojaId, mesRef) {
             abrirPaginaDetalheEscala();
-            carregarDetalheEscalaMensal(lojaId, mesRef).catch(error => showInfoModal(error.message, 'error'));
+            escalaDetalhePageController?.carregarMensal?.(lojaId, mesRef).catch(error => showInfoModal(error.message, 'error'));
         }
 
 
@@ -451,7 +422,7 @@
             navTiposDescanso?.classList.add('active');
             expandActiveNavGroup(navTiposDescanso);
             setCurrentPageTitle('tiposDescanso');
-            carregarTiposDescansoTela().catch(error => showInfoModal(error.message, 'error'));
+            catalogosPageController?.carregarTiposDescanso?.().catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showRegrasPage() {
@@ -460,7 +431,7 @@
             navRegras?.classList.add('active');
             expandActiveNavGroup(navRegras);
             setCurrentPageTitle('regras');
-            carregarRegrasTela().catch(error => showInfoModal(error.message, 'error'));
+            catalogosPageController?.carregarRegras?.().catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showHorariosPadraoPage() {
@@ -469,7 +440,7 @@
             navHorariosPadrao?.classList.add('active');
             expandActiveNavGroup(navHorariosPadrao);
             setCurrentPageTitle('horariosPadrao');
-            carregarHorariosPadraoTela().catch(error => showInfoModal(error.message, 'error'));
+            catalogosPageController?.carregarHorariosPadrao?.().catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showIntegracaoRmPage() {
@@ -478,8 +449,8 @@
             navIntegracaoRm?.classList.add('active');
             expandActiveNavGroup(navIntegracaoRm);
             setCurrentPageTitle('integracaoRm');
-            prepararFiltrosRm();
-            carregarRmLogsTela().catch(error => showInfoModal(error.message, 'error'));
+            rmPageController?.prepararFiltros?.();
+            rmPageController?.carregarLogs?.().catch(error => showInfoModal(error.message, 'error'));
         }
         function showAcessosPage() {
             hideAllPages();
@@ -487,7 +458,7 @@
             navAcessos.classList.add('active');
             expandActiveNavGroup(navAcessos);
             setCurrentPageTitle('acessos');
-            carregarAcessosTela(false);
+            accessPageController?.carregarAcessos?.(false);
         }
 
         function showRolesPage() {
@@ -496,7 +467,7 @@
             navRoles.classList.add('active');
             expandActiveNavGroup(navRoles);
             setCurrentPageTitle('roles');
-            renderizarRolesSettings().catch(error => showInfoModal(error.message, 'error'));
+            accessPageController?.renderizarPerfis?.().catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showSettingsPage() {
@@ -590,12 +561,7 @@
             }
 
             if (escalaRascunhoAtivo && !pageKey.startsWith('escalas/nova')) {
-                const confirmacao = await showInputModal({
-                    title: 'Descartar rascunho?',
-                    inputs: [{ type: 'message', text: 'Existe uma escala em rascunho. Se voce sair desta tela antes de salvar, o progresso sera perdido.' }],
-                    confirmText: 'Sair mesmo assim'
-                });
-
+                const confirmacao = await navigationController.confirmDiscardDraft(true);
                 if (!confirmacao) {
                     hashNavigationLock = true;
                     window.location.hash = '/' + currentHashRoute;
@@ -1250,129 +1216,35 @@
         // =========================================================================
         // FUNCAO DE IMPRESSAO DA TIMELINE (VERSAO CORRIGIDA E MELHORADA)
         // =========================================================================
-        const imprimirTimelineMelhorado = (dataSource = dadosEscala, title = 'Relatório de Linha do Tempo') => {
-            const printContent = document.getElementById('print-container');
-            if (!printContent) return;
-
-            const config = {
-                inicioTimeline: timeToMinutes(horaInicioTimelineInput.value),
-                fimTimeline: timeToMinutes(horaFimTimelineInput.value),
-                intervaloMarcacao: parseInt(intervaloMarcacaoInput.value) || 30,
-            };
-            const duracaoTotalTimeline = config.fimTimeline - config.inicioTimeline;
-
-            if (duracaoTotalTimeline <= 0 || dataSource.length === 0) {
-                showInfoModal('Não há dados suficientes na timeline para gerar um relatório.', 'info');
-                return;
-            }
-            
-            // --- 1. Calcular o número de colunas de tempo para o colspan ---
-            const numMarcacoes = Math.floor(duracaoTotalTimeline / config.intervaloMarcacao) + 1;
-
-            // --- 2. Construir Cabeçalho (Régua de Horários com células individuais) ---
-            let headerHtml = '<tr><th class="col-info">Turno</th>';
-            // Criamos uma célula para cada marcador de tempo
-            for (let min = config.inicioTimeline; min <= config.fimTimeline; min += config.intervaloMarcacao) {
-                headerHtml += `<th>${minutesToTime(min)}</th>`;
-            }
-            headerHtml += '</tr>';
-
-            // --- 3. Construir Corpo (Linhas dos Turnos usando colspan) ---
-            let bodyHtml = '';
-            dataSource.forEach(escala => {
-                const inicioEscalaMin = timeToMinutes(escala.inicio);
-                const fimEscalaMin = timeToMinutes(escala.fim);
-                const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo);
-                const fimIntervaloMin = timeToMinutes(escala.fimIntervalo);
-
-                let barsHtml = '';
-                const createBar = (startMin, endMin, colorClass) => {
-                    if (endMin <= startMin) return '';
-                    const leftPercent = ((startMin - config.inicioTimeline) / duracaoTotalTimeline) * 100;
-                    const widthPercent = ((endMin - startMin) / duracaoTotalTimeline) * 100;
-                    return `<div class="timeline-bar ${colorClass}" style="left: ${leftPercent}%; width: ${widthPercent}%;"></div>`;
-                };
-
-                if (inicioIntervaloMin < fimIntervaloMin && inicioIntervaloMin > inicioEscalaMin && fimIntervaloMin < fimEscalaMin) {
-                    barsHtml += createBar(inicioEscalaMin, inicioIntervaloMin, 'bg-green-500');
-                    barsHtml += createBar(inicioIntervaloMin, fimIntervaloMin, 'bg-yellow-500');
-                    barsHtml += createBar(fimIntervaloMin, fimEscalaMin, 'bg-green-500');
-                } else {
-                    barsHtml += createBar(inicioEscalaMin, fimEscalaMin, 'bg-green-500');
-                }
-
-                const infoTurno = `
-                    <div class="font-bold">${escala.quantidade} Colaborador(es)</div>
-                    <div class="text-xs text-gray-600">${escala.inicio} às ${escala.fim}</div>
-                    <div class="text-xs text-gray-500">Intervalo: ${escala.inicioIntervalo} - ${escala.fimIntervalo}</div>
-                `;
-                // A célula da timeline agora usa colspan para se alinhar com o novo cabeçalho
-                bodyHtml += `<tr><td class="col-info">${infoTurno}</td><td class="col-timeline" colspan="${numMarcacoes}"><div class="timeline-bar-container">${barsHtml}</div></td></tr>`;
+        const imprimirTimelineMelhorado = (dataSource = dadosEscala, title = 'Relatorio de Linha do Tempo') => {
+            window.EscalaPrintService.printTimeline({
+                printContainer,
+                dataSource,
+                title,
+                inicioTimeline: horaInicioTimelineInput.value,
+                fimTimeline: horaFimTimelineInput.value,
+                intervaloMarcacao: intervaloMarcacaoInput.value,
+                timeToMinutes,
+                minutesToTime,
+                showInfoModal
             });
-
-            // --- 4. Construir Rodapé (Linha de Soma usando colspan) ---
-            const perfilCarga = new Array(duracaoTotalTimeline + 1).fill(0);
-            dataSource.forEach(escala => {
-                const quantidade = parseInt(escala.quantidade);
-                const inicioEscalaMin = timeToMinutes(escala.inicio);
-                const fimEscalaMin = timeToMinutes(escala.fim);
-                const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo);
-                const fimIntervaloMin = timeToMinutes(escala.fimIntervalo);
-                for (let min = inicioEscalaMin; min < fimEscalaMin; min++) {
-                    const isBreak = (inicioIntervaloMin < fimIntervaloMin && min >= inicioIntervaloMin && min < fimIntervaloMin);
-                    if (!isBreak) {
-                        const index = min - config.inicioTimeline;
-                        if (index >= 0 && index < perfilCarga.length) perfilCarga[index] += quantidade;
-                    }
-                }
-            });
-
-            let summaryBarsHtml = '';
-            let lastCount = -1;
-            let blockStartMin = config.inicioTimeline;
-            for (let i = 0; i <= duracaoTotalTimeline; i++) {
-                const currentCount = perfilCarga[i] || 0;
-                const currentMin = config.inicioTimeline + i;
-                if (currentCount !== lastCount && i > 0) {
-                    if (lastCount > 0) {
-                        const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100;
-                        const widthPercent = ((currentMin - blockStartMin) / duracaoTotalTimeline) * 100;
-                        summaryBarsHtml += `<div class="summary-bar bg-blue-600" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount}</span></div>`;
-                    }
-                    blockStartMin = currentMin;
-                }
-                lastCount = currentCount;
-            }
-            if (lastCount > 0) {
-                const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100;
-                const widthPercent = ((config.fimTimeline - blockStartMin) / duracaoTotalTimeline) * 100;
-                summaryBarsHtml += `<div class="summary-bar bg-blue-600" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount}</span></div>`;
-            }
-
-            const footerHtml = `
-                <tr>
-                    <td class="col-info font-bold text-center">Total de Ativos</td>
-                    <td class="col-timeline" colspan="${numMarcacoes}"><div class="summary-bar-container">${summaryBarsHtml}</div></td>
-                </tr>
-            `;
-            
-            // --- 5. Montar a Tabela Final ---
-            const dataGeracao = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            printContent.innerHTML = `
-                <div class="print-title">${title}</div>
-                <div class="print-subtitle">Gerado em: ${dataGeracao}</div>
-                <table class="print-timeline-table">
-                    <thead>${headerHtml}</thead>
-                    <tbody>${bodyHtml}</tbody>
-                    <tfoot>${footerHtml}</tfoot>
-                </table>
-            `;
-
-            window.print();
         };
 
-        const prepareSkeletonForPrint = () => { const tableElement = document.getElementById('tabela-esqueleto'); if (!tableElement) return; const clone = tableElement.cloneNode(true); clone.classList.add('print-skeleton-table'); clone.removeAttribute('id'); const month = mesSelect.options[mesSelect.selectedIndex].text; const year = anoSelect.value; printContainer.innerHTML = `<div class="print-title">Esqueleto da Escala</div><div class="print-subtitle">${month} / ${year}</div>`; printContainer.appendChild(clone); window.print(); };
-        const prepareDetailedForPrint = () => { const detailedElements = detalhadaModalBody.querySelectorAll('.colaborador-escala-detalhada'); if (detailedElements.length === 0) return; const month = mesSelect.options[mesSelect.selectedIndex].text; const year = anoSelect.value; printContainer.innerHTML = `<div class="print-title">Escala Detalhada</div><div class="print-subtitle">${month} / ${year}</div>`; detailedElements.forEach(el => { printContainer.appendChild(el.cloneNode(true)); }); window.print(); };
+        const prepareSkeletonForPrint = () => {
+            const tableElement = document.getElementById('tabela-esqueleto');
+            if (!tableElement) return;
+            const month = mesSelect.options[mesSelect.selectedIndex].text;
+            const year = anoSelect.value;
+            window.EscalaPrintService.printElementList(printContainer, 'Esqueleto da Escala', month + ' / ' + year, [tableElement], 'print-skeleton-table');
+        };
+
+        const prepareDetailedForPrint = () => {
+            const detailedElements = Array.from(detalhadaModalBody.querySelectorAll('.colaborador-escala-detalhada'));
+            if (detailedElements.length === 0) return;
+            const month = mesSelect.options[mesSelect.selectedIndex].text;
+            const year = anoSelect.value;
+            window.EscalaPrintService.printElementList(printContainer, 'Escala Detalhada', month + ' / ' + year, detailedElements);
+        };
         
         // --- EVENTOS E ACOES PRINCIPAIS ---
 
@@ -5303,6 +5175,96 @@
         timelineZoomOutBtn.addEventListener('click', () => { if (mainTimelineZoomLevel > 0.5) { mainTimelineZoomLevel = parseFloat((mainTimelineZoomLevel - 0.1).toFixed(2)); applyMainTimelineZoom(); } });
         timelineZoomResetBtn.addEventListener('click', () => { mainTimelineZoomLevel = 1.0; applyMainTimelineZoom(); });
 
+
+        const inicializarControladoresPaginas = () => {
+            escalaCriacaoPageController = window.EscalaCriacaoPage?.createEscalaCriacaoPage?.({
+                prepararPaineisCriacao,
+                iniciarCriacaoEscalaPagina,
+                gerarTimelineCriacaoPagina,
+                iniciarNovaEscalaRascunho,
+                renderizarSecoesCriacao,
+                abrirModalTurnoSecaoCriacao
+            }) || {
+                prepararPaineis: prepararPaineisCriacao,
+                iniciarCriacao: iniciarCriacaoEscalaPagina,
+                gerarTimeline: gerarTimelineCriacaoPagina,
+                iniciarRascunho: iniciarNovaEscalaRascunho,
+                renderizarSecoes: renderizarSecoesCriacao,
+                abrirTurnoSecao: abrirModalTurnoSecaoCriacao
+            };
+
+            escalaDetalhePageController = window.EscalaDetalhePage?.createEscalaDetalhePage?.({
+                carregarDetalheEscalaBanco,
+                carregarDetalheEscalaMensal,
+                renderizarSecaoAtivaEscala,
+                validarDetalheBancoAtual,
+                editarDiaEscalaPorId
+            }) || {
+                carregarIndividual: carregarDetalheEscalaBanco,
+                carregarMensal: carregarDetalheEscalaMensal,
+                renderizarSecaoAtiva: renderizarSecaoAtivaEscala,
+                validar: validarDetalheBancoAtual,
+                editarDia: editarDiaEscalaPorId
+            };
+
+            escalaFuncionarioPageController = window.EscalaFuncionarioPage?.createEscalaFuncionarioPage?.({
+                prepararFiltrosEscalaFuncionarios,
+                carregarEscalasFuncionarios,
+                carregarEscalaFuncionarioEdicao,
+                renderizarEscalaFuncionarioEdicao,
+                distribuirFolgasFuncionario,
+                validarEscalaFuncionarioAtual
+            }) || {
+                prepararFiltros: prepararFiltrosEscalaFuncionarios,
+                carregarLista: carregarEscalasFuncionarios,
+                carregarEdicao: carregarEscalaFuncionarioEdicao,
+                renderizarEdicao: renderizarEscalaFuncionarioEdicao,
+                distribuirFolgas: distribuirFolgasFuncionario,
+                validar: validarEscalaFuncionarioAtual
+            };
+
+            catalogosPageController = window.CatalogosPage?.createCatalogosPage?.({
+                carregarFuncionariosTela,
+                carregarSecoesTela,
+                prepararFormularioSecao,
+                carregarTurnosSecaoTela,
+                carregarTiposDescansoTela,
+                carregarHorariosPadraoTela,
+                carregarRegrasTela
+            }) || {
+                carregarFuncionarios: carregarFuncionariosTela,
+                carregarSecoes: carregarSecoesTela,
+                prepararFormularioSecao,
+                carregarTurnosSecao: carregarTurnosSecaoTela,
+                carregarTiposDescanso: carregarTiposDescansoTela,
+                carregarHorariosPadrao: carregarHorariosPadraoTela,
+                carregarRegras: carregarRegrasTela
+            };
+
+            accessPageController = window.AccessPage?.createAccessPage?.({
+                carregarAcessosTela,
+                renderizarAcessosTela,
+                carregarPerfisAcesso,
+                renderizarRolesSettings,
+                abrirModalPerfilAcesso
+            }) || {
+                carregarAcessos: carregarAcessosTela,
+                renderizarAcessos: renderizarAcessosTela,
+                carregarPerfis: carregarPerfisAcesso,
+                renderizarPerfis: renderizarRolesSettings,
+                abrirPerfil: abrirModalPerfilAcesso
+            };
+
+            rmPageController = window.RmPage?.createRmPage?.({
+                prepararFiltrosRm,
+                carregarRmLogsTela
+            }) || {
+                prepararFiltros: prepararFiltrosRm,
+                carregarLogs: carregarRmLogsTela
+            };
+        };
+
+        inicializarControladoresPaginas();
 
         // --- LOGICA DE CONFIGURACOES ---
         const salvarConfiguracoes = async () => {
