@@ -5,7 +5,29 @@ function pick(row, ...keys) {
   for (const key of keys) {
     if (row?.[key] !== undefined) return row[key];
   }
+  if (!row || typeof row !== 'object') return undefined;
+
+  const expected = new Set(keys.map(normalizeFieldName));
+  const stack = [row];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current || typeof current !== 'object') continue;
+
+    for (const [key, value] of Object.entries(current)) {
+      if (expected.has(normalizeFieldName(key))) return value;
+      if (value && typeof value === 'object' && !(value instanceof Date) && !Array.isArray(value)) {
+        stack.push(value);
+      }
+    }
+  }
   return undefined;
+}
+
+function normalizeFieldName(value) {
+  return String(value || '')
+    .replace(/^[^.]+\./, '')
+    .replace(/[^a-z0-9]/gi, '')
+    .toUpperCase();
 }
 
 function formatDate(value) {
@@ -88,6 +110,59 @@ function getCodTabFolga(funcionarioRm) {
 
 function getCodColigada(funcionarioRm, fallback) {
   return pick(funcionarioRm, 'CODCOLIGADA', 'codColigada', 'codcoligada', 'CodColigada') || fallback;
+}
+
+function getFolgaDateValue(folga) {
+  return pick(
+    folga,
+    'DATA',
+    'data',
+    'Data',
+    'DT',
+    'dt',
+    'DATAFOLGA',
+    'dataFolga',
+    'DataFolga',
+    'ADTTABFOLGA.DATA',
+    'ADTTABFOLGA_DATA'
+  );
+}
+
+function getFolgaHoraInicioValue(folga) {
+  return pick(
+    folga,
+    'HORAINICIO',
+    'horainicio',
+    'HoraInicio',
+    'HORA_INICIO',
+    'hora_inicio',
+    'ADTTABFOLGA.HORAINICIO',
+    'ADTTABFOLGA_HORAINICIO'
+  );
+}
+
+function getFolgaCodColigadaValue(folga) {
+  return pick(
+    folga,
+    'CODCOLIGADA',
+    'codColigada',
+    'codcoligada',
+    'CodColigada',
+    'ADTTABFOLGA.CODCOLIGADA',
+    'ADTTABFOLGA_CODCOLIGADA'
+  );
+}
+
+function getFolgaCodTabFolgaValue(folga) {
+  return pick(
+    folga,
+    'CODTABFOLGA',
+    'codTabFolga',
+    'codtabfolga',
+    'CodTabFolga',
+    'ADTTABFOLGA.CODTABFOLGA',
+    'ADTTABFOLGA_CODTABFOLGA'
+  );
 }
 
 async function getTableColumns(connection, tableName) {
@@ -204,17 +279,21 @@ async function getFolgasExistentes({ codTabFolga, inicio, fim }) {
 }
 
 function getFolgaKey(folga) {
-  const data = formatDate(pick(folga, 'DATA', 'data', 'DT', 'dt'));
-  const horaInicio = Number(pick(folga, 'HORAINICIO', 'horainicio', 'HORA_INICIO', 'hora_inicio') ?? getEnv().rm.folgaHoraInicio);
+  const data = formatDate(getFolgaDateValue(folga));
+  if (!data) return null;
+  const horaInicio = Number(getFolgaHoraInicioValue(folga) ?? getEnv().rm.folgaHoraInicio);
+  if (!Number.isFinite(horaInicio)) return null;
   return `${data}|${horaInicio}`;
 }
 
 function buildDeleteFolgaPath(folga, defaults) {
   const rmConfig = getEnv().rm;
-  const codColigada = pick(folga, 'CODCOLIGADA', 'codColigada', 'codcoligada') || defaults.codColigada;
-  const codTabFolga = pick(folga, 'CODTABFOLGA', 'codTabFolga', 'codtabfolga') || defaults.codTabFolga;
-  const data = formatRmDate(pick(folga, 'DATA', 'data', 'DT', 'dt'));
-  const horaInicio = Number(pick(folga, 'HORAINICIO', 'horainicio', 'HORA_INICIO', 'hora_inicio') ?? rmConfig.folgaHoraInicio);
+  const codColigada = getFolgaCodColigadaValue(folga) || defaults.codColigada;
+  const codTabFolga = getFolgaCodTabFolgaValue(folga) || defaults.codTabFolga;
+  const dataValue = getFolgaDateValue(folga);
+  const data = dataValue ? formatRmDate(dataValue) : null;
+  const horaInicio = Number(getFolgaHoraInicioValue(folga) ?? rmConfig.folgaHoraInicio);
+  if (!codColigada || !codTabFolga || !data || !Number.isFinite(horaInicio)) return null;
   const id = `${codColigada}$_$${codTabFolga}$_$${data}$_$${horaInicio}`;
   return `${rmConfig.folgasPath}/${id}`;
 }
@@ -392,10 +471,23 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
         const fim = getMonthEnd(mesRef);
         const existentesRows = await getFolgasExistentes({ codTabFolga, inicio, fim });
         const desejadas = new Set(funcionario.eventos.map((evento) => `${evento.data}|${rmConfig.folgaHoraInicio}`));
+        let removidas = 0;
+        let ignoradas = 0;
 
         for (const folga of existentesRows) {
-          if (!desejadas.has(getFolgaKey(folga))) {
-            await requestRm(buildDeleteFolgaPath(folga, { codColigada: codColigadaRm, codTabFolga }), { method: 'DELETE' });
+          const folgaKey = getFolgaKey(folga);
+          if (!folgaKey) {
+            ignoradas += 1;
+            continue;
+          }
+          if (!desejadas.has(folgaKey)) {
+            const deletePath = buildDeleteFolgaPath(folga, { codColigada: codColigadaRm, codTabFolga });
+            if (!deletePath) {
+              ignoradas += 1;
+              continue;
+            }
+            await requestRm(deletePath, { method: 'DELETE' });
+            removidas += 1;
           }
         }
 
@@ -413,7 +505,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
           loja: lojaId, mesRef, revisao: funcionario.revisao ?? revisao, escfuncId: funcionario.escfuncId, chapa: funcionario.chapa, cpf: mask(cpf),
           acao: 'RM_ENVIAR_DESCANSOS', status: 'SUCESSO',
           mensagem: `${funcionario.eventos.length} evento(s) sincronizado(s).`,
-          payloadResumo: `chapa=${funcionario.chapa}; codtabfolga=${codTabFolga}; incluir=${payloadInclusao.length}; existentes=${existentesRows.length}`
+          payloadResumo: `chapa=${funcionario.chapa}; codtabfolga=${codTabFolga}; incluir=${payloadInclusao.length}; remover=${removidas}; ignorar=${ignoradas}; existentes=${existentesRows.length}`
         });
       } catch (error) {
         falhas += 1;
@@ -463,4 +555,13 @@ async function listRmLogs({ lojaId, mesRef, lojasPermitidas = [] }) {
   });
 }
 
-module.exports = { oficializarNoRm, listRmLogs, validarPreRequisitosRm };
+module.exports = {
+  oficializarNoRm,
+  listRmLogs,
+  validarPreRequisitosRm,
+  _private: {
+    buildDeleteFolgaPath,
+    getFolgaKey,
+    pick
+  }
+};
