@@ -69,6 +69,11 @@ function canAccessLoja(req, loja) {
   return lojas.includes(Number(loja)) || (req.user?.perfil === 'ADMIN' && lojas.length === 0);
 }
 
+function getLojasPermitidasParaConsulta(req) {
+  if (req.user?.perfil === 'ADMIN' && (!req.user.lojas || req.user.lojas.length === 0)) return null;
+  return req.user?.lojas || [];
+}
+
 async function getLojasPermitidas(req, requestedLojaId = 'all') {
   if (requestedLojaId && requestedLojaId !== 'all') {
     const lojaCodigo = await catalogService.resolveLojaCodigo(Number(requestedLojaId));
@@ -92,7 +97,8 @@ router.get('/resumo', requirePermission('escalas', 'visualizar'), resolveLojaReq
   try {
     const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
     const mesRef = req.query.mesRef || null;
-    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef });
+    const lojasPermitidas = getLojasPermitidasParaConsulta(req);
+    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas });
     return res.json({ escalas });
   } catch (error) {
     return next(error);
@@ -119,7 +125,7 @@ router.get('/historico', requirePermission('historico', 'visualizar'), resolveLo
   try {
     const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
     const mesRef = req.query.mesRef || null;
-    const lojasPermitidas = req.user?.perfil === 'ADMIN' && (!req.user.lojas || req.user.lojas.length === 0) ? [] : (req.user.lojas || []);
+    const lojasPermitidas = getLojasPermitidasParaConsulta(req);
     const historico = await escalaService.listHistoricoEscala({ lojaId, mesRef, lojasPermitidas });
     return res.json({ historico });
   } catch (error) {
@@ -163,9 +169,11 @@ router.get('/mensal-lote', requirePermission('escalas', 'visualizar'), async (re
 
 router.get('/rm/logs', requirePermission('integracao-rm', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
+    const lojasPermitidas = getLojasPermitidasParaConsulta(req);
     const logs = await rmIntegrationService.listRmLogs({
       lojaId: req.query.lojaId ? Number(req.query.lojaId) : null,
-      mesRef: req.query.mesRef || null
+      mesRef: req.query.mesRef || null,
+      lojasPermitidas
     });
     return res.json({ logs });
   } catch (error) {

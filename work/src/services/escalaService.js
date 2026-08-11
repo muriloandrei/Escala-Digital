@@ -219,13 +219,21 @@ async function listEscalas({ lojaId, mesRef }) {
   });
 }
 
-async function listEscalasResumo({ lojaId, mesRef }) {
+async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [] }) {
   return withConnection(async (connection) => {
     const binds = {};
     const filters = [];
     if (lojaId) {
       binds.lojaId = lojaId;
       filters.push('p.loja = :lojaId');
+    } else if (Array.isArray(lojasPermitidas)) {
+      const lojasUnicas = [...new Set(lojasPermitidas.map(Number).filter(Boolean))];
+      if (lojasUnicas.length > 0) {
+        lojasUnicas.forEach((loja, index) => { binds['loja' + index] = loja; });
+        filters.push('p.loja in (' + lojasUnicas.map((_, index) => ':loja' + index).join(', ') + ')');
+      } else {
+        filters.push('1 = 0');
+      }
     }
     if (mesRef) {
       binds.mesRef = mesRef;
@@ -316,9 +324,14 @@ async function listHistoricoEscala({ lojaId, mesRef, lojasPermitidas = [] }) {
       if (lojaId) {
         binds.lojaId = lojaId;
         filters.push("a.loja = :lojaId");
-      } else if (Array.isArray(lojasPermitidas) && lojasPermitidas.length > 0) {
-        lojasPermitidas.forEach((loja, index) => { binds['loja' + index] = loja; });
-        filters.push('a.loja in (' + lojasPermitidas.map((_, index) => ':loja' + index).join(', ') + ')');
+      } else if (Array.isArray(lojasPermitidas)) {
+        const lojasUnicas = [...new Set(lojasPermitidas.map(Number).filter(Boolean))];
+        if (lojasUnicas.length > 0) {
+          lojasUnicas.forEach((loja, index) => { binds['loja' + index] = loja; });
+          filters.push('a.loja in (' + lojasUnicas.map((_, index) => ':loja' + index).join(', ') + ')');
+        } else {
+          filters.push('1 = 0');
+        }
       }
       if (mesRef) { binds.mesRef = mesRef; filters.push("a.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')"); }
       const whereSql = filters.length ? `where ${filters.join(" and ")}` : "";

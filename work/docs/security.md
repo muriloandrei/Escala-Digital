@@ -15,7 +15,7 @@
 - Credenciais somente em `.env`.
 - Consultas com bind parameters.
 - Cookie `httpOnly` para token de acesso.
-- Rate limit global.
+- Rate limit separado para login e API interna, sem contar `/api/auth/login` no limite geral.
 - `helmet` para cabecalhos de seguranca.
 - Autorizacao por loja em middleware.
 - Frontend escrevendo dados de tabela com `textContent`, nao `innerHTML`.
@@ -27,6 +27,5 @@
 - Ativar HTTPS no Nginx.
 - Criar auditoria completa para login, salvamento, alteracao e exclusao.
 - Implementar controle de revisao antes de atualizar escala existente.
-- Adicionar bloqueio temporario por tentativas invalidas de login.
+- Revisar periodicamente os limites de login e API conforme volume real das lojas.
 - Criar testes de regressao da regra da escala.
-

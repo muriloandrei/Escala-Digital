@@ -431,12 +431,21 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
   });
 }
 
-async function listRmLogs({ lojaId, mesRef }) {
+async function listRmLogs({ lojaId, mesRef, lojasPermitidas = [] }) {
   return withConnection(async (connection) => {
     try {
       const binds = {};
       const filters = [];
       if (lojaId) { binds.lojaId = lojaId; filters.push('loja = :lojaId'); }
+      else if (Array.isArray(lojasPermitidas)) {
+        const lojasUnicas = [...new Set(lojasPermitidas.map(Number).filter(Boolean))];
+        if (lojasUnicas.length > 0) {
+          lojasUnicas.forEach((loja, index) => { binds['loja' + index] = loja; });
+          filters.push('loja in (' + lojasUnicas.map((_, index) => ':loja' + index).join(', ') + ')');
+        } else {
+          filters.push('1 = 0');
+        }
+      }
       if (mesRef) { binds.mesRef = mesRef; filters.push("mes_ref = to_date(:mesRef, 'YYYY-MM-DD')"); }
       const result = await connection.execute(
         `select escrmlog_id, loja, mes_ref, revisao, escfunc_id, chapa, cpf, acao, status, mensagem, payload_resumo, dt_hr_incl

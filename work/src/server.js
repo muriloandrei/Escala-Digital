@@ -72,7 +72,7 @@ const apiLimiter = rateLimit({
   limit: env.rateLimit.apiLimit,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path === '/favicon.ico',
+  skip: (req) => req.path === '/favicon.ico' || req.path === '/auth/login',
   message: { error: 'Muitas requisicoes. Aguarde alguns instantes e tente novamente.' }
 });
 
