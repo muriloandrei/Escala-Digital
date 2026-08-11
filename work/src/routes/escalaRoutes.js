@@ -264,10 +264,12 @@ router.post('/inativar', requirePermission('escalas', 'inativar'), resolveLojaRe
 });
 router.get('/', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
-    const lojaId = Number(req.query.lojaId);
+    const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
     const mesRef = req.query.mesRef;
     if (!lojaId || !mesRef) {
-      return res.status(400).json({ error: 'lojaId e mesRef sao obrigatorios.' });
+      const lojasPermitidas = getLojasPermitidasParaConsulta(req);
+      const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas });
+      return res.json({ escalas });
     }
 
     const escalas = await escalaService.listEscalas({ lojaId, mesRef });
