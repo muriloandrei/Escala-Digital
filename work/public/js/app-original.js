@@ -2019,6 +2019,11 @@
         const getLojaContextoEscala = () => String(escalaRascunhoContexto?.loja || lojaEscalaSelect?.value || '');
 
         const apiRequest = window.EscalaApi.request.bind(window.EscalaApi);
+        const formatApiError = (error) => {
+            if (Array.isArray(error?.details)) return error.details.join(' ');
+            if (Array.isArray(error?.details?.errors)) return error.details.errors.join(' ');
+            return error?.message || 'Erro na comunicação com o servidor.';
+        };
         const carregarUsuarioSessao = async () => {
             const data = await apiRequest('/api/auth/me');
             const user = data.user || {};
@@ -5003,16 +5008,37 @@
             try {
                 const result = await sincronizarEscalaComBanco(escalaParaSalvar);
                 const total = result.saved ? result.saved.length : 0;
+                const mesRef = formatDateForDb(ano, mes, 1);
+                let mensagemSalvamento = 'Escala salva no banco com sucesso para ' + total + ' funcionário(s).';
+                let tipoMensagemSalvamento = 'success';
                 if (!total) throw new Error('Nenhum funcionário foi gravado no banco.');
+                if (hasPermission('escalas', 'oficializar')) {
+                    try {
+                        const oficializacao = await apiRequest('/api/escalas/oficializar', {
+                            method: 'POST',
+                            body: JSON.stringify({ lojaId, mesRef }),
+                            timeoutMs: 120000
+                        });
+                        const rm = oficializacao.rm || {};
+                        const rmMensagem = rm.enabled
+                            ? 'RM: ' + (rm.enviados || 0) + ' evento(s) enviado(s), ' + (rm.falhas || 0) + ' falha(s).'
+                            : 'RM: integração desabilitada no .env.';
+                        mensagemSalvamento = [mensagemSalvamento, 'Escala oficializada após o salvamento.', rmMensagem];
+                        tipoMensagemSalvamento = rm.falhas ? 'error' : 'success';
+                    } catch (oficializacaoError) {
+                        mensagemSalvamento = [mensagemSalvamento, 'Falha ao oficializar/enviar para o RM: ' + formatApiError(oficializacaoError)];
+                        tipoMensagemSalvamento = 'error';
+                    }
+                }
                 escalaRascunhoAtivo = false;
                 escalaRascunhoContexto = null;
                 escalaCarregadaId = null;
                 currentLoadedScale = null;
-                showInfoModal('Escala salva no banco com sucesso para ' + total + ' funcionário(s).', 'success');
+                showInfoModal(mensagemSalvamento, tipoMensagemSalvamento);
                 await consultarEscalasBancoLocal().catch(() => {});
-                setTimeout(() => { window.location.hash = '/escalas-geradas'; }, 700);
+                setTimeout(() => { window.location.hash = '/escalas-geradas'; }, tipoMensagemSalvamento === 'error' ? 4000 : 700);
             } catch (error) {
-                showInfoModal(error.details ? error.details.join(' ') : error.message, 'error');
+                showInfoModal(formatApiError(error), 'error');
             } finally {
                 salvarEscalaBtn.disabled = false;
                 salvarEscalaBtn.textContent = 'Salvar Escala';

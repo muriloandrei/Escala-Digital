@@ -23,9 +23,11 @@ const api = {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(data.error || 'Erro na comunicação com o servidor.');
+      const baseMessage = data.error || 'Erro na comunicação com o servidor.';
+      const error = new Error(data.requestId ? `${baseMessage} (requestId: ${data.requestId})` : baseMessage);
       error.status = response.status;
       error.details = data.details || data.errors;
+      error.requestId = data.requestId || null;
       throw error;
     }
 
