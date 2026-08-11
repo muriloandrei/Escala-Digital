@@ -574,23 +574,6 @@
             color: #f59e0b;
         }
 
-        .detail-input {
-            border: 1px solid var(--cor-borda);
-            border-radius: 6px;
-            color: var(--cor-texto);
-            font-size: 0.9rem;
-            height: 34px;
-            max-width: 120px;
-            padding: 4px 8px;
-            width: 100%;
-        }
-
-        .detail-programacao {
-            max-width: 72px;
-            text-transform: uppercase;
-        }
-
-
         .section-choice-grid {
             display: grid;
             gap: 12px;
@@ -846,8 +829,6 @@
         #tabela-esqueleto th { font-weight: bold; background-color: #f1f5f9; }
         #tabela-esqueleto tfoot td { font-weight: bold; background-color: #f1f5f9; }
         .escala-cell { cursor: pointer; transition: background-color 0.2s; }
-        .collaborator-name-span[contenteditable="true"] { cursor: text; }
-        .collaborator-name-span[contenteditable="true"]:hover, .collaborator-name-span[contenteditable="true"]:focus { background-color: #eff6ff; outline: 1px solid #3b82f6; border-radius: 2px; }
         #tabela-esqueleto.is-readonly .escala-cell { cursor: not-allowed; }
         #tabela-esqueleto .dias-trabalhados-cell, #tabela-esqueleto .folgas-cell { font-weight: bold; }
         #esqueleto-modal-content { position: relative; }
@@ -876,12 +857,6 @@
         .colaborador-escala-detalhada table th:first-child, .colaborador-escala-detalhada table td:first-child { width: 55px; text-align: left; font-weight: 500; padding-left: 6px; }
         .colaborador-escala-detalhada table th { background-color: #f8fafc; }
         .colaborador-escala-detalhada .header-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
-        [contenteditable="true"] { cursor: text; outline: none; }
-        .colaborador-escala-detalhada h3[contenteditable="true"]:hover,
-        .colaborador-escala-detalhada h3[contenteditable="true"]:focus,
-        .colaborador-escala-detalhada td[contenteditable="true"]:hover,
-        .colaborador-escala-detalhada td[contenteditable="true"]:focus { background-color: #eff6ff !important; box-shadow: 0 0 0 1px #3b82f6; border-radius: 2px; }
-        .selection-highlight { background-color: #dbeafe !important; box-shadow: inset 0 0 0 1px #3b82f6; }
 
         #tabela-esqueleto-container, #timeline-content {
             transition: transform 0.2s ease-in-out;
