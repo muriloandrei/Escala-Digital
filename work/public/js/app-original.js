@@ -284,6 +284,7 @@
             copiarOptionsSelect(lojaEscalaSelect, criacaoEscalaLoja, params.loja || escalasFiltroLoja?.value || lojaEscalaSelect.value);
             copiarOptionsSelect(mesSelect, criacaoEscalaMes, params.mes ?? escalasFiltroMes?.value ?? mesSelect.value);
             copiarOptionsSelect(anoSelect, criacaoEscalaAno, params.ano || escalasFiltroAno?.value || anoSelect.value);
+            restaurarCriacaoEscalaEditavel();
             if (criacaoEscalaStatus) criacaoEscalaStatus.textContent = 'Informe os dados para carregar as secoes e montar a timeline.';
             criacaoSecoesCard?.classList.add('hidden');
             criacaoTimelineCard?.classList.add('hidden');
@@ -299,6 +300,7 @@
             expandActiveNavGroup(navRegistros);
             setCurrentPageTitle('escalasGeradas');
             escalaCriacaoPageController?.prepararPaineis?.();
+            restaurarCriacaoEscalaEditavel();
 
             if (escalaRascunhoAtivo && escalaRascunhoContexto) {
                 copiarOptionsSelect(lojaEscalaSelect, criacaoEscalaLoja, escalaRascunhoContexto.loja);
@@ -570,6 +572,7 @@
 
                 escalaRascunhoAtivo = false;
                 escalaRascunhoContexto = null;
+                restaurarCriacaoEscalaEditavel();
             }
 
             currentHashRoute = pageKey;
@@ -756,6 +759,28 @@
         const { timeToMinutes, minutesToTime, hoursToMinutes } = window.EscalaRulesCore;
         const { showInfoModal, hideInfoModal, showInputModal } = window.EscalaModal;
         const { escapeHtml, formatarDataTabela, formatarMesTabela } = window.EscalaFormatters;
+
+        const restaurarCriacaoEscalaEditavel = () => {
+            distribuicaoFolgasBloqueada = false;
+            distribuicaoEdicaoAtiva = false;
+            detailedScaleHasBeenGenerated = false;
+            escalaDetalhadaValidada = false;
+            criacaoSecoesLista?.querySelectorAll('input[type="checkbox"]').forEach(input => { input.disabled = false; });
+            document.querySelectorAll('#criacaoTimelineContent button').forEach(button => { button.disabled = false; });
+            if (gerarTimelineCriacaoBtn) gerarTimelineCriacaoBtn.disabled = false;
+            if (novoTurnoCriacaoBtn) novoTurnoCriacaoBtn.disabled = false;
+            if (carregarFuncionariosCriacaoBtn) carregarFuncionariosCriacaoBtn.disabled = false;
+            if (autoDistribuirFolgasBtn) {
+                autoDistribuirFolgasBtn.disabled = false;
+                autoDistribuirFolgasBtn.classList.remove('hidden');
+            }
+            gerarEscalaDetalhadaBtn?.classList.add('hidden');
+            editarDistribuicaoBtn?.classList.add('hidden');
+            esqueletoModal?.classList.remove('distribution-locked');
+            const tabelaEsqueleto = document.getElementById('tabela-esqueleto');
+            tabelaEsqueleto?.classList.remove('is-readonly');
+            tabelaEsqueleto?.querySelectorAll('.collaborator-select').forEach(select => { select.disabled = false; });
+        };
         
         const contarTurnosCriados = (ignorarIndex = null) => dadosEscala.reduce((total, escala, index) => {
             if (index === ignorarIndex) return total;
@@ -4780,10 +4805,11 @@
                 return;
             }
             const values = await showInputModal({
-                title: turno ? 'Editar Turno por Secao' : 'Novo Turno por Secao',
-                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-3xl flex flex-col employee-day-modal',
+                title: 'Dados do turno',
+                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-4xl flex flex-col turno-form-modal',
                 inputs: [
-                    { label: 'Secao', type: 'select', id: 'CRI_TURNO_SECAO', value: turno?.ESCSECAO_ID || secaoOptions[0]?.value || '', options: secaoOptions, required: true, wrapperClass: 'employee-modal-span-2' },
+                    { type: 'message', text: 'Selecione a secao e informe os horarios usados no gerador de escala.', className: 'turno-form-subtitle' },
+                    { label: 'Secao', type: 'select', id: 'CRI_TURNO_SECAO', value: turno?.ESCSECAO_ID || secaoOptions[0]?.value || '', options: secaoOptions, required: true },
                     { label: 'Colaboradores previstos', type: 'number', id: 'CRI_TURNO_QTDE', value: turno?.QTDE_COLABORADORES || 1, required: true },
                     { label: 'Entrada 1', type: 'time', id: 'CRI_TURNO_ENT1', value: turno?.HR_ENT1 || '08:00', required: true },
                     { label: 'Saida 1', type: 'time', id: 'CRI_TURNO_SAI1', value: turno?.HR_SAI1 || '12:00', required: true },

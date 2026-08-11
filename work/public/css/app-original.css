@@ -461,6 +461,45 @@
             justify-content: flex-end;
         }
 
+        #inputModalPanel.turno-form-modal #inputModalBody {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        #inputModalPanel.turno-form-modal #inputModalBody > p,
+        #inputModalPanel.turno-form-modal .turno-form-subtitle {
+            color: var(--cor-texto-leve);
+            font-size: 0.9rem;
+            grid-column: 1 / -1;
+            margin: 0;
+        }
+
+        #inputModalPanel.turno-form-modal label {
+            color: var(--cor-texto-leve);
+            display: block;
+            font-size: 0.82rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        #inputModalPanel.turno-form-modal input,
+        #inputModalPanel.turno-form-modal select {
+            border: 1px solid var(--cor-borda);
+            border-radius: 6px;
+            color: var(--cor-texto);
+            height: 40px;
+            padding: 8px 10px;
+            width: 100%;
+        }
+
+        @media (max-width: 760px) {
+            #inputModalPanel.turno-form-modal #inputModalBody {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .table-card-header {
             margin-bottom: 24px;
         }
