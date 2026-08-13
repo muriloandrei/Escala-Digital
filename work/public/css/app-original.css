@@ -1340,6 +1340,35 @@
             justify-content: flex-end;
         }
 
+        .employee-scale-actions .action-button {
+            font-size: 0.82rem;
+            min-height: 38px;
+            padding: 8px 10px;
+            white-space: nowrap;
+        }
+
+        .employee-scale-actions .action-button .material-symbols-outlined {
+            font-size: 1.1rem;
+        }
+
+        .action-button.warning-button {
+            background: #f59e0b;
+            color: #ffffff;
+        }
+
+        .action-button.warning-button:hover:not(:disabled) {
+            background: #d97706;
+        }
+
+        .action-button.danger-button {
+            background: #dc2626;
+            color: #ffffff;
+        }
+
+        .action-button.danger-button:hover:not(:disabled) {
+            background: #b91c1c;
+        }
+
         .employee-period-tabs {
             display: grid;
             gap: 8px;
@@ -1526,7 +1555,18 @@
         .catalog-filter-bar.two-filters { grid-template-columns: minmax(260px, 1fr) minmax(180px, 240px); }
         .catalog-filter-bar.three-filters { grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(180px, 240px)); }
         .employee-scale-filters { grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(150px, 210px)); }
-        .funcionarios-filter-bar { grid-template-columns: minmax(220px, 1fr) repeat(5, minmax(130px, 170px)); }
+        .funcionarios-filter-bar {
+            align-items: center;
+            grid-template-columns: minmax(180px, 1fr) repeat(4, minmax(116px, 158px));
+        }
+        #funcionarios-page .escala-filter-select,
+        #funcionarios-page .escala-search-field {
+            min-height: 40px;
+        }
+        #funcionarios-page .escala-filter-select {
+            min-width: 0;
+            padding-inline: 10px;
+        }
         .status-agendada { background: #dbeafe; color: #1d4ed8; }
         .action-btn-table.banco-action { white-space: nowrap; }
         #funcionarios-page .table-card,

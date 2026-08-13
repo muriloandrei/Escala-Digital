@@ -1,8 +1,11 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { withConnection, oracledb } = require('../db/oracle');
 const { getEnv } = require('../config/env');
 const accessService = require('./accessService');
+
+const MD5_BCRYPT_PREFIX = 'md5-bcrypt:';
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -17,6 +20,29 @@ function isActiveStatus(status) {
 
 function isBcryptHash(value) {
   return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(String(value || ''));
+}
+
+function md5Hex(value) {
+  return crypto.createHash('md5').update(String(value || ''), 'utf8').digest('hex');
+}
+
+function isMd5BcryptHash(value) {
+  const text = String(value || '');
+  return text.startsWith(MD5_BCRYPT_PREFIX) && isBcryptHash(text.slice(MD5_BCRYPT_PREFIX.length));
+}
+
+function isSupportedPasswordHash(value) {
+  return isBcryptHash(value) || isMd5BcryptHash(value);
+}
+
+async function verifyPasswordHash(password, senhaHash) {
+  if (isBcryptHash(senhaHash)) {
+    return bcrypt.compare(password, senhaHash);
+  }
+  if (isMd5BcryptHash(senhaHash)) {
+    return bcrypt.compare(md5Hex(password), String(senhaHash).slice(MD5_BCRYPT_PREFIX.length));
+  }
+  return false;
 }
 
 function invalidLoginError() {
@@ -102,12 +128,12 @@ async function login({ login, password }) {
   }
 
   const senhaHash = pick(user, 'SENHA_HASH', 'senha_hash');
-  if (!isBcryptHash(senhaHash)) {
+  if (!isSupportedPasswordHash(senhaHash)) {
     console.warn(`Usuario ${pick(user, 'LOGIN', 'login')} sem SENHA_HASH bcrypt valido.`);
     throw invalidLoginError();
   }
 
-  const passwordMatches = await bcrypt.compare(password, senhaHash);
+  const passwordMatches = await verifyPasswordHash(password, senhaHash);
   if (!passwordMatches) {
     throw invalidLoginError();
   }
@@ -137,4 +163,15 @@ async function getUserPermissions(perfil) {
   }
 }
 
-module.exports = { login, getSessionUserById };
+module.exports = {
+  login,
+  getSessionUserById,
+  _private: {
+    MD5_BCRYPT_PREFIX,
+    isBcryptHash,
+    isMd5BcryptHash,
+    isSupportedPasswordHash,
+    md5Hex,
+    verifyPasswordHash
+  }
+};

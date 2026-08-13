@@ -325,7 +325,6 @@
             expandActiveNavGroup(navFuncionarios);
             setCurrentPageTitle('funcionarios');
             if (funcionariosMesFiltro && !funcionariosMesFiltro.options.length) copiarOptionsSelect(mesSelect, funcionariosMesFiltro, String(new Date().getMonth()));
-            if (funcionariosAnoFiltro && !funcionariosAnoFiltro.options.length) copiarOptionsSelect(anoSelect, funcionariosAnoFiltro, String(new Date().getFullYear()));
             catalogosPageController?.carregarFuncionarios?.(false).catch(error => showInfoModal(error.message, 'error'));
         }
 
@@ -2604,7 +2603,7 @@
 
         const carregarFuncionariosTela = async () => {
             const loja = funcionariosLojaSelect?.value && funcionariosLojaSelect.value !== 'all' ? funcionariosLojaSelect.value : 'all';
-            const mesRef = funcionariosMesFiltro && funcionariosAnoFiltro ? formatDateForDb(Number(funcionariosAnoFiltro.value), Number(funcionariosMesFiltro.value), 1) : '';
+            const mesRef = funcionariosMesFiltro ? formatDateForDb(new Date().getFullYear(), Number(funcionariosMesFiltro.value), 1) : '';
             const params = new URLSearchParams({ lojaId: loja });
             if (mesRef) params.set('mesRef', mesRef);
             const data = await apiRequest('/api/catalog/funcionarios?' + params.toString());
@@ -2618,7 +2617,6 @@
         funcionariosSecaoFiltro?.addEventListener('change', aplicarFiltrosFuncionariosTela);
         funcionariosFuncaoFiltro?.addEventListener('change', aplicarFiltrosFuncionariosTela);
         funcionariosMesFiltro?.addEventListener('change', () => carregarFuncionariosTela().catch(error => showInfoModal(error.message, 'error')));
-        funcionariosAnoFiltro?.addEventListener('change', () => carregarFuncionariosTela().catch(error => showInfoModal(error.message, 'error')));
         funcionariosLojaSelect?.addEventListener('change', () => carregarFuncionariosTela().catch(error => showInfoModal(error.message, 'error')));
 
         tabelaFuncionariosBody.addEventListener('click', async (event) => {
