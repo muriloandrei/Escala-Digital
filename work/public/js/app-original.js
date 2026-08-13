@@ -15,6 +15,7 @@
         const horariosPadraoPage = document.getElementById('horarios-padrao-page');
         const integracaoRmPage = document.getElementById('integracao-rm-page');
         const acessosPage = document.getElementById('acessos-page');
+        const liberacaoSecoesPage = document.getElementById('liberacao-secoes-page');
         const rolesPage = document.getElementById('roles-page');
         const settingsPage = document.getElementById('settings-page');
         
@@ -29,6 +30,7 @@
         const navTiposDescanso = document.getElementById('nav-tipos-descanso');
         const navRegras = document.getElementById('nav-regras');
         const navAcessos = document.getElementById('nav-acessos');
+        const navLiberacaoSecoes = document.getElementById('nav-liberacao-secoes');
         const navRoles = document.getElementById('nav-roles');
         const navHorariosPadrao = document.getElementById('nav-horarios-padrao');
         const navIntegracaoRm = document.getElementById('nav-integracao-rm');
@@ -158,6 +160,19 @@
         const tabelaTiposDescansoBody = document.getElementById('tabelaTiposDescansoBody');
         const carregarAcessosBtn = document.getElementById('carregarAcessosBtn');
         const tabelaAcessosBody = document.getElementById('tabela-acessos-body');
+        const liberacaoSecoesLojaSelect = document.getElementById('liberacaoSecoesLojaSelect');
+        const liberacaoSecoesUsuarioSelect = document.getElementById('liberacaoSecoesUsuarioSelect');
+        const liberacaoSecoesPesquisaInput = document.getElementById('liberacaoSecoesPesquisaInput');
+        const liberacaoSecoesResumo = document.getElementById('liberacaoSecoesResumo');
+        const liberacaoSecoesDisponiveisLista = document.getElementById('liberacaoSecoesDisponiveisLista');
+        const liberacaoSecoesLiberadasLista = document.getElementById('liberacaoSecoesLiberadasLista');
+        const liberacaoSecoesDisponiveisCount = document.getElementById('liberacaoSecoesDisponiveisCount');
+        const liberacaoSecoesLiberadasCount = document.getElementById('liberacaoSecoesLiberadasCount');
+        const liberacaoSecoesAddBtn = document.getElementById('liberacaoSecoesAddBtn');
+        const liberacaoSecoesAddAllBtn = document.getElementById('liberacaoSecoesAddAllBtn');
+        const liberacaoSecoesRemoveBtn = document.getElementById('liberacaoSecoesRemoveBtn');
+        const liberacaoSecoesRemoveAllBtn = document.getElementById('liberacaoSecoesRemoveAllBtn');
+        const salvarLiberacaoSecoesBtn = document.getElementById('salvarLiberacaoSecoesBtn');
         let novoUsuarioBtn = null;
         const currentPageTitle = document.getElementById('currentPageTitle');
         const currentPageParent = document.getElementById('currentPageParent');
@@ -211,6 +226,7 @@
             horariosPadraoPage?.classList.add('hidden');
             integracaoRmPage?.classList.add('hidden');
             acessosPage.classList.add('hidden');
+            liberacaoSecoesPage?.classList.add('hidden');
             rolesPage.classList.add('hidden');
             settingsPage.classList.add('hidden');
             navLinks.forEach(link => link.classList.remove('active'));
@@ -463,6 +479,15 @@
             accessPageController?.carregarAcessos?.(false);
         }
 
+        function showLiberacaoSecoesPage() {
+            hideAllPages();
+            liberacaoSecoesPage?.classList.remove('hidden');
+            navLiberacaoSecoes?.classList.add('active');
+            expandActiveNavGroup(navLiberacaoSecoes);
+            setCurrentPageTitle('liberacaoSecoes');
+            carregarLiberacaoSecoesTela().catch(error => showInfoModal(error.message, 'error'));
+        }
+
         function showRolesPage() {
             hideAllPages();
             rolesPage.classList.remove('hidden');
@@ -543,6 +568,7 @@
                 'horarios-padrao': showHorariosPadraoPage,
                 'integracao-rm': showIntegracaoRmPage,
                 acessos: showAcessosPage,
+                'liberacao-secoes': showLiberacaoSecoesPage,
                 roles: showRolesPage,
                 configuracoes: showSettingsPage
             };
@@ -587,6 +613,7 @@
         navTurnosSecao.addEventListener('click', () => { window.location.hash = '/turnos-secao'; });
         navRegras?.addEventListener('click', () => { window.location.hash = '/regras'; });
         navAcessos.addEventListener('click', () => { window.location.hash = '/acessos'; });
+        navLiberacaoSecoes?.addEventListener('click', () => { window.location.hash = '/liberacao-secoes'; });
         navRoles.addEventListener('click', () => { window.location.hash = '/roles'; });
         navHorariosPadrao?.addEventListener('click', () => { window.location.hash = '/horarios-padrao'; });
         navIntegracaoRm?.addEventListener('click', () => { window.location.hash = '/integracao-rm'; });
@@ -741,6 +768,7 @@
         let lojasPermitidasCache = [];
         let usuarioSessaoCache = null;
         let usuariosAcessoCache = [];
+        let liberacaoSecoesCache = { usuarios: [], secoes: [], liberadas: new Set(), selecionadasDisponiveis: new Set(), selecionadasLiberadas: new Set(), tableReady: false };
         let secoesTelaCache = [];
         let turnosTelaCache = [];
         let funcionariosTelaCache = [];
@@ -2066,6 +2094,19 @@
             return lojasPermitidasCache.map(loja => ({ value: String(loja), label: 'Loja ' + loja, checked: selecionadas.has(String(loja)) }));
         };
 
+        const popularLojasLiberacaoSecoes = () => {
+            if (!liberacaoSecoesLojaSelect) return;
+            const atual = liberacaoSecoesLojaSelect.value;
+            liberacaoSecoesLojaSelect.innerHTML = lojasPermitidasCache
+                .map(loja => `<option value="${escapeHtml(loja)}">Loja ${escapeHtml(loja)}</option>`)
+                .join('');
+            if (atual && lojasPermitidasCache.includes(Number(atual))) {
+                liberacaoSecoesLojaSelect.value = atual;
+            } else if (lojasPermitidasCache.length) {
+                liberacaoSecoesLojaSelect.value = String(lojasPermitidasCache[0]);
+            }
+        };
+
         carregarAcessosBtn.parentElement.addEventListener('click', async (event) => {
             if (event.target.closest('#novoUsuarioBtn')) {
                 try {
@@ -2192,6 +2233,7 @@
             if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.innerHTML = '';
             if (escalaFuncionarioLoja) escalaFuncionarioLoja.innerHTML = '';
             if (historicoLojaSelect) historicoLojaSelect.innerHTML = '';
+            if (liberacaoSecoesLojaSelect) liberacaoSecoesLojaSelect.innerHTML = '';
 
             if (lojas.length === 0) {
                 const option = document.createElement('option');
@@ -2204,12 +2246,14 @@
                 secoesLojaSelect?.appendChild(option.cloneNode(true));
                 secaoFormLoja?.appendChild(option.cloneNode(true));
                 turnosSecaoLojaSelect?.appendChild(option.cloneNode(true));
+                liberacaoSecoesLojaSelect?.appendChild(option.cloneNode(true));
                 lojaEscalaSelect.disabled = true;
                 funcionariosLojaSelect.disabled = true;
                 if (homeLojaSelect) homeLojaSelect.disabled = true;
                 if (escalasFiltroLoja) escalasFiltroLoja.disabled = true;
                 if (secoesLojaSelect) secoesLojaSelect.disabled = true;
                 if (secaoFormLoja) secaoFormLoja.disabled = true;
+                if (liberacaoSecoesLojaSelect) liberacaoSecoesLojaSelect.disabled = true;
                 carregarFuncionariosBtn.disabled = true;
                 if (carregarFuncionariosTelaBtn) carregarFuncionariosTelaBtn.disabled = true;
                 funcionariosStatus.textContent = 'Usuario sem loja permitida';
@@ -2223,6 +2267,7 @@
             if (secoesLojaSelect) secoesLojaSelect.disabled = false;
             if (secaoFormLoja) secaoFormLoja.disabled = false;
             if (historicoLojaSelect) historicoLojaSelect.disabled = false;
+            if (liberacaoSecoesLojaSelect) liberacaoSecoesLojaSelect.disabled = false;
             carregarFuncionariosBtn.disabled = false;
             if (carregarFuncionariosTelaBtn) carregarFuncionariosTelaBtn.disabled = false;
 
@@ -2255,6 +2300,7 @@
                 turnosSecaoLojaSelect?.appendChild(option.cloneNode(true));
                 escalaFuncionarioLoja?.appendChild(option.cloneNode(true));
                 historicoLojaSelect?.appendChild(option.cloneNode(true));
+                liberacaoSecoesLojaSelect?.appendChild(option.cloneNode(true));
             });
 
             const lojaSelecionada = lojasPermitidasCache.includes(Number(lojaAtual))
@@ -2269,6 +2315,7 @@
             if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = 'all';
             if (escalaFuncionarioLoja) escalaFuncionarioLoja.value = lojasPermitidasCache.length > 1 ? 'all' : lojaSelecionada;
             if (historicoLojaSelect) historicoLojaSelect.value = lojasPermitidasCache.length > 1 ? 'all' : lojaSelecionada;
+            if (liberacaoSecoesLojaSelect) liberacaoSecoesLojaSelect.value = lojaSelecionada;
             return lojas;
         };
 
@@ -3523,6 +3570,162 @@
             }
         
         }
+
+        const getSecaoLiberacaoLabel = (secao) => {
+            const codigo = secao.COD_SECAO ? String(secao.COD_SECAO) : String(secao.ESCSECAO_ID || '');
+            return `${codigo} - ${secao.DESCR || 'Secao'}`;
+        };
+
+        const renderLiberacaoSecoesLista = (target, secoes, tipo) => {
+            if (!target) return;
+            if (!secoes.length) {
+                target.innerHTML = '<p class="section-access-empty">Nenhuma secao encontrada.</p>';
+                return;
+            }
+            const selecionadas = tipo === 'liberadas'
+                ? liberacaoSecoesCache.selecionadasLiberadas
+                : liberacaoSecoesCache.selecionadasDisponiveis;
+            target.innerHTML = secoes.map((secao) => {
+                const id = String(secao.ESCSECAO_ID);
+                const active = selecionadas.has(id) ? ' active' : '';
+                return `<button type="button" class="section-access-item${active}" data-list="${tipo}" data-id="${escapeHtml(id)}"><strong>${escapeHtml(getSecaoLiberacaoLabel(secao))}</strong><span>Loja ${escapeHtml(secao.LOJA || liberacaoSecoesLojaSelect?.value || '')}</span></button>`;
+            }).join('');
+        };
+
+        const renderLiberacaoSecoes = () => {
+            const termo = normalizarTextoFiltro(liberacaoSecoesPesquisaInput?.value || '');
+            const liberadasIds = liberacaoSecoesCache.liberadas;
+            const filtrar = (secao) => !termo || normalizarTextoFiltro(getSecaoLiberacaoLabel(secao)).includes(termo);
+            const disponiveis = liberacaoSecoesCache.secoes.filter(secao => !liberadasIds.has(String(secao.ESCSECAO_ID)) && filtrar(secao));
+            const liberadas = liberacaoSecoesCache.secoes.filter(secao => liberadasIds.has(String(secao.ESCSECAO_ID)) && filtrar(secao));
+            renderLiberacaoSecoesLista(liberacaoSecoesDisponiveisLista, disponiveis, 'disponiveis');
+            renderLiberacaoSecoesLista(liberacaoSecoesLiberadasLista, liberadas, 'liberadas');
+            if (liberacaoSecoesDisponiveisCount) liberacaoSecoesDisponiveisCount.textContent = String(disponiveis.length);
+            if (liberacaoSecoesLiberadasCount) liberacaoSecoesLiberadasCount.textContent = String(liberadas.length);
+            if (liberacaoSecoesResumo) {
+                const usuario = liberacaoSecoesCache.usuarios.find(item => String(item.USUARIO_ID) === String(liberacaoSecoesUsuarioSelect?.value));
+                liberacaoSecoesResumo.textContent = usuario
+                    ? `${usuario.NOME || usuario.LOGIN} possui ${liberacaoSecoesCache.liberadas.size} secao(oes) liberada(s) na loja ${liberacaoSecoesLojaSelect?.value || '-'}.`
+                    : 'Selecione um usuario para visualizar as secoes liberadas.';
+            }
+            if (salvarLiberacaoSecoesBtn) {
+                salvarLiberacaoSecoesBtn.disabled = !liberacaoSecoesCache.tableReady || !liberacaoSecoesUsuarioSelect?.value || !hasPermission('liberacao-secoes', 'editar');
+            }
+        };
+
+        const popularUsuariosLiberacaoSecoes = (usuarios = []) => {
+            if (!liberacaoSecoesUsuarioSelect) return;
+            const atual = liberacaoSecoesUsuarioSelect.value;
+            liberacaoSecoesUsuarioSelect.innerHTML = usuarios.length
+                ? usuarios.map(usuario => `<option value="${escapeHtml(usuario.USUARIO_ID)}">${escapeHtml(usuario.LOGIN || '')} - ${escapeHtml(usuario.NOME || '')}</option>`).join('')
+                : '<option value="">Nenhum usuario para esta loja</option>';
+            if (usuarios.some(usuario => String(usuario.USUARIO_ID) === String(atual))) {
+                liberacaoSecoesUsuarioSelect.value = atual;
+            } else if (usuarios.length) {
+                liberacaoSecoesUsuarioSelect.value = String(usuarios[0].USUARIO_ID);
+            }
+        };
+
+        const carregarLiberacaoSecoesTela = async () => {
+            if (!liberacaoSecoesPage) return;
+            if (!lojasPermitidasCache.length) await carregarLojasEscala();
+            popularLojasLiberacaoSecoes();
+            const lojaId = liberacaoSecoesLojaSelect?.value || lojasPermitidasCache[0] || '';
+            if (!lojaId) return;
+            const usuarioId = liberacaoSecoesUsuarioSelect?.value || '';
+            const params = new URLSearchParams({ lojaId });
+            if (usuarioId) params.set('usuarioId', usuarioId);
+            const data = await apiRequest('/api/acessos/secoes-usuario?' + params.toString());
+            liberacaoSecoesCache = {
+                usuarios: data.usuarios || [],
+                secoes: data.secoes || [],
+                liberadas: new Set((data.secoesLiberadas || []).map(String)),
+                selecionadasDisponiveis: new Set(),
+                selecionadasLiberadas: new Set(),
+                tableReady: data.tableReady !== false
+            };
+            popularUsuariosLiberacaoSecoes(liberacaoSecoesCache.usuarios);
+
+            const usuarioSelecionado = liberacaoSecoesUsuarioSelect?.value;
+            if (usuarioSelecionado && !usuarioId) {
+                const nextParams = new URLSearchParams({ lojaId, usuarioId: usuarioSelecionado });
+                const usuarioData = await apiRequest('/api/acessos/secoes-usuario?' + nextParams.toString());
+                liberacaoSecoesCache.liberadas = new Set((usuarioData.secoesLiberadas || []).map(String));
+                liberacaoSecoesCache.tableReady = usuarioData.tableReady !== false;
+            }
+
+            if (!liberacaoSecoesCache.tableReady) {
+                showInfoModal('Tabela SGN_ESC_USUARIO_SECAO nao encontrada. Rode a migration antes de salvar liberacoes.', 'info');
+            }
+            renderLiberacaoSecoes();
+        };
+
+        const moverLiberacaoSecoes = (origem, destino, todos = false) => {
+            const ids = todos
+                ? liberacaoSecoesCache.secoes
+                    .filter(secao => origem === 'disponiveis' ? !liberacaoSecoesCache.liberadas.has(String(secao.ESCSECAO_ID)) : liberacaoSecoesCache.liberadas.has(String(secao.ESCSECAO_ID)))
+                    .map(secao => String(secao.ESCSECAO_ID))
+                : [...(origem === 'disponiveis' ? liberacaoSecoesCache.selecionadasDisponiveis : liberacaoSecoesCache.selecionadasLiberadas)];
+            ids.forEach(id => {
+                if (destino === 'liberadas') liberacaoSecoesCache.liberadas.add(id);
+                else liberacaoSecoesCache.liberadas.delete(id);
+            });
+            liberacaoSecoesCache.selecionadasDisponiveis.clear();
+            liberacaoSecoesCache.selecionadasLiberadas.clear();
+            renderLiberacaoSecoes();
+        };
+
+        const toggleSelecaoLiberacaoSecao = (event) => {
+            const button = event.target.closest('.section-access-item');
+            if (!button) return;
+            const targetSet = button.dataset.list === 'liberadas'
+                ? liberacaoSecoesCache.selecionadasLiberadas
+                : liberacaoSecoesCache.selecionadasDisponiveis;
+            const id = String(button.dataset.id || '');
+            if (targetSet.has(id)) targetSet.delete(id);
+            else targetSet.add(id);
+            renderLiberacaoSecoes();
+        };
+
+        liberacaoSecoesDisponiveisLista?.addEventListener('click', toggleSelecaoLiberacaoSecao);
+        liberacaoSecoesLiberadasLista?.addEventListener('click', toggleSelecaoLiberacaoSecao);
+        liberacaoSecoesPesquisaInput?.addEventListener('input', renderLiberacaoSecoes);
+        liberacaoSecoesLojaSelect?.addEventListener('change', () => carregarLiberacaoSecoesTela().catch(error => showInfoModal(error.message, 'error')));
+        liberacaoSecoesUsuarioSelect?.addEventListener('change', () => carregarLiberacaoSecoesTela().catch(error => showInfoModal(error.message, 'error')));
+        liberacaoSecoesAddBtn?.addEventListener('click', () => moverLiberacaoSecoes('disponiveis', 'liberadas'));
+        liberacaoSecoesAddAllBtn?.addEventListener('click', () => moverLiberacaoSecoes('disponiveis', 'liberadas', true));
+        liberacaoSecoesRemoveBtn?.addEventListener('click', () => moverLiberacaoSecoes('liberadas', 'disponiveis'));
+        liberacaoSecoesRemoveAllBtn?.addEventListener('click', () => moverLiberacaoSecoes('liberadas', 'disponiveis', true));
+        salvarLiberacaoSecoesBtn?.addEventListener('click', async () => {
+            if (!hasPermission('liberacao-secoes', 'editar')) {
+                showInfoModal('Usuario sem permissao para editar liberacao de secoes.', 'error');
+                return;
+            }
+            const usuarioId = Number(liberacaoSecoesUsuarioSelect?.value);
+            const lojaId = Number(liberacaoSecoesLojaSelect?.value);
+            if (!usuarioId || !lojaId) {
+                showInfoModal('Selecione loja e usuario antes de salvar.', 'error');
+                return;
+            }
+            salvarLiberacaoSecoesBtn.disabled = true;
+            try {
+                const data = await apiRequest('/api/acessos/secoes-usuario', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        USUARIO_ID: usuarioId,
+                        LOJA: lojaId,
+                        SECOES: [...liberacaoSecoesCache.liberadas].map(Number)
+                    })
+                });
+                liberacaoSecoesCache.liberadas = new Set((data.secoesLiberadas || []).map(String));
+                showInfoModal('Liberacao de secoes salva com sucesso.', 'success');
+                renderLiberacaoSecoes();
+            } catch (error) {
+                showInfoModal(formatApiError(error), 'error');
+            } finally {
+                salvarLiberacaoSecoesBtn.disabled = !hasPermission('liberacao-secoes', 'editar');
+            }
+        });
 
         tabelaAcessosBody.addEventListener('click', async (event) => {
             const editButton = event.target.closest('.edit-usuario');

@@ -46,6 +46,7 @@
                         <button type="button" class="nav-parent" data-nav-group="configuracoes"><span class="material-symbols-outlined">settings</span><span class="nav-label">Configurações</span><span class="material-symbols-outlined nav-chevron">expand_more</span></button>
                         <div class="nav-children">
                             <a href="#/acessos" id="nav-acessos"><span class="nav-child-dot"></span><span class="nav-label">Controle de Acesso</span></a>
+                            <a href="#/liberacao-secoes" id="nav-liberacao-secoes"><span class="nav-child-dot"></span><span class="nav-label">Libera&ccedil;&atilde;o de Se&ccedil;&otilde;es</span></a>
                             <a href="#/roles" id="nav-roles"><span class="nav-child-dot"></span><span class="nav-label">Perfil de Acesso</span></a>
                             <a href="#/horarios-padrao" id="nav-horarios-padrao"><span class="nav-child-dot"></span><span class="nav-label">Hor&aacute;rios Padr&atilde;o</span></a>
                             <a href="#/integracao-rm" id="nav-integracao-rm"><span class="nav-child-dot"></span><span class="nav-label">Integra&ccedil;&atilde;o RM</span></a>
@@ -324,6 +325,56 @@
                             <tr><td colspan="6" class="text-center text-gray-500 py-8">Carregue os usuários com acesso à escala.</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <div id="liberacao-secoes-page" class="hidden">
+                <header class="main-header">
+                    <div>
+                        <h1>Libera&ccedil;&atilde;o de Se&ccedil;&otilde;es</h1>
+                        <p class="table-card-subtitle">Vincule usu&aacute;rios &agrave;s se&ccedil;&otilde;es em que poder&atilde;o atuar nas escalas.</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="action-button" id="salvarLiberacaoSecoesBtn">
+                            <span class="material-symbols-outlined">save</span>
+                            Salvar Libera&ccedil;&otilde;es
+                        </button>
+                    </div>
+                </header>
+
+                <div class="table-card section-access-card">
+                    <div class="catalog-filter-bar section-access-filter-bar">
+                        <select id="liberacaoSecoesLojaSelect" class="escala-filter-select" aria-label="Loja"></select>
+                        <select id="liberacaoSecoesUsuarioSelect" class="escala-filter-select" aria-label="Usu&aacute;rio"></select>
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="liberacaoSecoesPesquisaInput" type="search" placeholder="Pesquisar se&ccedil;&atilde;o ou c&oacute;digo"></label>
+                    </div>
+
+                    <div id="liberacaoSecoesResumo" class="section-access-summary">Selecione uma loja e um usu&aacute;rio.</div>
+
+                    <div class="section-access-shuttle">
+                        <section class="section-access-panel">
+                            <div class="section-access-panel-header">
+                                <h2>Se&ccedil;&otilde;es Dispon&iacute;veis</h2>
+                                <span id="liberacaoSecoesDisponiveisCount">0</span>
+                            </div>
+                            <div id="liberacaoSecoesDisponiveisLista" class="section-access-list" aria-label="Se&ccedil;&otilde;es dispon&iacute;veis"></div>
+                        </section>
+
+                        <div class="section-access-actions" aria-label="A&ccedil;&otilde;es de libera&ccedil;&atilde;o">
+                            <button type="button" id="liberacaoSecoesAddAllBtn" title="Liberar todas"><span class="material-symbols-outlined">keyboard_double_arrow_right</span></button>
+                            <button type="button" id="liberacaoSecoesAddBtn" title="Liberar selecionadas"><span class="material-symbols-outlined">chevron_right</span></button>
+                            <button type="button" id="liberacaoSecoesRemoveBtn" title="Remover selecionadas"><span class="material-symbols-outlined">chevron_left</span></button>
+                            <button type="button" id="liberacaoSecoesRemoveAllBtn" title="Remover todas"><span class="material-symbols-outlined">keyboard_double_arrow_left</span></button>
+                        </div>
+
+                        <section class="section-access-panel">
+                            <div class="section-access-panel-header selected">
+                                <h2>Se&ccedil;&otilde;es Liberadas</h2>
+                                <span id="liberacaoSecoesLiberadasCount">0</span>
+                            </div>
+                            <div id="liberacaoSecoesLiberadasLista" class="section-access-list selected" aria-label="Se&ccedil;&otilde;es liberadas"></div>
+                        </section>
+                    </div>
                 </div>
             </div>
 

@@ -17,6 +17,7 @@
     horariosPadrao: 'Horarios Padrao',
     integracaoRm: 'Integracao RM',
     acessos: 'Controle de Acesso',
+    liberacaoSecoes: 'Liberacao de Secoes',
     roles: 'Perfil de Acesso',
     configuracoes: 'Configuracoes'
   };
@@ -39,6 +40,7 @@
     horariosPadrao: 'Configuracoes',
     integracaoRm: 'Configuracoes',
     acessos: 'Configuracoes',
+    liberacaoSecoes: 'Configuracoes',
     roles: 'Configuracoes',
     configuracoes: 'Configuracoes'
   };
@@ -55,6 +57,7 @@
     ['nav-horarios-padrao', 'horarios-padrao', 'visualizar'],
     ['nav-integracao-rm', 'integracao-rm', 'visualizar'],
     ['nav-settings', 'configuracoes', 'visualizar'],
+    ['nav-liberacao-secoes', 'liberacao-secoes', 'visualizar'],
     ['goToTimelineBtn', 'escalas', 'criar'],
     ['novoTurnoCriacaoBtn', 'turnos-secao', 'criar'],
     ['gerarTimelineCriacaoBtn', 'escalas', 'editar'],
@@ -85,6 +88,7 @@
     '/horarios-padrao': 'horarios-padrao',
     '/integracao-rm': 'integracao-rm',
     '/acessos': 'acessos',
+    '/liberacao-secoes': 'liberacao-secoes',
     '/roles': 'roles',
     '/configuracoes': 'configuracoes'
   };

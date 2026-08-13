@@ -1570,6 +1570,124 @@
             min-width: 0;
             padding-inline: 10px;
         }
+        .section-access-filter-bar {
+            grid-template-columns: minmax(150px, 220px) minmax(240px, 360px) minmax(260px, 1fr);
+        }
+        .section-access-summary {
+            background: #f8fafc;
+            border: 1px solid var(--cor-borda);
+            border-radius: 8px;
+            color: var(--cor-texto-leve);
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+            padding: 10px 12px;
+        }
+        .section-access-shuttle {
+            align-items: stretch;
+            display: grid;
+            gap: 14px;
+            grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr);
+        }
+        .section-access-panel {
+            border: 1px solid var(--cor-borda);
+            border-radius: 8px;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .section-access-panel-header {
+            align-items: center;
+            background: #f8fafc;
+            border-bottom: 1px solid var(--cor-borda);
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 14px;
+        }
+        .section-access-panel-header.selected {
+            background: #eff6ff;
+        }
+        .section-access-panel-header h2 {
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+        .section-access-panel-header span {
+            background: #ffffff;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            color: var(--cor-principal);
+            font-size: 0.78rem;
+            font-weight: 800;
+            min-width: 34px;
+            padding: 3px 8px;
+            text-align: center;
+        }
+        .section-access-list {
+            display: grid;
+            gap: 6px;
+            max-height: 420px;
+            min-height: 320px;
+            overflow: auto;
+            padding: 10px;
+        }
+        .section-access-item {
+            background: #ffffff;
+            border: 1px solid var(--cor-borda);
+            border-radius: 7px;
+            color: var(--cor-texto);
+            cursor: pointer;
+            display: block;
+            font: inherit;
+            padding: 9px 10px;
+            text-align: left;
+            width: 100%;
+        }
+        .section-access-item strong {
+            color: #0f3d91;
+            display: block;
+            font-size: 0.86rem;
+        }
+        .section-access-item span {
+            color: var(--cor-texto-leve);
+            display: block;
+            font-size: 0.78rem;
+            margin-top: 2px;
+        }
+        .section-access-item.active {
+            background: #eff6ff;
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+        }
+        .section-access-list.selected .section-access-item strong {
+            color: #047857;
+        }
+        .section-access-empty {
+            align-self: center;
+            color: var(--cor-texto-leve);
+            font-size: 0.9rem;
+            justify-self: center;
+            padding: 24px;
+            text-align: center;
+        }
+        .section-access-actions {
+            align-self: center;
+            display: grid;
+            gap: 8px;
+        }
+        .section-access-actions button {
+            align-items: center;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            color: var(--cor-principal);
+            cursor: pointer;
+            display: inline-flex;
+            height: 42px;
+            justify-content: center;
+            width: 42px;
+        }
+        .section-access-actions button:hover {
+            background: var(--cor-principal);
+            color: #ffffff;
+        }
         .status-agendada { background: #dbeafe; color: #1d4ed8; }
         .action-btn-table.banco-action { white-space: nowrap; }
         #funcionarios-page .table-card,
@@ -1584,14 +1702,21 @@
             .catalog-filter-bar.two-filters,
             .catalog-filter-bar.three-filters,
             .funcionarios-filter-bar,
-            .employee-scale-filters { grid-template-columns: 1fr 1fr; }
+            .employee-scale-filters,
+            .section-access-filter-bar { grid-template-columns: 1fr 1fr; }
+            .section-access-shuttle { grid-template-columns: 1fr; }
+            .section-access-actions {
+                grid-template-columns: repeat(4, 42px);
+                justify-content: center;
+            }
         }
         @media (max-width: 620px) {
             .catalog-filter-bar,
             .catalog-filter-bar.two-filters,
             .catalog-filter-bar.three-filters,
             .funcionarios-filter-bar,
-            .employee-scale-filters { grid-template-columns: 1fr; }
+            .employee-scale-filters,
+            .section-access-filter-bar { grid-template-columns: 1fr; }
         }
 
 

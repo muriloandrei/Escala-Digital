@@ -31,6 +31,7 @@ const PERFIL_PAGES = [
   { key: 'horarios-padrao', label: 'Horarios Padrao' },
   { key: 'integracao-rm', label: 'Integracao RM' },
   { key: 'acessos', label: 'Controle de Acesso' },
+  { key: 'liberacao-secoes', label: 'Liberacao de Secoes' },
   { key: 'roles', label: 'Perfil de Acesso' },
   { key: 'configuracoes', label: 'Configuracoes' }
 ];
@@ -102,6 +103,159 @@ function canSeeUser(requestUser, lojas) {
   if (requestUser?.perfil === 'ADMIN') return true;
   const permitidas = new Set((requestUser?.lojas || []).map(Number));
   return lojas.some((loja) => permitidas.has(Number(loja)));
+}
+
+function assertLojaAcesso(requestUser, lojaId) {
+  if (requestUser?.perfil === 'ADMIN') return;
+  const permitidas = new Set((requestUser?.lojas || []).map(Number));
+  if (!permitidas.has(Number(lojaId))) {
+    const error = new Error('Usuario sem acesso a loja informada.');
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+async function getSecaoLojaColumn(connection) {
+  const columns = await getTableColumns(connection, 'SGN_ESC_SECAO');
+  if (columns.has('CODFILIAL')) return 'CODFILIAL';
+  if (columns.has('LOJA')) return 'LOJA';
+  throw new Error('Tabela SGN_ESC_SECAO sem coluna CODFILIAL/LOJA.');
+}
+
+async function getUsuarioSecaoColumns(connection) {
+  try {
+    const columns = await getTableColumns(connection, 'SGN_ESC_USUARIO_SECAO');
+    return columns.size ? columns : null;
+  } catch (error) {
+    if (isMissingObjectError(error)) return null;
+    throw error;
+  }
+}
+
+async function listSecoesPorLojaInConnection(connection, lojaId) {
+  const lojaColumn = await getSecaoLojaColumn(connection);
+  const result = await connection.execute(
+    `select escsecao_id, cod_secao, descr, ${lojaColumn.toLowerCase()} as loja
+       from sgn_esc_secao
+      where ${lojaColumn.toLowerCase()} = :lojaId
+      order by cod_secao, descr`,
+    { lojaId },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+
+  return result.rows.map((row) => ({
+    ESCSECAO_ID: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
+    COD_SECAO: pick(row, 'COD_SECAO', 'cod_secao'),
+    DESCR: pick(row, 'DESCR', 'descr'),
+    LOJA: pick(row, 'LOJA', 'loja')
+  }));
+}
+
+async function listLiberacaoSecoes({ requestUser, lojaId, usuarioId = null }) {
+  assertLojaAcesso(requestUser, lojaId);
+
+  return withConnection(async (connection) => {
+    const columns = await getUsuarioSecaoColumns(connection);
+    const usuarios = await listUsuariosAcesso(requestUser);
+    const usuariosDaLoja = usuarios.filter((usuario) => (usuario.LOJAS || []).map(Number).includes(Number(lojaId)));
+    const secoes = await listSecoesPorLojaInConnection(connection, lojaId);
+    const usuarioAlvo = usuarioId
+      ? usuariosDaLoja.find((usuario) => Number(usuario.USUARIO_ID) === Number(usuarioId))
+      : null;
+
+    if (usuarioId && !usuarioAlvo) {
+      const error = new Error('Usuario nao encontrado ou sem acesso a loja informada.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (!columns || !usuarioId) {
+      return {
+        tableReady: !!columns,
+        usuarios: usuariosDaLoja,
+        secoes,
+        secoesLiberadas: []
+      };
+    }
+
+    const hasStatus = columns.has('STATUS');
+    const lojaColumn = await getSecaoLojaColumn(connection);
+    const result = await connection.execute(
+      `select us.escsecao_id
+         from sgn_esc_usuario_secao us
+         join sgn_esc_secao s on s.escsecao_id = us.escsecao_id
+        where us.usuario_id = :usuarioId
+          and s.${lojaColumn.toLowerCase()} = :lojaId
+          ${hasStatus ? "and nvl(us.status, 'A') = 'A'" : ''}`,
+      { usuarioId, lojaId },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return {
+      tableReady: true,
+      usuarios: usuariosDaLoja,
+      secoes,
+      secoesLiberadas: result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id')))
+    };
+  });
+}
+
+async function saveLiberacaoSecoes({ requestUser, usuarioId, lojaId, secoes }) {
+  assertLojaAcesso(requestUser, lojaId);
+
+  return withConnection(async (connection) => {
+    const columns = await getUsuarioSecaoColumns(connection);
+    if (!columns) {
+      const error = new Error('Tabela SGN_ESC_USUARIO_SECAO nao encontrada.');
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const usuarios = await listUsuariosAcesso(requestUser);
+    const usuarioAlvo = usuarios.find((usuario) =>
+      Number(usuario.USUARIO_ID) === Number(usuarioId)
+      && (usuario.LOJAS || []).map(Number).includes(Number(lojaId))
+    );
+    if (!usuarioAlvo) {
+      const error = new Error('Usuario nao encontrado ou sem acesso a loja informada.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const secoesLoja = await listSecoesPorLojaInConnection(connection, lojaId);
+    const permitidas = new Set(secoesLoja.map((secao) => Number(secao.ESCSECAO_ID)));
+    const selecionadas = [...new Set((secoes || []).map(Number).filter((secaoId) => permitidas.has(secaoId)))];
+    const lojaColumn = await getSecaoLojaColumn(connection);
+
+    await connection.execute(
+      `delete from sgn_esc_usuario_secao
+        where usuario_id = :usuarioId
+          and escsecao_id in (
+            select escsecao_id
+              from sgn_esc_secao
+             where ${lojaColumn.toLowerCase()} = :lojaId
+          )`,
+      { usuarioId, lojaId },
+      { autoCommit: false }
+    );
+
+    if (selecionadas.length) {
+      const hasStatus = columns.has('STATUS');
+      const hasDtHrIncl = columns.has('DT_HR_INCL');
+      await connection.executeMany(
+        `insert into sgn_esc_usuario_secao (
+           usuario_id, escsecao_id${hasStatus ? ', status' : ''}${hasDtHrIncl ? ', dt_hr_incl' : ''}
+         ) values (
+           :usuarioId, :escsecaoId${hasStatus ? ", 'A'" : ''}${hasDtHrIncl ? ', sysdate' : ''}
+         )`,
+        selecionadas.map((escsecaoId) => ({ usuarioId, escsecaoId })),
+        { autoCommit: false }
+      );
+    }
+
+    await connection.commit();
+    return listLiberacaoSecoes({ requestUser, lojaId, usuarioId });
+  });
 }
 
 async function listUsuariosAcesso(requestUser) {
@@ -375,6 +529,8 @@ module.exports = {
   listPerfisAcesso,
   createPerfilAcesso,
   updatePerfilAcesso,
+  listLiberacaoSecoes,
+  saveLiberacaoSecoes,
   getPermissaoPerfil,
   getPermissoesPerfil
 };

@@ -40,6 +40,12 @@ const perfilSchema = z.object({
   PERMISSOES: z.array(permissaoSchema).optional()
 }).strict();
 
+const liberacaoSecoesSchema = z.object({
+  USUARIO_ID: z.number().int().positive(),
+  LOJA: z.number().int().positive(),
+  SECOES: z.array(z.number().int().positive()).default([])
+}).strict();
+
 router.use(requireAuth);
 
 router.get('/perfis', requirePermission('roles', 'visualizar'), async (req, res, next) => {
@@ -143,6 +149,43 @@ router.patch('/usuarios/:usuarioId', requirePermission('acessos', 'editar'), asy
   } catch (error) {
     if (error.name === 'ZodError') {
       return res.status(400).json({ error: 'Dados de usuario invalidos.', details: error.errors });
+    }
+    return next(error);
+  }
+});
+
+router.get('/secoes-usuario', requirePermission('liberacao-secoes', 'visualizar'), async (req, res, next) => {
+  try {
+    const lojaId = Number(req.query.lojaId);
+    const usuarioId = req.query.usuarioId ? Number(req.query.usuarioId) : null;
+    if (!lojaId) return res.status(400).json({ error: 'lojaId e obrigatorio.' });
+    const result = await accessService.listLiberacaoSecoes({ requestUser: req.user, lojaId, usuarioId });
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.put('/secoes-usuario', requirePermission('liberacao-secoes', 'editar'), async (req, res, next) => {
+  try {
+    const data = liberacaoSecoesSchema.parse(req.body);
+    const result = await accessService.saveLiberacaoSecoes({
+      requestUser: req.user,
+      usuarioId: data.USUARIO_ID,
+      lojaId: data.LOJA,
+      secoes: data.SECOES
+    });
+    await auditService.registerAudit({
+      action: 'LIBERAR_SECOES_USUARIO',
+      entity: 'ACESSO',
+      user: req.user,
+      referenceId: data.USUARIO_ID,
+      details: { loja: data.LOJA, secoes: data.SECOES.length }
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Dados de liberacao invalidos.', details: error.errors });
     }
     return next(error);
   }
