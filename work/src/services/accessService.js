@@ -251,9 +251,13 @@ async function listLiberacaoSecoes({ requestUser, lojaId, usuarioId = null }) {
       : null;
 
     if (usuarioId && !usuarioAlvo) {
-      const error = new Error('Usuario nao encontrado ou sem acesso a loja informada.');
-      error.statusCode = 404;
-      throw error;
+      return {
+        tableReady: !!columns,
+        usuarios: usuariosDaLoja,
+        secoes,
+        secoesLiberadas: [],
+        usuarioInvalido: true
+      };
     }
 
     if (!columns || !usuarioId) {

@@ -3649,9 +3649,7 @@
             popularLojasLiberacaoSecoes();
             const lojaId = liberacaoSecoesLojaSelect?.value || lojasPermitidasCache[0] || '';
             if (!lojaId) return;
-            const usuarioId = liberacaoSecoesUsuarioSelect?.value || '';
             const params = new URLSearchParams({ lojaId });
-            if (usuarioId) params.set('usuarioId', usuarioId);
             const data = await apiRequest('/api/acessos/secoes-usuario?' + params.toString());
             liberacaoSecoesCache = {
                 usuarios: data.usuarios || [],
@@ -3664,7 +3662,7 @@
             popularUsuariosLiberacaoSecoes(liberacaoSecoesCache.usuarios);
 
             const usuarioSelecionado = liberacaoSecoesUsuarioSelect?.value;
-            if (usuarioSelecionado && !usuarioId) {
+            if (usuarioSelecionado) {
                 const nextParams = new URLSearchParams({ lojaId, usuarioId: usuarioSelecionado });
                 const usuarioData = await apiRequest('/api/acessos/secoes-usuario?' + nextParams.toString());
                 liberacaoSecoesCache.liberadas = new Set((usuarioData.secoesLiberadas || []).map(String));
@@ -3707,7 +3705,10 @@
         liberacaoSecoesDisponiveisLista?.addEventListener('click', toggleSelecaoLiberacaoSecao);
         liberacaoSecoesLiberadasLista?.addEventListener('click', toggleSelecaoLiberacaoSecao);
         liberacaoSecoesPesquisaInput?.addEventListener('input', renderLiberacaoSecoes);
-        liberacaoSecoesLojaSelect?.addEventListener('change', () => carregarLiberacaoSecoesTela().catch(error => showInfoModal(error.message, 'error')));
+        liberacaoSecoesLojaSelect?.addEventListener('change', () => {
+            if (liberacaoSecoesUsuarioSelect) liberacaoSecoesUsuarioSelect.value = '';
+            carregarLiberacaoSecoesTela().catch(error => showInfoModal(error.message, 'error'));
+        });
         liberacaoSecoesUsuarioSelect?.addEventListener('change', () => carregarLiberacaoSecoesTela().catch(error => showInfoModal(error.message, 'error')));
         liberacaoSecoesAddBtn?.addEventListener('click', () => moverLiberacaoSecoes('disponiveis', 'liberadas'));
         liberacaoSecoesAddAllBtn?.addEventListener('click', () => moverLiberacaoSecoes('disponiveis', 'liberadas', true));
