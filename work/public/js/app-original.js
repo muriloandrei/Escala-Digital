@@ -788,6 +788,12 @@
             return total + (parseInt(escala.quantidade, 10) || 0);
         }, 0);
 
+        const contarTurnosCriadosPorSecao = (secaoId, ignorarIndex = null) => dadosEscala.reduce((total, escala, index) => {
+            if (index === ignorarIndex) return total;
+            if (String(escala.secaoId || '') !== String(secaoId || '')) return total;
+            return total + (parseInt(escala.quantidade, 10) || 0);
+        }, 0);
+
         const atualizarContadoresHome = () => {
             const funcionariosNaLoja = funcionariosLojaCache.length;
             const turnosCriados = contarTurnosCriados();
@@ -856,6 +862,20 @@
         };
 
         const getFuncionarioOptionValue = (funcionario) => String(funcionario?.ESCFUNC_ID || funcionario?.CHAPA || '');
+
+        const isFuncionarioDaSecao = (funcionario, secaoId) => {
+            return String(funcionario?.ESCSECAO_ID || '') === String(secaoId || '');
+        };
+
+        const renderFuncionarioOptionsPorSecao = (secaoId, selectedFuncionarioValue = '') => {
+            const funcionariosDaSecao = funcionariosLojaCache.filter(funcionario => isFuncionarioDaSecao(funcionario, secaoId));
+            return funcionariosDaSecao.map(item => {
+                const value = getFuncionarioOptionValue(item);
+                const label = `${item.NOME} (${item.CHAPA})`;
+                const selected = value === selectedFuncionarioValue ? 'selected' : '';
+                return `<option value="${escapeHtml(value)}" data-escfunc-id="${escapeHtml(item.ESCFUNC_ID)}" data-chapa="${escapeHtml(item.CHAPA)}" data-escsecao-id="${escapeHtml(item.ESCSECAO_ID || '')}" data-escfuncao-id="${escapeHtml(item.ESCFUNCAO_ID || '')}" data-name="${escapeHtml(label)}" ${selected}>${escapeHtml(label)}</option>`;
+            }).join('');
+        };
 
         const atualizarOpcoesFuncionariosEsqueleto = () => {
             const selects = Array.from(tabelaEsqueletoContainer.querySelectorAll('.collaborator-select'));
@@ -1091,7 +1111,50 @@
         const renderizarCorpo = (config, duracaoTotalTimeline, customDadosEscala, targetElementId) => { let bodyHtml = '<div>'; if (customDadosEscala.length === 0) { bodyHtml += `<p class="text-center text-gray-500 mt-4">Nenhum turno adicionado.</p>`; } else { customDadosEscala.forEach((escala, index) => { const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); let barsHtml = ''; const createBar = (startMin, endMin, color) => { if (endMin <= startMin) return ''; const duration = endMin - startMin; const leftPercent = ((startMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (leftPercent < 0 || widthPercent <= 0) return ''; return `<div class="absolute h-full ${color} rounded" style="left: ${leftPercent}%; width: ${widthPercent}%;"></div>`; }; if (inicioIntervaloMin < fimIntervaloMin && inicioIntervaloMin > inicioEscalaMin && fimIntervaloMin < fimEscalaMin) { barsHtml += createBar(inicioEscalaMin, inicioIntervaloMin, 'bg-green-500'); barsHtml += createBar(inicioIntervaloMin, fimIntervaloMin, 'bg-yellow-500'); barsHtml += createBar(fimIntervaloMin, fimEscalaMin, 'bg-green-500'); } else { barsHtml += createBar(inicioEscalaMin, fimEscalaMin, 'bg-green-500'); } let tempoInfoHtml = `<span class="text-xs text-gray-500 block">${escala.inicio} -<span class="text-gray-400"> ${escala.inicioIntervalo} - ${escala.fimIntervalo}</span> - ${escala.fim}</span>`; let actionsHtml = ''; if (targetElementId === 'timeline-content') { actionsHtml = `<div class="row-actions hidden mt-2 space-x-2"><button class="action-btn edit-btn" data-index="${index}">Editar</button><button class="action-btn delete-btn" data-index="${index}">Excluir</button></div>`; } else if (targetElementId === 'criacaoTimelineContent') { actionsHtml = `<div class="row-actions creation-row-actions mt-2"><button class="action-btn edit-btn" data-index="${index}"><span class="material-symbols-outlined">edit</span>Editar turno</button><button class="action-btn delete-btn" data-index="${index}"><span class="material-symbols-outlined">remove_circle</span>Remover secao</button></div>`; } bodyHtml += `<div class="timeline-row flex items-center py-1 ${targetElementId === 'timeline-content' ? 'cursor-pointer' : ''}"><div class="w-48 flex-shrink-0 pr-4 flex flex-col justify-center"><div><span class="font-bold text-gray-700">${escala.quantidade} Colab.</span><span class="text-xs text-gray-600 block">${escapeHtml(escala.secaoNome || "Sem secao")}</span>${tempoInfoHtml}</div>${actionsHtml}</div><div class="flex-1 h-8 bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${barsHtml}</div></div>`; }); } bodyHtml += `</div>`; return bodyHtml; };
         const renderizarLinhaDeSoma = (config, duracaoTotalTimeline, customDadosEscala) => { if (customDadosEscala.length === 0) return ''; const perfilCarga = new Array(duracaoTotalTimeline + 1).fill(0); customDadosEscala.forEach(escala => { const quantidade = parseInt(escala.quantidade); const inicioEscalaMin = timeToMinutes(escala.inicio); const fimEscalaMin = timeToMinutes(escala.fim); const inicioIntervaloMin = timeToMinutes(escala.inicioIntervalo); const fimIntervaloMin = timeToMinutes(escala.fimIntervalo); for (let min = inicioEscalaMin; min < fimEscalaMin; min++) { const isBreak = (inicioIntervaloMin < fimIntervaloMin && min >= inicioIntervaloMin && min < fimIntervaloMin); if (!isBreak) { const index = min - config.inicioTimeline; if (index >= 0 && index < perfilCarga.length) perfilCarga[index] += quantidade; } } }); let summaryHtml = ''; let lastCount = -1; let blockStartMin = config.inicioTimeline; for (let i = 0; i <= duracaoTotalTimeline; i++) { const currentCount = perfilCarga[i] || 0; const currentMin = config.inicioTimeline + i; if (currentCount !== lastCount && i > 0) { const duration = currentMin - blockStartMin; const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (widthPercent > 0) { const color = lastCount > 0 ? 'bg-blue-600' : 'bg-transparent'; summaryHtml += `<div class="absolute h-full ${color} flex items-center justify-center" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount > 0 ? lastCount : ''}</span></div>`; } blockStartMin = currentMin; } lastCount = currentCount; } const duration = (config.inicioTimeline + duracaoTotalTimeline) - blockStartMin; const leftPercent = ((blockStartMin - config.inicioTimeline) / duracaoTotalTimeline) * 100; const widthPercent = (duration / duracaoTotalTimeline) * 100; if (widthPercent > 0) { const color = lastCount > 0 ? 'bg-blue-600' : 'bg-transparent'; summaryHtml += `<div class="absolute h-full ${color} flex items-center justify-center" style="left: ${leftPercent}%; width: ${widthPercent}%;"><span class="summary-bar-text">${lastCount > 0 ? lastCount : ''}</span></div>`; } return `<div class="summary-row border-t-2 border-gray-300 mt-4 pt-4"><div class="flex items-center my-2 h-10"><div class="w-48 flex-shrink-0 text-center pr-4"><span class="font-bold text-lg text-gray-700">Total</span><span class="text-xs text-gray-500 block">Ativos</span></div><div class="flex-1 h-full bg-gray-200 rounded relative overflow-hidden" style="z-index: 2;">${summaryHtml}</div></div></div>`; };
         
-        const manipularEnvioFormulario = () => { let errors = []; const secaoOption = secaoTurnoSelect?.selectedOptions?.[0]; const novaEscala = { secaoId: secaoTurnoSelect?.value || '', secaoNome: secaoOption?.textContent || '', quantidade: quantidadeInput.value, inicio: inicioEscalaInput.value, fim: fimEscalaInput.value, inicioIntervalo: inicioIntervaloInput.value, fimIntervalo: fimIntervaloInput.value }; if (!novaEscala.secaoId) errors.push("Selecione uma secao com turno cadastrado."); if (!novaEscala.quantidade || !novaEscala.inicio || !novaEscala.fim) errors.push("A secao selecionada precisa ter quantidade, entrada e saida cadastradas."); if (timeToMinutes(novaEscala.fim) <= timeToMinutes(novaEscala.inicio)) errors.push("A saida do turno deve ser maior que a entrada."); const quantidadeNova = parseInt(novaEscala.quantidade, 10) || 0; const totalProjetado = contarTurnosCriados(modoEdicao.ativo ? modoEdicao.index : null) + quantidadeNova; if (funcionariosLojaCache.length > 0 && totalProjetado > funcionariosLojaCache.length) errors.push(`A loja possui ${funcionariosLojaCache.length} funcionario(s) carregado(s). Reduza a quantidade para nao ultrapassar o total disponivel.`); errors = errors.concat(validarTurnoSimples(novaEscala)); if (errors.length > 0) { showInfoModal(errors, 'error'); return; } if(modoEdicao.ativo) { dadosEscala[modoEdicao.index] = novaEscala; } else { dadosEscala.push(novaEscala); } dadosEscala.sort((a, b) => timeToMinutes(a.inicio) - timeToMinutes(b.inicio)); cancelarModoEdicao(); renderizarTimelineCompleta('timeline-content'); atualizarContadoresHome(); fecharModalTurno(); };
+        const manipularEnvioFormulario = () => {
+            let errors = [];
+            const secaoOption = secaoTurnoSelect?.selectedOptions?.[0];
+            const novaEscala = {
+                secaoId: secaoTurnoSelect?.value || '',
+                secaoNome: secaoOption?.textContent || '',
+                quantidade: quantidadeInput.value,
+                inicio: inicioEscalaInput.value,
+                fim: fimEscalaInput.value,
+                inicioIntervalo: inicioIntervaloInput.value,
+                fimIntervalo: fimIntervaloInput.value
+            };
+            if (!novaEscala.secaoId) errors.push("Selecione uma secao com turno cadastrado.");
+            if (!novaEscala.quantidade || !novaEscala.inicio || !novaEscala.fim) errors.push("A secao selecionada precisa ter quantidade, entrada e saida cadastradas.");
+            if (timeToMinutes(novaEscala.fim) <= timeToMinutes(novaEscala.inicio)) errors.push("A saida do turno deve ser maior que a entrada.");
+            const quantidadeNova = parseInt(novaEscala.quantidade, 10) || 0;
+            const totalProjetado = contarTurnosCriados(modoEdicao.ativo ? modoEdicao.index : null) + quantidadeNova;
+            if (funcionariosLojaCache.length > 0 && totalProjetado > funcionariosLojaCache.length) {
+                errors.push(`A loja possui ${funcionariosLojaCache.length} funcionario(s) carregado(s). Reduza a quantidade para nao ultrapassar o total disponivel.`);
+            }
+            const funcionariosDaSecao = funcionariosLojaCache.filter(funcionario => isFuncionarioDaSecao(funcionario, novaEscala.secaoId));
+            const totalSecaoProjetado = contarTurnosCriadosPorSecao(novaEscala.secaoId, modoEdicao.ativo ? modoEdicao.index : null) + quantidadeNova;
+            if (funcionariosDaSecao.length > 0 && totalSecaoProjetado > funcionariosDaSecao.length) {
+                errors.push(`A secao selecionada possui ${funcionariosDaSecao.length} funcionario(s). Reduza a quantidade deste turno ou revise o cadastro da secao.`);
+            }
+            if (funcionariosDaSecao.length === 0 && quantidadeNova > 0) {
+                errors.push('A secao selecionada nao possui funcionarios cadastrados para distribuicao.');
+            }
+            errors = errors.concat(validarTurnoSimples(novaEscala));
+            if (errors.length > 0) {
+                showInfoModal(errors, 'error');
+                return;
+            }
+            if (modoEdicao.ativo) {
+                dadosEscala[modoEdicao.index] = novaEscala;
+            } else {
+                dadosEscala.push(novaEscala);
+            }
+            dadosEscala.sort((a, b) => timeToMinutes(a.inicio) - timeToMinutes(b.inicio));
+            cancelarModoEdicao();
+            renderizarTimelineCompleta('timeline-content');
+            atualizarContadoresHome();
+            fecharModalTurno();
+        };
         const entrarModoEdicao = (index) => { modoEdicao.ativo = true; modoEdicao.index = index; const escala = dadosEscala[index]; if (secaoTurnoSelect) secaoTurnoSelect.value = escala.secaoId || ''; quantidadeInput.value = escala.quantidade; inicioEscalaInput.value = escala.inicio; fimEscalaInput.value = escala.fim; inicioIntervaloInput.value = escala.inicioIntervalo; fimIntervaloInput.value = escala.fimIntervalo; formTitle.textContent = "Editando Turno"; addEscalaBtn.textContent = "Salvar Alteracoes"; cancelEditBtn.classList.remove('hidden'); abrirModalTurno(); };
         const cancelarModoEdicao = () => { modoEdicao.ativo = false; modoEdicao.index = null; formContainer.reset(); if (secaoTurnoSelect) secaoTurnoSelect.value = ''; aplicarSecaoSelecionadaNoFormulario(); formTitle.textContent = "Adicionar Turno"; addEscalaBtn.textContent = "Adicionar"; cancelEditBtn.classList.add('hidden'); };        const popularSeletoresData = () => { const hoje = new Date(); const anoAtual = hoje.getFullYear(); const mesAtual = hoje.getMonth(); anoSelect.innerHTML = ''; for (let i = anoAtual - 5; i <= anoAtual + 5; i++) { const option = document.createElement('option'); option.value = i; option.textContent = i; if (i === anoAtual) option.selected = true; anoSelect.appendChild(option); } const nomesMeses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']; mesSelect.innerHTML = ''; nomesMeses.forEach((nome, index) => { const option = document.createElement('option'); option.value = index; option.textContent = nome; if (index === mesAtual) option.selected = true; mesSelect.appendChild(option); }); };
         
@@ -1154,13 +1217,9 @@
             const usados = new Set();
             return colaboradorShifts.map((escala) => {
                 const secaoId = Number(escala.secaoId || 0);
-                let index = funcionariosLojaCache.findIndex((funcionario, funcionarioIndex) => {
+                const index = funcionariosLojaCache.findIndex((funcionario, funcionarioIndex) => {
                     return !usados.has(funcionarioIndex) && Number(funcionario.ESCSECAO_ID || 0) === secaoId;
                 });
-
-                if (index < 0) {
-                    index = funcionariosLojaCache.findIndex((funcionario, funcionarioIndex) => !usados.has(funcionarioIndex));
-                }
 
                 if (index >= 0) {
                     usados.add(index);
@@ -1200,17 +1259,13 @@
                 const nomeBase = funcionario ? `${funcionario.NOME} (${funcionario.CHAPA})` : `Colaborador ${index + 1}`;
                 const escfuncId = funcionario ? funcionario.ESCFUNC_ID : '';
                 const chapa = funcionario ? funcionario.CHAPA : '';
-                const escsecaoId = funcionario ? funcionario.ESCSECAO_ID : '';
+                const escsecaoId = escala.secaoId || (funcionario ? funcionario.ESCSECAO_ID : '');
                 const escfuncaoId = funcionario ? funcionario.ESCFUNCAO_ID : '';
                 const selectedFuncionarioValue = funcionario ? getFuncionarioOptionValue(funcionario) : '';
-                const funcionarioOptions = funcionariosLojaCache.map(item => {
-                    const value = getFuncionarioOptionValue(item);
-                    const label = `${item.NOME} (${item.CHAPA})`;
-                    const selected = value === selectedFuncionarioValue ? 'selected' : '';
-                    return `<option value="${escapeHtml(value)}" data-escfunc-id="${escapeHtml(item.ESCFUNC_ID)}" data-chapa="${escapeHtml(item.CHAPA)}" data-escsecao-id="${escapeHtml(item.ESCSECAO_ID || '')}" data-escfuncao-id="${escapeHtml(item.ESCFUNCAO_ID || '')}" data-name="${escapeHtml(label)}" ${selected}>${escapeHtml(label)}</option>`;
-                }).join('');
+                const funcionarioOptions = renderFuncionarioOptionsPorSecao(escala.secaoId, selectedFuncionarioValue);
+                const placeholder = funcionarioOptions ? `Colaborador ${index + 1}` : 'Nenhum funcionario nesta secao';
                 const horarios = ` ${escala.inicio} - ${escala.inicioIntervalo} - ${escala.fimIntervalo} - ${escala.fim}`;
-                tableHtml += `<tr data-colab-index="${index}" data-turno-id="${escapeHtml(escala.turnoId || '')}" data-escfunc-id="${escapeHtml(escfuncId)}" data-chapa="${escapeHtml(chapa)}" data-escsecao-id="${escapeHtml(escsecaoId)}" data-escfuncao-id="${escapeHtml(escfuncaoId)}"><td data-name="${escapeHtml(nomeBase)}" class="sticky left-0 bg-white font-semibold z-10"><select class="collaborator-select" aria-label="Selecionar colaborador"><option value="">Colaborador ${index + 1}</option>${funcionarioOptions}</select><span class="collaborator-name-span hidden">${escapeHtml(nomeBase)}</span><span class="collaborator-time-span text-gray-500">${escapeHtml(horarios)}</span></td>`;
+                tableHtml += `<tr data-colab-index="${index}" data-turno-id="${escapeHtml(escala.turnoId || '')}" data-escfunc-id="${escapeHtml(escfuncId)}" data-chapa="${escapeHtml(chapa)}" data-escsecao-id="${escapeHtml(escsecaoId)}" data-escfuncao-id="${escapeHtml(escfuncaoId)}"><td data-name="${escapeHtml(nomeBase)}" class="sticky left-0 bg-white font-semibold z-10"><select class="collaborator-select" aria-label="Selecionar colaborador"><option value="">${escapeHtml(placeholder)}</option>${funcionarioOptions}</select><span class="collaborator-name-span hidden">${escapeHtml(nomeBase)}</span><span class="collaborator-time-span text-gray-500">${escapeHtml(horarios)}</span></td>`;
                 for (let dia = 1; dia <= diasNoMes; dia++) {
                     const data = new Date(ano, mes, dia);
                     tableHtml += `<td class="escala-cell ${data.getDay() === 0 ? 'bg-yellow-100' : ''}" data-dia="${dia}"></td>`;
@@ -1743,9 +1798,17 @@
 
             if (!row || !nameCell) return;
 
+            const secaoDaLinha = row.dataset.escsecaoId || colaboradorShifts[Number(row.dataset.colabIndex || 0)]?.secaoId || '';
+            const secaoSelecionada = selectedOption?.dataset.escsecaoId || '';
+            if (select.value && String(secaoDaLinha) !== String(secaoSelecionada)) {
+                select.value = '';
+                showInfoModal('Selecione um funcionario da mesma secao do turno.', 'error');
+                return;
+            }
+
             row.dataset.escfuncId = selectedOption?.dataset.escfuncId || '';
             row.dataset.chapa = selectedOption?.dataset.chapa || '';
-            row.dataset.escsecaoId = selectedOption?.dataset.escsecaoId || '';
+            row.dataset.escsecaoId = secaoDaLinha;
             row.dataset.escfuncaoId = selectedOption?.dataset.escfuncaoId || '';
             nameCell.dataset.name = nomeSelecionado;
             const hiddenName = nameCell.querySelector('.collaborator-name-span');
