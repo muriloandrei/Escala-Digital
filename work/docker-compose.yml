@@ -41,6 +41,7 @@ services:
       - ./src:/app/src
       - ./public:/app/public
       - ./views:/app/views
+      - ./scripts:/app/scripts
     command: ["node", "--watch", "src/server.js"]
     ports:
       - "3000:3000"
