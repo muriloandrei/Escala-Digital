@@ -3,6 +3,7 @@ const { z } = require('zod');
 const { requireAuth, requireLojaAccess, requirePermission } = require('../middleware/auth');
 const escalaService = require('../services/escalaService');
 const catalogService = require('../services/catalogService');
+const accessService = require('../services/accessService');
 const auditService = require('../services/auditService');
 const rmIntegrationService = require('../services/rmIntegrationService');
 const { REGRAS_VIGENTES, validateEscalaPayload } = require('../rules/escalaRules');
@@ -105,12 +106,21 @@ async function getLojasPermitidas(req, requestedLojaId = 'all') {
   return [...new Set((req.user?.lojas || []).map(Number).filter(Boolean))];
 }
 
+async function getSecoesPermitidas(req, lojaId = null) {
+  return accessService.getSecoesPermitidasUsuario(req.user, lojaId);
+}
+
+async function assertPayloadDentroDoEscopo(req, payload) {
+  await accessService.assertFuncionariosPermitidos(req.user, payload.lojaId, payload.funcionarios || []);
+}
+
 router.get('/resumo', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
     const mesRef = req.query.mesRef || null;
     const lojasPermitidas = getLojasPermitidasParaConsulta(req);
-    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas });
+    const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
+    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas });
     return res.json({ escalas });
   } catch (error) {
     return next(error);
@@ -125,7 +135,8 @@ router.get('/revisoes', requirePermission('escalas', 'visualizar'), resolveLojaR
       return res.status(400).json({ error: 'lojaId e mesRef sao obrigatorios.' });
     }
 
-    const revisoes = await escalaService.listEscalaRevisoes({ lojaId, mesRef });
+    const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
+    const revisoes = await escalaService.listEscalaRevisoes({ lojaId, mesRef, secoesPermitidas });
     return res.json({ revisoes });
   } catch (error) {
     return next(error);
@@ -153,7 +164,8 @@ router.get('/mensal', requirePermission('escalas', 'visualizar'), resolveLojaReq
       return res.status(400).json({ error: 'lojaId e mesRef sao obrigatorios.' });
     }
 
-    const escala = await escalaService.getEscalaMensal({ lojaId, mesRef });
+    const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
+    const escala = await escalaService.getEscalaMensal({ lojaId, mesRef, secoesPermitidas });
     return res.json({ escala });
   } catch (error) {
     return next(error);
@@ -170,7 +182,8 @@ router.get('/mensal-lote', requirePermission('escalas', 'visualizar'), async (re
     const lojas = await getLojasPermitidas(req, req.query.lojaId || 'all');
     const escalas = [];
     for (const lojaId of lojas) {
-      const escala = await escalaService.getEscalaMensal({ lojaId, mesRef });
+      const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
+      const escala = await escalaService.getEscalaMensal({ lojaId, mesRef, secoesPermitidas });
       escalas.push({ lojaId, escala });
     }
     return res.json({ escalas });
@@ -279,11 +292,13 @@ router.get('/', requirePermission('escalas', 'visualizar'), resolveLojaRequest, 
     const mesRef = req.query.mesRef;
     if (!lojaId || !mesRef) {
       const lojasPermitidas = getLojasPermitidasParaConsulta(req);
-      const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas });
+      const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
+      const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas });
       return res.json({ escalas });
     }
 
-    const escalas = await escalaService.listEscalas({ lojaId, mesRef });
+    const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
+    const escalas = await escalaService.listEscalas({ lojaId, mesRef, secoesPermitidas });
     return res.json({ escalas });
   } catch (error) {
     return next(error);
@@ -293,6 +308,7 @@ router.get('/', requirePermission('escalas', 'visualizar'), resolveLojaRequest, 
 router.post('/validar', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = saveSchema.parse(req.body);
+    await assertPayloadDentroDoEscopo(req, payload);
     const ruleErrors = validateEscalaPayload(payload);
     const ausenciaErrors = await escalaService.validateAusencias({
       lojaId: payload.lojaId,
@@ -314,6 +330,7 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
     if (payload.funcionarios.length !== 1) {
       return res.status(400).json({ error: 'Informe exatamente um funcionario para a revisao individual.' });
     }
+    await assertPayloadDentroDoEscopo(req, payload);
     const ruleErrors = validateEscalaPayload(payload);
     if (ruleErrors.length > 0) return res.status(422).json({ errors: ruleErrors });
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
@@ -362,7 +379,8 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
 router.post('/funcionario/sincronizar-rm', requirePermission('escalas-funcionarios', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = syncFuncionarioRmSchema.parse(req.body);
-    const funcionarios = await catalogService.listFuncionariosByLoja(payload.lojaId, { mesRef: payload.mesRef });
+    const secoesPermitidas = await getSecoesPermitidas(req, payload.lojaId);
+    const funcionarios = await catalogService.listFuncionariosByLoja(payload.lojaId, { mesRef: payload.mesRef, secoesPermitidas });
     const funcionario = funcionarios.find((item) => Number(item.ESCFUNC_ID) === Number(payload.escfuncId));
     if (!funcionario) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja informada.' });
     if (!funcionario.CPF) {
@@ -425,6 +443,7 @@ router.get('/:escprogId/dias', requirePermission('escalas', 'visualizar'), async
     if (!canAccessLoja(req, loja)) {
       return res.status(403).json({ error: 'Usuario sem permissao para esta escala.' });
     }
+    await accessService.assertSecoesPermitidas(req.user, loja, [header.ESCSECAO_ID || header.escsecao_id]);
 
     const dias = await escalaService.getEscalaDias(Number(req.params.escprogId));
     res.json({ dias });
@@ -444,6 +463,7 @@ router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'edi
     if (!canAccessLoja(req, loja)) {
       return res.status(403).json({ error: 'Usuario sem permissao para esta escala.' });
     }
+    await accessService.assertSecoesPermitidas(req.user, loja, [header.ESCSECAO_ID || header.escsecao_id]);
 
     const data = diaSchema.parse(req.body);
     const diasAntes = await escalaService.getEscalaDias(Number(req.params.escprogId));
@@ -488,6 +508,10 @@ router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'edi
 router.post('/', requirePermission('escalas', 'criar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = saveSchema.parse(req.body);
+    if (!accessService.canCreateEscala(req.user)) {
+      return res.status(403).json({ error: 'Perfil Lider nao pode criar novas escalas.' });
+    }
+    await assertPayloadDentroDoEscopo(req, payload);
     const ruleErrors = validateEscalaPayload(payload);
     if (ruleErrors.length > 0) {
       return res.status(422).json({ errors: ruleErrors });

@@ -208,6 +208,21 @@ async function resolveCodcoligada(connection, lojaCodigo) {
   return Number(process.env.ORACLE_CODCOLIGADA || process.env.DEFAULT_CODCOLIGADA || 1);
 }
 
+function addSecoesPermitidasFilter(conditions, binds, fieldSql, secoesPermitidas) {
+  if (!Array.isArray(secoesPermitidas)) return;
+  const normalized = [...new Set(secoesPermitidas.map(Number).filter(Boolean))];
+  if (normalized.length === 0) {
+    conditions.push('1 = 0');
+    return;
+  }
+  const placeholders = normalized.map((secaoId, index) => {
+    const key = `secaoPermitida${index}`;
+    binds[key] = secaoId;
+    return `:${key}`;
+  });
+  conditions.push(`${fieldSql} in (${placeholders.join(', ')})`);
+}
+
 async function listLojas() {
   return withConnection(async (connection) => {
     const columns = await getTableColumns(connection, 'SGN_ESC_LOJA');
@@ -268,7 +283,10 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
         ? 'f.cpf_funcionario as cpf'
         : 'cast(null as varchar2(20)) as cpf';
     const binds = { lojaId: lojaCodigo };
+    const funcionarioFilters = [];
     if (lojaCodcoligada !== null) binds.codcoligada = lojaCodcoligada;
+    addSecoesPermitidasFilter(funcionarioFilters, binds, 'f.escsecao_id', options.secoesPermitidas);
+    const funcionarioSecaoWhere = funcionarioFilters.length ? `and ${funcionarioFilters.join(' and ')}` : '';
     const baseSql = `select
           f.escfunc_id,
           f.codcoligada,
@@ -317,6 +335,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
        ) e on e.escfunc_id = f.escfunc_id` : ''}
        where f.loja = :lojaId
          ${funcionarioColigadaWhere}
+         ${funcionarioSecaoWhere}
        order by f.nome`;
 
     if (options.mesRef) {
@@ -347,7 +366,7 @@ async function listFuncionariosByLojas(lojas, options = {}) {
   return result;
 }
 
-async function listSecoesByLoja(lojaId) {
+async function listSecoesByLoja(lojaId, options = {}) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
     const lojaColumn = await getSecaoLojaColumn(connection);
@@ -365,6 +384,7 @@ async function listSecoesByLoja(lojaId) {
       conditions.push('codcoligada = :codcoligada');
       binds.codcoligada = lojaCodcoligada;
     }
+    addSecoesPermitidasFilter(conditions, binds, 'escsecao_id', options.secoesPermitidas);
 
     const whereSql = conditions.length ? `where ${conditions.join(' and ')}` : '';
     const secoesResult = await connection.execute(
@@ -380,11 +400,11 @@ async function listSecoesByLoja(lojaId) {
   });
 }
 
-async function listSecoesByLojas(lojas) {
+async function listSecoesByLojas(lojas, options = {}) {
   const result = [];
   const seen = new Set();
   for (const loja of [...new Set((lojas || []).map(Number).filter(Boolean))]) {
-    const secoes = await listSecoesByLoja(loja);
+    const secoes = await listSecoesByLoja(loja, options);
     secoes.forEach((secao) => {
       const key = `${secao.ESCSECAO_ID}|${secao.CODFILIAL || secao.LOJA || loja}`;
       if (seen.has(key)) return;
@@ -395,7 +415,7 @@ async function listSecoesByLojas(lojas) {
   return result;
 }
 
-async function listTurnosByLoja(lojaId) {
+async function listTurnosByLoja(lojaId, options = {}) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
     const canUseTurnos = await secaoTurnoSupportsSchedule(connection);
@@ -416,6 +436,7 @@ async function listTurnosByLoja(lojaId) {
       conditions.push('s.codcoligada = :codcoligada');
       binds.codcoligada = lojaCodcoligada;
     }
+    addSecoesPermitidasFilter(conditions, binds, 's.escsecao_id', options.secoesPermitidas);
 
     const whereSql = conditions.length ? `where ${conditions.join(' and ')}` : '';
     const result = await connection.execute(
@@ -442,11 +463,11 @@ async function listTurnosByLoja(lojaId) {
   });
 }
 
-async function listTurnosByLojas(lojas) {
+async function listTurnosByLojas(lojas, options = {}) {
   const result = [];
   const seen = new Set();
   for (const loja of [...new Set((lojas || []).map(Number).filter(Boolean))]) {
-    const turnos = await listTurnosByLoja(loja);
+    const turnos = await listTurnosByLoja(loja, options);
     turnos.forEach((turno) => {
       const key = `${turno.ESCSECAOTURNO_ID || `${turno.ESCSECAO_ID}|${turno.HR_ENT1}|${turno.HR_SAI1}|${turno.HR_ENT2}|${turno.HR_SAI2}`}|${turno.LOJA || loja}`;
       if (seen.has(key)) return;

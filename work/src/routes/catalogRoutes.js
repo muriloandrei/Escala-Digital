@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { requireAuth, requireLojaAccess, requirePermission } = require('../middleware/auth');
 const catalogService = require('../services/catalogService');
+const accessService = require('../services/accessService');
 
 const router = express.Router();
 
@@ -135,6 +136,10 @@ async function resolveLojaParam(req, res, next) {
   }
 }
 
+async function getSecoesPermitidas(req, lojaId = null) {
+  return accessService.getSecoesPermitidasUsuario(req.user, lojaId);
+}
+
 
 router.get('/tipos-descanso', async (req, res, next) => {
   try {
@@ -227,8 +232,10 @@ router.get('/lojas', async (req, res, next) => {
 router.get('/funcionarios', async (req, res, next) => {
   try {
     const lojas = await getLojasPermitidas(req, req.query.lojaId || 'all');
+    const secoesPermitidas = await getSecoesPermitidas(req);
     const funcionarios = await catalogService.listFuncionariosByLojas(lojas, {
-      mesRef: req.query.mesRef || null
+      mesRef: req.query.mesRef || null,
+      secoesPermitidas
     });
     return res.json({ funcionarios });
   } catch (error) {
@@ -239,7 +246,8 @@ router.get('/funcionarios', async (req, res, next) => {
 router.get('/secoes', async (req, res, next) => {
   try {
     const lojas = await getLojasPermitidas(req, req.query.lojaId || 'all');
-    const secoes = await catalogService.listSecoesByLojas(lojas);
+    const secoesPermitidas = await getSecoesPermitidas(req);
+    const secoes = await catalogService.listSecoesByLojas(lojas, { secoesPermitidas });
     return res.json({ secoes });
   } catch (error) {
     return next(error);
@@ -249,7 +257,8 @@ router.get('/secoes', async (req, res, next) => {
 router.get('/turnos-secao', async (req, res, next) => {
   try {
     const lojas = await getLojasPermitidas(req, req.query.lojaId || 'all');
-    const turnos = await catalogService.listTurnosByLojas(lojas);
+    const secoesPermitidas = await getSecoesPermitidas(req);
+    const turnos = await catalogService.listTurnosByLojas(lojas, { secoesPermitidas });
     return res.json({ turnos });
   } catch (error) {
     return next(error);
@@ -258,8 +267,10 @@ router.get('/turnos-secao', async (req, res, next) => {
 
 router.get('/lojas/:lojaId/funcionarios', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
+    const secoesPermitidas = await getSecoesPermitidas(req, Number(req.params.lojaId));
     const funcionarios = await catalogService.listFuncionariosByLoja(Number(req.params.lojaId), {
-      mesRef: req.query.mesRef || null
+      mesRef: req.query.mesRef || null,
+      secoesPermitidas
     });
     res.json({ funcionarios });
   } catch (error) {
@@ -269,7 +280,8 @@ router.get('/lojas/:lojaId/funcionarios', resolveLojaParam, requireLojaAccess, a
 
 router.get('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
-    const secoes = await catalogService.listSecoesByLoja(Number(req.params.lojaId));
+    const secoesPermitidas = await getSecoesPermitidas(req, Number(req.params.lojaId));
+    const secoes = await catalogService.listSecoesByLoja(Number(req.params.lojaId), { secoesPermitidas });
     res.json({ secoes });
   } catch (error) {
     next(error);
@@ -316,7 +328,8 @@ router.put('/lojas/:lojaId/secoes/:escsecaoId', resolveLojaParam, requireLojaAcc
 
 router.get('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
-    const turnos = await catalogService.listTurnosByLoja(Number(req.params.lojaId));
+    const secoesPermitidas = await getSecoesPermitidas(req, Number(req.params.lojaId));
+    const turnos = await catalogService.listTurnosByLoja(Number(req.params.lojaId), { secoesPermitidas });
     return res.json({ turnos });
   } catch (error) {
     return next(error);

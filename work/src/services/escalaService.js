@@ -226,6 +226,21 @@ async function getAtivaSql(connection, alias = 'p') {
   return (await hasProgAtivaColumn(connection)) ? `nvl(${alias}.ativa, 1) = 1` : '1 = 1';
 }
 
+function addSecoesPermitidasFilter(filters, binds, fieldSql, secoesPermitidas) {
+  if (!Array.isArray(secoesPermitidas)) return;
+  const normalized = [...new Set(secoesPermitidas.map(Number).filter(Boolean))];
+  if (normalized.length === 0) {
+    filters.push('1 = 0');
+    return;
+  }
+  const placeholders = normalized.map((secaoId, index) => {
+    const key = `secaoPermitida${index}`;
+    binds[key] = secaoId;
+    return `:${key}`;
+  });
+  filters.push(`${fieldSql} in (${placeholders.join(', ')})`);
+}
+
 async function getLatestRevision(connection, { lojaId, mesRef, includeInactive = false }) {
   const ativaSql = includeInactive ? '1 = 1' : await getAtivaSql(connection, 'p');
   const result = await connection.execute(
@@ -259,12 +274,16 @@ async function getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfun
   return value === null || value === undefined ? null : Number(value);
 }
 
-async function listEscalas({ lojaId, mesRef }) {
+async function listEscalas({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
     if (latestRevision === null) return [];
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
+    const binds = { lojaId, mesRef };
+    const secaoFilters = [];
+    addSecoesPermitidasFilter(secaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
+    const secaoSql = secaoFilters.length ? `and ${secaoFilters.join(' and ')}` : '';
 
     const result = await connection.execute(
       `select
@@ -294,8 +313,9 @@ async function listEscalas({ lojaId, mesRef }) {
           f.dt_hr_incl
        from sgn_esc_prog p
        left join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
-       where p.loja = :lojaId
+         where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+         ${secaoSql}
          and p.revisao = (
            select max(px.revisao)
            from sgn_esc_prog px
@@ -306,7 +326,7 @@ async function listEscalas({ lojaId, mesRef }) {
          )
          and ${ativaSql}
        order by f.chapa`,
-      { lojaId, mesRef },
+      binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
@@ -314,7 +334,7 @@ async function listEscalas({ lojaId, mesRef }) {
   });
 }
 
-async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [] }) {
+async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     const binds = {};
     const filters = [];
@@ -334,6 +354,7 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [] }) {
       binds.mesRef = mesRef;
       filters.push(`p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')`);
     }
+    addSecoesPermitidasFilter(filters, binds, 'p.escsecao_id', secoesPermitidas);
 
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
@@ -378,10 +399,14 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [] }) {
   });
 }
 
-async function listEscalaRevisoes({ lojaId, mesRef }) {
+async function listEscalaRevisoes({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     const auditJoin = await getAuditJoinSql(connection, 'p');
     const ativaSql = await getAtivaSql(connection, 'p');
+    const binds = { lojaId, mesRef };
+    const secaoFilters = [];
+    addSecoesPermitidasFilter(secaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
+    const secaoSql = secaoFilters.length ? `and ${secaoFilters.join(' and ')}` : '';
     const result = await connection.execute(
       `select
           p.revisao,
@@ -399,12 +424,13 @@ async function listEscalaRevisoes({ lojaId, mesRef }) {
           end as status
           from sgn_esc_prog p
        ${auditJoin.joinSql}
-       where p.loja = :lojaId
+         where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+         ${secaoSql}
          and ${ativaSql}
        group by p.mes_ref, p.revisao
        order by p.revisao desc`,
-      { lojaId, mesRef },
+      binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
@@ -447,12 +473,16 @@ async function listHistoricoEscala({ lojaId, mesRef, lojasPermitidas = [] }) {
   });
 }
 
-async function getEscalaMensal({ lojaId, mesRef }) {
+async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
     if (latestRevision === null) return { revisao: null, status: null, dias: [] };
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
+    const binds = { lojaId, mesRef };
+    const secaoFilters = [];
+    addSecoesPermitidasFilter(secaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
+    const secaoSql = secaoFilters.length ? `and ${secaoFilters.join(' and ')}` : '';
 
     const result = await connection.execute(
       `select
@@ -489,6 +519,7 @@ async function getEscalaMensal({ lojaId, mesRef }) {
        left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+         ${secaoSql}
          and p.revisao = (
            select max(px.revisao)
            from sgn_esc_prog px
@@ -499,7 +530,7 @@ async function getEscalaMensal({ lojaId, mesRef }) {
          )
          and ${ativaSql}
        order by s.descr, f.nome, p.chapa, d.dt`,
-      { lojaId, mesRef },
+      binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
@@ -513,7 +544,7 @@ async function getEscalaMensal({ lojaId, mesRef }) {
 async function getEscalaHeader(escprogId) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
-      `select escprog_id, mes_ref, escfunc_id, loja, chapa, revisao, oficializada
+      `select escprog_id, mes_ref, escfunc_id, escsecao_id, escfuncao_id, loja, chapa, revisao, oficializada
        from sgn_esc_prog
        where escprog_id = :escprogId`,
       { escprogId },

@@ -73,6 +73,7 @@
   const permissionPageByRoute = {
     '/home': 'escalas',
     '/timeline': 'escalas',
+    '/escalas/nova': 'escalas',
     '/escalas-geradas': 'escalas',
     '/criar-escala': 'escalas',
     '/escalas-funcionarios': 'escalas-funcionarios',

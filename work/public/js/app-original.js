@@ -510,6 +510,11 @@
             if (!checkRoutePermission(routeForPermission)) return;
 
             if (pageKey.startsWith('escalas/nova/')) {
+                if (!canCreateEscalaSessao()) {
+                    showEscalasGeradasPage();
+                    showInfoModal('Perfil Lider nao pode criar novas escalas.', 'error');
+                    return;
+                }
                 const [, , loja, mesRef] = pageKey.split('/');
                 const dataRef = mesRef ? new Date(mesRef + 'T00:00:00') : null;
                 if (escalaRascunhoAtivo && escalaRascunhoContexto) {
@@ -521,6 +526,11 @@
                 return;
             }
             if (pageKey === 'escalas/nova') {
+                if (!canCreateEscalaSessao()) {
+                    showEscalasGeradasPage();
+                    showInfoModal('Perfil Lider nao pode criar novas escalas.', 'error');
+                    return;
+                }
                 showEscalasGeradasPage();
                 iniciarNovaEscalaRascunho().catch(error => showInfoModal(error.message, 'error'));
                 return;
@@ -634,7 +644,7 @@
         });
         goToTimelineBtn.addEventListener('click', async (e) => {
             e.preventDefault();
-            if (!hasPermission('escalas', 'criar')) return showInfoModal('Usuario sem permissao para criar escalas.', 'error');
+            if (!canCreateEscalaSessao()) return showInfoModal('Usuario sem permissao para criar escalas.', 'error');
             iniciarNovaEscalaRascunho().catch(error => showInfoModal(error.message, 'error'));
         });
         iniciarCriacaoEscalaBtn?.addEventListener('click', async (e) => { e.preventDefault(); iniciarCriacaoEscalaPagina().catch(error => showInfoModal(error.message, 'error')); });
@@ -782,6 +792,12 @@
         let historicoCache = [];
         let perfisAcessoCache = [];
         let perfilPaginasCache = [];
+        function isPerfilLiderSessao() {
+            return String(usuarioSessaoCache?.perfil || '').trim().toUpperCase() === 'LIDER';
+        }
+        function canCreateEscalaSessao() {
+            return hasPermission('escalas', 'criar') && !isPerfilLiderSessao();
+        }
         const getLojaCodigo = (loja) => loja?.LOJA ?? loja?.loja;
         
         const { timeToMinutes, minutesToTime, hoursToMinutes } = window.EscalaRulesCore;
@@ -2163,6 +2179,7 @@
             usuarioSessaoCache = user;
             window.EscalaPermissions?.setUser(user);
             applyPermissionBindings();
+            if (goToTimelineBtn) goToTimelineBtn.classList.toggle('hidden', !canCreateEscalaSessao());
             const lojas = Array.isArray(user.lojas) ? user.lojas : [];
 
             if (loggedUserName) {
@@ -5245,6 +5262,10 @@
         });
 
         const iniciarNovaEscalaRascunho = async (opcoes = {}) => {
+            if (!canCreateEscalaSessao()) {
+                showInfoModal('Perfil Lider nao pode criar novas escalas.', 'error');
+                return;
+            }
             const dataPadrao = opcoes.mesRef ? new Date(opcoes.mesRef + 'T00:00:00') : null;
             let valoresPadrao = {
                 loja: String(opcoes.loja || (escalasFiltroLoja?.value !== 'all' ? escalasFiltroLoja?.value : '') || lojaEscalaSelect.value || ''),

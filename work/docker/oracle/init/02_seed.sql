@@ -37,6 +37,9 @@ values (1, 'Jornada 08:48 com 1:10 de almoco', '08:00', '12:00', '13:10', '17:58
 
 insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (1, 'ADMIN', 'Administracao completa', 'A', sysdate);
 insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (2, 'OPERADOR', 'Operacao nas lojas permitidas', 'A', sysdate);
+insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (3, 'GERENTE', 'Gerente de loja', 'A', sysdate);
+insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (4, 'RH', 'Recursos Humanos', 'A', sysdate);
+insert into SGN_ESC_PERFIL (PERFIL_ID, NOME, DESCR, STATUS, DT_HR_INCL) values (5, 'LIDER', 'Lider de secao', 'A', sysdate);
 
 insert into SGN_ESC_PERFIL_PERMISSAO (PERFIL_ID, PAGINA, PODE_VISUALIZAR, PODE_CRIAR, PODE_EDITAR, PODE_OFICIALIZAR, PODE_REPROCESSAR, PODE_EXCLUIR, PODE_ADMINISTRAR, DT_HR_INCL)
 select 1, pagina, 1, 1, 1, 1, 1, 1, 1, sysdate from (
@@ -46,6 +49,35 @@ insert into SGN_ESC_PERFIL_PERMISSAO (PERFIL_ID, PAGINA, PODE_VISUALIZAR, PODE_C
 select 2, pagina, 1, editar, editar, case when pagina in ('escalas', 'escalas-funcionarios') and editar = 1 then 1 else 0 end, 0, 0, 0, sysdate from (
   select 'escalas' pagina, 1 editar from dual union all select 'escalas-funcionarios', 1 from dual union all select 'funcionarios', 1 from dual union all select 'secoes', 1 from dual union all select 'turnos-secao', 1 from dual union all select 'historico', 0 from dual union all select 'regras', 0 from dual union all select 'tipos-descanso', 1 from dual union all select 'horarios-padrao', 1 from dual union all select 'integracao-rm', 0 from dual union all select 'acessos', 0 from dual union all select 'liberacao-secoes', 0 from dual union all select 'roles', 0 from dual union all select 'configuracoes', 0 from dual
 );
+
+insert into SGN_ESC_PERFIL_PERMISSAO (PERFIL_ID, PAGINA, PODE_VISUALIZAR, PODE_CRIAR, PODE_EDITAR, PODE_OFICIALIZAR, PODE_REPROCESSAR, PODE_EXCLUIR, PODE_ADMINISTRAR, DT_HR_INCL)
+select p.perfil_id, cfg.pagina, cfg.visualizar, cfg.criar, cfg.editar, cfg.oficializar, cfg.reprocessar, cfg.excluir, cfg.administrar, sysdate
+from SGN_ESC_PERFIL p
+join (
+  select 'GERENTE' perfil, 'escalas' pagina, 1 visualizar, 1 criar, 1 editar, 1 oficializar, 0 reprocessar, 0 excluir, 0 administrar from dual union all
+  select 'GERENTE', 'escalas-funcionarios', 1, 0, 1, 0, 0, 0, 0 from dual union all
+  select 'GERENTE', 'funcionarios', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'GERENTE', 'secoes', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'GERENTE', 'turnos-secao', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'GERENTE', 'historico', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'GERENTE', 'regras', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'RH', 'escalas', 1, 1, 1, 1, 0, 0, 0 from dual union all
+  select 'RH', 'escalas-funcionarios', 1, 0, 1, 0, 0, 0, 0 from dual union all
+  select 'RH', 'funcionarios', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'RH', 'secoes', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'RH', 'turnos-secao', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'RH', 'historico', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'RH', 'regras', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'RH', 'acessos', 1, 0, 1, 0, 0, 0, 0 from dual union all
+  select 'RH', 'liberacao-secoes', 1, 0, 1, 0, 0, 0, 0 from dual union all
+  select 'LIDER', 'escalas', 1, 0, 1, 0, 0, 0, 0 from dual union all
+  select 'LIDER', 'escalas-funcionarios', 1, 0, 1, 0, 0, 0, 0 from dual union all
+  select 'LIDER', 'funcionarios', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'LIDER', 'secoes', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'LIDER', 'turnos-secao', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'LIDER', 'historico', 1, 0, 0, 0, 0, 0, 0 from dual union all
+  select 'LIDER', 'regras', 1, 0, 0, 0, 0, 0, 0 from dual
+) cfg on cfg.perfil = p.nome;
 
 insert into SGN_ESC_USUARIO (USUARIO_ID, LOGIN, NOME, SENHA_HASH, PERFIL, STATUS, DT_HR_INCL) values (1, 'admin', 'Administrador', '$2a$10$1N1BKFLNZh7I2s7bkMavhu2RBBJpWqQQXbONkZosobki33EPpzxWe', 'ADMIN', 'A', sysdate);
 insert into SGN_ESC_USUARIO (USUARIO_ID, LOGIN, NOME, SENHA_HASH, PERFIL, STATUS, DT_HR_INCL) values (2, 'loja1', 'Usuario Loja 1', '$2a$10$1N1BKFLNZh7I2s7bkMavhu2RBBJpWqQQXbONkZosobki33EPpzxWe', 'OPERADOR', 'A', sysdate);

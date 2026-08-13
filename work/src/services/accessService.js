@@ -115,6 +115,93 @@ function assertLojaAcesso(requestUser, lojaId) {
   }
 }
 
+function normalizePerfilName(userOrPerfil) {
+  const perfil = typeof userOrPerfil === 'string' ? userOrPerfil : userOrPerfil?.perfil;
+  return String(perfil || '').trim().toUpperCase();
+}
+
+function isAdminUser(requestUser) {
+  return normalizePerfilName(requestUser) === 'ADMIN';
+}
+
+function isLeaderUser(requestUser) {
+  return normalizePerfilName(requestUser) === 'LIDER';
+}
+
+function canCreateEscala(requestUser) {
+  return !isLeaderUser(requestUser);
+}
+
+function buildInClause(field, values, binds, prefix) {
+  const normalized = [...new Set((values || []).map(Number).filter(Boolean))];
+  if (normalized.length === 0) return '1 = 0';
+  const placeholders = normalized.map((value, index) => {
+    const key = `${prefix}${index}`;
+    binds[key] = value;
+    return `:${key}`;
+  });
+  return `${field} in (${placeholders.join(', ')})`;
+}
+
+async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
+  if (!isLeaderUser(requestUser)) return null;
+  const usuarioId = Number(requestUser?.sub || requestUser?.id || requestUser?.usuarioId || requestUser?.USUARIO_ID || 0);
+  if (!usuarioId) return [];
+
+  return withConnection(async (connection) => {
+    const columns = await getUsuarioSecaoColumns(connection);
+    if (!columns) return [];
+
+    const lojaColumn = await getSecaoLojaColumn(connection);
+    const binds = { usuarioId };
+    const filters = ['us.usuario_id = :usuarioId'];
+    if (columns.has('STATUS')) filters.push("nvl(us.status, 'A') = 'A'");
+    if (lojaId) {
+      binds.lojaId = Number(lojaId);
+      filters.push(`s.${lojaColumn.toLowerCase()} = :lojaId`);
+    }
+
+    const result = await connection.execute(
+      `select us.escsecao_id
+         from sgn_esc_usuario_secao us
+         join sgn_esc_secao s on s.escsecao_id = us.escsecao_id
+        where ${filters.join(' and ')}`,
+      binds,
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
+  });
+}
+
+async function assertSecoesPermitidas(requestUser, lojaId, secaoIds = []) {
+  const perfil = normalizePerfilName(requestUser);
+  if (perfil === 'ADMIN' || perfil === 'GERENTE' || perfil === 'RH' || !isLeaderUser(requestUser)) return;
+
+  const permitidas = await getSecoesPermitidasUsuario(requestUser, lojaId);
+  const permitidasSet = new Set((permitidas || []).map(Number));
+  const solicitadas = [...new Set((secaoIds || []).map(Number).filter(Boolean))];
+  const bloqueadas = solicitadas.filter((secaoId) => !permitidasSet.has(secaoId));
+  if (bloqueadas.length === 0 && solicitadas.length > 0) return;
+
+  const error = new Error(
+    bloqueadas.length
+      ? 'Usuario lider sem acesso a uma ou mais secoes informadas.'
+      : 'Usuario lider sem secoes liberadas para esta loja.'
+  );
+  error.statusCode = 403;
+  error.details = bloqueadas;
+  throw error;
+}
+
+async function assertFuncionariosPermitidos(requestUser, lojaId, funcionarios = []) {
+  if (!isLeaderUser(requestUser)) return;
+  const secaoIds = (funcionarios || [])
+    .map((funcionario) => funcionario?.escsecaoId || funcionario?.ESCSECAO_ID)
+    .filter(Boolean);
+  await assertSecoesPermitidas(requestUser, lojaId, secaoIds);
+}
+
 async function getSecaoLojaColumn(connection) {
   const columns = await getTableColumns(connection, 'SGN_ESC_SECAO');
   if (columns.has('CODFILIAL')) return 'CODFILIAL';
@@ -419,7 +506,7 @@ function completarPermissoesPerfil(perfil) {
       if (atual) return normalizePermission(atual, perfil.NOME);
       return normalizePermission({
         PAGINA: pagina.key,
-        PODE_VISUALIZAR: 1,
+        PODE_VISUALIZAR: isAdmin ? 1 : 0,
         PODE_EDITAR: isAdmin ? 1 : 0,
         PODE_EXCLUIR: isAdmin ? 1 : 0
       }, perfil.NOME);
@@ -491,11 +578,11 @@ async function getPermissaoPerfil(perfilNome, pagina) {
   const { perfis } = await listPerfisAcesso();
   const perfil = perfis.find((item) => String(item.NOME || '').trim().toUpperCase() === normalizedPerfil);
   if (!perfil) {
-    return normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 0, PODE_EXCLUIR: 0 });
+    return normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 0, PODE_EDITAR: 0, PODE_EXCLUIR: 0 });
   }
 
   return (perfil.PERMISSOES || []).find((permissao) => String(permissao.PAGINA) === String(pagina))
-    || normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 1, PODE_EDITAR: 0, PODE_EXCLUIR: 0 });
+    || normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 0, PODE_EDITAR: 0, PODE_EXCLUIR: 0 });
 }
 
 async function getPermissoesPerfil(perfilNome) {
@@ -515,7 +602,7 @@ async function getPermissoesPerfil(perfilNome) {
   return perfil?.PERMISSOES || PERFIL_PAGES.map((pagina) => normalizePermission({
     PAGINA: pagina.key,
     LABEL: pagina.label,
-    PODE_VISUALIZAR: 1,
+    PODE_VISUALIZAR: 0,
     PODE_EDITAR: 0,
     PODE_EXCLUIR: 0
   }));
@@ -523,6 +610,14 @@ async function getPermissoesPerfil(perfilNome) {
 
 module.exports = {
   PERFIL_PAGES,
+  normalizePerfilName,
+  isAdminUser,
+  isLeaderUser,
+  canCreateEscala,
+  buildInClause,
+  getSecoesPermitidasUsuario,
+  assertSecoesPermitidas,
+  assertFuncionariosPermitidos,
   listUsuariosAcesso,
   updateUsuarioAcesso,
   createUsuarioAcesso,
