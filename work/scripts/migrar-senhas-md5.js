@@ -1,4 +1,3 @@
-const bcrypt = require('bcryptjs');
 const { closeOraclePool, oracledb, withConnection } = require('../src/db/oracle');
 const { _private: authPrivate } = require('../src/services/authService');
 
@@ -6,8 +5,7 @@ const DEFAULTS = {
   sourceTable: process.env.LEGACY_PASSWORD_SOURCE_TABLE || '',
   sourceLoginColumn: process.env.LEGACY_PASSWORD_LOGIN_COLUMN || 'LOGIN',
   sourceMd5Column: process.env.LEGACY_PASSWORD_MD5_COLUMN || 'SENHA_MD5',
-  sourceWhere: process.env.LEGACY_PASSWORD_SOURCE_WHERE || '',
-  bcryptRounds: Number(process.env.PASSWORD_BCRYPT_ROUNDS || 10)
+  sourceWhere: process.env.LEGACY_PASSWORD_SOURCE_WHERE || ''
 };
 
 function parseArgs(argv) {
@@ -26,7 +24,6 @@ function parseArgs(argv) {
     else if (arg.startsWith('--source-md5-column=')) args.sourceMd5Column = arg.split('=').slice(1).join('=');
     else if (arg.startsWith('--source-where=')) args.sourceWhere = arg.split('=').slice(1).join('=');
     else if (arg.startsWith('--only-login=')) args.onlyLogin = arg.split('=').slice(1).join('=');
-    else if (arg.startsWith('--bcrypt-rounds=')) args.bcryptRounds = Number(arg.split('=')[1]);
   });
 
   return args;
@@ -129,11 +126,10 @@ async function montarAtualizacoes(connection, args) {
       ignorados.push(usuario.login);
       continue;
     }
-    const bcryptHash = await bcrypt.hash(md5, args.bcryptRounds);
     atualizacoes.push({
       usuarioId: usuario.usuarioId,
       login: usuario.login,
-      senhaHash: authPrivate.MD5_BCRYPT_PREFIX + bcryptHash
+      senhaHash: md5
     });
   }
 
@@ -173,7 +169,7 @@ function imprimirResumo(resultado, args, rowsAffected = 0) {
   console.log(`Registros com MD5 invalido: ${resultado.invalidos.length}`);
 
   resultado.atualizacoes.slice(0, 20).forEach((item) => {
-    console.log(`- ${item.login}: sera atualizado para hash compativel com MD5 legado`);
+    console.log(`- ${item.login}: sera gravado com MD5 legado para upgrade automatico no primeiro login`);
   });
   if (resultado.atualizacoes.length > 20) {
     console.log(`... ${resultado.atualizacoes.length - 20} atualizacao(oes) omitida(s) no resumo.`);
@@ -181,7 +177,7 @@ function imprimirResumo(resultado, args, rowsAffected = 0) {
 
   if (!args.execute) {
     console.log('');
-    console.log('Nenhuma alteracao foi aplicada. Use --execute para gravar. Use --overwrite para substituir hashes ja existentes.');
+    console.log('Nenhuma alteracao foi aplicada. Use --execute para gravar MD5 puro. Use --overwrite para substituir hashes ja existentes.');
   }
 }
 
@@ -189,9 +185,6 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.sourceTable) {
     throw new Error('Informe a tabela origem com --source-table=NOME_TABELA ou LEGACY_PASSWORD_SOURCE_TABLE no .env.');
-  }
-  if (!Number.isFinite(args.bcryptRounds) || args.bcryptRounds < 8 || args.bcryptRounds > 14) {
-    throw new Error('bcrypt rounds deve estar entre 8 e 14.');
   }
 
   await withConnection(async (connection) => {

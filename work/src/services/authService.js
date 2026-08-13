@@ -5,8 +5,6 @@ const { withConnection, oracledb } = require('../db/oracle');
 const { getEnv } = require('../config/env');
 const accessService = require('./accessService');
 
-const MD5_BCRYPT_PREFIX = 'md5-bcrypt:';
-
 function pick(row, ...keys) {
   for (const key of keys) {
     if (row?.[key] !== undefined) return row[key];
@@ -26,23 +24,36 @@ function md5Hex(value) {
   return crypto.createHash('md5').update(String(value || ''), 'utf8').digest('hex');
 }
 
-function isMd5BcryptHash(value) {
-  const text = String(value || '');
-  return text.startsWith(MD5_BCRYPT_PREFIX) && isBcryptHash(text.slice(MD5_BCRYPT_PREFIX.length));
+function isLegacyMd5Hash(value) {
+  return /^[a-f0-9]{32}$/i.test(String(value || '').trim());
 }
 
 function isSupportedPasswordHash(value) {
-  return isBcryptHash(value) || isMd5BcryptHash(value);
+  return isBcryptHash(value) || isLegacyMd5Hash(value);
 }
 
 async function verifyPasswordHash(password, senhaHash) {
   if (isBcryptHash(senhaHash)) {
     return bcrypt.compare(password, senhaHash);
   }
-  if (isMd5BcryptHash(senhaHash)) {
-    return bcrypt.compare(md5Hex(password), String(senhaHash).slice(MD5_BCRYPT_PREFIX.length));
+  if (isLegacyMd5Hash(senhaHash)) {
+    return md5Hex(password) === String(senhaHash || '').trim().toLowerCase();
   }
   return false;
+}
+
+async function upgradeLegacyMd5Password(usuarioId, password, previousHash) {
+  const senhaHash = await bcrypt.hash(password, 10);
+  await withConnection(async (connection) => {
+    await connection.execute(
+      `update sgn_esc_usuario
+          set senha_hash = :senhaHash
+        where usuario_id = :usuarioId
+          and senha_hash = :previousHash`,
+      { usuarioId, senhaHash, previousHash },
+      { autoCommit: true }
+    );
+  });
 }
 
 function invalidLoginError() {
@@ -129,7 +140,7 @@ async function login({ login, password }) {
 
   const senhaHash = pick(user, 'SENHA_HASH', 'senha_hash');
   if (!isSupportedPasswordHash(senhaHash)) {
-    console.warn(`Usuario ${pick(user, 'LOGIN', 'login')} sem SENHA_HASH bcrypt valido.`);
+    console.warn(`Usuario ${pick(user, 'LOGIN', 'login')} sem SENHA_HASH suportado.`);
     throw invalidLoginError();
   }
 
@@ -139,6 +150,10 @@ async function login({ login, password }) {
   }
 
   const usuarioId = pick(user, 'USUARIO_ID', 'usuario_id');
+  if (isLegacyMd5Hash(senhaHash)) {
+    await upgradeLegacyMd5Password(usuarioId, password, senhaHash);
+  }
+
   const lojas = await findUserStores(usuarioId);
   const { auth } = getEnv();
   const payload = {
@@ -167,11 +182,11 @@ module.exports = {
   login,
   getSessionUserById,
   _private: {
-    MD5_BCRYPT_PREFIX,
     isBcryptHash,
-    isMd5BcryptHash,
+    isLegacyMd5Hash,
     isSupportedPasswordHash,
     md5Hex,
-    verifyPasswordHash
+    verifyPasswordHash,
+    upgradeLegacyMd5Password
   }
 };

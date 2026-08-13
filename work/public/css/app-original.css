@@ -1330,14 +1330,20 @@
         }
 
         .employee-scale-header {
-            align-items: flex-start;
-            gap: 18px;
+            align-items: stretch;
+            display: block;
+            gap: 14px;
         }
 
         .employee-scale-actions {
-            align-items: flex-start;
-            flex: 1;
-            justify-content: flex-end;
+            align-items: center;
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 8px;
+            justify-content: flex-start;
+            margin-top: 14px;
+            overflow-x: auto;
+            padding-bottom: 2px;
         }
 
         .employee-scale-actions .action-button {
@@ -1370,16 +1376,13 @@
         }
 
         .employee-period-tabs {
-            display: grid;
-            gap: 8px;
-            min-width: min(620px, 100%);
+            display: block;
+            flex: 1 0 520px;
+            min-width: 520px;
         }
 
         .employee-year-tabs {
-            align-items: center;
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
+            display: none;
         }
 
         .employee-year-tabs span {
@@ -1415,7 +1418,7 @@
         .employee-month-tabs {
             display: grid;
             gap: 6px;
-            grid-template-columns: repeat(12, minmax(42px, 1fr));
+            grid-template-columns: repeat(12, minmax(38px, 1fr));
         }
 
         .employee-month-tab {
