@@ -286,6 +286,38 @@ async function getFolgasExistentes({ codTabFolga, inicio, fim }) {
   return toArrayResult(await requestRm(`${rmConfig.folgasPath}?filter=${encodeURIComponent(filter)}`));
 }
 
+async function consultarFolgasFuncionarioMes({ cpf, inicio, fim, codColigadaFallback }) {
+  const cpfLimpo = sanitizeCpf(cpf);
+  if (!cpfLimpo) {
+    const error = new Error('CPF do funcionario nao informado para consulta ao RM.');
+    error.statusCode = 422;
+    throw error;
+  }
+
+  const funcionarioRm = await getFuncionarioRmPorCpf(cpfLimpo);
+  const codColigada = getCodColigada(funcionarioRm, codColigadaFallback);
+  const codTabFolga = getCodTabFolga(funcionarioRm);
+  if (!codTabFolga) {
+    const error = new Error(`RM nao retornou CODTABFOLGA para o CPF ${mask(cpfLimpo)}.`);
+    error.statusCode = 422;
+    throw error;
+  }
+
+  const folgas = await getFolgasExistentes({ codTabFolga, inicio, fim });
+  const datas = [...new Set(folgas
+    .map((folga) => formatDate(getFolgaDateValue(folga)))
+    .filter(Boolean))]
+    .sort();
+
+  return {
+    funcionarioRm,
+    codColigada,
+    codTabFolga,
+    folgas,
+    datas
+  };
+}
+
 function getFolgaKey(folga) {
   const data = formatDate(getFolgaDateValue(folga));
   if (!data) return null;
@@ -565,6 +597,7 @@ async function listRmLogs({ lojaId, mesRef, lojasPermitidas = [] }) {
 
 module.exports = {
   oficializarNoRm,
+  consultarFolgasFuncionarioMes,
   listRmLogs,
   validarPreRequisitosRm,
   _private: {

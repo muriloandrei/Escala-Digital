@@ -17,6 +17,72 @@ function formatDateValue(value) {
   return String(value || '').slice(0, 10);
 }
 
+function getHojeIso() {
+  return formatDateValue(new Date());
+}
+
+function isDiaBloqueadoParaEdicao(value, hojeIso = getHojeIso()) {
+  const dataIso = formatDateValue(value);
+  return Boolean(dataIso) && dataIso <= hojeIso;
+}
+
+function normalizeDiaComparavel(dia) {
+  const programacao = String(dia?.programacao ?? dia?.PROGRAMACAO ?? 'TRB').trim().toUpperCase() || 'TRB';
+  const descanso = programacao !== 'TRB';
+  return {
+    data: formatDateValue(dia?.data ?? dia?.DT),
+    hrEnt1: descanso ? null : (dia?.hrEnt1 ?? dia?.HR_ENT1 ?? null),
+    hrSai1: descanso ? null : (dia?.hrSai1 ?? dia?.HR_SAI1 ?? null),
+    hrEnt2: descanso ? null : (dia?.hrEnt2 ?? dia?.HR_ENT2 ?? null),
+    hrSai2: descanso ? null : (dia?.hrSai2 ?? dia?.HR_SAI2 ?? null),
+    programacao
+  };
+}
+
+function diasSaoIguais(a, b) {
+  const left = normalizeDiaComparavel(a);
+  const right = normalizeDiaComparavel(b);
+  return left.hrEnt1 === right.hrEnt1
+    && left.hrSai1 === right.hrSai1
+    && left.hrEnt2 === right.hrEnt2
+    && left.hrSai2 === right.hrSai2
+    && left.programacao === right.programacao;
+}
+
+function getAlteracoesDiasBloqueados(diasAtuais = [], diasNovos = [], hojeIso = getHojeIso()) {
+  const novosPorData = new Map((diasNovos || []).map((dia) => [normalizeDiaComparavel(dia).data, dia]));
+  const alteracoes = [];
+
+  for (const diaAtual of diasAtuais || []) {
+    const data = formatDateValue(pick(diaAtual, 'DT', 'dt') || diaAtual.data);
+    if (!isDiaBloqueadoParaEdicao(data, hojeIso)) continue;
+    const diaNovo = novosPorData.get(data);
+    if (!diaNovo || !diasSaoIguais(diaAtual, diaNovo)) alteracoes.push(data);
+  }
+
+  return alteracoes;
+}
+
+function assertSemAlteracaoEmDiasBloqueados(diasAtuais = [], diasNovos = [], hojeIso = getHojeIso()) {
+  const alteracoes = getAlteracoesDiasBloqueados(diasAtuais, diasNovos, hojeIso);
+  if (!alteracoes.length) return;
+  const error = new Error(`Dias ja passados nao podem ser alterados manualmente: ${alteracoes.join(', ')}.`);
+  error.statusCode = 422;
+  error.details = alteracoes;
+  throw error;
+}
+
+function assertSemDiasBloqueadosEmNovaEscala(dias = [], hojeIso = getHojeIso()) {
+  const bloqueados = [...new Set((dias || [])
+    .map((dia) => normalizeDiaComparavel(dia).data)
+    .filter((data) => isDiaBloqueadoParaEdicao(data, hojeIso)))];
+  if (!bloqueados.length) return;
+  const error = new Error(`Nova escala do mes vigente deve conter apenas dias futuros. Dias bloqueados recebidos: ${bloqueados.join(', ')}.`);
+  error.statusCode = 422;
+  error.details = bloqueados;
+  throw error;
+}
+
 async function getTableColumns(connection, tableName) {
   const result = await connection.execute(
     `select column_name from user_tab_columns where table_name = :tableName`,
@@ -518,6 +584,49 @@ async function getEscalaFuncionarioAtual({ lojaId, mesRef, escfuncId }) {
   });
 }
 
+async function getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId }) {
+  const latestFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId });
+  if (latestFuncionarioRevision === null) return null;
+  const ativaSql = await getAtivaSql(connection, 'p');
+  const result = await connection.execute(
+    `select
+        p.escprog_id,
+        p.mes_ref,
+        p.revisao,
+        p.oficializada,
+        p.loja,
+        p.chapa,
+        p.escfunc_id,
+        p.escsecao_id,
+        p.escfuncao_id,
+        d.escprogdia_id,
+        d.dt,
+        d.hr_ent1,
+        d.hr_sai1,
+        d.hr_ent2,
+        d.hr_sai2,
+        d.programacao
+     from sgn_esc_prog p
+     left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
+     where p.loja = :lojaId
+       and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+       and p.escfunc_id = :escfuncId
+       and p.revisao = :latestFuncionarioRevision
+       and ${ativaSql}
+     order by d.dt`,
+    { lojaId, mesRef, escfuncId, latestFuncionarioRevision },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+
+  const rows = result.rows || [];
+  if (!rows.length) return null;
+  return {
+    header: rows[0],
+    revisao: latestFuncionarioRevision,
+    dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id'))
+  };
+}
+
 async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
   return withConnection(async (connection) => {
     try {
@@ -560,6 +669,11 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
       const targetDay = targetDayResult.rows[0];
       if (!targetDay) return null;
       const targetDate = pick(targetDay, 'DT', 'dt');
+      if (isDiaBloqueadoParaEdicao(targetDate)) {
+        const error = new Error('Dias ja passados nao podem ser alterados manualmente.');
+        error.statusCode = 422;
+        throw error;
+      }
       const latestAnyFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId: loja, mesRef: mesRefKey, escfuncId, includeInactive: true });
       const nextRevision = latestAnyFuncionarioRevision === null ? latestFuncionarioRevision + 1 : latestAnyFuncionarioRevision + 1;
 
@@ -810,6 +924,15 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
 
       const saved = [];
       for (const funcionario of funcionarios) {
+        const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
+        const escalaAtualFuncionario = escfuncId
+          ? await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId })
+          : null;
+        if (escalaAtualFuncionario) {
+          assertSemAlteracaoEmDiasBloqueados(escalaAtualFuncionario.dias, funcionario.dias || []);
+        } else {
+          assertSemDiasBloqueadosEmNovaEscala(funcionario.dias || []);
+        }
         saved.push(await insertEscalaOracle(connection, {
           lojaId,
           mesRef,
@@ -851,6 +974,8 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
         error.statusCode = 404;
         throw error;
       }
+      const escalaAtualFuncionario = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+      assertSemAlteracaoEmDiasBloqueados(escalaAtualFuncionario?.dias || [], dias || []);
       const latestAnyFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
       const nextRevision = latestAnyFuncionarioRevision === null ? latestFuncionarioRevision + 1 : latestAnyFuncionarioRevision + 1;
       const ativaSql = await getAtivaSql(connection, 'p');
@@ -897,6 +1022,140 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
       });
       await connection.commit();
       return saved;
+    } catch (error) {
+      await connection.rollback();
+      throw normalizeOracleSaveError(error);
+    }
+  });
+}
+
+function isDescansoProgramacao(value) {
+  return String(value || 'TRB').trim().toUpperCase() !== 'TRB';
+}
+
+function getHorarioTrabalhoBase(dias = []) {
+  const diaTrabalho = [...dias]
+    .sort((a, b) => formatDateValue(pick(a, 'DT', 'dt') || a.data).localeCompare(formatDateValue(pick(b, 'DT', 'dt') || b.data)))
+    .find((dia) => !isDescansoProgramacao(pick(dia, 'PROGRAMACAO', 'programacao'))
+      && /^\d{2}:\d{2}$/.test(String(pick(dia, 'HR_ENT1', 'hrEnt1') || '')));
+
+  return {
+    hrEnt1: pick(diaTrabalho, 'HR_ENT1', 'hrEnt1') || '08:00',
+    hrSai1: pick(diaTrabalho, 'HR_SAI1', 'hrSai1') || '12:00',
+    hrEnt2: pick(diaTrabalho, 'HR_ENT2', 'hrEnt2') || '13:10',
+    hrSai2: pick(diaTrabalho, 'HR_SAI2', 'hrSai2') || '17:58'
+  };
+}
+
+function montarDiasReconciliadosRm(diasAtuais = [], rmFolgaDatas = []) {
+  const folgasRm = new Set((rmFolgaDatas || []).map(formatDateValue).filter(Boolean));
+  const horarioBase = getHorarioTrabalhoBase(diasAtuais);
+  const alteracoes = [];
+
+  const dias = (diasAtuais || []).map((diaAtual) => {
+    const data = formatDateValue(pick(diaAtual, 'DT', 'dt') || diaAtual.data);
+    const programacaoAtual = String(pick(diaAtual, 'PROGRAMACAO', 'programacao') || 'TRB').trim().toUpperCase() || 'TRB';
+    const descansoAtual = programacaoAtual !== 'TRB';
+    const rmTemFolga = folgasRm.has(data);
+    let novo;
+
+    if (rmTemFolga) {
+      novo = {
+        data,
+        hrEnt1: null,
+        hrSai1: null,
+        hrEnt2: null,
+        hrSai2: null,
+        programacao: 'F',
+        justificativa: 'Sincronizacao RM'
+      };
+    } else if (programacaoAtual === 'F') {
+      novo = {
+        data,
+        hrEnt1: horarioBase.hrEnt1,
+        hrSai1: horarioBase.hrSai1,
+        hrEnt2: horarioBase.hrEnt2,
+        hrSai2: horarioBase.hrSai2,
+        programacao: 'TRB',
+        justificativa: 'Sincronizacao RM'
+      };
+    } else {
+      novo = {
+        data,
+        hrEnt1: descansoAtual ? null : pick(diaAtual, 'HR_ENT1', 'hrEnt1'),
+        hrSai1: descansoAtual ? null : pick(diaAtual, 'HR_SAI1', 'hrSai1'),
+        hrEnt2: descansoAtual ? null : pick(diaAtual, 'HR_ENT2', 'hrEnt2'),
+        hrSai2: descansoAtual ? null : pick(diaAtual, 'HR_SAI2', 'hrSai2'),
+        programacao: programacaoAtual,
+        justificativa: null
+      };
+    }
+
+    if (!diasSaoIguais(diaAtual, novo)) {
+      alteracoes.push({
+        data,
+        anterior: normalizeDiaComparavel(diaAtual),
+        novo: normalizeDiaComparavel(novo),
+        origem: 'RM'
+      });
+    }
+
+    return novo;
+  });
+
+  return { dias, alteracoes };
+}
+
+async function sincronizarEscalaFuncionarioComRm({ lojaId, mesRef, escfuncId, rmFolgaDatas = [] }) {
+  return withConnection(async (connection) => {
+    try {
+      if (isMesFinalizado(mesRef)) {
+        const error = new Error('Escala finalizada nao pode ser sincronizada.');
+        error.statusCode = 422;
+        throw error;
+      }
+
+      const escalaAtual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+      if (!escalaAtual) {
+        const error = new Error('Escala do funcionario nao encontrada no mes informado.');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const { dias, alteracoes } = montarDiasReconciliadosRm(escalaAtual.dias, rmFolgaDatas);
+      if (!alteracoes.length) {
+        return {
+          alterado: false,
+          revisao: escalaAtual.revisao,
+          escprogId: pick(escalaAtual.header, 'ESCPROG_ID', 'escprog_id'),
+          alteracoes: []
+        };
+      }
+
+      const latestAnyFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
+      const nextRevision = latestAnyFuncionarioRevision === null ? escalaAtual.revisao + 1 : latestAnyFuncionarioRevision + 1;
+      const saved = await insertEscalaOracle(connection, {
+        lojaId,
+        mesRef,
+        funcionario: {
+          escfuncId,
+          escsecaoId: pick(escalaAtual.header, 'ESCSECAO_ID', 'escsecao_id'),
+          escfuncaoId: pick(escalaAtual.header, 'ESCFUNCAO_ID', 'escfuncao_id'),
+          chapa: pick(escalaAtual.header, 'CHAPA', 'chapa')
+        },
+        dias,
+        oficializada: 0,
+        revisao: nextRevision
+      });
+
+      await connection.commit();
+      return {
+        ...saved,
+        alterado: true,
+        revisaoAnterior: escalaAtual.revisao,
+        revisao: nextRevision,
+        alteracoes
+      };
     } catch (error) {
       await connection.rollback();
       throw normalizeOracleSaveError(error);
@@ -997,7 +1256,13 @@ module.exports = {
   saveEscala,
   saveEscalasBatch,
   saveEscalaFuncionarioRevision,
+  sincronizarEscalaFuncionarioComRm,
   oficializarEscala,
   inativarEscala,
-  validateAusencias
+  validateAusencias,
+  _private: {
+    getAlteracoesDiasBloqueados,
+    isDiaBloqueadoParaEdicao,
+    montarDiasReconciliadosRm
+  }
 };

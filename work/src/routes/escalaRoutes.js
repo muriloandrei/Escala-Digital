@@ -44,6 +44,12 @@ const diaSchema = z.object({
   PROGRAMACAO: z.string().max(3).optional().default('TRB')
 }).strict();
 
+const syncFuncionarioRmSchema = z.object({
+  lojaId: z.number().int().positive(),
+  mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  escfuncId: z.number().int().positive()
+});
+
 router.use(requireAuth);
 
 router.get('/regras', requirePermission('regras', 'visualizar'), async (req, res) => {
@@ -73,6 +79,11 @@ function canAccessLoja(req, loja) {
 function getLojasPermitidasParaConsulta(req) {
   if (req.user?.perfil === 'ADMIN' && (!req.user.lojas || req.user.lojas.length === 0)) return null;
   return req.user?.lojas || [];
+}
+
+function getMonthEndIso(mesRef) {
+  const ref = new Date(`${String(mesRef).slice(0, 10)}T00:00:00`);
+  return new Date(ref.getFullYear(), ref.getMonth() + 1, 0).toISOString().slice(0, 10);
 }
 
 async function getLojasPermitidas(req, requestedLojaId = 'all') {
@@ -344,6 +355,61 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
     return res.status(201).json({ saved: [saved] });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Formato da escala invalido.', details: error.errors });
+    return next(error);
+  }
+});
+
+router.post('/funcionario/sincronizar-rm', requirePermission('escalas-funcionarios', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = syncFuncionarioRmSchema.parse(req.body);
+    const funcionarios = await catalogService.listFuncionariosByLoja(payload.lojaId, { mesRef: payload.mesRef });
+    const funcionario = funcionarios.find((item) => Number(item.ESCFUNC_ID) === Number(payload.escfuncId));
+    if (!funcionario) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja informada.' });
+    if (!funcionario.CPF) {
+      return res.status(422).json({ error: `CPF nao cadastrado para o funcionario ${funcionario.CHAPA}. Atualize SGN_ESC_FUNCIONARIO.CPF antes de sincronizar com o RM.` });
+    }
+
+    const consultaRm = await rmIntegrationService.consultarFolgasFuncionarioMes({
+      cpf: funcionario.CPF,
+      inicio: payload.mesRef,
+      fim: getMonthEndIso(payload.mesRef),
+      codColigadaFallback: funcionario.CODCOLIGADA
+    });
+
+    const saved = await escalaService.sincronizarEscalaFuncionarioComRm({
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      escfuncId: payload.escfuncId,
+      rmFolgaDatas: consultaRm.datas
+    });
+
+    await auditService.registerAudit({
+      action: 'SINCRONIZAR_FUNCIONARIO_RM',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      revisao: saved.revisao,
+      referenceId: saved.escprogId,
+      details: {
+        escfuncId: payload.escfuncId,
+        chapa: funcionario.CHAPA,
+        codTabFolga: consultaRm.codTabFolga,
+        folgasRm: consultaRm.datas.length,
+        alterado: saved.alterado,
+        alteracoes: saved.alteracoes?.length || 0,
+        revisaoAnterior: saved.revisaoAnterior ?? null,
+        revisaoNova: saved.revisao
+      }
+    });
+
+    return res.json({
+      ok: true,
+      funcionario: { escfuncId: payload.escfuncId, chapa: funcionario.CHAPA, nome: funcionario.NOME },
+      rm: { codTabFolga: consultaRm.codTabFolga, folgas: consultaRm.datas },
+      saved
+    });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de sincronizacao invalidos.', details: error.errors });
     return next(error);
   }
 });

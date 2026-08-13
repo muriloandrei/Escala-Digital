@@ -124,6 +124,7 @@
         const escalaFuncionarioEdicaoResumo = document.getElementById('escalaFuncionarioEdicaoResumo');
         const escalaFuncionarioDetalhadaContent = document.getElementById('escalaFuncionarioDetalhadaContent');
         const voltarEscalaFuncionariosBtn = document.getElementById('voltarEscalaFuncionariosBtn');
+        const atualizarFuncionarioRmBtn = document.getElementById('atualizarFuncionarioRmBtn');
         const distribuirFolgasFuncionarioBtn = document.getElementById('distribuirFolgasFuncionarioBtn');
         const validarEscalaFuncionarioBtn = document.getElementById('validarEscalaFuncionarioBtn');
         const imprimirEscalaFuncionarioBtn = document.getElementById('imprimirEscalaFuncionarioBtn');
@@ -1684,6 +1685,10 @@
         };
 
         const abrirModalEdicaoDiaDetalhada = async (colabDiv, dia) => {
+            if (isDiaMesBloqueadoParaEdicao(anoSelect.value, mesSelect.value, dia)) {
+                showInfoModal('Dias ja passados nao podem ser alterados manualmente.', 'info');
+                return;
+            }
             const inicioCell = colabDiv.querySelector('tbody tr[data-key="inicio"]')?.cells[dia];
             if (!inicioCell) return;
             const descansoAtual = !/^\d{2}:\d{2}$/.test(inicioCell.textContent.trim());
@@ -2962,6 +2967,12 @@
 
         const isProgramacaoDescanso = (programacao) => String(programacao || 'TRB').toUpperCase() !== 'TRB';
         const getValorDescanso = (dia) => String(dia?.PROGRAMACAO || 'F').toUpperCase();
+        const getHojeIsoApp = () => {
+            const hoje = new Date();
+            return hoje.getFullYear() + '-' + String(hoje.getMonth() + 1).padStart(2, '0') + '-' + String(hoje.getDate()).padStart(2, '0');
+        };
+        const isDataBloqueadaParaEdicao = (dataIso) => String(dataIso || '').slice(0, 10) <= getHojeIsoApp();
+        const isDiaMesBloqueadoParaEdicao = (ano, mes, dia) => isDataBloqueadaParaEdicao(formatDateForDb(Number(ano), Number(mes), Number(dia)));
 
         const validarDiasEscalaFuncionario = (dias, nome) => {
             const errors = [];
@@ -3027,7 +3038,9 @@
             table += '</tr><tr><th>DIA</th>';
             for(let d=1;d<=diasNoMes;d++) {
                 const dia = map.get(d);
-                table += '<th class="employee-day-header"><button type="button" class="bank-day-header-button funcionario-dia-edit" data-dia="' + d + '" title="Editar dia ' + d + '">' + d + '</button></th>';
+                const bloqueado = isDiaMesBloqueadoParaEdicao(ref.getFullYear(), ref.getMonth(), d) || isEscalaFuncionarioFinalizada();
+                const title = bloqueado ? 'Dia bloqueado para edicao' : 'Editar dia ' + d;
+                table += '<th class="employee-day-header"><button type="button" class="bank-day-header-button funcionario-dia-edit" data-dia="' + d + '" title="' + title + '"' + (bloqueado ? ' disabled' : '') + '>' + d + '</button></th>';
             }
             table += '</tr></thead><tbody>';
             fields.forEach(field => {
@@ -3115,6 +3128,7 @@
             escalaFuncionarioEdicaoResumo.textContent='Loja '+lojaId+' | '+getNomeMesTabela(mesRef)+' '+mesRef.slice(0,4)+' | Revisão '+escala.revisao+' | '+escala.status;
             const finalizada=escala.status==='FINALIZADA';
             if (distribuirFolgasFuncionarioBtn) distribuirFolgasFuncionarioBtn.disabled = finalizada;
+            if (atualizarFuncionarioRmBtn) atualizarFuncionarioRmBtn.disabled = finalizada;
             atualizarBotaoSalvarEscalaFuncionario();
             await carregarTiposDescansoCache(false);
             await carregarMesesDisponiveisFuncionario(escfuncId, lojaId, Number(mesRef.slice(0, 4)));
@@ -3220,6 +3234,10 @@
             }
             const button=event.target.closest('.funcionario-dia-edit');
             if(!button||!escalaFuncionarioEdicaoAtual)return;
+            if (button.disabled || isDataBloqueadaParaEdicao(escalaFuncionarioEdicaoAtual.mesRef.slice(0, 8) + String(button.dataset.dia).padStart(2, '0'))) {
+                showInfoModal('Dias ja passados nao podem ser alterados manualmente.', 'info');
+                return;
+            }
             const dia=escalaFuncionarioEdicaoAtual.dias.find(item=>Number(String(item.DT).slice(8,10))===Number(button.dataset.dia));
             if(!dia)return;
             const numeroDia = Number(button.dataset.dia);
@@ -3243,9 +3261,14 @@
             if (!atual) return;
             const dias = [...atual.dias].sort((a,b) => String(a.DT).localeCompare(String(b.DT)));
             const horarioBase = dias.find(d => !isProgramacaoDescanso(d.PROGRAMACAO) && d.HR_ENT1 !== 'F') || { HR_ENT1:'08:00', HR_SAI1:'12:00', HR_ENT2:'13:00', HR_SAI2:'16:20' };
-            dias.forEach(d => { d.PROGRAMACAO='TRB'; d.HR_ENT1=horarioBase.HR_ENT1; d.HR_SAI1=horarioBase.HR_SAI1; d.HR_ENT2=horarioBase.HR_ENT2; d.HR_SAI2=horarioBase.HR_SAI2; });
+            const diasEditaveis = dias.filter(d => !isDataBloqueadaParaEdicao(String(d.DT).slice(0, 10)));
+            if (!diasEditaveis.length) {
+                showInfoModal('Nao ha dias futuros disponiveis para redistribuir neste mes.', 'info');
+                return;
+            }
+            diasEditaveis.forEach(d => { d.PROGRAMACAO='TRB'; d.HR_ENT1=horarioBase.HR_ENT1; d.HR_SAI1=horarioBase.HR_SAI1; d.HR_ENT2=horarioBase.HR_ENT2; d.HR_SAI2=horarioBase.HR_SAI2; });
             const semanas = new Map();
-            dias.forEach(dia => {
+            diasEditaveis.forEach(dia => {
                 const data = new Date(String(dia.DT).slice(0,10) + 'T00:00:00');
                 const segunda = new Date(data); segunda.setDate(data.getDate() - ((data.getDay()+6)%7));
                 const key = segunda.toISOString().slice(0,10);
@@ -3265,7 +3288,7 @@
                 folgas.forEach(({dia}) => { dia.PROGRAMACAO='F'; dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F'; });
             });
             let consecutivos=0;
-            dias.forEach(dia => { if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>5){dia.PROGRAMACAO='F';dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F';consecutivos=0;} });
+            dias.forEach(dia => { if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>5 && !isDataBloqueadaParaEdicao(String(dia.DT).slice(0,10))){dia.PROGRAMACAO='F';dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F';consecutivos=0;} });
             invalidarValidacaoEscalaFuncionario('Distribuição de folgas pendente de validação.');
             renderizarEscalaFuncionarioEdicao();
             showInfoModal('Folgas 5x2 distribuídas. Revise e valide antes de salvar.','success');
@@ -3284,6 +3307,44 @@
         };
         validarEscalaFuncionarioBtn?.addEventListener('click',validarEscalaFuncionarioAtual);
         imprimirEscalaFuncionarioBtn?.addEventListener('click',()=>{if(!escalaFuncionarioEdicaoAtual)return;printContainer.innerHTML='<div class="print-title">Escala - '+escapeHtml(escalaFuncionarioEdicaoAtual.nome)+'</div>'+escalaFuncionarioDetalhadaContent.innerHTML;window.print();});
+
+        atualizarFuncionarioRmBtn?.addEventListener('click', async () => {
+            if (!hasPermission('escalas-funcionarios', 'editar')) {
+                showInfoModal('Usuario sem permissao para atualizar escala do funcionario.', 'error');
+                return;
+            }
+            const atual = escalaFuncionarioEdicaoAtual;
+            if (!atual) return;
+            const confirmacao = await showInputModal({
+                title: 'Atualizar Funcionario pelo RM',
+                inputs: [{ type: 'message', text: 'O sistema consultara as folgas do RM para este funcionario e criara uma nova revisao somente se houver divergencia com a escala local.' }],
+                cancelText: 'Cancelar',
+                confirmText: 'Atualizar'
+            });
+            if (!confirmacao) return;
+            atualizarFuncionarioRmBtn.disabled = true;
+            try {
+                const result = await apiRequest('/api/escalas/funcionario/sincronizar-rm', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        lojaId: atual.lojaId,
+                        mesRef: atual.mesRef,
+                        escfuncId: atual.escfuncId
+                    })
+                });
+                const alteracoes = result.saved?.alteracoes?.length || 0;
+                const folgasRm = result.rm?.folgas?.length || 0;
+                const mensagem = result.saved?.alterado
+                    ? 'Funcionario atualizado pelo RM. Folgas RM: ' + folgasRm + '. Dias alterados: ' + alteracoes + '. Nova revisao: ' + result.saved.revisao + '.'
+                    : 'Funcionario ja estava sincronizado com o RM. Folgas RM: ' + folgasRm + '.';
+                showInfoModal(mensagem, result.saved?.alterado ? 'success' : 'info');
+                await carregarEscalaFuncionarioEdicao(atual.escfuncId, atual.lojaId, atual.mesRef);
+            } catch (error) {
+                showInfoModal(error.details ? error.details.join(' ') : 'Nao foi possivel atualizar o funcionario pelo RM: ' + error.message, 'error');
+            } finally {
+                if (atualizarFuncionarioRmBtn) atualizarFuncionarioRmBtn.disabled = isEscalaFuncionarioFinalizada();
+            }
+        });
 
         salvarEscalaFuncionarioBtn?.addEventListener('click', async () => {
             if (!hasPermission('escalas-funcionarios', 'editar')) {
@@ -4039,15 +4100,16 @@
                         const turno = colaborador.turnos[dia] || {};
                         const programacaoDia = String(turno.inicio || '').trim().toUpperCase();
                         const isFolga = !/^\d{2}:\d{2}$/.test(programacaoDia);
+                        const data = formatDateForDb(escalaSalva.ano, escalaSalva.mes, parseInt(dia, 10));
                         return {
-                            data: formatDateForDb(escalaSalva.ano, escalaSalva.mes, parseInt(dia, 10)),
+                            data,
                             hrEnt1: isFolga ? null : (turno.inicio || null),
                             hrSai1: isFolga ? null : (turno.inicioIntervalo || null),
                             hrEnt2: isFolga ? null : (turno.fimIntervalo || null),
                             hrSai2: isFolga ? null : (turno.fim || null),
                             programacao: isFolga ? (programacaoDia || 'F') : 'TRB'
                         };
-                    })
+                    }).filter(dia => !isDataBloqueadaParaEdicao(dia.data))
                 }));
 
             return { lojaId, mesRef, escalaOrigemId: escalaSalva.id, funcionarios, oficializada: 0 };
@@ -4514,7 +4576,8 @@
                 table += '</tr><tr><th>DIA</th>';
                 for (let dia = 1; dia <= diasNoMes; dia += 1) {
                     const registro = funcionario.dias.get(dia);
-                    const dayContent = !somenteLeitura && registro ? '<button type="button" class="bank-day-header-button bank-day-edit" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" title="Editar dia ' + dia + '">' + dia + '</button>' : dia;
+                    const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia);
+                    const dayContent = !somenteLeitura && registro ? '<button type="button" class="bank-day-header-button bank-day-edit" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" title="' + (bloqueado ? 'Dia bloqueado para edicao' : 'Editar dia ' + dia) + '"' + (bloqueado ? ' disabled' : '') + '>' + dia + '</button>' : dia;
                     table += '<th>' + dayContent + '</th>';
                 }
                 table += '</tr></thead><tbody>';
@@ -4706,6 +4769,10 @@
             }
             const button = event.target.closest('.bank-day-edit');
             if (!button) return;
+            if (button.disabled) {
+                showInfoModal('Dias ja passados nao podem ser alterados manualmente.', 'info');
+                return;
+            }
             editarDiaEscalaPorId(button.dataset.escprogId, button.dataset.escprogdiaId);
         });
 

@@ -7,3 +7,4 @@ require('./env.test');
 require('./schedule-diff.test');
 require('./error-handler.test');
 require('./rm-integration.test');
+require('./escala-sync-rm.test');
