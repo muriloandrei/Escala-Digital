@@ -2218,7 +2218,7 @@
             try {
                 await apiRequest('/api/auth/logout', { method: 'POST' });
             } finally {
-                window.location.href = '/login.html';
+                window.location.href = '/';
             }
         });
 

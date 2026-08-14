@@ -55,6 +55,10 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'login.html'));
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', database: 'oracle' });
 });
@@ -78,7 +82,7 @@ const apiLimiter = rateLimit({
 
 function redirectToLoginWhenMissingSession(req, res, next) {
   if (!req.cookies.access_token) {
-    return res.redirect('/login.html');
+    return res.redirect('/');
   }
 
   return next();
@@ -99,7 +103,7 @@ app.use('/api/diagnostics', diagnosticsRoutes);
 app.use('/api', notFound);
 
 app.get('*', (req, res) => {
-  res.redirect('/login.html');
+  res.redirect('/');
 });
 
 app.use(errorHandler);
