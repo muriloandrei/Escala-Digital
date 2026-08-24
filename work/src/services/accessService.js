@@ -143,6 +143,73 @@ function buildInClause(field, values, binds, prefix) {
   return `${field} in (${placeholders.join(', ')})`;
 }
 
+function buildUsuariosAcessoBaseSql(requestUser, search = '') {
+  const binds = {};
+  const filters = [];
+
+  if (!isAdminUser(requestUser)) {
+    const lojasPermitidas = (requestUser?.lojas || []).map(Number).filter(Boolean);
+    filters.push(buildInClause('ulx.loja', lojasPermitidas, binds, 'lojaUsuario'));
+  }
+
+  const searchText = String(search || '').trim().toLowerCase();
+  if (searchText) {
+    binds.search = `%${searchText}%`;
+    filters.push(`(
+      lower(u.login) like :search
+      or lower(u.nome) like :search
+      or lower(u.perfil) like :search
+      or lower(u.status) like :search
+      or exists (
+        select 1
+          from sgn_esc_usuario_loja uls
+         where uls.usuario_id = u.usuario_id
+           and to_char(uls.loja) like :search
+      )
+    )`);
+  }
+
+  const whereSql = filters.length
+    ? `where ${filters.map((filter) => {
+      if (filter.includes('ulx.loja')) {
+        return `exists (
+          select 1
+            from sgn_esc_usuario_loja ulx
+           where ulx.usuario_id = u.usuario_id
+             and ${filter}
+        )`;
+      }
+      return filter;
+    }).join(' and ')}`
+    : '';
+
+  return {
+    binds,
+    sql: `with usuarios_base as (
+      select
+          u.usuario_id,
+          u.login,
+          u.nome,
+          u.perfil,
+          u.status,
+          listagg(ul.loja, ', ') within group (order by ul.loja) as lojas
+       from sgn_esc_usuario u
+       left join sgn_esc_usuario_loja ul on ul.usuario_id = u.usuario_id
+       ${whereSql}
+       group by u.usuario_id, u.login, u.nome, u.perfil, u.status
+    )`
+  };
+}
+
+function normalizeUsuarioRows(rows = []) {
+  return rows.map((row) => {
+    const lojas = pick(row, 'LOJAS', 'lojas')
+      ? String(pick(row, 'LOJAS', 'lojas')).split(',').map((loja) => Number(loja.trim()))
+      : [];
+    return normalizeUser(row, lojas);
+  });
+}
+
 async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
   if (!isLeaderUser(requestUser)) return null;
   const usuarioId = Number(requestUser?.sub || requestUser?.id || requestUser?.usuarioId || requestUser?.USUARIO_ID || 0);
@@ -351,28 +418,60 @@ async function saveLiberacaoSecoes({ requestUser, usuarioId, lojaId, secoes }) {
 
 async function listUsuariosAcesso(requestUser) {
   return withConnection(async (connection) => {
+    const base = buildUsuariosAcessoBaseSql(requestUser);
     const result = await connection.execute(
-      `select
-          u.usuario_id,
-          u.login,
-          u.nome,
-          u.perfil,
-          u.status,
-          listagg(ul.loja, ', ') within group (order by ul.loja) as lojas
-       from sgn_esc_usuario u
-       left join sgn_esc_usuario_loja ul on ul.usuario_id = u.usuario_id
-       group by u.usuario_id, u.login, u.nome, u.perfil, u.status
-       order by u.login`,
-      {},
+      `${base.sql}
+       select usuario_id, login, nome, perfil, status, lojas
+         from usuarios_base
+        order by lower(login), usuario_id`,
+      base.binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows.map((row) => {
-      const lojas = pick(row, 'LOJAS', 'lojas')
-        ? String(pick(row, 'LOJAS', 'lojas')).split(',').map((loja) => Number(loja.trim()))
-        : [];
-      return normalizeUser(row, lojas);
-    }).filter((usuario) => canSeeUser(requestUser, usuario.LOJAS));
+    return normalizeUsuarioRows(result.rows).filter((usuario) => canSeeUser(requestUser, usuario.LOJAS));
+  });
+}
+
+async function listUsuariosAcessoPaginado(requestUser, options = {}) {
+  const page = Math.max(1, Number(options.page) || 1);
+  const pageSize = Math.min(100, Math.max(5, Number(options.pageSize) || 20));
+  const startRow = ((page - 1) * pageSize) + 1;
+  const endRow = page * pageSize;
+  const base = buildUsuariosAcessoBaseSql(requestUser, options.search || '');
+
+  return withConnection(async (connection) => {
+    const totalResult = await connection.execute(
+      `${base.sql}
+       select count(*) as total
+         from usuarios_base`,
+      base.binds,
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    const total = Number(pick(totalResult.rows[0], 'TOTAL', 'total') || 0);
+    const result = await connection.execute(
+      `${base.sql}
+       select usuario_id, login, nome, perfil, status, lojas
+         from (
+           select usuarios_base.*,
+                  row_number() over (order by lower(login), usuario_id) as rn
+             from usuarios_base
+         )
+        where rn between :startRow and :endRow
+        order by rn`,
+      { ...base.binds, startRow, endRow },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return {
+      usuarios: normalizeUsuarioRows(result.rows),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize))
+      }
+    };
   });
 }
 
@@ -623,6 +722,7 @@ module.exports = {
   assertSecoesPermitidas,
   assertFuncionariosPermitidos,
   listUsuariosAcesso,
+  listUsuariosAcessoPaginado,
   updateUsuarioAcesso,
   createUsuarioAcesso,
   listPerfisAcesso,

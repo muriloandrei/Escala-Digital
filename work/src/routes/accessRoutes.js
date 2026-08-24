@@ -46,6 +46,12 @@ const liberacaoSecoesSchema = z.object({
   SECOES: z.array(z.number().int().positive()).default([])
 }).strict();
 
+const usuariosQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(5).max(100).default(20),
+  search: z.string().max(100).optional().default('')
+}).strict();
+
 router.use(requireAuth);
 
 router.get('/perfis', requirePermission('roles', 'visualizar'), async (req, res, next) => {
@@ -97,9 +103,13 @@ router.patch('/perfis/:perfilId', requirePermission('roles', 'editar'), async (r
 
 router.get('/usuarios', requirePermission('acessos', 'visualizar'), async (req, res, next) => {
   try {
-    const usuarios = await accessService.listUsuariosAcesso(req.user);
-    res.json({ usuarios });
+    const query = usuariosQuerySchema.parse(req.query);
+    const result = await accessService.listUsuariosAcessoPaginado(req.user, query);
+    res.json(result);
   } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Parametros de listagem invalidos.', details: error.errors });
+    }
     next(error);
   }
 });

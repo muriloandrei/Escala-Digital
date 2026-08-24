@@ -159,6 +159,12 @@
         const tiposDescansoStatusFiltro = document.getElementById('tiposDescansoStatusFiltro');
         const tabelaTiposDescansoBody = document.getElementById('tabelaTiposDescansoBody');
         const carregarAcessosBtn = document.getElementById('carregarAcessosBtn');
+        const acessosPesquisaInput = document.getElementById('acessosPesquisaInput');
+        const acessosPageSizeSelect = document.getElementById('acessosPageSizeSelect');
+        const acessosPaginationResumo = document.getElementById('acessosPaginationResumo');
+        const acessosPaginaAnteriorBtn = document.getElementById('acessosPaginaAnteriorBtn');
+        const acessosProximaPaginaBtn = document.getElementById('acessosProximaPaginaBtn');
+        const acessosPaginaAtual = document.getElementById('acessosPaginaAtual');
         const tabelaAcessosBody = document.getElementById('tabela-acessos-body');
         const liberacaoSecoesLojaSelect = document.getElementById('liberacaoSecoesLojaSelect');
         const liberacaoSecoesUsuarioSelect = document.getElementById('liberacaoSecoesUsuarioSelect');
@@ -778,6 +784,8 @@
         let lojasPermitidasCache = [];
         let usuarioSessaoCache = null;
         let usuariosAcessoCache = [];
+        let acessosPaginationState = { page: 1, pageSize: 20, total: 0, totalPages: 1, search: '' };
+        let acessosPesquisaTimeout = null;
         let liberacaoSecoesCache = { usuarios: [], secoes: [], liberadas: new Set(), selecionadasDisponiveis: new Set(), selecionadasLiberadas: new Set(), tableReady: false };
         let secoesTelaCache = [];
         let turnosTelaCache = [];
@@ -2098,6 +2106,21 @@
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
+        });
+        acessosPesquisaInput?.addEventListener('input', () => {
+            clearTimeout(acessosPesquisaTimeout);
+            acessosPesquisaTimeout = setTimeout(() => {
+                carregarAcessosTela(false, 1).catch(error => showInfoModal(error.message, 'error'));
+            }, 350);
+        });
+        acessosPageSizeSelect?.addEventListener('change', () => {
+            carregarAcessosTela(false, 1).catch(error => showInfoModal(error.message, 'error'));
+        });
+        acessosPaginaAnteriorBtn?.addEventListener('click', () => {
+            carregarAcessosTela(false, Math.max(1, acessosPaginationState.page - 1)).catch(error => showInfoModal(error.message, 'error'));
+        });
+        acessosProximaPaginaBtn?.addEventListener('click', () => {
+            carregarAcessosTela(false, Math.min(acessosPaginationState.totalPages, acessosPaginationState.page + 1)).catch(error => showInfoModal(error.message, 'error'));
         });
         const getPerfilAcessoOptions = async (selected = '') => {
             if (!perfisAcessoCache.length) await carregarPerfisAcesso();
@@ -3528,6 +3551,31 @@
             }
         });
 
+        function renderizarPaginacaoAcessos(pagination = {}) {
+            acessosPaginationState = {
+                ...acessosPaginationState,
+                page: Number(pagination.page || acessosPaginationState.page || 1),
+                pageSize: Number(pagination.pageSize || acessosPaginationState.pageSize || 20),
+                total: Number(pagination.total || 0),
+                totalPages: Math.max(1, Number(pagination.totalPages || 1))
+            };
+
+            const { page, pageSize, total, totalPages } = acessosPaginationState;
+            const inicio = total === 0 ? 0 : ((page - 1) * pageSize) + 1;
+            const fim = Math.min(total, page * pageSize);
+            if (acessosPaginationResumo) {
+                acessosPaginationResumo.textContent = total === 0
+                    ? '0 usuário(s)'
+                    : `${inicio}-${fim} de ${total} usuário(s)`;
+            }
+            if (acessosPaginaAtual) acessosPaginaAtual.textContent = `Página ${page} de ${totalPages}`;
+            if (acessosPaginaAnteriorBtn) acessosPaginaAnteriorBtn.disabled = page <= 1;
+            if (acessosProximaPaginaBtn) acessosProximaPaginaBtn.disabled = page >= totalPages;
+            if (acessosPageSizeSelect && String(acessosPageSizeSelect.value) !== String(pageSize)) {
+                acessosPageSizeSelect.value = String(pageSize);
+            }
+        }
+
         function renderizarAcessosTela(usuarios) {
             tabelaAcessosBody.innerHTML = '';
 
@@ -3543,10 +3591,10 @@
                 const isAdmin = hasPermission('acessos', 'editar') || hasPermission('acessos', 'inativar');
                 const row = `
                     <tr data-usuario-id="${usuario.USUARIO_ID}">
-                        <td data-label="Login">${usuario.LOGIN || ''}</td>
-                        <td data-label="Nome">${usuario.NOME || ''}</td>
-                        <td data-label="Perfil de Acesso">${usuario.PERFIL || ''}</td>
-                        <td data-label="Status">${statusLabel}</td>
+                        <td data-label="Login">${escapeHtml(usuario.LOGIN || '')}</td>
+                        <td data-label="Nome">${escapeHtml(usuario.NOME || '')}</td>
+                        <td data-label="Perfil de Acesso">${escapeHtml(usuario.PERFIL || '')}</td>
+                        <td data-label="Status">${escapeHtml(statusLabel)}</td>
                         <td data-label="Lojas Permitidas">
                             <span title="${escapeHtml(lojasArray.join(', '))}">${escapeHtml(lojas || '-')}</span>
                         </td>
@@ -3578,12 +3626,27 @@
         
         }
 
-        async function carregarAcessosTela(showSuccess = true) {
-            const data = await apiRequest('/api/acessos/usuarios');
+        async function carregarAcessosTela(showSuccess = true, page = acessosPaginationState.page) {
+            const pageSize = Number(acessosPageSizeSelect?.value || acessosPaginationState.pageSize || 20);
+            const search = String(acessosPesquisaInput?.value || '').trim();
+            const params = new URLSearchParams({
+                page: String(Math.max(1, Number(page) || 1)),
+                pageSize: String(pageSize)
+            });
+            if (search) params.set('search', search);
+            acessosPaginationState = { ...acessosPaginationState, page: Number(params.get('page')), pageSize, search };
+
+            tabelaAcessosBody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-8">Carregando usuários...</td></tr>';
+            const data = await apiRequest('/api/acessos/usuarios?' + params.toString());
+            if ((data.usuarios || []).length === 0 && data.pagination?.total > 0 && Number(data.pagination?.page || 1) > Number(data.pagination?.totalPages || 1)) {
+                await carregarAcessosTela(false, data.pagination.totalPages);
+                return;
+            }
             usuariosAcessoCache = data.usuarios || [];
+            renderizarPaginacaoAcessos(data.pagination || {});
             renderizarAcessosTela(usuariosAcessoCache);
             if (showSuccess) {
-                showInfoModal(`${(data.usuarios || []).length} usuário(s) carregado(s).`, 'success');
+                showInfoModal(`${usuariosAcessoCache.length} usuário(s) carregado(s) nesta página.`, 'success');
             }
         
         }

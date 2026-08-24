@@ -1557,6 +1557,38 @@
         }
         .catalog-filter-bar.two-filters { grid-template-columns: minmax(260px, 1fr) minmax(180px, 240px); }
         .catalog-filter-bar.three-filters { grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(180px, 240px)); }
+        .access-filter-bar {
+            align-items: center;
+            grid-template-columns: minmax(260px, 1fr) minmax(150px, 190px);
+        }
+        .access-pagination {
+            align-items: center;
+            border-top: 1px solid var(--cor-borda);
+            color: var(--cor-texto-leve);
+            display: flex;
+            gap: 14px;
+            justify-content: space-between;
+            margin-top: 14px;
+            padding-top: 14px;
+        }
+        .access-pagination-actions {
+            align-items: center;
+            display: flex;
+            gap: 10px;
+        }
+        .access-pagination-actions .action-button {
+            padding: 8px 12px;
+        }
+        .access-pagination-actions .action-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+        #acessosPaginaAtual {
+            color: var(--cor-texto);
+            font-weight: 600;
+            min-width: 110px;
+            text-align: center;
+        }
         .employee-scale-filters { grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(150px, 210px)); }
         .funcionarios-filter-bar {
             align-items: center;
@@ -1703,7 +1735,8 @@
             .catalog-filter-bar.three-filters,
             .funcionarios-filter-bar,
             .employee-scale-filters,
-            .section-access-filter-bar { grid-template-columns: 1fr 1fr; }
+            .section-access-filter-bar,
+            .access-filter-bar { grid-template-columns: 1fr 1fr; }
             .section-access-shuttle { grid-template-columns: 1fr; }
             .section-access-actions {
                 grid-template-columns: repeat(4, 42px);
@@ -1716,7 +1749,10 @@
             .catalog-filter-bar.three-filters,
             .funcionarios-filter-bar,
             .employee-scale-filters,
-            .section-access-filter-bar { grid-template-columns: 1fr; }
+            .section-access-filter-bar,
+            .access-filter-bar { grid-template-columns: 1fr; }
+            .access-pagination { align-items: flex-start; flex-direction: column; }
+            .access-pagination-actions { flex-wrap: wrap; width: 100%; }
         }
 
 
