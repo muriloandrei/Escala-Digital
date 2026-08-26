@@ -28,7 +28,7 @@
                     <li class="nav-group">
                         <button type="button" class="nav-parent" data-nav-group="escalas"><span class="material-symbols-outlined">event_note</span><span class="nav-label">Escalas</span><span class="material-symbols-outlined nav-chevron">expand_more</span></button>
                         <div class="nav-children">
-                            <a href="#/escalas-geradas" id="nav-registros"><span class="nav-child-dot"></span><span class="nav-label">Escalas Geradas</span></a>
+                            <a href="#/escalas-geradas" id="nav-registros"><span class="nav-child-dot"></span><span class="nav-label">Escalas Liberadas</span></a>
                             <a href="#/escalas-funcionarios" id="nav-escalas-funcionarios"><span class="nav-child-dot"></span><span class="nav-label">Escalas por Funcionário</span></a>
                             <a href="#/secoes" id="nav-secoes"><span class="nav-child-dot"></span><span class="nav-label">Seções</span></a>
                             <a href="#/turnos-secao" id="nav-turnos-secao"><span class="nav-child-dot"></span><span class="nav-label">Turnos por Seção</span></a>
@@ -59,16 +59,21 @@
 
         <main class="main-content">
             <header class="app-topbar no-print">
-                <nav class="app-breadcrumb" aria-label="Navegação estrutural">
-                    <span id="currentPageParent">Escalas</span>
-                    <span class="app-breadcrumb-separator">/</span>
-                    <strong id="currentPageTitle">Escalas Geradas</strong>
-                </nav>
+                <div class="topbar-left">
+                    <button id="sidebarToggleBtn" type="button" class="sidebar-toggle-button" aria-label="Abrir menu">
+                        <span class="material-symbols-outlined">menu</span>
+                    </button>
+                    <nav class="app-breadcrumb" aria-label="Navegação estrutural">
+                        <span id="currentPageParent">Escalas</span>
+                        <span class="app-breadcrumb-separator">/</span>
+                        <strong id="currentPageTitle">Escalas Liberadas</strong>
+                    </nav>
+                </div>
                 <div class="topbar-session">
-                    <span id="loggedUserStores" class="store-badge">
+                    <button id="loggedUserStores" type="button" class="store-badge store-badge-button">
                         <span class="material-symbols-outlined">storefront</span>
                         Carregando
-                    </span>
+                    </button>
                     <div class="session-summary">
                         <span id="loggedUserInitials" class="user-avatar" aria-hidden="true">US</span>
                         <div>
@@ -147,10 +152,10 @@
             <div id="registros-page">
                 <header class="main-header">
                     <div class="page-title-group">
-                        <h1>Escalas Geradas</h1>
-                        <p>Visualize e gerencie todas as escalas criadas.</p>
+                        <h1>Escalas Liberadas</h1>
+                        <p>Visualize e gerencie as escalas abertas para edição e oficialização.</p>
                     </div>
-                    <div class="header-actions">
+                    <div class="header-actions hidden">
                         <button class="action-button" id="goToTimelineBtn">
                             <span class="material-symbols-outlined">add</span>
                             Criar Nova Escala
@@ -178,7 +183,7 @@
                 </div>
 
                 <div class="table-card mt-6">
-                    <div class="escala-filter-bar" aria-label="Filtros de escalas geradas">
+                    <div class="escala-filter-bar" aria-label="Filtros de Escalas Liberadas">
                         <label class="escala-search-field" for="escalasPesquisaInput">
                             <span class="material-symbols-outlined">search</span>
                             <input id="escalasPesquisaInput" type="search" placeholder="Buscar m&ecirc;s ou loja" autocomplete="off">

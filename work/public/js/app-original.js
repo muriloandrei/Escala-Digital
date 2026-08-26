@@ -187,6 +187,7 @@
         const loggedUserInitials = document.getElementById('loggedUserInitials');
         const loggedUserRole = document.getElementById('loggedUserRole');
         const logoutAppBtn = document.getElementById('logoutAppBtn');
+        const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
         const abrirTurnoModalBtn = document.getElementById('abrirTurnoModalBtn');
         const turnoModal = document.getElementById('turnoModal');
         const closeTurnoModalBtn = document.getElementById('closeTurnoModalBtn');
@@ -593,10 +594,10 @@
         }
 
         let hashNavigationLock = false;
-        let currentHashRoute = (window.location.hash || '#/home').replace(/^#\/?/, '') || 'home';
+        let currentHashRoute = (window.location.hash || '#/escalas-geradas').replace(/^#\/?/, '') || 'escalas-geradas';
 
         async function handleHashNavigation() {
-            const pageKey = (window.location.hash || '#/home').replace(/^#\/?/, '') || 'home';
+            const pageKey = (window.location.hash || '#/escalas-geradas').replace(/^#\/?/, '') || 'escalas-geradas';
             if (hashNavigationLock) {
                 currentHashRoute = pageKey;
                 navigateToPage(pageKey);
@@ -783,6 +784,7 @@
         let turnosSecaoCache = [];
         let escalaDetalheAtual = { escprogId: null, lojaId: null, mesRef: null, modo: 'individual', dias: [], secaoAtiva: null, secoes: [] };
         let lojasPermitidasCache = [];
+        let lojaPrincipalCache = null;
         let usuarioSessaoCache = null;
         let usuariosAcessoCache = [];
         let acessosPaginationState = { page: 1, pageSize: 20, total: 0, totalPages: 1, search: '' };
@@ -808,6 +810,34 @@
             return hasPermission('escalas', 'criar') && !isPerfilLiderSessao();
         }
         const getLojaCodigo = (loja) => loja?.LOJA ?? loja?.loja;
+        const getLojaPrincipalStorageKey = () => {
+            const id = usuarioSessaoCache?.sub || usuarioSessaoCache?.id || usuarioSessaoCache?.usuarioId || usuarioSessaoCache?.login || 'anonimo';
+            return 'escala_loja_principal_' + String(id);
+        };
+        const getLojaPrincipal = () => {
+            const permitidas = lojasPermitidasCache.map(Number).filter(Boolean);
+            const salva = Number(localStorage.getItem(getLojaPrincipalStorageKey()) || 0);
+            if (salva && permitidas.includes(salva)) return String(salva);
+            const atual = Number(lojaPrincipalCache || 0);
+            if (atual && permitidas.includes(atual)) return String(atual);
+            return permitidas.length ? String(permitidas[0]) : '';
+        };
+        const setLojaPrincipal = (loja) => {
+            const value = Number(loja || 0);
+            if (!value || !lojasPermitidasCache.includes(value)) return '';
+            lojaPrincipalCache = String(value);
+            localStorage.setItem(getLojaPrincipalStorageKey(), String(value));
+            return String(value);
+        };
+        const atualizarBadgeLojaPrincipal = () => {
+            if (!loggedUserStores) return;
+            const lojas = Array.isArray(usuarioSessaoCache?.lojas) ? usuarioSessaoCache.lojas : lojasPermitidasCache;
+            const lojaPrincipal = getLojaPrincipal();
+            const labelPrincipal = lojaPrincipal ? `Loja principal ${lojaPrincipal}` : 'Sem loja principal';
+            loggedUserStores.innerHTML = '<span class="material-symbols-outlined">storefront</span>' + labelPrincipal;
+            loggedUserStores.title = lojas.length > 0 ? `Lojas permitidas: ${lojas.join(', ')}` : 'Sem loja vinculada';
+            loggedUserStores.disabled = lojas.length <= 1;
+        };
         
         const { timeToMinutes, minutesToTime, hoursToMinutes } = window.EscalaRulesCore;
         const { showInfoModal, hideInfoModal, showInputModal } = window.EscalaModal;
@@ -2218,10 +2248,7 @@
 
             if (loggedUserRole) loggedUserRole.textContent = user.perfil === 'ADMIN' ? 'Admin' : (user.perfil || 'Usuário');
 
-            if (loggedUserStores) {
-                loggedUserStores.innerHTML = '<span class="material-symbols-outlined">storefront</span>' + (lojas.length === 1 ? '1 loja' : `${lojas.length} lojas`);
-                loggedUserStores.title = lojas.length > 0 ? `Lojas permitidas: ${lojas.join(', ')}` : 'Sem loja vinculada';
-            }
+            atualizarBadgeLojaPrincipal();
         };
 
         const configurarAcoesAdmin = () => {
@@ -2244,6 +2271,45 @@
             } finally {
                 window.location.href = '/';
             }
+        });
+
+        sidebarToggleBtn?.addEventListener('click', () => {
+            document.body.classList.toggle('sidebar-mobile-open');
+        });
+
+        document.querySelector('.sidebar')?.addEventListener('click', (event) => {
+            if (!event.target.closest('a')) return;
+            document.body.classList.remove('sidebar-mobile-open');
+        });
+
+        loggedUserStores?.addEventListener('click', async () => {
+            if (lojasPermitidasCache.length <= 1) return;
+            const atual = getLojaPrincipal();
+            const values = await showInputModal({
+                title: 'Loja principal',
+                inputs: [
+                    { type: 'message', text: 'Selecione a loja usada como padrão ao abrir telas com filtro de loja.' },
+                    {
+                        label: 'Loja principal',
+                        type: 'select',
+                        id: 'loja-principal',
+                        value: atual,
+                        options: lojasPermitidasCache.map((loja) => ({ value: String(loja), label: 'Loja ' + loja })),
+                        required: true
+                    }
+                ],
+                cancelText: 'Cancelar',
+                confirmText: 'Salvar'
+            });
+            if (!values) return;
+            const loja = setLojaPrincipal(values['loja-principal']);
+            if (!loja) return;
+            [lojaEscalaSelect, funcionariosLojaSelect, homeLojaSelect, escalasFiltroLoja, secoesLojaSelect, secaoFormLoja, turnosSecaoLojaSelect, escalaFuncionarioLoja, historicoLojaSelect, liberacaoSecoesLojaSelect]
+                .forEach((select) => {
+                    if (select && Array.from(select.options || []).some((option) => option.value === loja)) select.value = loja;
+                });
+            atualizarBadgeLojaPrincipal();
+            handleHashNavigation();
         });
 
         const carregarEstadoServidor = async () => {
@@ -2344,19 +2410,21 @@
                 liberacaoSecoesLojaSelect?.appendChild(option.cloneNode(true));
             });
 
+            const lojaPrincipal = getLojaPrincipal() || setLojaPrincipal(getLojaCodigo(lojas[0]));
             const lojaSelecionada = lojasPermitidasCache.includes(Number(lojaAtual))
                 ? String(lojaAtual)
-                : String(getLojaCodigo(lojas[0]));
+                : lojaPrincipal;
             lojaEscalaSelect.value = lojaSelecionada;
-            funcionariosLojaSelect.value = 'all';
+            funcionariosLojaSelect.value = lojaSelecionada;
             if (homeLojaSelect) homeLojaSelect.value = lojaSelecionada;
-            if (escalasFiltroLoja) escalasFiltroLoja.value = lojasPermitidasCache.length > 1 ? 'all' : lojaSelecionada;
-            if (secoesLojaSelect) secoesLojaSelect.value = 'all';
+            if (escalasFiltroLoja) escalasFiltroLoja.value = lojaSelecionada;
+            if (secoesLojaSelect) secoesLojaSelect.value = lojaSelecionada;
             if (secaoFormLoja) secaoFormLoja.value = lojaSelecionada;
-            if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = 'all';
-            if (escalaFuncionarioLoja) escalaFuncionarioLoja.value = lojasPermitidasCache.length > 1 ? 'all' : lojaSelecionada;
-            if (historicoLojaSelect) historicoLojaSelect.value = lojasPermitidasCache.length > 1 ? 'all' : lojaSelecionada;
+            if (turnosSecaoLojaSelect) turnosSecaoLojaSelect.value = lojaSelecionada;
+            if (escalaFuncionarioLoja) escalaFuncionarioLoja.value = lojaSelecionada;
+            if (historicoLojaSelect) historicoLojaSelect.value = lojaSelecionada;
             if (liberacaoSecoesLojaSelect) liberacaoSecoesLojaSelect.value = lojaSelecionada;
+            atualizarBadgeLojaPrincipal();
             return lojas;
         };
 
@@ -5871,6 +5939,10 @@
             applyMainTimelineZoom();
             renderizarTimelineCompleta('timeline-content'); 
             atualizarContadoresHome();
+            if (!window.location.hash) {
+                window.location.hash = isPerfilLiderSessao() ? '/turnos-secao' : '/escalas-geradas';
+                return;
+            }
             handleHashNavigation(); 
             renderizarTabelaRegistros();
             // Fluxos de importacao/backup local ficam desativados: o banco e a origem oficial.

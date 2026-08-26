@@ -6,6 +6,7 @@ const catalogService = require('../services/catalogService');
 const accessService = require('../services/accessService');
 const auditService = require('../services/auditService');
 const rmIntegrationService = require('../services/rmIntegrationService');
+const monthlyReleaseService = require('../services/monthlyReleaseService');
 const { REGRAS_VIGENTES, validateEscalaPayload } = require('../rules/escalaRules');
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
 
@@ -55,6 +56,35 @@ router.use(requireAuth);
 
 router.get('/regras', requirePermission('regras', 'visualizar'), async (req, res) => {
   res.json({ regras: REGRAS_VIGENTES });
+});
+
+router.post('/liberar-mensal', requirePermission('escalas', 'criar'), async (req, res, next) => {
+  try {
+    if (!accessService.canCreateEscala(req.user)) {
+      return res.status(403).json({ error: 'Perfil Lider nao pode liberar novas escalas.' });
+    }
+    const payload = z.object({
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      lojas: z.array(z.number().int().positive()).optional()
+    }).parse(req.body);
+    const lojasPermitidas = await getLojasPermitidas(req, 'all');
+    const lojasSolicitadas = payload.lojas?.length ? payload.lojas : lojasPermitidas;
+    const permitidasSet = new Set(lojasPermitidas.map(Number));
+    const lojas = lojasSolicitadas.map(Number).filter((loja) => permitidasSet.has(loja));
+    if (!lojas.length) return res.status(403).json({ error: 'Nenhuma loja permitida para liberacao.' });
+
+    const resultados = await monthlyReleaseService.liberarEscalasMensais({ mesRef: payload.mesRef, lojas });
+    await auditService.registerAudit({
+      action: 'LIBERAR_ESCALA_MENSAL',
+      user: req.user,
+      mesRef: payload.mesRef,
+      details: { lojas, resultados }
+    });
+    return res.json({ resultados });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de liberacao invalidos.', details: error.errors });
+    return next(error);
+  }
 });
 
 async function resolveLojaRequest(req, res, next) {

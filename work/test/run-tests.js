@@ -5,6 +5,7 @@ require('./escala-status.test');
 
 require('./env.test');
 require('./schedule-diff.test');
+require('./monthly-release.test');
 require('./error-handler.test');
 require('./auth-md5-password.test');
 require('./rm-integration.test');

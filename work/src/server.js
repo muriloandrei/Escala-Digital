@@ -14,6 +14,7 @@ const escalaRoutes = require('./routes/escalaRoutes');
 const stateRoutes = require('./routes/stateRoutes');
 const accessRoutes = require('./routes/accessRoutes');
 const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
+const monthlyReleaseService = require('./services/monthlyReleaseService');
 
 const env = getEnv();
 const app = express();
@@ -135,8 +136,10 @@ async function start() {
   await initOraclePool();
 
   const server = await listen(env.port);
+  const monthlyReleaseInterval = monthlyReleaseService.startMonthlyReleaseScheduler(env);
 
   async function shutdown() {
+    if (monthlyReleaseInterval) clearInterval(monthlyReleaseInterval);
     server.close(async () => {
       await closeOraclePool();
       process.exit(0);

@@ -2,7 +2,7 @@
   const pageTitles = {
     home: 'Home',
     escalasCriadas: 'Escalas Criadas',
-    escalasGeradas: 'Escalas Geradas',
+    escalasGeradas: 'Escalas Liberadas',
     funcionarios: 'Funcionarios',
     secoes: 'Secoes',
     secaoForm: 'Cadastro de Secao',

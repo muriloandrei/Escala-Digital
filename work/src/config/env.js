@@ -56,6 +56,13 @@ function getEnv() {
       folgaHoraFimStr: process.env.RM_API_FOLGA_HORA_FIM_STR || '12:00',
       timezoneOffset: process.env.RM_API_TIMEZONE_OFFSET || '-03:00'
     },
+    scheduler: {
+      monthlyReleaseEnabled: String(process.env.ESCALA_MONTHLY_RELEASE_ENABLED || 'false').trim().toLowerCase() === 'true',
+      monthlyReleaseHour: Number(process.env.ESCALA_MONTHLY_RELEASE_HOUR || 1),
+      monthlyReleaseMinute: Number(process.env.ESCALA_MONTHLY_RELEASE_MINUTE || 0),
+      monthlyReleaseDay: Number(process.env.ESCALA_MONTHLY_RELEASE_DAY || 1),
+      monthlyReleaseIntervalMs: Number(process.env.ESCALA_MONTHLY_RELEASE_INTERVAL_MS || 60 * 1000)
+    },
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY)
   };
 }

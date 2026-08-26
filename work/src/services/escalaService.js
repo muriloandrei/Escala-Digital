@@ -23,7 +23,7 @@ function getHojeIso() {
 
 function isDiaBloqueadoParaEdicao(value, hojeIso = getHojeIso()) {
   const dataIso = formatDateValue(value);
-  return Boolean(dataIso) && dataIso <= hojeIso;
+  return Boolean(dataIso) && dataIso < hojeIso;
 }
 
 function normalizeDiaComparavel(dia) {
@@ -77,7 +77,7 @@ function assertSemDiasBloqueadosEmNovaEscala(dias = [], hojeIso = getHojeIso()) 
     .map((dia) => normalizeDiaComparavel(dia).data)
     .filter((data) => isDiaBloqueadoParaEdicao(data, hojeIso)))];
   if (!bloqueados.length) return;
-  const error = new Error(`Nova escala do mes vigente deve conter apenas dias futuros. Dias bloqueados recebidos: ${bloqueados.join(', ')}.`);
+  const error = new Error(`Nova escala do mes vigente nao pode alterar dias anteriores. Dias bloqueados recebidos: ${bloqueados.join(', ')}.`);
   error.statusCode = 422;
   error.details = bloqueados;
   throw error;
