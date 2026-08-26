@@ -85,9 +85,11 @@
         const secaoFormDescr = document.getElementById('secaoFormDescr');
         const turnosSecaoLojaSelect = document.getElementById('turnosSecaoLojaSelect');
         const novoTurnoSecaoBtn = document.getElementById('novoTurnoSecaoBtn');
+        const gerarEscalaTurnosBtn = document.getElementById('gerarEscalaTurnosBtn');
         const carregarTurnosSecaoBtn = document.getElementById('carregarTurnosSecaoBtn');
         const turnosSecaoTitulo = document.getElementById('turnosSecaoTitulo');
         const tabelaTurnosSecaoBody = document.getElementById('tabela-turnos-secao-body');
+        const turnosOperacionaisLista = document.getElementById('turnosOperacionaisLista');
         const turnosPesquisaInput = document.getElementById('turnosPesquisaInput');
         const turnosSecaoFiltro = document.getElementById('turnosSecaoFiltro');
         const turnoSecaoForm = document.getElementById('turnoSecaoForm');
@@ -792,6 +794,7 @@
         let liberacaoSecoesCache = { usuarios: [], secoes: [], liberadas: new Set(), selecionadasDisponiveis: new Set(), selecionadasLiberadas: new Set(), tableReady: false };
         let secoesTelaCache = [];
         let turnosTelaCache = [];
+        let turnosFuncionariosTelaCache = [];
         let funcionariosTelaCache = [];
         let escalasFuncionariosCache = [];
         let escalaFuncionarioEdicaoAtual = null;
@@ -2642,12 +2645,60 @@
             tabelaTurnosSecaoBody.querySelectorAll('.actions-cell').forEach(cell => {
                 if (!cell.textContent.trim()) cell.textContent = '-';
             });
+            renderizarTurnosOperacionais(filtrados);
+        };
+
+        const funcionarioPertenceAoTurno = (funcionario, turno) => {
+            if (String(funcionario.ESCSECAO_ID || '') !== String(turno.ESCSECAO_ID || '')) return false;
+            const horariosFuncionario = [funcionario.HR_ENT1, funcionario.HR_SAI1, funcionario.HR_ENT2, funcionario.HR_SAI2].map(value => String(value || '').trim());
+            if (horariosFuncionario.some(value => !value)) return false;
+            const horariosTurno = [turno.HR_ENT1, turno.HR_SAI1, turno.HR_ENT2, turno.HR_SAI2].map(value => String(value || '').trim());
+            return horariosFuncionario.every((value, index) => value === horariosTurno[index]);
+        };
+
+        const renderizarTurnosOperacionais = (turnos) => {
+            if (!turnosOperacionaisLista) return;
+            if (!turnos || turnos.length === 0) {
+                turnosOperacionaisLista.innerHTML = '';
+                return;
+            }
+
+            const lojaAtual = turnosSecaoLojaSelect?.value || 'all';
+            if (lojaAtual === 'all') {
+                turnosOperacionaisLista.innerHTML = '<div class="turnos-operacionais-empty">Selecione uma loja específica para visualizar os funcionários por turno.</div>';
+                return;
+            }
+
+            turnosOperacionaisLista.innerHTML = turnos.map(turno => {
+                const funcionariosTurno = turnosFuncionariosTelaCache.filter(funcionario => funcionarioPertenceAoTurno(funcionario, turno));
+                const periodo = [turno.HR_ENT1, turno.HR_SAI1, turno.HR_ENT2, turno.HR_SAI2].filter(Boolean).join(' / ');
+                const colaboradores = funcionariosTurno.length
+                    ? funcionariosTurno.map(funcionario => '<li><strong>' + escapeHtml(funcionario.NOME || '') + '</strong><span>' + escapeHtml(funcionario.CHAPA || '') + '</span></li>').join('')
+                    : '<li class="turnos-operacionais-vazio">Nenhum funcionário com este horário inicial.</li>';
+                return '<article class="turno-operacional-card">' +
+                    '<header><div><strong>' + escapeHtml((turno.COD_SECAO ? turno.COD_SECAO + ' - ' : '') + (turno.DESCR || 'Seção')) + '</strong><span>' + escapeHtml(periodo) + '</span></div><em>' + escapeHtml(funcionariosTurno.length) + '/' + escapeHtml(turno.QTDE_COLABORADORES || 0) + ' funcionários</em></header>' +
+                    '<ul>' + colaboradores + '</ul>' +
+                    '</article>';
+            }).join('');
+        };
+
+        const resolverLojaTurnosOperacional = () => {
+            const selecionada = turnosSecaoLojaSelect?.value || '';
+            if (selecionada && selecionada !== 'all') return selecionada;
+            const principal = getLojaPrincipal();
+            if (principal) return principal;
+            return lojaEscalaSelect?.value || '';
         };
 
         const carregarTurnosSecaoTela = async () => {
             const loja = turnosSecaoLojaSelect?.value && turnosSecaoLojaSelect.value !== 'all' ? turnosSecaoLojaSelect.value : 'all';
             const data = await apiRequest('/api/catalog/turnos-secao?lojaId=' + encodeURIComponent(loja));
             turnosTelaCache = data.turnos || [];
+            turnosFuncionariosTelaCache = [];
+            if (loja !== 'all') {
+                const funcionariosData = await apiRequest('/api/catalog/funcionarios?lojaId=' + encodeURIComponent(loja));
+                turnosFuncionariosTelaCache = funcionariosData.funcionarios || [];
+            }
             popularFiltroSecoesTurnos();
             aplicarFiltrosTurnosTela();
         };
@@ -2667,6 +2718,37 @@
         novoTurnoSecaoBtn?.addEventListener('click', () => {
             if (!hasPermission('turnos-secao', 'criar')) return showInfoModal('Usuario sem permissao para criar turnos por secao.', 'error');
             window.location.hash = '/turnos-secao/novo';
+        });
+
+        gerarEscalaTurnosBtn?.addEventListener('click', async () => {
+            const loja = resolverLojaTurnosOperacional();
+            if (!loja || !lojasPermitidasCache.includes(Number(loja))) {
+                showInfoModal('Selecione uma loja permitida para abrir a escala do mês.', 'error');
+                return;
+            }
+
+            const hoje = new Date();
+            const mesRef = formatDateForDb(hoje.getFullYear(), hoje.getMonth(), 1);
+            try {
+                const existentes = await carregarResumoEscalas(loja, mesRef);
+                if (existentes.length > 0) {
+                    window.location.hash = '/escala-banco-mensal/' + loja + '/' + mesRef;
+                    return;
+                }
+
+                if (!canCreateEscalaSessao()) {
+                    showInfoModal('A escala deste mês ainda não foi liberada para esta loja. Solicite a liberação ao RH ou gerente.', 'info');
+                    return;
+                }
+
+                await apiRequest('/api/escalas/liberar-mensal', {
+                    method: 'POST',
+                    body: JSON.stringify({ mesRef, lojas: [Number(loja)] })
+                });
+                window.location.hash = '/escala-banco-mensal/' + loja + '/' + mesRef;
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
         });
 
         carregarTurnosSecaoBtn?.addEventListener('click', async () => {

@@ -437,11 +437,21 @@
                 </div>
             </div>
             <div id="turnos-secao-page" class="hidden">
-                <header class="main-header"><h1>Turnos por Seção</h1><button type="button" class="action-button" id="novoTurnoSecaoBtn"><span class="material-symbols-outlined">add</span>Novo Turno</button></header>
+                <header class="main-header">
+                    <div>
+                        <h1>Turnos por Seção</h1>
+                        <p class="table-card-subtitle">Revise os turnos da loja e avance para a escala liberada do mês.</p>
+                    </div>
+                    <div class="header-actions">
+                        <button type="button" class="action-button secondary" id="gerarEscalaTurnosBtn"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala</button>
+                        <button type="button" class="action-button" id="novoTurnoSecaoBtn"><span class="material-symbols-outlined">add</span>Novo Turno</button>
+                    </div>
+                </header>
                 <div class="table-card">
                     <div class="catalog-filter-bar three-filters"><label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="turnosPesquisaInput" type="search" placeholder="Pesquisar seção ou código"></label><select id="turnosSecaoLojaSelect" class="escala-filter-select" aria-label="Filtrar turnos por loja"></select><select id="turnosSecaoFiltro" class="escala-filter-select"><option value="all">Todas as seções</option></select></div>
                     <div class="table-card-header"><h2 id="turnosSecaoTitulo">Turnos cadastrados</h2><p class="table-card-subtitle">Cadastre os horários de cada turno em suas devidas seções.</p></div>
                     <table class="data-table"><thead><tr><th>Seção</th><th>Colaboradores</th><th>Entrada 1</th><th>Saída 1</th><th>Entrada 2</th><th>Saída 2</th><th>Ações</th></tr></thead><tbody id="tabela-turnos-secao-body"><tr><td colspan="7" class="text-center text-gray-500 py-8">Carregando turnos...</td></tr></tbody></table>
+                    <div class="turnos-operacionais-lista" id="turnosOperacionaisLista" aria-live="polite"></div>
                 </div>
             </div>
 
