@@ -256,9 +256,7 @@
         }
 
         function setRegistrosMode(mode) {
-            const cards = registrosPage.querySelectorAll('.table-card');
-            if (cards[0]) cards[0].classList.toggle('hidden', mode === 'geradas');
-            if (cards[1]) cards[1].classList.toggle('hidden', mode === 'criadas');
+            registrosPage.dataset.mode = mode;
         }
 
         function showEscalasCriadasPage() {
@@ -4383,6 +4381,7 @@
         });
 
         const renderizarTabelaRegistros = () => {
+            if (!tabelaRegistrosBody) return;
             const escalas = getEscalasSalvas();
             tabelaRegistrosBody.innerHTML = '';
 
@@ -5638,7 +5637,7 @@
             }
         });
 
-        tabelaRegistrosBody.addEventListener('click', async (e) => {
+        tabelaRegistrosBody?.addEventListener('click', async (e) => {
             const targetButton = e.target.closest('.action-btn-table');
             if (!targetButton) return;
             
