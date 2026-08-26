@@ -736,6 +736,7 @@
         const regraDescansoEntreTurnosInput = document.getElementById('regraDescansoEntreTurnos');
         const regraDescansoPosFolgaInput = document.getElementById('regraDescansoPosFolga');
         const regraMaxDiasConsecutivosInput = document.getElementById('regraMaxDiasConsecutivos');
+        const getMaxDiasConsecutivos5x2 = () => Math.min(Number(regraMaxDiasConsecutivosInput?.value || 5) || 5, 5);
         const visualizarTimelineBtn = document.getElementById('visualizarTimelineBtn');
         const timelineVisualizerModal = document.getElementById('timelineVisualizerModal');
         const closeTimelineVisualizerBtn = document.getElementById('closeTimelineVisualizerBtn');
@@ -1583,7 +1584,7 @@
         });
 
         const validarSequenciaParaTraz = (row, folgaIndex) => {
-            const maxDias = parseInt(regraMaxDiasConsecutivosInput.value);
+            const maxDias = getMaxDiasConsecutivos5x2();
             const nomeColab = row.querySelector('.collaborator-name-span').textContent;
             const dayCells = row.querySelectorAll('.escala-cell');
             let diasTrabalhadosConsecutivos = 0;
@@ -1605,7 +1606,7 @@
         };
         
         const validarSequenciaDetalhadaParaTraz = (colabContainer, folgaIndex) => {
-            const maxDias = parseInt(regraMaxDiasConsecutivosInput.value);
+            const maxDias = getMaxDiasConsecutivos5x2();
             const nomeColab = colabContainer.querySelector('h3').textContent;
             const inicioRow = colabContainer.querySelector('tbody tr[data-key="inicio"]');
             if (!inicioRow) return null;
@@ -1730,7 +1731,7 @@
 
         const validarDiasConsecutivos = () => {
             let errors = [];
-            const maxDias = parseInt(regraMaxDiasConsecutivosInput.value);
+            const maxDias = getMaxDiasConsecutivos5x2();
             const colaboradoresDivs = detalhadaModalBody.querySelectorAll('.colaborador-escala-detalhada');
 
             colaboradoresDivs.forEach(colabDiv => {
@@ -3445,7 +3446,7 @@
 
         const validarEscalaFuncionarioAtual = () => {
             const atual=escalaFuncionarioEdicaoAtual;if(!atual)return false; const errors=validarDiasEscalaFuncionario(atual.dias, atual.nome); let consecutivos=0;
-            [...atual.dias].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach(dia=>{if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>Number(regraMaxDiasConsecutivosInput.value||7))errors.push('Mais de '+regraMaxDiasConsecutivosInput.value+' dias consecutivos em '+formatarDataTabela(dia.DT)+'.');});
+            [...atual.dias].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach(dia=>{if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>getMaxDiasConsecutivos5x2())errors.push('Mais de '+getMaxDiasConsecutivos5x2()+' dias consecutivos em '+formatarDataTabela(dia.DT)+'.');});
             atual.criticas = errors;
             escalaFuncionarioEdicaoValidada = errors.length === 0;
             if (!errors.length) atual.dias.forEach(dia => { delete dia.CRITICA_MANUAL; });
@@ -5998,6 +5999,31 @@ const distribuirFolgas5x2Auto = async () => {
         }
         current.setDate(current.getDate() + 1);
     }
+
+    const garantirLimiteDiasConsecutivos = () => {
+        const maxDias = getMaxDiasConsecutivos5x2();
+        for (let colabIdx = 0; colabIdx < total; colabIdx++) {
+            let consecutivos = 0;
+            const cursor = new Date(startScale);
+            while (cursor <= lastDay) {
+                const key = cursor.toDateString();
+                const status = scheduleMap[colabIdx][key] || 'T';
+                if (status === 'F') {
+                    consecutivos = 0;
+                } else {
+                    consecutivos++;
+                    const dentroDoMes = cursor >= firstDay && cursor <= lastDay;
+                    if (consecutivos > maxDias && dentroDoMes) {
+                        marcarFolgaNoMapa(colabIdx, cursor);
+                        consecutivos = 0;
+                    }
+                }
+                cursor.setDate(cursor.getDate() + 1);
+            }
+        }
+    };
+
+    garantirLimiteDiasConsecutivos();
 
     // --- RENDERIZACAO FINAL ---
     const rows = document.querySelectorAll('#tabela-esqueleto tbody tr');

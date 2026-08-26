@@ -2,6 +2,7 @@ const REGRAS_VIGENTES = [
   { codigo: 'DOMINGO_1X1', titulo: 'Domingo 1x1', descricao: 'O colaborador nao deve trabalhar dois domingos consecutivos.' },
   { codigo: 'INTERJORNADA_11H', titulo: 'Interjornada minima', descricao: 'Entre o fim de um dia trabalhado e o inicio do proximo deve haver ao menos 11 horas.' },
   { codigo: 'DESCANSO_POS_FOLGA_35H', titulo: 'Descanso apos folga', descricao: 'Ao retornar de uma ou mais folgas, o descanso minimo acumulado deve ser de 35 horas.' },
+  { codigo: 'MAX_5_DIAS_CONSECUTIVOS', titulo: 'Limite 5x2', descricao: 'No regime 5x2, o colaborador nao deve trabalhar mais que 5 dias consecutivos.' },
   { codigo: 'JORNADA_08H48', titulo: 'Jornada padrao', descricao: 'Dias trabalhados devem ter jornada total de 08:48.' },
   { codigo: 'INTERVALO_01H10', titulo: 'Intervalo minimo', descricao: 'Dias trabalhados devem ter intervalo minimo de 01:10.' },
   { codigo: 'MAX_06H_CONTINUAS', titulo: 'Jornada continua maxima', descricao: 'Nenhum periodo continuo de trabalho deve passar de 06:00.' },
@@ -78,6 +79,8 @@ function validarRegrasFuncionario(funcionario) {
   const errors = [];
   let ultimoTrabalho = null;
   let ultimoDomingoTrabalhado = null;
+  let diasTrabalhadosConsecutivos = 0;
+  const maxDiasConsecutivos = Number(funcionario.maxDiasConsecutivos || 5);
 
   for (const dia of dias) {
     const dataIso = formatDate(dia.data || dia.DT);
@@ -85,7 +88,15 @@ function validarRegrasFuncionario(funcionario) {
     const descanso = isDescanso(dia);
     errors.push(...validarTurnoDia(label, dia));
 
-    if (descanso) continue;
+    if (descanso) {
+      diasTrabalhadosConsecutivos = 0;
+      continue;
+    }
+
+    diasTrabalhadosConsecutivos += 1;
+    if (diasTrabalhadosConsecutivos > maxDiasConsecutivos) {
+      errors.push(`${label}: trabalhou ${diasTrabalhadosConsecutivos} dias consecutivos ate ${dataIso}; limite permitido no 5x2: ${maxDiasConsecutivos}.`);
+    }
 
     const horario = getHorarioDia(dia);
     if (ultimoTrabalho && horario.entrada !== null && ultimoTrabalho.saida !== null) {

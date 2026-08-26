@@ -56,6 +56,32 @@ test('backend rejects interjornada lower than 11 hours', () => {
   assert.ok(errors.some((error) => error.includes('interjornada menor que 11h')));
 });
 
+test('backend rejects more than five consecutive worked days in 5x2', () => {
+  const errors = validateEscalaPayload(buildPayload([
+    trabalho('2026-09-01'),
+    trabalho('2026-09-02'),
+    trabalho('2026-09-03'),
+    trabalho('2026-09-04'),
+    trabalho('2026-09-05'),
+    trabalho('2026-09-06')
+  ]));
+
+  assert.ok(errors.some((error) => error.includes('dias consecutivos')));
+});
+
+test('backend allows five consecutive worked days followed by rest', () => {
+  const errors = validateEscalaPayload(buildPayload([
+    trabalho('2026-09-01'),
+    trabalho('2026-09-02'),
+    trabalho('2026-09-03'),
+    trabalho('2026-09-04'),
+    trabalho('2026-09-05'),
+    descanso('2026-09-06')
+  ]));
+
+  assert.deepEqual(errors, []);
+});
+
 test('backend rejects rest lower than 35 hours after day off', () => {
   const errors = validateEscalaPayload(buildPayload([
     trabalho('2026-09-01', { hrEnt1: '12:00', hrSai1: '16:00', hrEnt2: '17:10', hrSai2: '21:58' }),
