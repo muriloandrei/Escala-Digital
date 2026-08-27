@@ -421,10 +421,9 @@
                 <header class="main-header">
                     <div>
                         <h1>Turnos por Seção</h1>
-                        <p class="table-card-subtitle">Revise os turnos da loja e avance para a escala liberada do mês.</p>
+                        <p class="table-card-subtitle">Revise os turnos e colaboradores por seção liberada.</p>
                     </div>
                     <div class="header-actions">
-                        <button type="button" class="action-button secondary" id="gerarEscalaTurnosBtn"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala</button>
                         <button type="button" class="action-button" id="novoTurnoSecaoBtn"><span class="material-symbols-outlined">add</span>Novo Turno</button>
                     </div>
                 </header>
@@ -475,6 +474,22 @@
                         <p id="escalaDetalheResumo" class="table-card-subtitle">Selecione uma escala no banco.</p>
                     </div>
                     <div class="header-actions">
+                        <button type="button" class="action-button danger-action hidden" id="criticasDetalheBancoBtn">
+                            <span class="material-symbols-outlined">priority_high</span>
+                            Cr&iacute;ticas
+                        </button>
+                        <button type="button" class="action-button secondary hidden" id="gerarDetalhadaBancoBtn">
+                            <span class="material-symbols-outlined">view_list</span>
+                            Gerar Escala Detalhada
+                        </button>
+                        <button type="button" class="action-button secondary" id="salvarRascunhoBancoBtn">
+                            <span class="material-symbols-outlined">save</span>
+                            Salvar Rascunho
+                        </button>
+                        <button type="button" class="action-button officialize-action" id="oficializarBancoBtn">
+                            <span class="material-symbols-outlined">verified</span>
+                            Oficializar Escala
+                        </button>
                         <button class="action-button secondary" id="voltarEscalasBtn">
                             <span class="material-symbols-outlined">arrow_back</span>
                             Voltar
@@ -490,7 +505,17 @@
                 <div class="table-card mt-6">
                     <div class="table-card-header creation-card-header">
                         <div>
-                            <h2 id="escalaSecaoTimelineTitulo">Timeline da seção</h2>
+                            <h2 id="escalaSecaoMensalTitulo">Visão mensal</h2>
+                            <p class="table-card-subtitle">Funcionários por dia, separados por semana. Passe o mouse para ver o horário completo.</p>
+                        </div>
+                    </div>
+                    <div id="escalaBancoMensalContent" class="monthly-scale-wrapper"></div>
+                </div>
+
+                <div class="table-card mt-6">
+                    <div class="table-card-header creation-card-header">
+                        <div>
+                            <h2 id="escalaSecaoTimelineTitulo">Timeline diária</h2>
                             <p class="table-card-subtitle">Visão diária operacional da seção selecionada.</p>
                         </div>
                         <div class="header-actions">
@@ -504,7 +529,7 @@
                     <div id="escalaBancoTimelineContent" class="daily-timeline-list"></div>
                 </div>
 
-                <div class="table-card mt-6">
+                <div class="table-card mt-6 hidden" id="escalaBancoDetalhadaCard">
                     <div class="table-card-header creation-card-header">
                         <div>
                             <h2 id="escalaSecaoDetalheTitulo">Escala detalhada</h2>

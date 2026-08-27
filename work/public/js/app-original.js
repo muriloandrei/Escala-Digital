@@ -110,11 +110,18 @@
         const escalaDetalheTitulo = document.getElementById('escalaDetalheTitulo');
         const escalaDetalheResumo = document.getElementById('escalaDetalheResumo');
         const escalaSecaoTabs = document.getElementById('escalaSecaoTabs');
+        const escalaBancoMensalContent = document.getElementById('escalaBancoMensalContent');
+        const escalaSecaoMensalTitulo = document.getElementById('escalaSecaoMensalTitulo');
         const escalaBancoTimelineContent = document.getElementById('escalaBancoTimelineContent');
         const escalaBancoDiaSelect = document.getElementById('escalaBancoDiaSelect');
+        const escalaBancoDetalhadaCard = document.getElementById('escalaBancoDetalhadaCard');
         const escalaBancoDetalhadaContent = document.getElementById('escalaBancoDetalhadaContent');
         const escalaSecaoTimelineTitulo = document.getElementById('escalaSecaoTimelineTitulo');
         const escalaSecaoDetalheTitulo = document.getElementById('escalaSecaoDetalheTitulo');
+        const gerarDetalhadaBancoBtn = document.getElementById('gerarDetalhadaBancoBtn');
+        const criticasDetalheBancoBtn = document.getElementById('criticasDetalheBancoBtn');
+        const salvarRascunhoBancoBtn = document.getElementById('salvarRascunhoBancoBtn');
+        const oficializarBancoBtn = document.getElementById('oficializarBancoBtn');
         const imprimirTimelineBancoBtn = document.getElementById('imprimirTimelineBancoBtn');
         const imprimirDetalheBancoBtn = document.getElementById('imprimirDetalheBancoBtn');
         const validarDetalheBancoBtn = document.getElementById('validarDetalheBancoBtn');
@@ -277,7 +284,9 @@
             expandActiveNavGroup(navRegistros);
             setCurrentPageTitle('escalasGeradas');
             setRegistrosMode('geradas');
-            consultarEscalasBancoLocal().catch(() => {});
+            consultarEscalasBancoLocal().catch(error => {
+                if (tabelaBancoBody) tabelaBancoBody.innerHTML = '<tr><td colspan="10" class="text-center text-red-600 py-8">Erro ao carregar escalas: ' + escapeHtml(error.message || 'falha na consulta') + '</td></tr>';
+            });
         }
 
         function showEscalasFuncionariosPage() {
@@ -2683,17 +2692,19 @@
                 return;
             }
 
-            turnosOperacionaisLista.innerHTML = turnos.map(turno => {
+            turnosOperacionaisLista.innerHTML = '<div class="turnos-operacionais-table">' + turnos.map(turno => {
                 const funcionariosTurno = turnosFuncionariosTelaCache.filter(funcionario => funcionarioPertenceAoTurno(funcionario, turno));
                 const periodo = [turno.HR_ENT1, turno.HR_SAI1, turno.HR_ENT2, turno.HR_SAI2].filter(Boolean).join(' / ');
                 const colaboradores = funcionariosTurno.length
-                    ? funcionariosTurno.map(funcionario => '<li><strong>' + escapeHtml(funcionario.NOME || '') + '</strong><span>' + escapeHtml(funcionario.CHAPA || '') + '</span></li>').join('')
-                    : '<li class="turnos-operacionais-vazio">Nenhum funcionário com este horário inicial.</li>';
-                return '<article class="turno-operacional-card">' +
-                    '<header><div><strong>' + escapeHtml((turno.COD_SECAO ? turno.COD_SECAO + ' - ' : '') + (turno.DESCR || 'Seção')) + '</strong><span>' + escapeHtml(periodo) + '</span></div><em>' + escapeHtml(funcionariosTurno.length) + '/' + escapeHtml(turno.QTDE_COLABORADORES || 0) + ' funcionários</em></header>' +
-                    '<ul>' + colaboradores + '</ul>' +
+                    ? funcionariosTurno.map(funcionario => '<span class="turno-worker"><strong>' + escapeHtml(funcionario.NOME || '') + '</strong><small>' + escapeHtml(funcionario.CHAPA || '') + '</small></span>').join('')
+                    : '<span class="turnos-operacionais-vazio">Nenhum funcionário com este horário inicial.</span>';
+                return '<article class="turno-operacional-row">' +
+                    '<div class="turno-operacional-section"><strong>' + escapeHtml((turno.COD_SECAO ? turno.COD_SECAO + ' - ' : '') + (turno.DESCR || 'Seção')) + '</strong><span>' + escapeHtml(periodo) + '</span></div>' +
+                    '<div class="turno-operacional-count"><strong>' + escapeHtml(funcionariosTurno.length) + '/' + escapeHtml(turno.QTDE_COLABORADORES || 0) + '</strong><span>funcionários</span></div>' +
+                    '<div class="turno-operacional-workers">' + colaboradores + '</div>' +
+                    '<div class="turno-operacional-actions"><button type="button" class="action-btn-table banco-action edit-turno-secao" data-id="' + escapeHtml(turno.ESCSECAOTURNO_ID || '') + '" data-loja="' + escapeHtml(turno.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar turno</button></div>' +
                     '</article>';
-            }).join('');
+            }).join('') + '</div>';
         };
 
         const resolverLojaTurnosOperacional = () => {
@@ -2722,6 +2733,14 @@
         turnosSecaoLojaSelect?.addEventListener('change', () => carregarTurnosSecaoTela().catch(error => showInfoModal(error.message, 'error')));
 
         tabelaTurnosSecaoBody?.addEventListener('click', (event) => {
+            const editButton = event.target.closest('.edit-turno-secao');
+            if (!editButton) return;
+            if (!hasPermission('turnos-secao', 'editar')) return showInfoModal('Usuario sem permissao para editar turnos por secao.', 'error');
+            if (editButton.dataset.loja) turnosSecaoLojaSelect.value = editButton.dataset.loja;
+            window.location.hash = `/turnos-secao/${editButton.dataset.id}`;
+        });
+
+        turnosOperacionaisLista?.addEventListener('click', (event) => {
             const editButton = event.target.closest('.edit-turno-secao');
             if (!editButton) return;
             if (!hasPermission('turnos-secao', 'editar')) return showInfoModal('Usuario sem permissao para editar turnos por secao.', 'error');
@@ -4916,6 +4935,9 @@
             escalaDetalheBancoValidada = false;
             escalaDetalheBancoAlterados = new Map();
             salvarDetalheBancoBtn?.classList.add('hidden');
+            escalaBancoDetalhadaCard?.classList.add('hidden');
+            criticasDetalheBancoBtn?.classList.add('hidden');
+            gerarDetalhadaBancoBtn?.classList.add('hidden');
         };
 
         const marcarDiaBancoAlterado = (dia) => {
@@ -4995,7 +5017,24 @@
                 .map(dia => 'Dia ' + Number(String(dia.DT).slice(8, 10)) + ': ajuste manual pendente de validacao.');
         };
 
-        const validarDetalheBancoAtual = async () => {
+        const getTodasCriticasBanco = () => {
+            const criticas = [];
+            agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).forEach((funcionario) => {
+                getCriticasFuncionarioBanco(funcionario).forEach((critica) => criticas.push(critica));
+            });
+            return [...new Set(criticas.filter(Boolean))];
+        };
+
+        const atualizarAcoesValidacaoBanco = () => {
+            const criticas = getTodasCriticasBanco();
+            criticasDetalheBancoBtn?.classList.toggle('hidden', criticas.length === 0);
+            gerarDetalhadaBancoBtn?.classList.toggle('hidden', criticas.length > 0 || !(escalaDetalheAtual.dias || []).length);
+            salvarDetalheBancoBtn?.classList.toggle('hidden', true);
+            if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = criticas.length > 0;
+            if (oficializarBancoBtn) oficializarBancoBtn.disabled = criticas.length > 0 || escalaDetalheAtual.status === 'FINALIZADA';
+        };
+
+        const validarDetalheBancoSilencioso = async () => {
             const errors = [];
             escalaDetalheAtual.criticasPorFuncionario = new Map();
             agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).forEach((funcionario) => {
@@ -5019,11 +5058,14 @@
                 if (criticasFuncionario.length) escalaDetalheAtual.criticasPorFuncionario.set(String(funcionario.escfuncId), criticasFuncionario);
             });
             escalaDetalheBancoValidada = uniqueErrors.length === 0;
+            atualizarAcoesValidacaoBanco();
+            return uniqueErrors;
+        };
+
+        const validarDetalheBancoAtual = async () => {
+            const uniqueErrors = await validarDetalheBancoSilencioso();
             if (escalaDetalheBancoValidada) {
                 (escalaDetalheAtual.dias || []).forEach(dia => { delete dia.CRITICA_MANUAL; });
-                salvarDetalheBancoBtn?.classList.toggle('hidden', escalaDetalheBancoAlterados.size === 0);
-            } else {
-                salvarDetalheBancoBtn?.classList.add('hidden');
             }
             renderizarSecaoAtivaEscala();
             showInfoModal(uniqueErrors.length ? uniqueErrors : 'A escala foi validada com sucesso.', uniqueErrors.length ? 'error' : 'success');
@@ -5107,25 +5149,117 @@
             }
 
             const somenteLeitura = escalaDetalheAtual.status === 'FINALIZADA';
-            escalaBancoTimelineContent.innerHTML = registrosDia.map((dia) => {
+            const inicioTimeline = 0;
+            const fimTimeline = 24 * 60;
+            const duracaoTimeline = fimTimeline - inicioTimeline;
+            const markers = [];
+            for (let min = 0; min <= fimTimeline; min += 120) {
+                const left = ((min - inicioTimeline) / duracaoTimeline) * 100;
+                markers.push('<span style="left:' + left + '%">' + minutesToTime(min === 1440 ? 0 : min) + '</span>');
+            }
+            const rows = registrosDia.map((dia) => {
                 const descanso = isProgramacaoDescanso(dia.PROGRAMACAO);
                 const bloqueado = isDataBloqueadaParaEdicao(String(dia.DT || '').slice(0, 10)) || somenteLeitura;
                 const periodo = descanso
                     ? getValorDescanso(dia)
                     : [dia.HR_ENT1, dia.HR_SAI1, dia.HR_ENT2, dia.HR_SAI2].filter(Boolean).join(' / ');
-                const inicio = descanso ? '' : dia.HR_ENT1;
-                const fim = descanso ? '' : dia.HR_SAI2;
-                const classe = descanso ? ' descanso' : '';
-                const editAction = bloqueado
-                    ? '<span class="daily-timeline-locked">' + (somenteLeitura ? 'Finalizada' : 'Dia passado') + '</span>'
-                    : '<button type="button" class="action-btn-table banco-action daily-bank-edit" data-escprog-id="' + escapeHtml(dia.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(dia.ESCPROGDIA_ID || '') + '"><span class="material-symbols-outlined">edit_calendar</span>Editar</button>';
-                const critica = dia.CRITICA_MANUAL ? '<span class="critical-status-chip">CRITICA</span>' : '';
-                return '<article class="daily-timeline-row' + classe + '" title="' + escapeHtml(periodo) + '">' +
-                    '<div class="daily-timeline-time"><strong>' + escapeHtml(inicio || getValorDescanso(dia)) + '</strong><span>' + escapeHtml(fim || 'Descanso') + '</span></div>' +
-                    '<div class="daily-timeline-main"><strong>' + escapeHtml(dia.NOME || dia.CHAPA || '') + '</strong><span>' + escapeHtml((dia.CHAPA || '') + (dia.FUNCAO_DESCR ? ' | ' + dia.FUNCAO_DESCR : '')) + '</span><small>' + escapeHtml(periodo) + '</small></div>' +
-                    '<div class="daily-timeline-actions">' + critica + editAction + '</div>' +
-                    '</article>';
+                const attrs = !bloqueado ? ' data-escprog-id="' + escapeHtml(dia.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(dia.ESCPROGDIA_ID || '') + '"' : '';
+                let bars = '';
+                if (descanso) {
+                    bars = '<button type="button" class="daily-schedule-rest daily-bank-edit" title="' + escapeHtml(periodo) + '"' + attrs + '>' + escapeHtml(getValorDescanso(dia)) + '</button>';
+                } else {
+                    const ent1 = timeToMinutes(dia.HR_ENT1 || '00:00');
+                    const sai1 = timeToMinutes(dia.HR_SAI1 || dia.HR_ENT1 || '00:00');
+                    const ent2 = timeToMinutes(dia.HR_ENT2 || dia.HR_SAI1 || '00:00');
+                    const sai2 = timeToMinutes(dia.HR_SAI2 || dia.HR_ENT2 || '00:00');
+                    const mkBar = (start, end, cls, label) => {
+                        const width = Math.max(0, ((end - start) / duracaoTimeline) * 100);
+                        const left = Math.max(0, ((start - inicioTimeline) / duracaoTimeline) * 100);
+                        if (width <= 0) return '';
+                        return '<button type="button" class="' + cls + ' daily-bank-edit" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(periodo) + '"' + attrs + '>' + escapeHtml(label) + '</button>';
+                    };
+                    bars = mkBar(ent1, sai1, 'daily-schedule-bar', (dia.HR_ENT1 || '') + ' - ' + (dia.HR_SAI1 || ''))
+                        + mkBar(sai1, ent2, 'daily-schedule-break', '')
+                        + mkBar(ent2, sai2, 'daily-schedule-bar', (dia.HR_ENT2 || '') + ' - ' + (dia.HR_SAI2 || ''));
+                }
+                const criticas = dia.CRITICA_MANUAL ? '<span class="critical-marker" title="Critica: ajuste manual">!</span>' : '';
+                return '<div class="daily-schedule-row">' +
+                    '<div class="daily-schedule-person"><strong>' + escapeHtml(dia.NOME || dia.CHAPA || '') + '</strong><span>' + escapeHtml((dia.CHAPA || '') + (dia.FUNCAO_DESCR ? ' | ' + dia.FUNCAO_DESCR : '')) + '</span></div>' +
+                    '<div class="daily-schedule-track' + (dia.CRITICA_MANUAL ? ' manual-critical-day' : '') + '">' + criticas + bars + '</div>' +
+                    '</div>';
             }).join('');
+            escalaBancoTimelineContent.innerHTML = '<div class="daily-schedule"><div class="daily-schedule-axis"><div></div><div class="daily-schedule-markers">' + markers.join('') + '</div></div>' + rows + '</div>';
+        };
+
+        const renderizarMensalSecaoBanco = (dias) => {
+            if (!escalaBancoMensalContent) return;
+            const dataRef = escalaDetalheAtual.mesRef ? new Date(escalaDetalheAtual.mesRef + 'T00:00:00') : null;
+            const ano = dataRef?.getFullYear() || new Date().getFullYear();
+            const mes = dataRef?.getMonth() || 0;
+            const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+            const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+            const funcionarios = agruparDiasPorFuncionario(dias);
+            const getWeekClass = (dia) => dia > 1 && new Date(ano, mes, dia).getDay() === 1 ? ' week-start' : '';
+            const getDiaTitle = (registro) => {
+                if (!registro) return '';
+                if (isProgramacaoDescanso(registro.PROGRAMACAO)) return 'Descanso: ' + getValorDescanso(registro);
+                return 'Trabalho: ' + [registro.HR_ENT1, registro.HR_SAI1, registro.HR_ENT2, registro.HR_SAI2].filter(Boolean).join(' / ');
+            };
+
+            if (!funcionarios.length) {
+                escalaBancoMensalContent.innerHTML = '<p class="text-center text-gray-500 py-8">Nenhum colaborador encontrado nesta seção.</p>';
+                return;
+            }
+
+            let html = '<div class="monthly-scale-scroll"><table class="monthly-scale-table"><thead>';
+            html += '<tr><th class="employee-col monthly-summary-label">' + funcionarios.length + ' colaborador(es)</th>';
+            for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                let folgas = 0;
+                let trabalhando = 0;
+                funcionarios.forEach((funcionario) => {
+                    const registro = funcionario.dias.get(dia);
+                    if (!registro) return;
+                    if (isProgramacaoDescanso(registro.PROGRAMACAO)) folgas += 1;
+                    else trabalhando += 1;
+                });
+                html += '<th class="monthly-quality' + getWeekClass(dia) + '" title="Trabalhando: ' + trabalhando + ' | Folgas: ' + folgas + '"><span>' + trabalhando + '</span><small>' + folgas + ' F</small></th>';
+            }
+            html += '</tr><tr><th class="employee-col">Funcionário</th>';
+            for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                html += '<th class="' + getWeekClass(dia).trim() + '"><span>' + diasSemana[new Date(ano, mes, dia).getDay()] + '</span><strong>' + dia + '</strong></th>';
+            }
+            html += '</tr></thead><tbody>';
+
+            funcionarios.forEach((funcionario) => {
+                const criticas = getCriticasFuncionarioBanco(funcionario);
+                const criticaButton = criticas.length ? '<button type="button" class="critical-status-chip banco-critical-chip" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '">CRITICA</button>' : '';
+                html += '<tr><th class="employee-col"><strong>' + escapeHtml(funcionario.nome) + '</strong><span>' + escapeHtml(funcionario.chapa) + (funcionario.funcao ? ' | ' + escapeHtml(funcionario.funcao) : '') + '</span>' + criticaButton + '</th>';
+                for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                    const registro = funcionario.dias.get(dia);
+                    if (!registro) {
+                        html += '<td class="empty' + getWeekClass(dia) + '">-</td>';
+                        continue;
+                    }
+                    const descanso = isProgramacaoDescanso(registro.PROGRAMACAO);
+                    const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
+                    const critica = getCriticasFuncionarioBanco(funcionario).some(item => String(item).includes('Dia ' + dia + ':') || String(item).includes('dia ' + dia + ' '));
+                    const value = descanso ? getValorDescanso(registro) : (registro.HR_ENT1 || '--');
+                    const cellClass = [
+                        descanso ? 'rest-cell' : 'work-cell',
+                        getWeekClass(dia).trim(),
+                        registro.CRITICA_MANUAL || critica ? 'manual-critical-day' : '',
+                        bloqueado ? 'locked-day' : ''
+                    ].filter(Boolean).join(' ');
+                    const editAttrs = !bloqueado
+                        ? ' role="button" tabindex="0" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '"'
+                        : '';
+                    html += '<td class="' + cellClass + ' monthly-editable-day" title="' + escapeHtml(getDiaTitle(registro)) + '"' + editAttrs + '>' + escapeHtml(value) + '</td>';
+                }
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+            escalaBancoMensalContent.innerHTML = html;
         };
 
         const renderizarTabsSecoesEscala = () => {
@@ -5201,11 +5335,14 @@
             const secao = escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva));
             const dias = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
             const nome = secao?.nome || 'Seção';
-            if (escalaSecaoTimelineTitulo) escalaSecaoTimelineTitulo.textContent = 'Timeline - ' + nome;
+            if (escalaSecaoMensalTitulo) escalaSecaoMensalTitulo.textContent = 'Visão mensal - ' + nome;
+            if (escalaSecaoTimelineTitulo) escalaSecaoTimelineTitulo.textContent = 'Timeline diária - ' + nome;
             if (escalaSecaoDetalheTitulo) escalaSecaoDetalheTitulo.textContent = 'Escala detalhada - ' + nome;
             renderizarTabsSecoesEscala();
+            renderizarMensalSecaoBanco(dias);
             renderizarTimelineDiariaBanco(dias);
             renderizarDetalhadaSecaoBanco(dias);
+            atualizarAcoesValidacaoBanco();
         };
 
         const prepararSecoesDetalheEscala = () => {
@@ -5243,6 +5380,7 @@
             escalaDetalheAtual.status = escala.status || null;
             escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s), revisão ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
             prepararSecoesDetalheEscala();
+            validarDetalheBancoSilencioso().then(() => renderizarSecaoAtivaEscala()).catch(() => atualizarAcoesValidacaoBanco());
         };
 
         escalaSecaoTabs?.addEventListener('click', (event) => {
@@ -5278,18 +5416,30 @@
             }
         });
 
-        salvarDetalheBancoBtn?.addEventListener('click', async () => {
+        const salvarAlteracoesDetalheBanco = async ({ oficializar = false } = {}) => {
             if (!hasPermission('escalas', 'editar')) {
                 showInfoModal('Usuario sem permissao para salvar escalas.', 'error');
                 return;
             }
             if (!escalaDetalheBancoAlterados.size) {
+                if (oficializar && hasPermission('escalas', 'oficializar')) {
+                    const result = await apiRequest('/api/escalas/oficializar', {
+                        method: 'POST',
+                        body: JSON.stringify({ lojaId: Number(escalaDetalheAtual.lojaId), mesRef: escalaDetalheAtual.mesRef }),
+                        timeoutMs: 120000
+                    });
+                    showInfoModal('Escala oficializada. ' + (result.rm?.message || ''), result.rm?.ok === false ? 'error' : 'success');
+                    await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
+                    return;
+                }
                 showInfoModal('Nenhuma alteração pendente para salvar.', 'info');
                 return;
             }
             if (!escalaDetalheBancoValidada && !(await validarDetalheBancoAtual())) return;
 
-            salvarDetalheBancoBtn.disabled = true;
+            if (salvarDetalheBancoBtn) salvarDetalheBancoBtn.disabled = true;
+            if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = true;
+            if (oficializarBancoBtn) oficializarBancoBtn.disabled = true;
             try {
                 for (const funcionario of escalaDetalheBancoAlterados.values()) {
                     const dias = (escalaDetalheAtual.dias || [])
@@ -5313,20 +5463,45 @@
                             lojaId: Number(escalaDetalheAtual.lojaId),
                             mesRef: escalaDetalheAtual.mesRef,
                             funcionarios: [{ ...funcionario, dias }],
-                            oficializada: 1,
+                            oficializada: oficializar ? 1 : 0,
                             justificativa: dias.find(dia => dia.justificativa)?.justificativa || null
                         })
                     });
                 }
-                showInfoModal('Alterações salvas em revisão individual e oficializadas.', 'success');
+                if (oficializar && hasPermission('escalas', 'oficializar')) {
+                    await apiRequest('/api/escalas/oficializar', {
+                        method: 'POST',
+                        body: JSON.stringify({ lojaId: Number(escalaDetalheAtual.lojaId), mesRef: escalaDetalheAtual.mesRef }),
+                        timeoutMs: 120000
+                    });
+                }
+                showInfoModal(oficializar ? 'Alterações salvas, oficializadas e enviadas para o RM.' : 'Rascunho salvo em nova revisão.', 'success');
                 const lojaId = escalaDetalheAtual.lojaId;
                 const mesRef = escalaDetalheAtual.mesRef;
                 await carregarDetalheEscalaMensal(lojaId, mesRef);
             } catch (error) {
                 showInfoModal(error.details?.length ? error.details : 'Não foi possível salvar a revisão individual: ' + error.message, 'error');
             } finally {
-                salvarDetalheBancoBtn.disabled = false;
+                if (salvarDetalheBancoBtn) salvarDetalheBancoBtn.disabled = false;
+                if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = false;
+                if (oficializarBancoBtn) oficializarBancoBtn.disabled = false;
             }
+        };
+
+        salvarDetalheBancoBtn?.addEventListener('click', () => salvarAlteracoesDetalheBanco({ oficializar: false }));
+        salvarRascunhoBancoBtn?.addEventListener('click', () => salvarAlteracoesDetalheBanco({ oficializar: false }));
+        oficializarBancoBtn?.addEventListener('click', () => salvarAlteracoesDetalheBanco({ oficializar: true }));
+
+        gerarDetalhadaBancoBtn?.addEventListener('click', () => {
+            escalaBancoDetalhadaCard?.classList.toggle('hidden');
+            if (!escalaBancoDetalhadaCard?.classList.contains('hidden')) {
+                escalaBancoDetalhadaCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+
+        criticasDetalheBancoBtn?.addEventListener('click', () => {
+            const criticas = getTodasCriticasBanco();
+            showInfoModal(criticas.length ? criticas : 'Nenhuma critica pendente.', criticas.length ? 'error' : 'success');
         });
 
         const editarDiaEscalaPorId = async (escprogId, escprogdiaId) => {
@@ -5353,9 +5528,27 @@
             dia.HR_SAI2 = folgaLocal ? programacaoLocal : values.BANCO_HR_SAI2;
             dia.JUSTIFICATIVA_ALTERACAO = String(values.BANCO_JUSTIFICATIVA || '').trim();
             marcarDiaBancoAlterado(dia);
+            await validarDetalheBancoSilencioso();
             renderizarSecaoAtivaEscala();
-            showInfoModal('Dia alterado. Valide a escala antes de salvar.', 'info');
         };
+
+        escalaBancoMensalContent?.addEventListener('click', (event) => {
+            const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
+            if (!cell) return;
+            if (cell.classList.contains('locked-day')) {
+                showInfoModal('Dias ja passados nao podem ser alterados manualmente.', 'info');
+                return;
+            }
+            editarDiaEscalaPorId(cell.dataset.escprogId, cell.dataset.escprogdiaId);
+        });
+
+        escalaBancoMensalContent?.addEventListener('keypress', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
+            if (!cell) return;
+            event.preventDefault();
+            editarDiaEscalaPorId(cell.dataset.escprogId, cell.dataset.escprogdiaId);
+        });
 
         escalaBancoDetalhadaContent?.addEventListener('click', (event) => {
             const criticalButton = event.target.closest('.banco-critical-chip');
@@ -5642,25 +5835,13 @@
                     continue;
                 }
 
-                lojaEscalaSelect.value = loja;
-                funcionariosLojaSelect.value = loja;
-                if (homeLojaSelect) homeLojaSelect.value = loja;
-                mesSelect.value = String(mes);
-                anoSelect.value = String(ano);
-                dadosEscala = [];
-                colaboradorShifts = [];
-                escalaCarregadaId = null;
-                currentLoadedScale = null;
-                detailedScaleHasBeenGenerated = false;
-                escalaRascunhoAtivo = true;
-                escalaRascunhoContexto = { loja, mesRef, criadoEm: new Date().toISOString() };
-                await carregarSecoesDaLoja(true, loja);
-                await carregarTurnosSecaoDaLoja(true, loja);
-                renderizarSecoesCriacao();
-                prepararPaineisCriacao();
-                esqueletoModal.classList.add('hidden');
-                detalhadaModal.classList.add('hidden');
-                window.location.hash = '/escalas/nova/' + loja + '/' + mesRef;
+                await apiRequest('/api/escalas/liberar-mensal', {
+                    method: 'POST',
+                    body: JSON.stringify({ mesRef, lojas: [Number(loja)] })
+                });
+                escalaRascunhoAtivo = false;
+                escalaRascunhoContexto = null;
+                window.location.hash = '/escala-banco-mensal/' + loja + '/' + mesRef;
                 return;
             }
         };
