@@ -1628,8 +1628,11 @@
         .turnos-operacionais-table {
             border: 1px solid var(--cor-borda);
             border-radius: 10px;
-            margin-top: 18px;
             overflow: hidden;
+        }
+
+        #turnos-secao-page .data-table {
+            display: none;
         }
 
         .turno-operacional-row {

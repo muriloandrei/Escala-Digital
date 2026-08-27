@@ -385,6 +385,8 @@
             navTurnosSecao.classList.add('active');
             expandActiveNavGroup(navTurnosSecao);
             setCurrentPageTitle('turnosSecao');
+            novoTurnoSecaoBtn?.classList.toggle('hidden', !hasPermission('turnos-secao', 'criar'));
+            gerarEscalaTurnosBtn?.classList.toggle('hidden', !isPerfilLiderSessao());
             catalogosPageController?.carregarTurnosSecao?.(false).catch(error => showInfoModal(error.message, 'error'));
         }
 
@@ -6056,17 +6058,7 @@
                 return;
             }
 
-            try {
-                const data = await apiRequest('/api/escalas?lojaId=' + encodeURIComponent(loja) + '&mesRef=' + encodeURIComponent(mesRef));
-                const primeiraEscala = (data.escalas || [])[0];
-                if (!primeiraEscala?.ESCPROG_ID) {
-                    showInfoModal('Nenhum detalhamento encontrado para esta escala.', 'info');
-                    return;
-                }
-                window.location.hash = '/escala-banco-mensal/' + loja + '/' + mesRef;
-            } catch (error) {
-                showInfoModal(error.message, 'error');
-            }
+            window.location.hash = '/escala-banco-mensal/' + loja + '/' + mesRef;
         });
 
         document.getElementById('timeline-content').addEventListener('click', async (e) => {
