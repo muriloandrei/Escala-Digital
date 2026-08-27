@@ -111,6 +111,7 @@
         const escalaDetalheResumo = document.getElementById('escalaDetalheResumo');
         const escalaSecaoTabs = document.getElementById('escalaSecaoTabs');
         const escalaBancoTimelineContent = document.getElementById('escalaBancoTimelineContent');
+        const escalaBancoDiaSelect = document.getElementById('escalaBancoDiaSelect');
         const escalaBancoDetalhadaContent = document.getElementById('escalaBancoDetalhadaContent');
         const escalaSecaoTimelineTitulo = document.getElementById('escalaSecaoTimelineTitulo');
         const escalaSecaoDetalheTitulo = document.getElementById('escalaSecaoDetalheTitulo');
@@ -5060,6 +5061,73 @@
             });
         };
 
+        const getDiasDisponiveisSecaoBanco = (dias) => {
+            const map = new Map();
+            (dias || []).forEach((dia) => {
+                const iso = String(dia.DT || '').slice(0, 10);
+                if (iso) map.set(iso, dia.DT);
+            });
+            return [...map.keys()].sort();
+        };
+
+        const garantirDiaTimelineBancoSelecionado = (dias) => {
+            if (!escalaBancoDiaSelect) return '';
+            const diasDisponiveis = getDiasDisponiveisSecaoBanco(dias);
+            const atual = escalaBancoDiaSelect.value;
+            escalaBancoDiaSelect.innerHTML = diasDisponiveis.map((iso) => {
+                const numero = Number(iso.slice(8, 10));
+                const semana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'][new Date(iso + 'T00:00:00').getDay()];
+                return '<option value="' + escapeHtml(iso) + '">' + escapeHtml(String(numero).padStart(2, '0') + ' - ' + semana) + '</option>';
+            }).join('');
+            if (diasDisponiveis.includes(atual)) {
+                escalaBancoDiaSelect.value = atual;
+                return atual;
+            }
+            const hojeIso = new Date().toISOString().slice(0, 10);
+            const preferido = diasDisponiveis.includes(hojeIso) ? hojeIso : diasDisponiveis[0] || '';
+            escalaBancoDiaSelect.value = preferido;
+            return preferido;
+        };
+
+        const renderizarTimelineDiariaBanco = (dias) => {
+            if (!escalaBancoTimelineContent) return;
+            const diaSelecionado = garantirDiaTimelineBancoSelecionado(dias);
+            const registrosDia = (dias || [])
+                .filter((dia) => String(dia.DT || '').slice(0, 10) === diaSelecionado)
+                .sort((a, b) => {
+                    const aDescanso = isProgramacaoDescanso(a.PROGRAMACAO);
+                    const bDescanso = isProgramacaoDescanso(b.PROGRAMACAO);
+                    if (aDescanso !== bDescanso) return aDescanso ? 1 : -1;
+                    return timeToMinutes(a.HR_ENT1 || '23:59') - timeToMinutes(b.HR_ENT1 || '23:59') || String(a.NOME || '').localeCompare(String(b.NOME || ''));
+                });
+
+            if (!diaSelecionado || registrosDia.length === 0) {
+                escalaBancoTimelineContent.innerHTML = '<p class="text-center text-gray-500 py-8">Nenhum funcionário encontrado para o dia selecionado.</p>';
+                return;
+            }
+
+            const somenteLeitura = escalaDetalheAtual.status === 'FINALIZADA';
+            escalaBancoTimelineContent.innerHTML = registrosDia.map((dia) => {
+                const descanso = isProgramacaoDescanso(dia.PROGRAMACAO);
+                const bloqueado = isDataBloqueadaParaEdicao(String(dia.DT || '').slice(0, 10)) || somenteLeitura;
+                const periodo = descanso
+                    ? getValorDescanso(dia)
+                    : [dia.HR_ENT1, dia.HR_SAI1, dia.HR_ENT2, dia.HR_SAI2].filter(Boolean).join(' / ');
+                const inicio = descanso ? '' : dia.HR_ENT1;
+                const fim = descanso ? '' : dia.HR_SAI2;
+                const classe = descanso ? ' descanso' : '';
+                const editAction = bloqueado
+                    ? '<span class="daily-timeline-locked">' + (somenteLeitura ? 'Finalizada' : 'Dia passado') + '</span>'
+                    : '<button type="button" class="action-btn-table banco-action daily-bank-edit" data-escprog-id="' + escapeHtml(dia.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(dia.ESCPROGDIA_ID || '') + '"><span class="material-symbols-outlined">edit_calendar</span>Editar</button>';
+                const critica = dia.CRITICA_MANUAL ? '<span class="critical-status-chip">CRITICA</span>' : '';
+                return '<article class="daily-timeline-row' + classe + '" title="' + escapeHtml(periodo) + '">' +
+                    '<div class="daily-timeline-time"><strong>' + escapeHtml(inicio || getValorDescanso(dia)) + '</strong><span>' + escapeHtml(fim || 'Descanso') + '</span></div>' +
+                    '<div class="daily-timeline-main"><strong>' + escapeHtml(dia.NOME || dia.CHAPA || '') + '</strong><span>' + escapeHtml((dia.CHAPA || '') + (dia.FUNCAO_DESCR ? ' | ' + dia.FUNCAO_DESCR : '')) + '</span><small>' + escapeHtml(periodo) + '</small></div>' +
+                    '<div class="daily-timeline-actions">' + critica + editAction + '</div>' +
+                    '</article>';
+            }).join('');
+        };
+
         const renderizarTabsSecoesEscala = () => {
             if (!escalaSecaoTabs) return;
             escalaSecaoTabs.innerHTML = escalaDetalheAtual.secoes.map((secao) => {
@@ -5136,7 +5204,7 @@
             if (escalaSecaoTimelineTitulo) escalaSecaoTimelineTitulo.textContent = 'Timeline - ' + nome;
             if (escalaSecaoDetalheTitulo) escalaSecaoDetalheTitulo.textContent = 'Escala detalhada - ' + nome;
             renderizarTabsSecoesEscala();
-            renderizarTimelineCompleta('escalaBancoTimelineContent', criarTimelineSecaoBanco(dias));
+            renderizarTimelineDiariaBanco(dias);
             renderizarDetalhadaSecaoBanco(dias);
         };
 
@@ -5184,9 +5252,15 @@
             renderizarSecaoAtivaEscala();
         });
 
+        escalaBancoDiaSelect?.addEventListener('change', () => {
+            const dias = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
+            renderizarTimelineDiariaBanco(dias);
+        });
+
         imprimirTimelineBancoBtn?.addEventListener('click', () => {
             const dias = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
-            imprimirTimelineMelhorado(criarTimelineSecaoBanco(dias), escalaSecaoTimelineTitulo?.textContent || 'Timeline da seção');
+            printContainer.innerHTML = '<div class="print-title">' + escapeHtml(escalaSecaoTimelineTitulo?.textContent || 'Timeline da seção') + '</div>' + (escalaBancoTimelineContent?.innerHTML || '');
+            window.print();
         });
 
         imprimirDetalheBancoBtn?.addEventListener('click', () => {
@@ -5297,6 +5371,12 @@
                 showInfoModal('Dias ja passados nao podem ser alterados manualmente.', 'info');
                 return;
             }
+            editarDiaEscalaPorId(button.dataset.escprogId, button.dataset.escprogdiaId);
+        });
+
+        escalaBancoTimelineContent?.addEventListener('click', (event) => {
+            const button = event.target.closest('.daily-bank-edit');
+            if (!button) return;
             editarDiaEscalaPorId(button.dataset.escprogId, button.dataset.escprogdiaId);
         });
 

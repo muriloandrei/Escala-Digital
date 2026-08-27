@@ -15,6 +15,15 @@
 
   let currentUser = null;
   let permissions = new Map();
+  const RESTRICTED_PROFILE_PAGES = new Set([
+    'acessos',
+    'liberacao-secoes',
+    'roles',
+    'horarios-padrao',
+    'integracao-rm',
+    'configuracoes',
+    'tipos-descanso'
+  ]);
 
   function normalize(value) {
     return String(value || '').trim();
@@ -29,8 +38,14 @@
     applyDocument();
   }
 
+  function isRestrictedOperationalProfile() {
+    const perfil = normalize(currentUser?.perfil).toUpperCase();
+    return perfil === 'LIDER' || perfil === 'OPERADOR';
+  }
+
   function can(page, action = 'visualizar') {
     if (!page) return true;
+    if (isRestrictedOperationalProfile() && RESTRICTED_PROFILE_PAGES.has(normalize(page))) return false;
     if (normalize(currentUser?.perfil).toUpperCase() === 'ADMIN') return true;
     const permission = permissions.get(normalize(page));
     const field = ACTION_FIELD[normalize(action).toLowerCase()] || 'PODE_EDITAR';

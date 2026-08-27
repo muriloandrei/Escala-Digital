@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { getEnv } = require('./config/env');
 const { initOraclePool, closeOraclePool } = require('./db/oracle');
+const { csrfSameOriginGuard } = require('./middleware/csrf');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { requireAuth } = require('./middleware/auth');
 const authRoutes = require('./routes/authRoutes');
@@ -95,6 +96,7 @@ app.get('/app', redirectToLoginWhenMissingSession, requireAuth, (req, res) => {
 
 app.use('/api/auth/login', loginLimiter);
 app.use('/api', apiLimiter);
+app.use('/api', csrfSameOriginGuard);
 app.use('/api/auth', authRoutes);
 app.use('/api/catalog', catalogRoutes);
 app.use('/api/escalas', escalaRoutes);

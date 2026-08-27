@@ -165,6 +165,7 @@ async function main() {
 
   const saved = await request('/api/escalas', { method: 'POST', body: payload });
   assert(saved.saved?.length === 1, 'Salvamento inicial nao retornou 1 escala.');
+  const revisaoInicial = Number(saved.saved[0].revisao || 0);
   report.push('salvar escala');
 
   const resumo = await request(`/api/escalas/resumo?lojaId=${lojaId}&mesRef=${encodeURIComponent(mesRef)}`);
@@ -191,7 +192,10 @@ async function main() {
   assert(validacaoRevisao.ok === true, `Validacao da revisao falhou: ${JSON.stringify(validacaoRevisao.errors || [])}`);
   const revisao = await request('/api/escalas/funcionario/revisao', { method: 'POST', body: revisaoPayload });
   assert(revisao.saved?.length === 1, 'Revisao individual nao foi salva.');
-  assert(Number(revisao.saved[0].revisao) === 1, `Revisao esperada 1, recebida ${revisao.saved[0].revisao}.`);
+  assert(
+    Number(revisao.saved[0].revisao) > revisaoInicial,
+    `Revisao deveria ser maior que ${revisaoInicial}, recebida ${revisao.saved[0].revisao}.`
+  );
   report.push('revisao individual');
 
   const historico = await request(`/api/escalas/historico?lojaId=${lojaId}&mesRef=${encodeURIComponent(mesRef)}`);

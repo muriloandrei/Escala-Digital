@@ -52,7 +52,16 @@ const usuariosQuerySchema = z.object({
   search: z.string().max(100).optional().default('')
 }).strict();
 
+function blockRestrictedAccessProfiles(req, res, next) {
+  const perfil = String(req.user?.perfil || '').toUpperCase();
+  if (perfil === 'LIDER' || perfil === 'OPERADOR') {
+    return res.status(403).json({ error: 'Usuario sem permissao para esta acao.' });
+  }
+  return next();
+}
+
 router.use(requireAuth);
+router.use(blockRestrictedAccessProfiles);
 
 router.get('/perfis', requirePermission('roles', 'visualizar'), async (req, res, next) => {
   try {

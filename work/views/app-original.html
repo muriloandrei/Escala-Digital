@@ -155,7 +155,7 @@
                         <h1>Escalas Liberadas</h1>
                         <p>Visualize e gerencie as escalas abertas para edição e oficialização.</p>
                     </div>
-                    <div class="header-actions hidden">
+                    <div class="header-actions">
                         <button class="action-button" id="goToTimelineBtn">
                             <span class="material-symbols-outlined">add</span>
                             Criar Nova Escala
@@ -491,16 +491,17 @@
                     <div class="table-card-header creation-card-header">
                         <div>
                             <h2 id="escalaSecaoTimelineTitulo">Timeline da seção</h2>
-                            <p class="table-card-subtitle">Turnos consolidados da seção selecionada.</p>
+                            <p class="table-card-subtitle">Visão diária operacional da seção selecionada.</p>
                         </div>
-                        <button type="button" class="action-button secondary" id="imprimirTimelineBancoBtn">
-                            <span class="material-symbols-outlined">print</span>
-                            Imprimir Timeline
-                        </button>
+                        <div class="header-actions">
+                            <select id="escalaBancoDiaSelect" class="escala-filter-select" aria-label="Selecionar dia da timeline"></select>
+                            <button type="button" class="action-button secondary" id="imprimirTimelineBancoBtn">
+                                <span class="material-symbols-outlined">print</span>
+                                Imprimir Timeline
+                            </button>
+                        </div>
                     </div>
-                    <div class="timeline-scroll-container overflow-x-auto pb-4">
-                        <div id="escalaBancoTimelineContent" style="min-width: 1200px; position: relative;"></div>
-                    </div>
+                    <div id="escalaBancoTimelineContent" class="daily-timeline-list"></div>
                 </div>
 
                 <div class="table-card mt-6">

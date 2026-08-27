@@ -10,6 +10,7 @@
     "check": "node --check src/server.js",
     "test": "node test/run-tests.js",
     "smoke:api": "node scripts/smoke-api-flow.js",
+    "smoke:perfis": "node scripts/smoke-perfis-flow.js",
     "turnos:padrao": "node scripts/recriar-turnos-padrao-secao.js",
     "senhas:migrar-md5": "node scripts/migrar-senhas-md5.js"
   },
