@@ -11,6 +11,10 @@ const loginSchema = z.object({
   password: z.string().min(1).max(200)
 });
 
+const lojaPrincipalSchema = z.object({
+  lojaPrincipal: z.number().int().positive()
+});
+
 router.post('/login', async (req, res, next) => {
   try {
     const credentials = loginSchema.parse(req.body);
@@ -48,6 +52,24 @@ router.post('/logout', (req, res) => {
 
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
+});
+
+router.patch('/me/loja-principal', requireAuth, async (req, res, next) => {
+  try {
+    const { lojaPrincipal } = lojaPrincipalSchema.parse(req.body);
+    const lojas = Array.isArray(req.user?.lojas) ? req.user.lojas.map(Number) : [];
+    if (!lojas.includes(Number(lojaPrincipal))) {
+      return res.status(403).json({ error: 'Loja principal deve estar entre as lojas permitidas do usuario.' });
+    }
+    const user = await authService.updateLojaPrincipal(Number(req.user.sub), Number(lojaPrincipal));
+    return res.json({ user });
+  } catch (error) {
+    if (error.name === 'ZodError') {
+      error.statusCode = 400;
+      error.message = 'Dados de loja principal invalidos.';
+    }
+    return next(error);
+  }
 });
 
 module.exports = router;

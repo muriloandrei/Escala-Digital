@@ -817,10 +817,10 @@
         };
         const getLojaPrincipal = () => {
             const permitidas = lojasPermitidasCache.map(Number).filter(Boolean);
-            const salva = Number(localStorage.getItem(getLojaPrincipalStorageKey()) || 0);
-            if (salva && permitidas.includes(salva)) return String(salva);
             const atual = Number(lojaPrincipalCache || 0);
             if (atual && permitidas.includes(atual)) return String(atual);
+            const salva = Number(localStorage.getItem(getLojaPrincipalStorageKey()) || 0);
+            if (salva && permitidas.includes(salva)) return String(salva);
             return permitidas.length ? String(permitidas[0]) : '';
         };
         const setLojaPrincipal = (loja) => {
@@ -2232,6 +2232,7 @@
             const data = await apiRequest('/api/auth/me');
             const user = data.user || {};
             usuarioSessaoCache = user;
+            lojaPrincipalCache = user.lojaPrincipal ? String(user.lojaPrincipal) : lojaPrincipalCache;
             window.EscalaPermissions?.setUser(user);
             applyPermissionBindings();
             if (goToTimelineBtn) goToTimelineBtn.classList.toggle('hidden', !canCreateEscalaSessao());
@@ -2305,6 +2306,20 @@
             if (!values) return;
             const loja = setLojaPrincipal(values['loja-principal']);
             if (!loja) return;
+            try {
+                const data = await apiRequest('/api/auth/me/loja-principal', {
+                    method: 'PATCH',
+                    body: JSON.stringify({ lojaPrincipal: Number(loja) })
+                });
+                usuarioSessaoCache = data.user || usuarioSessaoCache;
+                lojaPrincipalCache = String(usuarioSessaoCache?.lojaPrincipal || loja);
+                window.EscalaPermissions?.setUser(usuarioSessaoCache);
+            } catch (error) {
+                if (Number(error.status) !== 501) {
+                    showInfoModal(error.message, 'error');
+                    return;
+                }
+            }
             [lojaEscalaSelect, funcionariosLojaSelect, homeLojaSelect, escalasFiltroLoja, secoesLojaSelect, secaoFormLoja, turnosSecaoLojaSelect, escalaFuncionarioLoja, historicoLojaSelect, liberacaoSecoesLojaSelect]
                 .forEach((select) => {
                     if (select && Array.from(select.options || []).some((option) => option.value === loja)) select.value = loja;

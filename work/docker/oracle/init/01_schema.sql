@@ -127,9 +127,11 @@ create table SGN_ESC_USUARIO (
   SENHA_HASH varchar2(100) not null,
   PERFIL varchar2(30) not null,
   STATUS varchar2(1) default 'A' not null,
+  LOJA_PRINCIPAL number(10),
   DT_HR_INCL date default sysdate not null,
   constraint SGN_ESC_USUARIO_PK primary key (USUARIO_ID),
   constraint SGN_ESC_USUARIO_1_UK unique (LOGIN),
+  constraint SGN_ESC_USUARIO_LOJA_PRINC_CK check (LOJA_PRINCIPAL is null or LOJA_PRINCIPAL > 0),
   constraint SGN_ESC_USUARIO_STATUS_CK check (STATUS in ('A', 'I'))
 );
 

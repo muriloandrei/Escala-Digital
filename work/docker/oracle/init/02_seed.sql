@@ -79,8 +79,8 @@ join (
   select 'LIDER', 'regras', 1, 0, 0, 0, 0, 0, 0 from dual
 ) cfg on cfg.perfil = p.nome;
 
-insert into SGN_ESC_USUARIO (USUARIO_ID, LOGIN, NOME, SENHA_HASH, PERFIL, STATUS, DT_HR_INCL) values (1, 'admin', 'Administrador', '$2a$10$1N1BKFLNZh7I2s7bkMavhu2RBBJpWqQQXbONkZosobki33EPpzxWe', 'ADMIN', 'A', sysdate);
-insert into SGN_ESC_USUARIO (USUARIO_ID, LOGIN, NOME, SENHA_HASH, PERFIL, STATUS, DT_HR_INCL) values (2, 'loja1', 'Usuario Loja 1', '$2a$10$1N1BKFLNZh7I2s7bkMavhu2RBBJpWqQQXbONkZosobki33EPpzxWe', 'OPERADOR', 'A', sysdate);
+insert into SGN_ESC_USUARIO (USUARIO_ID, LOGIN, NOME, SENHA_HASH, PERFIL, STATUS, LOJA_PRINCIPAL, DT_HR_INCL) values (1, 'admin', 'Administrador', '$2a$10$1N1BKFLNZh7I2s7bkMavhu2RBBJpWqQQXbONkZosobki33EPpzxWe', 'ADMIN', 'A', 1, sysdate);
+insert into SGN_ESC_USUARIO (USUARIO_ID, LOGIN, NOME, SENHA_HASH, PERFIL, STATUS, LOJA_PRINCIPAL, DT_HR_INCL) values (2, 'loja1', 'Usuario Loja 1', '$2a$10$1N1BKFLNZh7I2s7bkMavhu2RBBJpWqQQXbONkZosobki33EPpzxWe', 'OPERADOR', 'A', 1, sysdate);
 insert into SGN_ESC_USUARIO_LOJA (USUARIO_ID, LOJA) values (2, 1);
 
 commit;

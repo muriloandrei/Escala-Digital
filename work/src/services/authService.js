@@ -12,6 +12,17 @@ function pick(row, ...keys) {
   return undefined;
 }
 
+async function getTableColumns(connection, tableName) {
+  const result = await connection.execute(
+    `select column_name
+       from user_tab_columns
+      where table_name = :tableName`,
+    { tableName: String(tableName || '').toUpperCase() },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  return new Set(result.rows.map((row) => pick(row, 'COLUMN_NAME', 'column_name')));
+}
+
 function isActiveStatus(status) {
   return String(status || '').trim().toUpperCase() === 'A';
 }
@@ -64,6 +75,8 @@ function invalidLoginError() {
 
 async function findUserByLogin(login) {
   return withConnection(async (connection) => {
+    const columns = await getTableColumns(connection, 'SGN_ESC_USUARIO');
+    const lojaPrincipalSelect = columns.has('LOJA_PRINCIPAL') ? ', u.loja_principal' : ', cast(null as number) as loja_principal';
     const result = await connection.execute(
       `select
           u.usuario_id,
@@ -72,6 +85,7 @@ async function findUserByLogin(login) {
           u.senha_hash,
           u.perfil,
           u.status
+          ${lojaPrincipalSelect}
        from sgn_esc_usuario u
        where upper(u.login) = upper(:login)`,
       { login },
@@ -84,6 +98,8 @@ async function findUserByLogin(login) {
 
 async function findUserById(usuarioId) {
   return withConnection(async (connection) => {
+    const columns = await getTableColumns(connection, 'SGN_ESC_USUARIO');
+    const lojaPrincipalSelect = columns.has('LOJA_PRINCIPAL') ? ', u.loja_principal' : ', cast(null as number) as loja_principal';
     const result = await connection.execute(
       `select
           u.usuario_id,
@@ -91,6 +107,7 @@ async function findUserById(usuarioId) {
           u.nome,
           u.perfil,
           u.status
+          ${lojaPrincipalSelect}
        from sgn_esc_usuario u
        where u.usuario_id = :usuarioId`,
       { usuarioId },
@@ -126,7 +143,8 @@ async function getSessionUserById(usuarioId) {
     login: pick(user, 'LOGIN', 'login'),
     nome: pick(user, 'NOME', 'nome'),
     perfil: pick(user, 'PERFIL', 'perfil'),
-    lojas
+    lojas,
+    lojaPrincipal: pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || null
   };
   sessionUser.permissoes = await getUserPermissions(sessionUser.perfil);
   return sessionUser;
@@ -161,7 +179,8 @@ async function login({ login, password }) {
     login: pick(user, 'LOGIN', 'login'),
     nome: pick(user, 'NOME', 'nome'),
     perfil: pick(user, 'PERFIL', 'perfil'),
-    lojas
+    lojas,
+    lojaPrincipal: pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || null
   };
   payload.permissoes = await getUserPermissions(payload.perfil);
 
@@ -178,15 +197,38 @@ async function getUserPermissions(perfil) {
   }
 }
 
+async function updateLojaPrincipal(usuarioId, lojaPrincipal) {
+  return withConnection(async (connection) => {
+    const columns = await getTableColumns(connection, 'SGN_ESC_USUARIO');
+    if (!columns.has('LOJA_PRINCIPAL')) {
+      const error = new Error('Coluna SGN_ESC_USUARIO.LOJA_PRINCIPAL nao encontrada. Rode a migration de loja principal.');
+      error.statusCode = 501;
+      throw error;
+    }
+
+    await connection.execute(
+      `update sgn_esc_usuario
+          set loja_principal = :lojaPrincipal
+        where usuario_id = :usuarioId`,
+      { usuarioId, lojaPrincipal },
+      { autoCommit: true }
+    );
+
+    return getSessionUserById(usuarioId);
+  });
+}
+
 module.exports = {
   login,
   getSessionUserById,
+  updateLojaPrincipal,
   _private: {
     isBcryptHash,
     isLegacyMd5Hash,
     isSupportedPasswordHash,
     md5Hex,
     verifyPasswordHash,
+    getTableColumns,
     upgradeLegacyMd5Password
   }
 };
