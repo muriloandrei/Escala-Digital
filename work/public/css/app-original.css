@@ -1594,6 +1594,11 @@
             outline: 1px solid #2563eb;
         }
 
+        .bank-employee-scale table th.week-start,
+        .bank-employee-scale table td.week-start {
+            border-left: 3px solid #2563eb;
+        }
+
         .bank-day-header-button:disabled,
         .detailed-day-button:disabled {
             color: #94a3b8;

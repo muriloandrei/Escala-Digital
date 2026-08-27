@@ -3338,6 +3338,12 @@
             const diasNoMes = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate();
             const diasSemana = ['D','S','T','Q','Q','S','S'];
             const map = new Map(atual.dias.map(dia => [Number(String(dia.DT).slice(8,10)), dia]));
+            const getWeekClass = (dia) => dia > 1 && new Date(ref.getFullYear(), ref.getMonth(), dia).getDay() === 1 ? ' week-start' : '';
+            const getDiaTitle = (dia) => {
+                if (!dia) return '';
+                if (isProgramacaoDescanso(dia.PROGRAMACAO)) return 'Descanso: ' + getValorDescanso(dia);
+                return 'Trabalho: ' + [dia.HR_ENT1, dia.HR_SAI1, dia.HR_ENT2, dia.HR_SAI2].filter(Boolean).join(' / ');
+            };
             const fields = [{key:'HR_ENT1',label:'ENT.'},{key:'HR_SAI1',label:'SAI.INT.'},{key:'INTERVALO',label:'INTER.'},{key:'HR_ENT2',label:'RET.INT.'},{key:'HR_SAI2',label:'SAI.'},{key:'TRABALHADAS',label:'H.TRAB'}];
             const criticasManuais = atual.dias
                 .filter(dia => dia.CRITICA_MANUAL)
@@ -3346,13 +3352,13 @@
             atual.criticas = criticas;
             const criticaButton = criticas.length ? '<button type="button" class="critical-status-chip funcionario-critical-chip" title="Ver criticas do funcionario" aria-label="Ver criticas do funcionario">CRITICA</button>' : '';
             let table = '<article class="bank-employee-scale"><header><div><h3>' + escapeHtml(atual.nome) + '</h3><p>' + escapeHtml(atual.chapa + ' | ' + atual.secao + ' | ' + atual.funcao) + '</p><p class="print-aware-inline">Ciente: ___________________________________________</p></div>' + criticaButton + '</header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
-            for(let d=1;d<=diasNoMes;d++) table += '<th class="employee-day-header">' + diasSemana[new Date(ref.getFullYear(),ref.getMonth(),d).getDay()] + '</th>';
+            for(let d=1;d<=diasNoMes;d++) table += '<th class="employee-day-header' + getWeekClass(d) + '">' + diasSemana[new Date(ref.getFullYear(),ref.getMonth(),d).getDay()] + '</th>';
             table += '</tr><tr><th>DIA</th>';
             for(let d=1;d<=diasNoMes;d++) {
                 const dia = map.get(d);
                 const bloqueado = isDiaMesBloqueadoParaEdicao(ref.getFullYear(), ref.getMonth(), d) || isEscalaFuncionarioFinalizada();
                 const title = bloqueado ? 'Dia bloqueado para edicao' : 'Editar dia ' + d;
-                table += '<th class="employee-day-header"><button type="button" class="bank-day-header-button funcionario-dia-edit" data-dia="' + d + '" title="' + title + '"' + (bloqueado ? ' disabled' : '') + '>' + d + '</button></th>';
+                table += '<th class="employee-day-header' + getWeekClass(d) + '"><button type="button" class="bank-day-header-button funcionario-dia-edit" data-dia="' + d + '" title="' + title + '"' + (bloqueado ? ' disabled' : '') + '>' + d + '</button></th>';
             }
             table += '</tr></thead><tbody>';
             fields.forEach(field => {
@@ -3368,9 +3374,9 @@
                         else value=dia[field.key]||'--';
                     }
                     const domingo=new Date(ref.getFullYear(),ref.getMonth(),d).getDay()===0;
-                    const cls=[descanso?(domingo?'day-off sunday':'day-off'):(domingo?'sunday':''), dia.CRITICA_MANUAL ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
+                    const cls=[descanso?(domingo?'day-off sunday':'day-off'):(domingo?'sunday':''), getWeekClass(d).trim(), dia.CRITICA_MANUAL ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
                     const marker = dia.CRITICA_MANUAL && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Critica: ajuste manual">!</span>' : '';
-                    table+='<td class="' + cls + '" data-dia="' + d + '">' + marker + escapeHtml(value) + '</td>';
+                    table+='<td class="' + cls + '" data-dia="' + d + '" title="' + escapeHtml(getDiaTitle(dia)) + '">' + marker + escapeHtml(value) + '</td>';
                 }
                 table+='</tr>';
             });
@@ -5070,6 +5076,14 @@
             const diasNoMes = new Date(ano, mes + 1, 0).getDate();
             const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
             const somenteLeitura = escalaDetalheAtual.status === 'FINALIZADA';
+            const getWeekClass = (dia) => dia > 1 && new Date(ano, mes, dia).getDay() === 1 ? ' week-start' : '';
+            const getDiaTitle = (registro) => {
+                if (!registro) return '';
+                if (isProgramacaoDescanso(registro.PROGRAMACAO)) {
+                    return 'Descanso: ' + getValorDescanso(registro);
+                }
+                return 'Trabalho: ' + [registro.HR_ENT1, registro.HR_SAI1, registro.HR_ENT2, registro.HR_SAI2].filter(Boolean).join(' / ');
+            };
             const fields = [
                 { key: 'HR_ENT1', label: 'ENT.' },
                 { key: 'HR_SAI1', label: 'SAÍ.INT.' },
@@ -5082,13 +5096,13 @@
                 const criticas = getCriticasFuncionarioBanco(funcionario);
                 const criticaButton = criticas.length ? '<button type="button" class="critical-status-chip banco-critical-chip" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" title="Ver criticas do funcionario">CRITICA</button>' : '';
                 let table = '<article class="bank-employee-scale" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '"><header><div><h3>' + escapeHtml(funcionario.nome) + '</h3><p>' + escapeHtml(funcionario.chapa) + (funcionario.funcao ? ' | ' + escapeHtml(funcionario.funcao) : '') + '</p><p class="print-aware-inline">Ciente: ___________________________________________</p></div>' + criticaButton + '</header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
-                for (let dia = 1; dia <= diasNoMes; dia += 1) table += '<th>' + diasSemana[new Date(ano, mes, dia).getDay()] + '</th>';
+                for (let dia = 1; dia <= diasNoMes; dia += 1) table += '<th class="' + getWeekClass(dia).trim() + '">' + diasSemana[new Date(ano, mes, dia).getDay()] + '</th>';
                 table += '</tr><tr><th>DIA</th>';
                 for (let dia = 1; dia <= diasNoMes; dia += 1) {
                     const registro = funcionario.dias.get(dia);
                     const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia);
                     const dayContent = !somenteLeitura && registro ? '<button type="button" class="bank-day-header-button bank-day-edit" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" title="' + (bloqueado ? 'Dia bloqueado para edicao' : 'Editar dia ' + dia) + '"' + (bloqueado ? ' disabled' : '') + '>' + dia + '</button>' : dia;
-                    table += '<th>' + dayContent + '</th>';
+                    table += '<th class="' + getWeekClass(dia).trim() + '">' + dayContent + '</th>';
                 }
                 table += '</tr></thead><tbody>';
                 fields.forEach((field) => {
@@ -5104,9 +5118,9 @@
                             else value = registro[field.key] || '--';
                         }
                         const domingo = new Date(ano, mes, numeroDia).getDay() === 0;
-                        const cellClass = [folga ? (domingo ? 'day-off sunday' : 'day-off') : (domingo ? 'sunday' : ''), registro.CRITICA_MANUAL ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
+                        const cellClass = [folga ? (domingo ? 'day-off sunday' : 'day-off') : (domingo ? 'sunday' : ''), getWeekClass(numeroDia).trim(), registro.CRITICA_MANUAL ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
                         const marker = registro.CRITICA_MANUAL && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Critica: ajuste manual">!</span>' : '';
-                        table += '<td class="' + cellClass + '">' + marker + escapeHtml(value) + '</td>';
+                        table += '<td class="' + cellClass + '" title="' + escapeHtml(getDiaTitle(registro)) + '">' + marker + escapeHtml(value) + '</td>';
                     }
                     table += '</tr>';
                 });
