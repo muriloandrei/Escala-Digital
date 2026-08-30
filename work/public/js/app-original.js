@@ -393,7 +393,7 @@
             expandActiveNavGroup(navTurnosSecao);
             setCurrentPageTitle('turnosSecao');
             novoTurnoSecaoBtn?.classList.toggle('hidden', !hasPermission('turnos-secao', 'criar'));
-            gerarEscalaTurnosBtn?.classList.toggle('hidden', !isPerfilLiderSessao());
+            gerarEscalaTurnosBtn?.classList.add('hidden');
             catalogosPageController?.carregarTurnosSecao?.(false).catch(error => showInfoModal(error.message, 'error'));
         }
 
@@ -2775,14 +2775,27 @@
                 const turnosHtml = turnos.map((turno) => {
                     const funcionariosTurno = funcionarios.filter(funcionario => funcionarioPertenceAoTurno(funcionario, turno));
                     const periodo = [turno.HR_ENT1, turno.HR_SAI1, turno.HR_ENT2, turno.HR_SAI2].filter(Boolean).join(' / ');
-                    return '<section class="turno-detail-section"><header><strong>' + escapeHtml(periodo) + '</strong><span>' + escapeHtml(funcionariosTurno.length) + ' funcionário(s)</span></header>' +
+                    const editar = hasPermission('turnos-secao', 'editar')
+                        ? '<button type="button" class="action-btn-table banco-action edit-turno-detail" data-id="' + escapeHtml(turno.ESCSECAOTURNO_ID || '') + '" data-loja="' + escapeHtml(turno.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar Turno</button>'
+                        : '';
+                    return '<section class="turno-detail-section"><header><div><strong>' + escapeHtml(periodo) + '</strong><span>' + escapeHtml(funcionariosTurno.length) + ' funcionário(s)</span></div>' + editar + '</header>' +
                         '<div class="turno-operacional-workers">' + (funcionariosTurno.length ? funcionariosTurno.map(funcionario => '<span class="turno-worker"><strong>' + escapeHtml((funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '')) + '</strong><small>' + escapeHtml(funcionario.FUNCAO_DESCR || funcionario.FUNCAO || '') + '</small></span>').join('') : '<span class="turnos-operacionais-vazio">Nenhum funcionário neste turno.</span>') + '</div></section>';
                 }).join('');
                 showInputModal({
                     title: 'Funcionários - ' + titulo,
                     inputs: [{ type: 'html', html: '<div class="turno-detail-modal">' + (turnosHtml || '<p>Nenhum turno encontrado.</p>') + '</div>' }],
                     cancelText: '',
-                    confirmText: 'Fechar'
+                    confirmText: 'Fechar',
+                    panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-3xl flex flex-col',
+                    onRender: (modalBody) => {
+                        modalBody.querySelectorAll('.edit-turno-detail').forEach((button) => {
+                            button.addEventListener('click', () => {
+                                if (button.dataset.loja) turnosSecaoLojaSelect.value = button.dataset.loja;
+                                window.location.hash = `/turnos-secao/${button.dataset.id}`;
+                                document.getElementById('inputModal')?.classList.add('hidden');
+                            });
+                        });
+                    }
                 });
                 return;
             }
@@ -4830,7 +4843,10 @@
             tabelaBancoBody.innerHTML = '';
 
             if (!escalas || escalas.length === 0) {
-                tabelaBancoBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Nenhuma escala encontrada para os filtros selecionados.</td></tr>';
+                const action = canCreateEscalaSessao()
+                    ? '<div class="empty-table-action"><button type="button" class="action-button banco-criar-vazio"><span class="material-symbols-outlined">add</span>Gerar Escala</button></div>'
+                    : '<div class="text-gray-500 mt-2">Nenhuma escala liberada para as seções do seu perfil.</div>';
+                tabelaBancoBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8"><strong>Nenhuma escala encontrada para os filtros selecionados.</strong>' + action + '</td></tr>';
                 return;
             }
 
@@ -5910,7 +5926,7 @@
 
             while (true) {
                 const values = await showInputModal({
-                    title: 'Criar Nova Escala',
+                    title: 'Gerar Escala',
                     inputs: [
                         { type: 'message', text: 'Selecione a loja e o período da nova escala.' },
                         { label: 'Loja', type: 'select', id: 'nova-escala-loja', value: valoresPadrao.loja, options: lojaOptions, required: true },
@@ -5918,7 +5934,7 @@
                         { label: 'Ano', type: 'select', id: 'nova-escala-ano', value: valoresPadrao.ano, options: anoOptions, required: true }
                     ],
                     cancelText: 'Cancelar',
-                    confirmText: 'Iniciar Criação'
+                    confirmText: 'Gerar Escala'
                 });
                 if (!values) return;
 
@@ -6097,9 +6113,14 @@
         tabelaBancoBody.addEventListener('click', async (e) => {
             const abrirButton = e.target.closest('.banco-abrir');
             const criarButton = e.target.closest('.banco-criar');
+            const criarVazioButton = e.target.closest('.banco-criar-vazio');
             const oficializarButton = e.target.closest('.banco-oficializar');
             const inativarButton = e.target.closest('.banco-inativar');
             const historicoButton = e.target.closest('.banco-historico');
+            if (criarVazioButton) {
+                iniciarNovaEscalaRascunho().catch(error => showInfoModal(error.message, 'error'));
+                return;
+            }
             if (!abrirButton && !criarButton && !oficializarButton && !inativarButton && !historicoButton) return;
 
             const button = abrirButton || criarButton || oficializarButton || inativarButton || historicoButton;
