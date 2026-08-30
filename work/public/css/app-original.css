@@ -337,6 +337,14 @@
         .hidden {
             display: none !important;
         }
+
+        .sr-only {
+            height: 1px;
+            margin: -1px;
+            overflow: hidden;
+            position: absolute;
+            width: 1px;
+        }
         
         /* --- ESTILOS DA PÁGINA DE REGISTROS --- */
         .header-actions {
@@ -1418,10 +1426,66 @@
             overflow-x: auto;
         }
 
+        .view-switch {
+            align-items: center;
+            background: #eef4ff;
+            border: 1px solid #cfe0ff;
+            border-radius: 999px;
+            display: inline-flex;
+            gap: 4px;
+            padding: 4px;
+        }
+
+        .view-switch button {
+            background: transparent;
+            border: 0;
+            border-radius: 999px;
+            color: #475569;
+            cursor: pointer;
+            font-weight: 800;
+            padding: 8px 14px;
+        }
+
+        .view-switch button.active {
+            background: var(--cor-principal);
+            color: #ffffff;
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.18);
+        }
+
+        .daily-toolbar {
+            align-items: center;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin: 0 0 14px;
+        }
+
+        .day-nav-button,
+        .day-current-button {
+            align-items: center;
+            background: #ffffff;
+            border: 1px solid #cfe0ff;
+            border-radius: 8px;
+            color: var(--cor-principal);
+            cursor: pointer;
+            display: inline-flex;
+            font-weight: 800;
+            gap: 8px;
+            min-height: 40px;
+            padding: 8px 12px;
+        }
+
+        .day-current-button {
+            color: var(--cor-texto);
+            justify-content: center;
+            min-width: 260px;
+        }
+
         .daily-schedule-axis,
         .daily-schedule-row {
             display: grid;
-            grid-template-columns: 260px minmax(1100px, 1fr);
+            grid-template-columns: 220px minmax(900px, 1fr);
         }
 
         .daily-schedule-axis {
@@ -1464,6 +1528,9 @@
         .daily-schedule-person span {
             color: var(--cor-texto-leve);
             font-size: 0.72rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .daily-schedule-track {
@@ -1534,7 +1601,7 @@
             border-right: 1px solid #e5edf6;
             font-size: 0.78rem;
             height: 34px;
-            min-width: 52px;
+            min-width: 54px;
             padding: 6px 8px;
             text-align: center;
             white-space: nowrap;
@@ -1553,46 +1620,52 @@
         }
 
         .monthly-scale-table thead tr:nth-child(2) th {
-            top: 34px;
+            top: 44px;
+            z-index: 5;
+        }
+
+        .monthly-scale-table thead tr:nth-child(3) th {
+            top: 78px;
             z-index: 5;
         }
 
         .monthly-scale-table .employee-col {
             left: 0;
-            min-width: 280px;
+            min-width: 250px;
             position: sticky;
             text-align: left;
-            z-index: 6;
+            z-index: 8;
         }
 
         .monthly-scale-table tbody .employee-col {
             background: #ffffff;
         }
 
-        .monthly-scale-table .employee-col strong,
-        .monthly-scale-table .employee-col span {
+        .monthly-scale-table .employee-col strong {
             display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .monthly-scale-table .employee-col span {
-            color: var(--cor-texto-leve);
-            font-size: 0.72rem;
-            margin-top: 2px;
-        }
-
-        .monthly-quality span,
-        .monthly-quality small {
+        .monthly-total-box {
+            border-radius: 4px;
             display: block;
-        }
-
-        .monthly-quality span {
-            color: #15803d;
-            font-weight: 800;
-        }
-
-        .monthly-quality small {
-            color: var(--cor-texto-leve);
             font-size: 0.67rem;
+            font-weight: 900;
+            line-height: 1.1;
+            margin: 1px auto;
+            padding: 2px 3px;
+        }
+
+        .monthly-total-box.folga {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .monthly-total-box.trabalho {
+            background: #dcfce7;
+            color: #15803d;
         }
 
         .monthly-scale-table .week-start {
@@ -1679,6 +1752,40 @@
         .turno-worker strong,
         .turno-worker small {
             display: block;
+        }
+
+        .compact-section-row {
+            grid-template-columns: minmax(260px, 1.4fr) 140px minmax(240px, 1fr) auto;
+        }
+
+        .turno-detail-modal {
+            display: grid;
+            gap: 12px;
+        }
+
+        .turno-detail-section {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .turno-detail-section header {
+            align-items: center;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .turno-detail-section header span {
+            color: var(--cor-texto-leve);
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .action-button:disabled {
+            cursor: not-allowed;
+            filter: grayscale(0.25);
+            opacity: 0.45;
         }
 
         @media (max-width: 720px) {

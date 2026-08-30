@@ -479,14 +479,13 @@
                     </div>
                     <div class="header-actions">
                         <button type="button" class="action-button danger-action hidden" id="criticasDetalheBancoBtn">
-                            <span class="material-symbols-outlined">priority_high</span>
                             Cr&iacute;ticas
                         </button>
                         <button type="button" class="action-button secondary hidden" id="gerarDetalhadaBancoBtn">
                             <span class="material-symbols-outlined">view_list</span>
                             Gerar Escala Detalhada
                         </button>
-                        <button type="button" class="action-button secondary" id="salvarRascunhoBancoBtn">
+                        <button type="button" class="action-button" id="salvarRascunhoBancoBtn">
                             <span class="material-symbols-outlined">save</span>
                             Salvar Rascunho
                         </button>
@@ -509,28 +508,40 @@
                 <div class="table-card mt-6">
                     <div class="table-card-header creation-card-header">
                         <div>
-                            <h2 id="escalaSecaoMensalTitulo">Visão mensal</h2>
-                            <p class="table-card-subtitle">Funcionários por dia, separados por semana. Passe o mouse para ver o horário completo.</p>
-                        </div>
-                    </div>
-                    <div id="escalaBancoMensalContent" class="monthly-scale-wrapper"></div>
-                </div>
-
-                <div class="table-card mt-6">
-                    <div class="table-card-header creation-card-header">
-                        <div>
-                            <h2 id="escalaSecaoTimelineTitulo">Timeline diária</h2>
-                            <p class="table-card-subtitle">Visão diária operacional da seção selecionada.</p>
+                            <h2 id="escalaSecaoMensalTitulo">Escala da Se&ccedil;&atilde;o</h2>
+                            <p class="table-card-subtitle">Alterne entre a vis&atilde;o mensal e a timeline operacional do dia.</p>
                         </div>
                         <div class="header-actions">
-                            <select id="escalaBancoDiaSelect" class="escala-filter-select" aria-label="Selecionar dia da timeline"></select>
+                            <div class="view-switch" role="group" aria-label="Alternar vis&atilde;o da escala">
+                                <button type="button" class="active" id="escalaViewMensalBtn">Mensal</button>
+                                <button type="button" id="escalaViewDiariaBtn">Di&aacute;ria</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="escalaBancoMensalPanel">
+                        <div id="escalaBancoMensalContent" class="monthly-scale-wrapper"></div>
+                    </div>
+                    <div id="escalaBancoDiariaPanel" class="hidden">
+                        <div class="daily-toolbar">
+                            <button type="button" class="day-nav-button" id="escalaBancoDiaAnteriorBtn" aria-label="Dia anterior">
+                                <span class="material-symbols-outlined">chevron_left</span>
+                            </button>
+                            <button type="button" class="day-current-button" id="escalaBancoDiaAtualBtn">
+                                <span class="material-symbols-outlined">calendar_month</span>
+                                <span id="escalaBancoDiaAtualLabel">Selecione um dia</span>
+                            </button>
+                            <button type="button" class="day-nav-button" id="escalaBancoDiaProximoBtn" aria-label="Pr&oacute;ximo dia">
+                                <span class="material-symbols-outlined">chevron_right</span>
+                            </button>
                             <button type="button" class="action-button secondary" id="imprimirTimelineBancoBtn">
                                 <span class="material-symbols-outlined">print</span>
                                 Imprimir Timeline
                             </button>
                         </div>
+                        <select id="escalaBancoDiaSelect" class="hidden" aria-hidden="true"></select>
+                        <h2 id="escalaSecaoTimelineTitulo" class="sr-only">Timeline di&aacute;ria</h2>
+                        <div id="escalaBancoTimelineContent" class="daily-timeline-list"></div>
                     </div>
-                    <div id="escalaBancoTimelineContent" class="daily-timeline-list"></div>
                 </div>
 
                 <div class="table-card mt-6 hidden" id="escalaBancoDetalhadaCard">
