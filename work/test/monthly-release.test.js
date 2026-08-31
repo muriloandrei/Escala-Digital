@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const monthlyReleaseService = require('../src/services/monthlyReleaseService');
-const { buildFuncionarioRascunho, buildFuncionariosRascunhoBalanceado, getPadroesFolgaValidos } = monthlyReleaseService;
+const { buildFuncionarioRascunho, buildFuncionariosRascunhoBalanceado, buildFuncionariosLiberacao, getPadroesFolgaValidos } = monthlyReleaseService;
 const { _private } = require('../src/services/escalaService');
 const { validateEscalaPayload } = require('../src/rules/escalaRules');
 const catalogService = require('../src/services/catalogService');
@@ -148,6 +148,104 @@ test('monthly release draft keeps at most two rests per employee week', () => {
       });
     folgasPorSemana.forEach((total) => assert.ok(total <= 2));
   });
+});
+
+test('monthly release applies vacations and absences as protected rest days', () => {
+  const funcionarios = [{
+    ESCFUNC_ID: 800,
+    CHAPA: '080080',
+    NOME: 'Funcionario Ausente',
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+  const turnos = [{
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01', {
+    ausencias: [
+      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-02', DT_FIM: '2026-09-03', MOTIVO: 'Ferias' },
+      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-08', DT_FIM: '2026-09-08', MOTIVO: 'Afastamento medico' }
+    ]
+  });
+  const dias = new Map(rascunhos[0].dias.map((dia) => [dia.data, dia]));
+
+  assert.equal(dias.get('2026-09-02').programacao, 'FER');
+  assert.equal(dias.get('2026-09-03').programacao, 'FER');
+  assert.equal(dias.get('2026-09-08').programacao, 'AFA');
+  assert.equal(dias.get('2026-09-02').hrEnt1, 'FER');
+  assert.equal(dias.get('2026-09-08').hrSai2, 'AFA');
+});
+
+test('monthly release preserves fixed rest days before automatic distribution', () => {
+  const funcionarios = [{
+    ESCFUNC_ID: 810,
+    CHAPA: '081081',
+    NOME: 'Funcionario Fixo',
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+  const turnos = [{
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01', {
+    fixos: [{ ESCFUNC_ID: 810, DT: '2026-09-10', PROGRAMACAO: 'FXF', JUSTIFICATIVA: 'Folga fixa do lider' }]
+  });
+  const diaFixo = rascunhos[0].dias.find((dia) => dia.data === '2026-09-10');
+
+  assert.equal(diaFixo.programacao, 'FXF');
+  assert.equal(diaFixo.hrEnt1, 'FXF');
+  assert.equal(diaFixo.justificativa, 'Folga fixa do lider');
+});
+
+test('monthly release liberation creates only monthly headers', () => {
+  const funcionarios = [{
+    ESCFUNC_ID: 900,
+    CHAPA: '090090',
+    NOME: 'Funcionario Liberado',
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+  const turnos = [{
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+
+  const liberados = buildFuncionariosLiberacao(funcionarios, turnos);
+
+  assert.equal(liberados.length, 1);
+  assert.equal(liberados[0].dias.length, 0);
+  assert.equal(liberados[0].turnoOficial.hrEnt1, '08:00');
 });
 
 test('monthly release keeps legacy 07:20 schedule and flags it as critique', () => {
@@ -368,16 +466,16 @@ test('monthly release does not repeat the same 14 day rest shape for every emplo
   assert.equal(todosRepetemMesmoCiclo, false);
 });
 
-test('monthly release saves draft even when automatic validation returns critiques', async () => {
+test('section generation saves draft even when automatic validation returns critiques', async () => {
   const originals = {
-    listEscalasResumo: escalaService.listEscalasResumo,
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
     listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listFixosEscala: escalaService.listFixosEscala,
     saveEscalasBatch: escalaService.saveEscalasBatch
   };
   let savedPayload = null;
 
-  escalaService.listEscalasResumo = async () => [];
   catalogService.listFuncionariosByLoja = async () => [{
     ESCFUNC_ID: 300,
     CHAPA: '030030',
@@ -391,15 +489,18 @@ test('monthly release saves draft even when automatic validation returns critiqu
     HR_SAI2: '17:58'
   }];
   catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listFixosEscala = async () => [];
   escalaService.saveEscalasBatch = async (payload) => {
     savedPayload = payload;
     return payload.funcionarios;
   };
 
   try {
-    const result = await monthlyReleaseService.liberarEscalaLojaMes({
+    const result = await monthlyReleaseService.gerarEscalaSecao({
       lojaId: 10,
       mesRef: '2026-09-01',
+      escsecaoId: 20,
       hojeIso: '2026-09-01'
     });
 
@@ -409,9 +510,10 @@ test('monthly release saves draft even when automatic validation returns critiqu
     assert.equal(savedPayload.oficializada, 0);
     assert.equal(savedPayload.funcionarios.length, 1);
   } finally {
-    escalaService.listEscalasResumo = originals.listEscalasResumo;
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
     catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
+    escalaService.listFixosEscala = originals.listFixosEscala;
     escalaService.saveEscalasBatch = originals.saveEscalasBatch;
   }
 });

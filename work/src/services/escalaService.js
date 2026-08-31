@@ -200,6 +200,10 @@ function normalizeOracleSaveError(error) {
   return normalized;
 }
 
+function isMissingObjectError(error) {
+  return error?.errorNum === 942 || error?.code === 'ORA-00942' || error?.errorNum === 2289 || error?.code === 'ORA-02289';
+}
+
 function assertUniqueFuncionarios(funcionarios = []) {
   const seen = new Set();
   const duplicates = new Set();
@@ -473,10 +477,115 @@ async function listHistoricoEscala({ lojaId, mesRef, lojasPermitidas = [] }) {
   });
 }
 
+async function listFixosEscalaComConnection(connection, { lojaId, mesRef, escsecaoId = null }) {
+  try {
+    const binds = { lojaId, mesRef };
+    const filters = [
+      'loja = :lojaId',
+      "mes_ref = to_date(:mesRef, 'YYYY-MM-DD')",
+      "nvl(status, 'A') = 'A'"
+    ];
+    if (escsecaoId) {
+      binds.escsecaoId = Number(escsecaoId);
+      filters.push('escsecao_id = :escsecaoId');
+    }
+    const result = await connection.execute(
+      `select escfixo_id, loja, mes_ref, escfunc_id, escsecao_id, dt, programacao,
+              hr_ent1, hr_sai1, hr_ent2, hr_sai2, justificativa, status, dt_hr_incl
+         from sgn_esc_fixo_escala
+        where ${filters.join(' and ')}
+        order by escsecao_id, escfunc_id, dt`,
+      binds,
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows || [];
+  } catch (error) {
+    if (isMissingObjectError(error)) return [];
+    throw error;
+  }
+}
+
+async function listFixosEscala({ lojaId, mesRef, escsecaoId = null }) {
+  return withConnection((connection) => listFixosEscalaComConnection(connection, { lojaId, mesRef, escsecaoId }));
+}
+
+async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data }) {
+  return withConnection(async (connection) => {
+    try {
+      if (isDiaBloqueadoParaEdicao(data.DT || data.dt)) {
+        const error = new Error('Dias ja passados nao podem receber fixos de escala.');
+        error.statusCode = 422;
+        throw error;
+      }
+      const funcionarioDb = await getFuncionarioEscala(connection, escfuncId);
+      if (!funcionarioDb || Number(funcionarioDb.LOJA) !== Number(lojaId) || Number(funcionarioDb.ESCSECAO_ID) !== Number(escsecaoId)) {
+        const error = new Error('Funcionario nao encontrado na loja/secao informada.');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const programacaoInput = String(data.PROGRAMACAO || data.programacao || 'TRB').trim().toUpperCase();
+      const programacao = programacaoInput === 'F' || programacaoInput === 'FOLGA' ? 'FXF' : programacaoInput;
+      const descanso = programacao !== 'TRB';
+      const binds = {
+        lojaId: Number(lojaId),
+        mesRef,
+        escfuncId: Number(escfuncId),
+        escsecaoId: Number(escsecaoId),
+        dt: data.DT || data.dt,
+        programacao,
+        hrEnt1: descanso ? programacao : data.HR_ENT1,
+        hrSai1: descanso ? programacao : data.HR_SAI1,
+        hrEnt2: descanso ? programacao : data.HR_ENT2,
+        hrSai2: descanso ? programacao : data.HR_SAI2,
+        justificativa: data.JUSTIFICATIVA || data.justificativa || null
+      };
+
+      await connection.execute(
+        `merge into sgn_esc_fixo_escala t
+         using (
+           select :lojaId as loja,
+                  to_date(:mesRef, 'YYYY-MM-DD') as mes_ref,
+                  :escfuncId as escfunc_id,
+                  to_date(:dt, 'YYYY-MM-DD') as dt
+             from dual
+         ) s
+         on (t.loja = s.loja and t.mes_ref = s.mes_ref and t.escfunc_id = s.escfunc_id and t.dt = s.dt)
+         when matched then update set
+           t.escsecao_id = :escsecaoId,
+           t.programacao = :programacao,
+           t.hr_ent1 = :hrEnt1,
+           t.hr_sai1 = :hrSai1,
+           t.hr_ent2 = :hrEnt2,
+           t.hr_sai2 = :hrSai2,
+           t.justificativa = :justificativa,
+           t.status = 'A',
+           t.dt_hr_incl = sysdate
+         when not matched then insert (
+           escfixo_id, loja, mes_ref, escfunc_id, escsecao_id, dt, programacao,
+           hr_ent1, hr_sai1, hr_ent2, hr_sai2, justificativa, status, dt_hr_incl
+         ) values (
+           sgn_esc_fixo_escala_seq.nextval, :lojaId, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :escsecaoId,
+           to_date(:dt, 'YYYY-MM-DD'), :programacao, :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :justificativa, 'A', sysdate
+         )`,
+        binds,
+        { autoCommit: false }
+      );
+      await connection.commit();
+      const fixos = await listFixosEscalaComConnection(connection, { lojaId, mesRef, escsecaoId });
+      return fixos.find((fixo) => Number(pick(fixo, 'ESCFUNC_ID', 'escfunc_id')) === Number(escfuncId)
+        && formatDateValue(pick(fixo, 'DT', 'dt')) === formatDateValue(data.DT || data.dt)) || null;
+    } catch (error) {
+      await connection.rollback();
+      throw normalizeOracleSaveError(error);
+    }
+  });
+}
+
 async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
-    if (latestRevision === null) return { revisao: null, status: null, dias: [] };
+    if (latestRevision === null) return { revisao: null, status: null, dias: [], funcionarios: [], secoes: [] };
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
     const binds = { lojaId, mesRef };
@@ -534,10 +643,71 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
+    const rows = result.rows || [];
+    let fixos = await listFixosEscalaComConnection(connection, { lojaId, mesRef });
+    if (Array.isArray(secoesPermitidas)) {
+      const permitidasSet = new Set(secoesPermitidas.map(Number).filter(Boolean));
+      fixos = fixos.filter((fixo) => permitidasSet.has(Number(pick(fixo, 'ESCSECAO_ID', 'escsecao_id'))));
+    }
+    const fixosMap = new Map(fixos.map((fixo) => [
+      `${pick(fixo, 'ESCFUNC_ID', 'escfunc_id')}|${formatDateValue(pick(fixo, 'DT', 'dt'))}`,
+      fixo
+    ]));
+    rows.forEach((row) => {
+      const fixo = fixosMap.get(`${pick(row, 'ESCFUNC_ID', 'escfunc_id')}|${formatDateValue(pick(row, 'DT', 'dt'))}`);
+      if (!fixo) return;
+      row.FIXO_ESCALA = 1;
+      row.JUSTIFICATIVA_ALTERACAO = pick(fixo, 'JUSTIFICATIVA', 'justificativa');
+    });
+    const funcionariosMap = new Map();
+    const secoesMap = new Map();
+    rows.forEach((row) => {
+      const escfuncId = pick(row, 'ESCFUNC_ID', 'escfunc_id');
+      const escsecaoId = pick(row, 'ESCSECAO_ID', 'escsecao_id');
+      if (escfuncId && !funcionariosMap.has(String(escfuncId))) {
+        funcionariosMap.set(String(escfuncId), {
+          ESCFUNC_ID: escfuncId,
+          CHAPA: pick(row, 'CHAPA', 'chapa'),
+          NOME: pick(row, 'NOME', 'nome'),
+          ESCSECAO_ID: escsecaoId,
+          ESCFUNCAO_ID: pick(row, 'ESCFUNCAO_ID', 'escfuncao_id'),
+          COD_SECAO: pick(row, 'COD_SECAO', 'cod_secao'),
+          SECAO_DESCR: pick(row, 'SECAO_DESCR', 'secao_descr'),
+          FUNCAO_DESCR: pick(row, 'FUNCAO_DESCR', 'funcao_descr'),
+          GERADA: pick(row, 'ESCPROGDIA_ID', 'escprogdia_id') ? 1 : 0
+        });
+      } else if (escfuncId && pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')) {
+        funcionariosMap.get(String(escfuncId)).GERADA = 1;
+      }
+      if (escsecaoId) {
+        const secaoKey = String(escsecaoId);
+        if (!secoesMap.has(secaoKey)) {
+          secoesMap.set(secaoKey, {
+            ESCSECAO_ID: escsecaoId,
+            COD_SECAO: pick(row, 'COD_SECAO', 'cod_secao'),
+            DESCR: pick(row, 'SECAO_DESCR', 'secao_descr'),
+            FUNCIONARIOS: new Set(),
+            GERADOS: new Set()
+          });
+        }
+        secoesMap.get(secaoKey).FUNCIONARIOS.add(String(escfuncId));
+        if (pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')) secoesMap.get(secaoKey).GERADOS.add(String(escfuncId));
+      }
+    });
+
     return {
       revisao: latestRevision,
       status: getMesStatus(mesRef, latestRevision),
-      dias: result.rows
+      dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')),
+      funcionarios: [...funcionariosMap.values()],
+      fixos,
+      secoes: [...secoesMap.values()].map((secao) => ({
+        ESCSECAO_ID: secao.ESCSECAO_ID,
+        COD_SECAO: secao.COD_SECAO,
+        DESCR: secao.DESCR,
+        FUNCIONARIOS: secao.FUNCIONARIOS.size,
+        GERADOS: secao.GERADOS.size
+      }))
     };
   });
 }
@@ -1279,6 +1449,8 @@ module.exports = {
   listEscalasResumo,
   listEscalaRevisoes,
   listHistoricoEscala,
+  listFixosEscala,
+  saveFixoEscala,
   getEscalaMensal,
   getEscalaHeader,
   getEscalaDias,

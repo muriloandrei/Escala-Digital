@@ -34,7 +34,7 @@ function isDescanso(dia) {
 
 function isFolgaSemanal(dia) {
   const programacao = String(dia?.programacao || dia?.PROGRAMACAO || 'TRB').trim().toUpperCase();
-  return programacao === 'F' || programacao === 'FOLGA';
+  return programacao === 'F' || programacao === 'FOLGA' || programacao === 'FXF' || programacao === 'FOLGA_FIXA';
 }
 
 function getWeekKey(dataIso) {

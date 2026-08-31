@@ -3508,9 +3508,12 @@
             if (['F', 'FOLGA'].includes(normalized)) return 'F';
             if (['FER', 'FERIAS'].includes(normalized)) return 'FER';
             if (['AFA', 'AFASTAMENTO'].includes(normalized)) return 'AFA';
+            if (['FXF', 'FOLGA_FIXA'].includes(normalized)) return 'F';
             return valor.slice(0, 3);
         };
         const getClasseDescanso = (dia) => {
+            const programacao = String(dia?.PROGRAMACAO || dia?.programacao || '').toUpperCase();
+            if (['FXF', 'FOLGA_FIXA'].includes(programacao)) return 'rest-cell-fixo';
             const sigla = getValorDescanso(dia);
             if (sigla === 'FER') return 'rest-cell-ferias';
             if (sigla === 'AFA') return 'rest-cell-afastamento';
@@ -3522,7 +3525,7 @@
         };
         const isDataBloqueadaParaEdicao = (dataIso) => String(dataIso || '').slice(0, 10) <= getHojeIsoApp();
         const isDiaMesBloqueadoParaEdicao = (ano, mes, dia) => isDataBloqueadaParaEdicao(formatDateForDb(Number(ano), Number(mes), Number(dia)));
-        const isFolgaSemanalApp = (dia) => ['F', 'FOLGA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
+        const isFolgaSemanalApp = (dia) => ['F', 'FOLGA', 'FXF', 'FOLGA_FIXA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
         const getWeekKeyIsoApp = (dataIso) => {
             const date = new Date(String(dataIso || '').slice(0, 10) + 'T00:00:00');
             const day = date.getDay();
@@ -5198,6 +5201,11 @@
             const codigo = dia.COD_SECAO ? dia.COD_SECAO + ' - ' : '';
             return codigo + (dia.SECAO_DESCR || 'Sem seção');
         };
+        const getSecaoLiberadaKey = (secao) => String(secao.ESCSECAO_ID || secao.COD_SECAO || secao.DESCR || 'SEM_SECAO');
+        const getSecaoLiberadaNome = (secao) => {
+            const codigo = secao.COD_SECAO ? secao.COD_SECAO + ' - ' : '';
+            return codigo + (secao.DESCR || secao.SECAO_DESCR || 'Sem seção');
+        };
         const normalizarTextoComparacao = (texto = '') => String(texto || '')
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
@@ -5206,6 +5214,8 @@
         const isSecaoFrenteCaixa = (nome = '') => normalizarTextoComparacao(nome).includes('frente de caixa');
         const getSubsetorDetalheKey = (dia) => String(dia.ESCFUNCAO_ID || dia.FUNCAO_DESCR || dia.FUNCAO || 'SEM_CARGO');
         const getSubsetorDetalheNome = (dia) => String(dia.FUNCAO_DESCR || dia.FUNCAO || (dia.ESCFUNCAO_ID ? 'Cargo ' + dia.ESCFUNCAO_ID : 'Sem cargo'));
+        const isProgramacaoProtegidaBanco = (programacao) => ['FER', 'AFA', 'FXF', 'FIX'].includes(String(programacao || '').toUpperCase());
+        const isDiaProtegidoBanco = (dia) => isProgramacaoProtegidaBanco(dia?.PROGRAMACAO) || dia?.AUSENCIA_OBRIGATORIA || Number(dia?.FIXO_ESCALA || 0) === 1;
 
         const resetarEstadoEdicaoBanco = () => {
             escalaDetalheBancoValidada = false;
@@ -5248,6 +5258,68 @@
                 if (numeroDia) grupos.get(key).dias.set(numeroDia, dia);
             });
             return [...grupos.values()].sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+        };
+
+        const getFuncionariosSecaoAtualBanco = () => {
+            return (escalaDetalheAtual.funcionarios || [])
+                .filter(funcionario => String(funcionario.ESCSECAO_ID || '') === String(escalaDetalheAtual.secaoAtiva || ''))
+                .sort((a, b) => String(a.NOME || '').localeCompare(String(b.NOME || '')) || String(a.CHAPA || '').localeCompare(String(b.CHAPA || '')));
+        };
+
+        const getFixosSecaoAtualBanco = () => {
+            return (escalaDetalheAtual.fixos || [])
+                .filter(fixo => String(fixo.ESCSECAO_ID || fixo.escsecao_id || '') === String(escalaDetalheAtual.secaoAtiva || ''));
+        };
+
+        const abrirModalFixoSecaoBanco = async () => {
+            const funcionarios = getFuncionariosSecaoAtualBanco();
+            if (!funcionarios.length) {
+                showInfoModal('Nenhum funcionário encontrado para cadastrar fixo nesta seção.', 'info');
+                return;
+            }
+            const dataRef = new Date((escalaDetalheAtual.mesRef || formatDateForDb(new Date().getFullYear(), new Date().getMonth(), 1)) + 'T00:00:00');
+            const hoje = new Date();
+            const dataPadrao = dataRef.getFullYear() === hoje.getFullYear() && dataRef.getMonth() === hoje.getMonth()
+                ? getHojeIsoApp()
+                : formatDateForDb(dataRef.getFullYear(), dataRef.getMonth(), 1);
+            const values = await showInputModal({
+                title: 'Adicionar fixo',
+                inputs: [
+                    { label: 'Funcionário', type: 'select', id: 'FIXO_ESCFUNC_ID', value: String(funcionarios[0]?.ESCFUNC_ID || ''), options: funcionarios.map(funcionario => ({ value: String(funcionario.ESCFUNC_ID), label: (funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '') })), required: true },
+                    { label: 'Dia', type: 'date', id: 'FIXO_DT', value: dataPadrao, required: true },
+                    { label: 'Tipo', type: 'choice-group', id: 'FIXO_TIPO', value: 'F', options: [{ value: 'F', label: 'Folga fixa' }, { value: 'TRB', label: 'Horário fixo' }], required: true },
+                    { label: 'Entrada 1', type: 'time', id: 'FIXO_HR_ENT1', value: '08:00', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
+                    { label: 'Saída 1', type: 'time', id: 'FIXO_HR_SAI1', value: '12:00', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
+                    { label: 'Entrada 2', type: 'time', id: 'FIXO_HR_ENT2', value: '13:10', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
+                    { label: 'Saída 2', type: 'time', id: 'FIXO_HR_SAI2', value: '17:58', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
+                    { label: 'Justificativa', type: 'textarea', id: 'FIXO_JUSTIFICATIVA', rows: 3, required: true, placeholder: 'Informe o motivo deste fixo.' }
+                ],
+                confirmText: 'Salvar fixo'
+            });
+            if (!values) return;
+            const lojaId = escalaDetalheAtual.lojaId;
+            const mesRef = escalaDetalheAtual.mesRef;
+            const secaoAtiva = escalaDetalheAtual.secaoAtiva;
+            await apiRequest('/api/escalas/fixos', {
+                method: 'POST',
+                body: JSON.stringify({
+                    lojaId: Number(lojaId),
+                    mesRef,
+                    escfuncId: Number(values.FIXO_ESCFUNC_ID),
+                    escsecaoId: Number(secaoAtiva),
+                    DT: values.FIXO_DT,
+                    PROGRAMACAO: values.FIXO_TIPO,
+                    HR_ENT1: values.FIXO_HR_ENT1 || null,
+                    HR_SAI1: values.FIXO_HR_SAI1 || null,
+                    HR_ENT2: values.FIXO_HR_ENT2 || null,
+                    HR_SAI2: values.FIXO_HR_SAI2 || null,
+                    JUSTIFICATIVA: values.FIXO_JUSTIFICATIVA
+                })
+            });
+            await carregarDetalheEscalaMensal(lojaId, mesRef);
+            escalaDetalheAtual.secaoAtiva = secaoAtiva;
+            prepararSecoesDetalheEscala();
+            showInfoModal('Fixo cadastrado para a geração da seção.', 'success');
         };
 
         const montarPayloadDetalheBancoAtual = () => {
@@ -5341,11 +5413,12 @@
 
         const atualizarAcoesValidacaoBanco = () => {
             const criticas = getTodasCriticasBanco();
+            const temDiasGerados = (escalaDetalheAtual.dias || []).length > 0;
             criticasDetalheBancoBtn?.classList.toggle('hidden', criticas.length === 0);
-            gerarDetalhadaBancoBtn?.classList.toggle('hidden', criticas.length > 0 || !(escalaDetalheAtual.dias || []).length);
+            gerarDetalhadaBancoBtn?.classList.toggle('hidden', criticas.length > 0 || !temDiasGerados);
             salvarDetalheBancoBtn?.classList.toggle('hidden', true);
-            if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = criticas.length > 0;
-            if (oficializarBancoBtn) oficializarBancoBtn.disabled = criticas.length > 0 || escalaDetalheAtual.status === 'FINALIZADA';
+            if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = !temDiasGerados || criticas.length > 0;
+            if (oficializarBancoBtn) oficializarBancoBtn.disabled = !temDiasGerados || criticas.length > 0 || escalaDetalheAtual.status === 'FINALIZADA';
         };
 
         const validarDetalheBancoSilencioso = async () => {
@@ -5651,6 +5724,8 @@
             const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
             const funcionarios = agruparDiasPorFuncionario(dias);
             const criticasSecao = getCriticasFuncionariosBanco(funcionarios);
+            const funcionariosPendentes = getFuncionariosSecaoAtualBanco();
+            const fixosPendentes = getFixosSecaoAtualBanco();
             const getWeekClass = (dia) => dia > 1 && new Date(ano, mes, dia).getDay() === 1 ? ' week-start' : '';
             const getDiaTitle = (registro) => registro ? montarTooltipHorarioEscala(registro) : '';
             const getFuncionarioTitle = (funcionario) => {
@@ -5667,7 +5742,13 @@
             };
 
             if (!funcionarios.length) {
-                escalaBancoMensalContent.innerHTML = '<p class="text-center text-gray-500 py-8">Nenhum colaborador encontrado nesta seção.</p>';
+                const secao = escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva));
+                const total = funcionariosPendentes.length || Number(secao?.funcionarios || 0);
+                escalaBancoMensalContent.innerHTML = '<div class="pending-section-scale">' +
+                    '<div><strong>Escala liberada para geração</strong><span>' + escapeHtml(total) + ' funcionário(s) nesta seção. ' + escapeHtml(fixosPendentes.length) + ' fixo(s) cadastrado(s).</span></div>' +
+                    '<div class="pending-section-actions"><button type="button" class="action-button secondary adicionar-fixo-secao-banco"><span class="material-symbols-outlined">push_pin</span>Adicionar fixo</button>' +
+                    '<button type="button" class="action-button gerar-escala-secao-banco" data-secao-key="' + escapeHtml(escalaDetalheAtual.secaoAtiva || '') + '"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção</button></div>' +
+                    '</div>';
                 return;
             }
 
@@ -5715,12 +5796,13 @@
                     const cellClass = [
                         descanso ? 'rest-cell' : 'work-cell',
                         descanso ? getClasseDescanso(registro) : '',
+                        Number(registro.FIXO_ESCALA || 0) === 1 ? 'fixed-work-cell' : '',
                         getWeekClass(dia).trim(),
                         critica ? 'manual-critical-day' : '',
                         bloqueado ? 'locked-day' : ''
                     ].filter(Boolean).join(' ');
                     const editAttrs = !bloqueado
-                        ? ' role="button" tabindex="0" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" draggable="' + (descanso ? 'true' : 'false') + '"'
+                        ? ' role="button" tabindex="0" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" draggable="' + (descanso && !isDiaProtegidoBanco(registro) ? 'true' : 'false') + '"'
                         : '';
                     html += '<td class="' + cellClass + ' monthly-editable-day" data-schedule-tooltip="' + escapeHtml(getDiaTitle(registro)) + '"' + editAttrs + '>' + escapeHtml(value) + '</td>';
                 }
@@ -5859,12 +5941,45 @@
 
         const prepararSecoesDetalheEscala = () => {
             const map = new Map();
+            (escalaDetalheAtual.secoesLiberadas || []).forEach((secao) => {
+                const key = getSecaoLiberadaKey(secao);
+                if (!map.has(key)) {
+                    map.set(key, {
+                        key,
+                        nome: getSecaoLiberadaNome(secao),
+                        funcionarios: new Set(),
+                        totalLiberado: Number(secao.FUNCIONARIOS || 0),
+                        gerados: Number(secao.GERADOS || 0)
+                    });
+                }
+            });
+            (escalaDetalheAtual.funcionarios || []).forEach((funcionario) => {
+                const key = String(funcionario.ESCSECAO_ID || 'SEM_SECAO');
+                if (!map.has(key)) {
+                    map.set(key, {
+                        key,
+                        nome: getSecaoLiberadaNome({
+                            ESCSECAO_ID: funcionario.ESCSECAO_ID,
+                            COD_SECAO: funcionario.COD_SECAO,
+                            DESCR: funcionario.SECAO_DESCR
+                        }),
+                        funcionarios: new Set(),
+                        totalLiberado: 0,
+                        gerados: 0
+                    });
+                }
+                map.get(key).funcionarios.add(getFuncionarioDetalheKey(funcionario));
+            });
             (escalaDetalheAtual.dias || []).forEach((dia) => {
                 const key = getSecaoDetalheKey(dia);
                 if (!map.has(key)) map.set(key, { key, nome: getSecaoDetalheNome(dia), funcionarios: new Set() });
                 map.get(key).funcionarios.add(getFuncionarioDetalheKey(dia));
             });
-            escalaDetalheAtual.secoes = [...map.values()].map(item => ({ ...item, funcionarios: item.funcionarios.size })).sort((a, b) => a.nome.localeCompare(b.nome));
+            escalaDetalheAtual.secoes = [...map.values()].map(item => ({
+                ...item,
+                funcionarios: item.funcionarios.size || item.totalLiberado || 0,
+                gerados: item.gerados || 0
+            })).sort((a, b) => a.nome.localeCompare(b.nome));
             if (!escalaDetalheAtual.secoes.some(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva))) escalaDetalheAtual.secaoAtiva = escalaDetalheAtual.secoes[0]?.key || null;
             renderizarSecaoAtivaEscala();
         };
@@ -5883,12 +5998,15 @@
 
         const carregarDetalheEscalaMensal = async (lojaId, mesRef) => {
             resetarEstadoEdicaoBanco();
-            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', visao: 'mensal', status: null, dias: [], secoes: [], secaoAtiva: null, subsetorAtivo: null, subsetores: [] };
+            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', visao: 'mensal', status: null, dias: [], funcionarios: [], fixos: [], secoesLiberadas: [], secoes: [], secaoAtiva: null, subsetorAtivo: null, subsetores: [] };
             escalaDetalheTitulo.textContent = 'Escala Loja ' + lojaId + ' - ' + formatarMesTabela(mesRef);
             escalaDetalheResumo.textContent = 'Carregando escala mensal...';
             const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
             const escala = data.escala || {};
             escalaDetalheAtual.dias = escala.dias || [];
+            escalaDetalheAtual.funcionarios = escala.funcionarios || [];
+            escalaDetalheAtual.fixos = escala.fixos || [];
+            escalaDetalheAtual.secoesLiberadas = escala.secoes || [];
             escalaDetalheAtual.status = escala.status || null;
             escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s), revisão ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
             prepararSecoesDetalheEscala();
@@ -6086,6 +6204,10 @@
         const alternarFolgaRapidaBanco = async (escprogdiaId) => {
             const dia = getDiaBancoPorId(escprogdiaId);
             if (!dia) return;
+            if (isDiaProtegidoBanco(dia)) {
+                showInfoModal('Este dia possui férias, afastamento ou folga fixa e não pode ser alterado automaticamente.', 'info');
+                return;
+            }
             if (isProgramacaoDescanso(dia.PROGRAMACAO)) {
                 aplicarTrabalhoBancoDia(dia, getHorarioTrabalhoReferenciaBanco(dia));
             } else {
@@ -6099,6 +6221,10 @@
             const origem = getDiaBancoPorId(origemId);
             const destino = getDiaBancoPorId(destinoId);
             if (!origem || !destino || String(origem.ESCPROGDIA_ID || '') === String(destino.ESCPROGDIA_ID || '')) return;
+            if (isDiaProtegidoBanco(origem) || isDiaProtegidoBanco(destino)) {
+                showInfoModal('Férias, afastamentos e folgas fixas não podem ser movidos pela edição rápida.', 'info');
+                return;
+            }
             if (String(origem.ESCFUNC_ID || '') !== String(destino.ESCFUNC_ID || '')) {
                 showInfoModal('Arraste a folga apenas dentro da linha do mesmo funcionario.', 'info');
                 return;
@@ -6128,6 +6254,10 @@
             }
             const dia = (escalaDetalheAtual.dias || []).find(item => String(item.ESCPROGDIA_ID || '') === String(escprogdiaId));
             if (!escprogId || !escprogdiaId || !dia) return;
+            if (isDiaProtegidoBanco(dia)) {
+                showInfoModal('Este dia possui férias, afastamento ou fixo cadastrado e não pode ser alterado.', 'info');
+                return;
+            }
             const descansoAtual = isProgramacaoDescanso(dia.PROGRAMACAO);
             const values = await abrirModalEdicaoDiaPadrao({
                 title: 'Editar dia ' + formatarDataTabela(dia.DT),
@@ -6163,6 +6293,41 @@
         };
 
         escalaBancoMensalContent?.addEventListener('click', (event) => {
+            const adicionarFixoButton = event.target.closest('.adicionar-fixo-secao-banco');
+            if (adicionarFixoButton) {
+                event.preventDefault();
+                abrirModalFixoSecaoBanco().catch(error => showInfoModal(error.message, 'error'));
+                return;
+            }
+            const gerarSecaoButton = event.target.closest('.gerar-escala-secao-banco');
+            if (gerarSecaoButton) {
+                event.preventDefault();
+                const secaoKey = gerarSecaoButton.dataset.secaoKey;
+                gerarSecaoButton.disabled = true;
+                gerarSecaoButton.innerHTML = '<span class="material-symbols-outlined">progress_activity</span>Gerando...';
+                apiRequest('/api/escalas/gerar-secao', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        lojaId: Number(escalaDetalheAtual.lojaId),
+                        mesRef: escalaDetalheAtual.mesRef,
+                        escsecaoId: Number(secaoKey)
+                    }),
+                    timeoutMs: 120000
+                }).then(async (data) => {
+                    const resultado = data.resultado || {};
+                    const criticas = resultado.criticas || [];
+                    await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
+                    escalaDetalheAtual.secaoAtiva = secaoKey;
+                    escalaBancoDetalhadaCard?.classList.remove('hidden');
+                    prepararSecoesDetalheEscala();
+                    showInfoModal(criticas.length ? ['Escala da seção gerada com críticas.', ...criticas] : 'Escala da seção gerada com sucesso.', criticas.length ? 'error' : 'success');
+                }).catch((error) => {
+                    gerarSecaoButton.disabled = false;
+                    gerarSecaoButton.innerHTML = '<span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção';
+                    showInfoModal(getApiErrorMessages(error), 'error');
+                });
+                return;
+            }
             const criticalSectionButton = event.target.closest('.banco-critical-section-chip');
             if (criticalSectionButton) {
                 exibirCriticasBancoAgrupadas();
@@ -6176,6 +6341,11 @@
             if (!cell) return;
             if (cell.classList.contains('locked-day')) {
                 showInfoModal('Dias ja passados nao podem ser alterados manualmente.', 'info');
+                return;
+            }
+            const dia = getDiaBancoPorId(cell.dataset.escprogdiaId);
+            if (isDiaProtegidoBanco(dia)) {
+                showInfoModal('Este dia possui férias, afastamento ou folga fixa e não pode ser alterado automaticamente.', 'info');
                 return;
             }
             clearTimeout(escalaBancoSingleClickTimer);
@@ -6193,12 +6363,18 @@
                 showInfoModal('Dias ja passados nao podem ser alterados manualmente.', 'info');
                 return;
             }
+            const dia = getDiaBancoPorId(cell.dataset.escprogdiaId);
+            if (isDiaProtegidoBanco(dia)) {
+                showInfoModal('Este dia possui férias, afastamento ou folga fixa e não pode ser alterado.', 'info');
+                return;
+            }
             editarDiaEscalaPorId(cell.dataset.escprogId, cell.dataset.escprogdiaId);
         });
 
         escalaBancoMensalContent?.addEventListener('dragstart', (event) => {
             const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
-            if (!cell || !cell.classList.contains('rest-cell') || cell.classList.contains('locked-day')) {
+            const dia = getDiaBancoPorId(cell?.dataset?.escprogdiaId);
+            if (!cell || !cell.classList.contains('rest-cell') || cell.classList.contains('locked-day') || isDiaProtegidoBanco(dia)) {
                 event.preventDefault();
                 return;
             }

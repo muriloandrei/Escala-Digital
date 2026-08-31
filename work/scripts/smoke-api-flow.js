@@ -26,7 +26,7 @@ function monthDays(mesRefValue) {
   for (let day = 1; day <= lastDay; day += 1) {
     const date = new Date(year, month - 1, day);
     const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const descanso = date.getDay() === 0 || date.getDay() === 6;
+    const descanso = date.getDay() === 0 || date.getDay() === 3;
 
     days.push(descanso
       ? {
@@ -180,11 +180,11 @@ async function main() {
   revisaoPayload.justificativa = 'Smoke test revisao individual';
   revisaoPayload.funcionarios[0].dias[3] = {
     ...revisaoPayload.funcionarios[0].dias[3],
-    hrEnt1: null,
-    hrSai1: null,
-    hrEnt2: null,
-    hrSai2: null,
-    programacao: 'F',
+    hrEnt1: '08:10',
+    hrSai1: '12:10',
+    hrEnt2: '13:20',
+    hrSai2: '18:08',
+    programacao: 'TRB',
     justificativa: 'Smoke test revisao individual'
   };
 

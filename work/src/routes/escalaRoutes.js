@@ -51,6 +51,19 @@ const syncFuncionarioRmSchema = z.object({
   mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   escfuncId: z.number().int().positive()
 });
+const fixoEscalaSchema = z.object({
+  lojaId: z.number().int().positive(),
+  mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  escfuncId: z.number().int().positive(),
+  escsecaoId: z.number().int().positive(),
+  DT: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  PROGRAMACAO: z.string().max(3).optional().default('TRB'),
+  HR_ENT1: z.string().max(5).nullable().optional(),
+  HR_SAI1: z.string().max(5).nullable().optional(),
+  HR_ENT2: z.string().max(5).nullable().optional(),
+  HR_SAI2: z.string().max(5).nullable().optional(),
+  JUSTIFICATIVA: z.string().max(500).nullable().optional()
+});
 
 router.use(requireAuth);
 
@@ -83,6 +96,60 @@ router.post('/liberar-mensal', requirePermission('escalas', 'criar'), async (req
     return res.json({ resultados });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de liberacao invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
+router.post('/gerar-secao', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({
+      lojaId: z.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      escsecaoId: z.number().int().positive()
+    }).parse(req.body);
+    await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+    const resultado = await monthlyReleaseService.gerarEscalaSecao(payload);
+    await auditService.registerAudit({
+      action: 'GERAR_ESCALA_SECAO',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      details: resultado
+    });
+    return res.status(resultado.criada ? 201 : 422).json({ resultado });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de geracao da secao invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
+router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = fixoEscalaSchema.parse(req.body);
+    await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+    const fixo = await escalaService.saveFixoEscala({
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      escfuncId: payload.escfuncId,
+      escsecaoId: payload.escsecaoId,
+      data: payload
+    });
+    await auditService.registerAudit({
+      action: 'CADASTRAR_FIXO_ESCALA',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      referenceId: fixo?.ESCFIXO_ID || fixo?.escfixo_id || null,
+      details: {
+        escfuncId: payload.escfuncId,
+        escsecaoId: payload.escsecaoId,
+        data: payload.DT,
+        programacao: payload.PROGRAMACAO
+      }
+    });
+    return res.status(201).json({ fixo });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados do fixo invalidos.', details: error.errors });
     return next(error);
   }
 });

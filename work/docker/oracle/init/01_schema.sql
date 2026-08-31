@@ -120,6 +120,27 @@ create table SGN_ESC_PROG_DIA (
   constraint SGN_ESC_PROG_DIA_FK foreign key (ESCPROG_ID) references SGN_ESC_PROG (ESCPROG_ID)
 );
 
+create table SGN_ESC_FIXO_ESCALA (
+  ESCFIXO_ID number(15) not null,
+  LOJA number(10) not null,
+  MES_REF date not null,
+  ESCFUNC_ID number(15) not null,
+  ESCSECAO_ID number(15) not null,
+  DT date not null,
+  PROGRAMACAO varchar2(3) default 'TRB' not null,
+  HR_ENT1 varchar2(5),
+  HR_SAI1 varchar2(5),
+  HR_ENT2 varchar2(5),
+  HR_SAI2 varchar2(5),
+  JUSTIFICATIVA varchar2(500),
+  STATUS varchar2(1) default 'A' not null,
+  DT_HR_INCL date default sysdate not null,
+  constraint SGN_ESC_FIXO_ESCALA_PK primary key (ESCFIXO_ID),
+  constraint SGN_ESC_FIXO_ESCALA_1_UK unique (LOJA, MES_REF, ESCFUNC_ID, DT),
+  constraint SGN_ESC_FIXO_ESC_FUNC_FK foreign key (ESCFUNC_ID) references SGN_ESC_FUNCIONARIO (ESCFUNC_ID),
+  constraint SGN_ESC_FIXO_ESC_STATUS_CK check (STATUS in ('A', 'I'))
+);
+
 create table SGN_ESC_USUARIO (
   USUARIO_ID number(15) not null,
   LOGIN varchar2(50) not null,
@@ -254,6 +275,7 @@ create sequence SGN_ESC_FUNCIONARIO_SEQ start with 1000 increment by 1 nocache;
 create sequence SGN_ESC_AUSENCIA_SEQ start with 100 increment by 1 nocache;
 create sequence SGN_ESC_PROG_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_PROG_DIA_SEQ start with 1 increment by 1 nocache;
+create sequence SGN_ESC_FIXO_ESCALA_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_USUARIO_SEQ start with 10 increment by 1 nocache;
 create sequence SGN_ESC_AUDITORIA_SEQ start with 1 increment by 1 nocache;
 create sequence SGN_ESC_TIPO_DESCANSO_SEQ start with 10 increment by 1 nocache;

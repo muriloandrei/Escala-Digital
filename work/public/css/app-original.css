@@ -2013,6 +2013,10 @@
             background: #f97316;
         }
 
+        .monthly-scale-table .rest-cell-fixo {
+            background: #7e22ce;
+        }
+
         .daily-schedule-rest.rest-cell-folga {
             background: #0ea5e9;
         }
@@ -2023,6 +2027,57 @@
 
         .daily-schedule-rest.rest-cell-afastamento {
             background: #f97316;
+        }
+
+        .daily-schedule-rest.rest-cell-fixo {
+            background: #7e22ce;
+        }
+
+        .pending-section-scale {
+            align-items: center;
+            background: #f8f5ff;
+            border: 1px solid #ddd6fe;
+            border-radius: 8px;
+            color: #312e81;
+            display: flex;
+            gap: 16px;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 18px;
+        }
+
+        .pending-section-scale strong,
+        .pending-section-scale span {
+            display: block;
+        }
+
+        .pending-section-scale strong {
+            color: #1f1d63;
+            font-size: 0.98rem;
+            margin-bottom: 4px;
+        }
+
+        .pending-section-scale span {
+            color: #5b5a91;
+            font-size: 0.84rem;
+        }
+
+        .pending-section-scale .action-button {
+            flex: 0 0 auto;
+        }
+
+        .pending-section-actions {
+            align-items: center;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .monthly-scale-table .fixed-work-cell {
+            background: #f3e8ff;
+            color: #581c87;
+            box-shadow: inset 0 0 0 2px #a855f7;
         }
 
         .monthly-scale-table .locked-day {

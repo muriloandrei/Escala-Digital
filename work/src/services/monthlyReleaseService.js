@@ -26,9 +26,72 @@ function getMonthDays(mesRef) {
   return days;
 }
 
+function getMonthEndIso(mesRef) {
+  const ref = new Date(`${formatDateValue(mesRef)}T00:00:00`);
+  return formatDateValue(new Date(ref.getFullYear(), ref.getMonth() + 1, 0));
+}
+
 function normalizeTime(value, fallback) {
   const text = String(value || '').trim();
   return /^\d{2}:\d{2}$/.test(text) ? text : fallback;
+}
+
+function normalizarAusenciaSigla(motivo) {
+  const text = String(motivo || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  if (text.includes('ferias')) return 'FER';
+  if (text.includes('afast')) return 'AFA';
+  return 'F';
+}
+
+function ausenciaCobreDia(ausencia, dataIso) {
+  const inicio = formatDateValue(ausencia?.DT_INIC || ausencia?.dt_inic);
+  const fim = formatDateValue(ausencia?.DT_FIM || ausencia?.dt_fim || inicio);
+  return inicio && fim && inicio <= dataIso && fim >= dataIso;
+}
+
+function criarIndiceAusencias(ausencias = []) {
+  const porFuncionario = new Map();
+  (ausencias || []).forEach((ausencia) => {
+    const keys = [
+      ausencia?.ESCFUNC_ID,
+      ausencia?.escfunc_id,
+      ausencia?.CHAPA,
+      ausencia?.chapa
+    ].map((value) => String(value || '').trim()).filter(Boolean);
+    keys.forEach((key) => {
+      if (!porFuncionario.has(key)) porFuncionario.set(key, []);
+      porFuncionario.get(key).push(ausencia);
+    });
+  });
+  return porFuncionario;
+}
+
+function criarIndiceFixos(fixos = []) {
+  const map = new Map();
+  (fixos || []).forEach((fixo) => {
+    const escfuncId = fixo?.ESCFUNC_ID || fixo?.escfunc_id || fixo?.escfuncId;
+    const data = formatDateValue(fixo?.DT || fixo?.dt || fixo?.data);
+    if (!escfuncId || !data) return;
+    map.set(`${escfuncId}|${data}`, fixo);
+  });
+  return map;
+}
+
+function encontrarAusencia(indiceAusencias, funcionario, dataIso) {
+  const keys = [
+    funcionario?.ESCFUNC_ID,
+    funcionario?.escfuncId,
+    funcionario?.CHAPA,
+    funcionario?.chapa
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+  for (const key of keys) {
+    const ausencia = (indiceAusencias?.get(key) || []).find((item) => ausenciaCobreDia(item, dataIso));
+    if (ausencia) return ausencia;
+  }
+  return null;
 }
 
 function findTurnoParaFuncionario(funcionario, turnos) {
@@ -142,14 +205,43 @@ function montarFuncionarioRascunho(funcionario, turno, dias, horario) {
   };
 }
 
-function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), folgasDatas = []) {
+function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), folgasDatas = [], opcoes = {}) {
   const horario = getHorarioBaseFuncionario(funcionario, turno);
   const folgas = new Set((folgasDatas || []).map(formatDateValue).filter(Boolean));
+  const indiceAusencias = opcoes.indiceAusencias || criarIndiceAusencias(opcoes.ausencias || []);
+  const diasFixos = opcoes.diasFixos || criarIndiceFixos(opcoes.fixos || []);
 
   const dias = getMonthDays(mesRef)
     .filter((date) => formatDateValue(date) >= hojeIso)
     .map((date) => {
       const data = formatDateValue(date);
+      const fixo = diasFixos.get(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`);
+      if (fixo) {
+        const programacaoFixa = String(fixo.programacao || fixo.PROGRAMACAO || 'TRB').toUpperCase();
+        const descansoFixo = programacaoFixa !== 'TRB';
+        return {
+          data,
+          hrEnt1: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrEnt1 || fixo.HR_ENT1, horario.hrEnt1),
+          hrSai1: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai1 || fixo.HR_SAI1, horario.hrSai1),
+          hrEnt2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrEnt2 || fixo.HR_ENT2, horario.hrEnt2),
+          hrSai2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2),
+          programacao: programacaoFixa,
+          justificativa: fixo.justificativa || fixo.JUSTIFICATIVA || 'Horario/folga fixa'
+        };
+      }
+      const ausencia = encontrarAusencia(indiceAusencias, funcionario, data);
+      if (ausencia) {
+        const sigla = normalizarAusenciaSigla(ausencia.MOTIVO || ausencia.motivo);
+        return {
+          data,
+          hrEnt1: sigla,
+          hrSai1: sigla,
+          hrEnt2: sigla,
+          hrSai2: sigla,
+          programacao: sigla,
+          justificativa: ausencia.MOTIVO || ausencia.motivo || 'Ausencia'
+        };
+      }
       const folga = folgas.has(data);
       return {
         data,
@@ -165,14 +257,14 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
   return montarFuncionarioRascunho(funcionario, turno, dias, horario);
 }
 
-function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), funcionarioIndex = 0, padraoFolga = null) {
+function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), funcionarioIndex = 0, padraoFolga = null, opcoes = {}) {
   const folgasCiclo = new Set(padraoFolga || getPadraoFolgaPorIndice(funcionarioIndex));
   const folgasDatas = getMonthDays(mesRef)
     .filter((date) => formatDateValue(date) >= hojeIso)
     .filter((date) => folgasCiclo.has(getCycleIndex(date)))
     .map(formatDateValue);
 
-  return buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasDatas);
+  return buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasDatas, opcoes);
 }
 
 function getSecaoKey(funcionario) {
@@ -221,6 +313,26 @@ function getDatasGeradas(diasMes, hojeIso) {
   return (diasMes || [])
     .map(formatDateValue)
     .filter((data) => data >= hojeIso);
+}
+
+function contarBloqueiosPorData(secao, diasMes, indiceAusencias, diasFixos) {
+  const contagemSecao = new Map(diasMes.map((date) => [formatDateValue(date), 0]));
+  const contagensTurno = new Map();
+  secao.forEach(({ funcionario, turnoKey }) => {
+    if (!contagensTurno.has(turnoKey)) {
+      contagensTurno.set(turnoKey, new Map(diasMes.map((date) => [formatDateValue(date), 0])));
+    }
+    diasMes.forEach((date) => {
+      const data = formatDateValue(date);
+      const fixo = diasFixos.get(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`);
+      const folgaFixa = fixo && String(fixo.PROGRAMACAO || fixo.programacao || '').toUpperCase() !== 'TRB';
+      if (!encontrarAusencia(indiceAusencias, funcionario, data) && !folgaFixa) return;
+      contagemSecao.set(data, (contagemSecao.get(data) || 0) + 1);
+      const turnoCounter = contagensTurno.get(turnoKey);
+      turnoCounter.set(data, (turnoCounter.get(data) || 0) + 1);
+    });
+  });
+  return { contagemSecao, contagensTurno };
 }
 
 const PADRAO_VARIACOES_MENSAIS = [0, 7, 13, 29, 43, 61];
@@ -367,7 +479,9 @@ function escolherPadraoBalanceado({
   secaoSize,
   turnoSize,
   domingosFolgaAlvo = [],
-  domingosTrabalhoAlvo = []
+  domingosTrabalhoAlvo = [],
+  indiceAusencias = null,
+  diasFixos = new Map()
 }) {
   const datasGeradas = getDatasGeradas(diasMes, hojeIso);
   const primeiraJanela = datasGeradas.slice(0, Math.min(7, datasGeradas.length));
@@ -389,10 +503,12 @@ function escolherPadraoBalanceado({
   let melhorIdeal = null;
   let melhorComCobertura = null;
   planos.forEach(({ padrao, folgas, repeticaoExata }, planoIndex) => {
-    if ([...domingosFolgaSet].some((data) => !folgas.includes(data))) return;
-    if ([...domingosTrabalhoSet].some((data) => folgas.includes(data))) return;
-    if (!hasMaxFolgasPorSemanaDatas(folgas, 2)) return;
-    const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgas);
+    const folgasEfetivas = folgas.filter((data) => !encontrarAusencia(indiceAusencias, funcionario, data)
+      && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`));
+    if ([...domingosFolgaSet].some((data) => !encontrarAusencia(indiceAusencias, funcionario, data) && !folgasEfetivas.includes(data))) return;
+    if ([...domingosTrabalhoSet].some((data) => folgasEfetivas.includes(data))) return;
+    if (!hasMaxFolgasPorSemanaDatas(folgasEfetivas, 2)) return;
+    const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas, { indiceAusencias });
     if (!hasNoConsecutiveAutomaticRests(rascunho.dias)) return;
     const errors = validateEscalaPayload({
       lojaId: Number(funcionario.LOJA || 0) || 1,
@@ -403,7 +519,7 @@ function escolherPadraoBalanceado({
     const projetadaSecao = new Map(contagemFolgasSecao);
     const projetadaTurno = new Map(contagemFolgasTurno);
     const projetadaSemanaSecao = new Map(contagemFolgasSemanaSecao);
-    folgas.forEach((data) => {
+    folgasEfetivas.forEach((data) => {
       projetadaSecao.set(data, (projetadaSecao.get(data) || 0) + 1);
       projetadaTurno.set(data, (projetadaTurno.get(data) || 0) + 1);
       const weekKey = getWeekKeyFromIso(data);
@@ -420,10 +536,10 @@ function escolherPadraoBalanceado({
     const maxFolgasInicio = Math.max(...primeiraJanelaCounts, 0);
     const somaQuadradosInicio = primeiraJanelaCounts.reduce((acc, value, index) => acc + (value * value * (primeiraJanela.length - index)), 0);
     const folgasPrimeiroDia = hojeIso ? (projetadaSecao.get(hojeIso) || 0) : 0;
-    const turnoSemCobertura = Number(turnoSize || 0) > 1 && folgas.some((data) => (projetadaTurno.get(data) || 0) >= Number(turnoSize || 0));
+    const turnoSemCobertura = Number(turnoSize || 0) > 1 && folgasEfetivas.some((data) => (projetadaTurno.get(data) || 0) >= Number(turnoSize || 0));
     const limiteDesejadoTurno = Math.max(1, Math.ceil(Number(turnoSize || 1) / 2));
     const excessoFolgaTurno = Math.max(0, maxFolgasTurnoDia - limiteDesejadoTurno);
-    const diferencaFolgasEsperadas = Math.abs(folgas.length - folgasEsperadas);
+    const diferencaFolgasEsperadas = Math.abs(folgasEfetivas.length - folgasEsperadas);
     const desempate = Math.abs(planoIndex - (indiceSecao % Math.max(planos.length, 1)));
     const score = (errors.length * 100000)
       + (turnoSemCobertura ? 50000 : 0)
@@ -440,7 +556,7 @@ function escolherPadraoBalanceado({
       + (somaQuadradosSemana * 3)
       + (repeticaoExata ? 250 : 0)
       + (desempate / 1000);
-    const candidato = { padrao, folgas, score };
+    const candidato = { padrao, folgas: folgasEfetivas, score };
     if (!melhor || score < melhor.score) melhor = candidato;
     if (!errors.length && !excessoFolgaTurno && !excessoFolgaSecao && (!melhorIdeal || score < melhorIdeal.score)) {
       melhorIdeal = candidato;
@@ -452,7 +568,9 @@ function escolherPadraoBalanceado({
   return melhorIdeal || melhorComCobertura || melhor || { padrao: getPadraoFolgaPorIndice(indiceSecao), folgas: [] };
 }
 
-function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeIso = formatDateValue(new Date())) {
+function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeIso = formatDateValue(new Date()), opcoes = {}) {
+  const indiceAusencias = opcoes.indiceAusencias || criarIndiceAusencias(opcoes.ausencias || []);
+  const diasFixos = opcoes.diasFixos || criarIndiceFixos(opcoes.fixos || []);
   const secoes = new Map();
   (funcionarios || []).forEach((funcionario) => {
     const turno = findTurnoParaFuncionario(funcionario, turnos);
@@ -469,9 +587,10 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
   const domingosGerados = getDatasGeradas(diasMes, hojeIso).filter(isDomingoIso);
   const payload = [];
   [...secoes.values()].forEach((secao) => {
-    const contagemFolgasSecao = new Map(diasMes.map((date) => [formatDateValue(date), 0]));
+    const contagemAusencias = contarBloqueiosPorData(secao, diasMes, indiceAusencias, diasFixos);
+    const contagemFolgasSecao = new Map(contagemAusencias.contagemSecao);
     const contagemFolgasSemanaSecao = new Map(diasMes.map((date) => [getWeekKeyFromIso(formatDateValue(date)), 0]));
-    const contagensTurno = new Map();
+    const contagensTurno = new Map(contagemAusencias.contagensTurno);
     const turnoSizes = new Map();
 
     secao.forEach(({ turnoKey }) => {
@@ -513,7 +632,9 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
           secaoSize: secao.length,
           turnoSize: turnoSizes.get(turnoKey) || 1,
           domingosFolgaAlvo,
-          domingosTrabalhoAlvo
+          domingosTrabalhoAlvo,
+          indiceAusencias,
+          diasFixos
         });
         escolhido.folgas.forEach((data) => {
           contagemFolgasSecao.set(data, (contagemFolgasSecao.get(data) || 0) + 1);
@@ -521,10 +642,18 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
           const weekKey = getWeekKeyFromIso(data);
           contagemFolgasSemanaSecao.set(weekKey, (contagemFolgasSemanaSecao.get(weekKey) || 0) + 1);
         });
-        payload.push(buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, escolhido.folgas));
+        payload.push(buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, escolhido.folgas, { indiceAusencias, diasFixos }));
       });
   });
   return payload;
+}
+
+function buildFuncionariosLiberacao(funcionarios, turnos) {
+  return (funcionarios || []).map((funcionario) => {
+    const turno = findTurnoParaFuncionario(funcionario, turnos);
+    const horario = getHorarioBaseFuncionario(funcionario, turno);
+    return montarFuncionarioRascunho(funcionario, turno, [], horario);
+  });
 }
 
 async function escalaMensalJaExiste(lojaId, mesRef) {
@@ -532,7 +661,7 @@ async function escalaMensalJaExiste(lojaId, mesRef) {
   return existentes.length > 0;
 }
 
-async function liberarEscalaLojaMes({ lojaId, mesRef, hojeIso = formatDateValue(new Date()) }) {
+async function liberarEscalaLojaMes({ lojaId, mesRef }) {
   if (await escalaMensalJaExiste(lojaId, mesRef)) {
     return { lojaId, mesRef, criada: false, motivo: 'Escala mensal ja existente.' };
   }
@@ -542,14 +671,12 @@ async function liberarEscalaLojaMes({ lojaId, mesRef, hojeIso = formatDateValue(
     catalogService.listTurnosByLoja(lojaId)
   ]);
 
-  const funcionariosPayload = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeIso)
-    .filter((funcionario) => funcionario.escfuncId && funcionario.chapa && funcionario.dias.length > 0);
+  const funcionariosPayload = buildFuncionariosLiberacao(funcionarios, turnos)
+    .filter((funcionario) => funcionario.escfuncId && funcionario.chapa);
 
-  if (!funcionariosPayload.length) {
+  if (!funcionariosPayload.length && funcionarios.length === 0) {
     return { lojaId, mesRef, criada: false, motivo: 'Nenhum funcionario apto para liberacao.' };
   }
-
-  const ruleErrors = validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload });
 
   const saved = await escalaService.saveEscalasBatch({
     lojaId,
@@ -563,7 +690,44 @@ async function liberarEscalaLojaMes({ lojaId, mesRef, hojeIso = formatDateValue(
     mesRef,
     criada: true,
     funcionarios: saved.length,
-    criticas: ruleErrors.slice(0, 50)
+    pendenteGeracao: true,
+    criticas: []
+  };
+}
+
+async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = formatDateValue(new Date()) }) {
+  const inicio = formatDateValue(mesRef);
+  const fim = getMonthEndIso(mesRef);
+  const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
+    catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
+    catalogService.listTurnosByLoja(lojaId),
+    catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
+    escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId })
+  ]);
+  const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
+  const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
+  const funcionariosPayload = buildFuncionariosRascunhoBalanceado(funcionariosSecao, turnosSecao, mesRef, hojeIso, { ausencias, fixos })
+    .filter((funcionario) => funcionario.escfuncId && funcionario.chapa && funcionario.dias.length > 0);
+
+  if (!funcionariosPayload.length) {
+    return { lojaId, mesRef, escsecaoId, criada: false, motivo: 'Nenhum funcionario apto para geracao da secao.' };
+  }
+
+  const ruleErrors = validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload });
+  const saved = await escalaService.saveEscalasBatch({
+    lojaId,
+    mesRef,
+    funcionarios: funcionariosPayload,
+    oficializada: 0
+  });
+
+  return {
+    lojaId,
+    mesRef,
+    escsecaoId,
+    criada: true,
+    funcionarios: saved.length,
+    criticas: ruleErrors.slice(0, 100)
   };
 }
 
@@ -618,9 +782,11 @@ function startMonthlyReleaseScheduler(env) {
 module.exports = {
   buildFuncionarioRascunho,
   buildFuncionariosRascunhoBalanceado,
+  buildFuncionariosLiberacao,
   getPadroesFolgaValidos,
   isFolgaAutomatica,
   liberarEscalaLojaMes,
   liberarEscalasMensais,
+  gerarEscalaSecao,
   startMonthlyReleaseScheduler
 };
