@@ -1086,6 +1086,11 @@
                     { label: 'Justificativa da mudanca', type: 'textarea', id: ids.justificativa, value: dia.JUSTIFICATIVA_ALTERACAO || '', required: true, rows: 3, placeholder: 'Descreva o motivo da alteracao deste dia.', wrapperClass: 'employee-modal-span-4' }
                 ],
                 confirmText: 'Salvar Dia',
+                secondaryActions: [{
+                    id: 'replicar-mes',
+                    label: 'Replicar para o Mês',
+                    className: 'input-modal-secondary-action px-4 py-2 rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 font-semibold transition'
+                }],
                 onRender: (body) => {
                     const ent1 = body.querySelector('#' + ids.hrEnt1);
                     const preencher = () => {
@@ -1111,6 +1116,20 @@
                     showInfoModal(erros, 'error');
                     return null;
                 }
+            }
+            if (values._modalAction === 'replicar-mes') {
+                const confirmacao = await showInputModal({
+                    title: 'Replicar alteração para o mês',
+                    inputs: [{ type: 'message', text: 'Este horário será aplicado aos demais dias trabalhados e futuros deste funcionário no mês. Folgas, férias, afastamentos e dias já passados serão mantidos.' }],
+                    cancelText: 'Cancelar',
+                    confirmText: 'Replicar'
+                });
+                if (!confirmacao) return null;
+                if (values[ids.tipoDia] === 'DESCANSO') {
+                    showInfoModal('Replicar para o mês é permitido apenas para alterações de horário de trabalho.', 'info');
+                    return null;
+                }
+                values.REPLICAR_MES = true;
             }
             return values;
         };
@@ -1862,11 +1881,20 @@
                 panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-5xl flex flex-col employee-day-modal'
             });
             if (!values) return;
+            const diasParaAtualizar = values.REPLICAR_MES
+                ? Array.from({ length: new Date(Number(anoSelect.value), Number(mesSelect.value) + 1, 0).getDate() }, (_, index) => index + 1)
+                    .filter((numeroDia) => {
+                        if (isDiaMesBloqueadoParaEdicao(anoSelect.value, mesSelect.value, numeroDia)) return false;
+                        const cell = colabDiv.querySelector('tbody tr[data-key="inicio"]')?.cells[numeroDia];
+                        if (!cell) return false;
+                        return numeroDia === dia || /^\d{2}:\d{2}$/.test(cell.textContent.trim());
+                    })
+                : [dia];
             if (values.DET_TIPO_DIA === 'DESCANSO') {
-                atualizarDiaDetalhada(colabDiv, dia, { tipo: 'DESCANSO', sigla: String(values.DET_DESCANSO || 'F').toUpperCase() });
+                diasParaAtualizar.forEach((numeroDia) => atualizarDiaDetalhada(colabDiv, numeroDia, { tipo: 'DESCANSO', sigla: String(values.DET_DESCANSO || 'F').toUpperCase() }));
             } else {
                 const turno = { HR_ENT1: values.DET_HR_ENT1, HR_SAI1: values.DET_HR_SAI1, HR_ENT2: values.DET_HR_ENT2, HR_SAI2: values.DET_HR_SAI2 };
-                atualizarDiaDetalhada(colabDiv, dia, { tipo: 'TRABALHO', ...turno });
+                diasParaAtualizar.forEach((numeroDia) => atualizarDiaDetalhada(colabDiv, numeroDia, { tipo: 'TRABALHO', ...turno }));
             }
             invalidarValidacaoDetalhada();
             registrarCriticasColaborador(colabDiv, ['Ajuste manual pendente de Validar Escala.']);
@@ -3625,7 +3653,14 @@
             const horarioPadrao = horariosPadraoCache.find(horario => String(horario.ESCHORPAD_ID) === String(values.IND_HORARIO_PADRAO_ID));
             atual.dias.forEach((dia) => {
                 const numeroDia = Number(String(dia.DT).slice(8,10));
-                if (numeroDia < diaInicio || numeroDia > diaFim) return;
+                const dataIso = String(dia.DT || '').slice(0, 10);
+                if (isDataBloqueadaParaEdicao(dataIso)) return;
+                if (values.REPLICAR_MES) {
+                    if (numeroDia < diaSelecionado) return;
+                    if (numeroDia !== diaSelecionado && isProgramacaoDescanso(dia.PROGRAMACAO)) return;
+                } else if (numeroDia < diaInicio || numeroDia > diaFim) {
+                    return;
+                }
                 dia.JUSTIFICATIVA_ALTERACAO = atual.justificativaAlteracao;
                 dia.CRITICA_MANUAL = 1;
                 if (tipoDia === 'DESCANSO') {
@@ -5772,15 +5807,28 @@
                 descansoAtual
             });
             if (!values) return;
-            const folgaLocal = values.BANCO_TIPO_DIA === 'DESCANSO';
-            const programacaoLocal = folgaLocal ? String(values.BANCO_DESCANSO || 'F').trim().toUpperCase() : 'TRB';
-            dia.PROGRAMACAO = programacaoLocal;
-            dia.HR_ENT1 = folgaLocal ? programacaoLocal : values.BANCO_HR_ENT1;
-            dia.HR_SAI1 = folgaLocal ? programacaoLocal : values.BANCO_HR_SAI1;
-            dia.HR_ENT2 = folgaLocal ? programacaoLocal : values.BANCO_HR_ENT2;
-            dia.HR_SAI2 = folgaLocal ? programacaoLocal : values.BANCO_HR_SAI2;
-            dia.JUSTIFICATIVA_ALTERACAO = String(values.BANCO_JUSTIFICATIVA || '').trim();
-            marcarDiaBancoAlterado(dia);
+            const aplicarValoresBancoDia = (diaAlvo) => {
+                const folgaLocal = values.BANCO_TIPO_DIA === 'DESCANSO';
+                const programacaoLocal = folgaLocal ? String(values.BANCO_DESCANSO || 'F').trim().toUpperCase() : 'TRB';
+                diaAlvo.PROGRAMACAO = programacaoLocal;
+                diaAlvo.HR_ENT1 = folgaLocal ? programacaoLocal : values.BANCO_HR_ENT1;
+                diaAlvo.HR_SAI1 = folgaLocal ? programacaoLocal : values.BANCO_HR_SAI1;
+                diaAlvo.HR_ENT2 = folgaLocal ? programacaoLocal : values.BANCO_HR_ENT2;
+                diaAlvo.HR_SAI2 = folgaLocal ? programacaoLocal : values.BANCO_HR_SAI2;
+                diaAlvo.JUSTIFICATIVA_ALTERACAO = String(values.BANCO_JUSTIFICATIVA || '').trim();
+                marcarDiaBancoAlterado(diaAlvo);
+            };
+            if (values.REPLICAR_MES) {
+                const diaSelecionado = Number(String(dia.DT || '').slice(8, 10));
+                (escalaDetalheAtual.dias || [])
+                    .filter((diaAlvo) => String(diaAlvo.ESCFUNC_ID || '') === String(dia.ESCFUNC_ID || ''))
+                    .filter((diaAlvo) => Number(String(diaAlvo.DT || '').slice(8, 10)) >= diaSelecionado)
+                    .filter((diaAlvo) => !isDataBloqueadaParaEdicao(String(diaAlvo.DT || '').slice(0, 10)))
+                    .filter((diaAlvo) => String(diaAlvo.ESCPROGDIA_ID || '') === String(dia.ESCPROGDIA_ID || '') || !isProgramacaoDescanso(diaAlvo.PROGRAMACAO))
+                    .forEach(aplicarValoresBancoDia);
+            } else {
+                aplicarValoresBancoDia(dia);
+            }
             await validarDetalheBancoSilencioso();
             renderizarSecaoAtivaEscala();
         };

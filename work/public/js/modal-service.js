@@ -71,6 +71,7 @@
 
     return new Promise((resolve) => {
       const inputs = config.inputs || [];
+      const secondaryActions = config.secondaryActions || [];
       const basePanelClass = 'bg-white rounded-lg shadow-xl w-11/12 max-w-sm flex flex-col';
       const hasWideInput = inputs.some((input) => input.type === 'checkbox-group');
       const panelClass = (config.panelClass || basePanelClass).trim();
@@ -90,6 +91,8 @@
       }
 
       inputModalBody.innerHTML = '';
+      const actionsContainer = inputModalConfirmBtn.parentElement;
+      actionsContainer?.querySelectorAll('[data-extra-modal-action]').forEach((button) => button.remove());
 
       const appendField = (input, field) => {
         const wrapper = document.createElement('div');
@@ -233,10 +236,11 @@
         inputModal.classList.add('hidden');
         inputModalConfirmBtn.onclick = null;
         inputModalCancelBtn.onclick = null;
+        actionsContainer?.querySelectorAll('[data-extra-modal-action]').forEach((button) => button.remove());
         if (inputModalPanel) inputModalPanel.className = basePanelClass;
       };
 
-      inputModalConfirmBtn.onclick = () => {
+      const collectValues = () => {
         const values = {};
         let allValid = true;
 
@@ -262,9 +266,32 @@
           values[input.id] = inputEl.value;
         });
 
+        return { values, allValid };
+      };
+
+      secondaryActions.forEach((action) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.extraModalAction = action.id || 'secondary';
+        button.className = action.className || 'input-modal-secondary-action px-4 py-2 rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-semibold transition';
+        button.textContent = action.label || 'Ação';
+        button.onclick = () => {
+          const { values, allValid } = collectValues();
+          if (!allValid) {
+            showInfoModal('Por favor, preencha todos os campos obrigatorios.', 'error');
+            return;
+          }
+          hideModal();
+          resolve({ ...values, _modalAction: button.dataset.extraModalAction });
+        };
+        actionsContainer?.insertBefore(button, inputModalCancelBtn);
+      });
+
+      inputModalConfirmBtn.onclick = () => {
+        const { values, allValid } = collectValues();
         if (allValid) {
           hideModal();
-          resolve(values);
+          resolve(secondaryActions.length ? { ...values, _modalAction: 'confirm' } : values);
         } else {
           showInfoModal('Por favor, preencha todos os campos obrigatorios.', 'error');
         }
