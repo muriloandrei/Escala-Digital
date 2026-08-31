@@ -121,6 +121,7 @@
         const escalaBancoDiaAnteriorBtn = document.getElementById('escalaBancoDiaAnteriorBtn');
         const escalaBancoDiaAtualLabel = document.getElementById('escalaBancoDiaAtualLabel');
         const escalaBancoDiaProximoBtn = document.getElementById('escalaBancoDiaProximoBtn');
+        const escalaHeaderDayNav = document.querySelector('.scale-header-day-nav');
         const escalaBancoDetalhadaCard = document.getElementById('escalaBancoDetalhadaCard');
         const escalaBancoDetalhadaContent = document.getElementById('escalaBancoDetalhadaContent');
         const escalaSecaoTimelineTitulo = document.getElementById('escalaSecaoTimelineTitulo');
@@ -5380,6 +5381,8 @@
             escalaBancoDiariaPanel?.classList.toggle('hidden', visao !== 'diaria');
             escalaViewMensalBtn?.classList.toggle('active', visao === 'mensal');
             escalaViewDiariaBtn?.classList.toggle('active', visao === 'diaria');
+            escalaHeaderDayNav?.classList.toggle('hidden', visao !== 'diaria');
+            imprimirTimelineBancoBtn?.classList.toggle('hidden', visao !== 'diaria');
         };
 
         const moverDiaTimelineBanco = (direcao) => {

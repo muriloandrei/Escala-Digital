@@ -505,7 +505,7 @@
 
                 <div class="section-tabs" id="escalaSecaoTabs" role="tablist" aria-label="Seções da escala"></div>
 
-                <div class="table-card mt-6">
+                <div class="table-card mt-6 scale-overview-card">
                     <div class="table-card-header creation-card-header">
                         <div>
                             <div class="scale-section-title-row">
@@ -517,12 +517,7 @@
                             </div>
                             <p class="table-card-subtitle">Alterne entre a vis&atilde;o mensal e a timeline operacional do dia.</p>
                         </div>
-                    </div>
-                    <div id="escalaBancoMensalPanel">
-                        <div id="escalaBancoMensalContent" class="monthly-scale-wrapper"></div>
-                    </div>
-                    <div id="escalaBancoDiariaPanel" class="hidden">
-                        <div class="daily-toolbar">
+                        <div class="daily-toolbar scale-header-day-nav hidden">
                             <button type="button" class="day-nav-button" id="escalaBancoDiaAnteriorBtn" aria-label="Dia anterior">
                                 <span class="material-symbols-outlined">chevron_left</span>
                             </button>
@@ -533,11 +528,16 @@
                             <button type="button" class="day-nav-button" id="escalaBancoDiaProximoBtn" aria-label="Pr&oacute;ximo dia">
                                 <span class="material-symbols-outlined">chevron_right</span>
                             </button>
-                            <button type="button" class="action-button secondary" id="imprimirTimelineBancoBtn">
-                                <span class="material-symbols-outlined">print</span>
-                                Imprimir Timeline
-                            </button>
                         </div>
+                        <button type="button" class="action-button secondary scale-header-print hidden" id="imprimirTimelineBancoBtn">
+                            <span class="material-symbols-outlined">print</span>
+                            Imprimir Timeline
+                        </button>
+                    </div>
+                    <div id="escalaBancoMensalPanel">
+                        <div id="escalaBancoMensalContent" class="monthly-scale-wrapper"></div>
+                    </div>
+                    <div id="escalaBancoDiariaPanel" class="hidden">
                         <select id="escalaBancoDiaSelect" class="hidden" aria-hidden="true"></select>
                         <h2 id="escalaSecaoTimelineTitulo" class="sr-only">Timeline di&aacute;ria</h2>
                         <div id="escalaBancoTimelineContent" class="daily-timeline-list"></div>

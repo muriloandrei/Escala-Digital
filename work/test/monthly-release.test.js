@@ -97,7 +97,7 @@ test('monthly release draft does not include consecutive automatic rests', () =>
   }
 });
 
-test('monthly release uses safe default shift when employee has legacy 07:20 schedule', () => {
+test('monthly release keeps legacy 07:20 schedule and flags it as critique', () => {
   const funcionario = {
     ESCFUNC_ID: 13,
     CHAPA: '000013',
@@ -121,8 +121,8 @@ test('monthly release uses safe default shift when employee has legacy 07:20 sch
   assert.equal(primeiroTrabalho.hrEnt1, '08:00');
   assert.equal(primeiroTrabalho.hrSai1, '12:00');
   assert.equal(primeiroTrabalho.hrEnt2, '13:10');
-  assert.equal(primeiroTrabalho.hrSai2, '17:58');
-  assert.deepEqual(errors, []);
+  assert.equal(primeiroTrabalho.hrSai2, '16:30');
+  assert.ok(errors.some((error) => error.includes('jornada total deve ser 08:48')));
 });
 
 test('monthly release balances rests between employees in the same section and shift', () => {
@@ -240,7 +240,7 @@ test('monthly release balances rests across the whole section before each shift'
   assert.notDeepEqual(assinaturaPorTurno.get('40'), assinaturaPorTurno.get('41'));
 });
 
-test('monthly release saves draft after normalizing legacy employee schedule', async () => {
+test('monthly release saves draft even when automatic validation returns critiques', async () => {
   const originals = {
     listEscalasResumo: escalaService.listEscalasResumo,
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
@@ -277,7 +277,7 @@ test('monthly release saves draft after normalizing legacy employee schedule', a
 
     assert.equal(result.criada, true);
     assert.equal(result.funcionarios, 1);
-    assert.deepEqual(result.criticas, []);
+    assert.ok(result.criticas.length > 0);
     assert.equal(savedPayload.oficializada, 0);
     assert.equal(savedPayload.funcionarios.length, 1);
   } finally {
