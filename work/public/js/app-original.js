@@ -2739,6 +2739,17 @@
             return lojaEscalaSelect?.value || '';
         };
 
+        const escalaLiberacaoFoiCriada = (resultado) => {
+            const resultados = resultado?.resultados || [];
+            if (resultados.some(item => item.criada)) return true;
+            const mensagens = resultados.flatMap((item) => [
+                item.motivo || item.erro || 'A escala não foi criada.',
+                ...(item.criticas || [])
+            ]).filter(Boolean);
+            showInfoModal(mensagens.length ? mensagens : 'A escala não foi criada.', 'error');
+            return false;
+        };
+
         const carregarTurnosSecaoTela = async () => {
             const loja = turnosSecaoLojaSelect?.value && turnosSecaoLojaSelect.value !== 'all' ? turnosSecaoLojaSelect.value : 'all';
             const data = await apiRequest('/api/catalog/turnos-secao?lojaId=' + encodeURIComponent(loja));
@@ -2831,10 +2842,11 @@
                     return;
                 }
 
-                await apiRequest('/api/escalas/liberar-mensal', {
+                const liberacao = await apiRequest('/api/escalas/liberar-mensal', {
                     method: 'POST',
                     body: JSON.stringify({ mesRef, lojas: [Number(loja)] })
                 });
+                if (!escalaLiberacaoFoiCriada(liberacao)) return;
                 window.location.hash = '/escala-banco-mensal/' + loja + '/' + mesRef;
             } catch (error) {
                 showInfoModal(error.message, 'error');
@@ -5966,10 +5978,11 @@
                     continue;
                 }
 
-                await apiRequest('/api/escalas/liberar-mensal', {
+                const liberacao = await apiRequest('/api/escalas/liberar-mensal', {
                     method: 'POST',
                     body: JSON.stringify({ mesRef, lojas: [Number(loja)] })
                 });
+                if (!escalaLiberacaoFoiCriada(liberacao)) return;
                 escalaRascunhoAtivo = false;
                 escalaRascunhoContexto = null;
                 window.location.hash = '/escala-banco-mensal/' + loja + '/' + mesRef;

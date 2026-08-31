@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildFuncionarioRascunho } = require('../src/services/monthlyReleaseService');
+const { buildFuncionarioRascunho, buildFuncionariosRascunhoBalanceado } = require('../src/services/monthlyReleaseService');
 const { _private } = require('../src/services/escalaService');
 const { validateEscalaPayload } = require('../src/rules/escalaRules');
 
@@ -57,6 +57,63 @@ test('monthly release distributes 5x2 rests without consecutive Sunday work', ()
 
   assert.deepEqual(errors, []);
   assert.equal(rascunho.dias.filter((dia) => dia.programacao === 'F').length >= 8, true);
+});
+
+test('monthly release balances rests between employees in the same section and shift', () => {
+  const funcionarios = Array.from({ length: 6 }, (_, index) => ({
+    ESCFUNC_ID: 100 + index,
+    CHAPA: `01010${index}`,
+    NOME: `Funcionario ${index + 1}`,
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }));
+  const turnos = [{
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01');
+  const errors = validateEscalaPayload({
+    lojaId: 10,
+    mesRef: '2026-09-01',
+    funcionarios: rascunhos
+  });
+  const folgasPorDia = new Map();
+  rascunhos.forEach((funcionario) => {
+    funcionario.dias
+      .filter((dia) => dia.programacao === 'F')
+      .forEach((dia) => folgasPorDia.set(dia.data, (folgasPorDia.get(dia.data) || 0) + 1));
+  });
+
+  assert.deepEqual(errors, []);
+  assert.equal(Math.max(...folgasPorDia.values()) < funcionarios.length, true);
+  assert.equal(new Set([...folgasPorDia.values()]).size > 1, true);
+});
+
+test('monthly release separates balance by section and shift', () => {
+  const funcionarios = [
+    { ESCFUNC_ID: 1, CHAPA: 'A1', NOME: 'A1', LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 1, HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' },
+    { ESCFUNC_ID: 2, CHAPA: 'A2', NOME: 'A2', LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 1, HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' },
+    { ESCFUNC_ID: 3, CHAPA: 'B1', NOME: 'B1', LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 1, HR_ENT1: '10:00', HR_SAI1: '14:00', HR_ENT2: '15:10', HR_SAI2: '19:58' },
+    { ESCFUNC_ID: 4, CHAPA: 'B2', NOME: 'B2', LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 1, HR_ENT1: '10:00', HR_SAI1: '14:00', HR_ENT2: '15:10', HR_SAI2: '19:58' }
+  ];
+  const turnos = [
+    { ESCSECAOTURNO_ID: 40, ESCSECAO_ID: 20, HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' },
+    { ESCSECAOTURNO_ID: 41, ESCSECAO_ID: 20, HR_ENT1: '10:00', HR_SAI1: '14:00', HR_ENT2: '15:10', HR_SAI2: '19:58' }
+  ];
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01');
+
+  assert.deepEqual(rascunhos.map((item) => item.escsecaoTurnoId).sort(), [40, 40, 41, 41]);
 });
 
 test('date lock blocks only previous days, not current day', () => {
