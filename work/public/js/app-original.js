@@ -2275,6 +2275,11 @@
             if (Array.isArray(error?.details?.errors)) return error.details.errors.join(' ');
             return error?.message || 'Erro na comunicação com o servidor.';
         };
+        const getApiErrorMessages = (error) => {
+            if (Array.isArray(error?.details) && error.details.length) return error.details;
+            if (Array.isArray(error?.details?.errors) && error.details.errors.length) return error.details.errors;
+            return [error?.message || 'Erro na comunicação com o servidor.'];
+        };
         const carregarUsuarioSessao = async () => {
             const data = await apiRequest('/api/auth/me');
             const user = data.user || {};
@@ -2870,14 +2875,20 @@
                     return;
                 }
 
-                const liberacao = await apiRequest('/api/escalas/liberar-mensal', {
-                    method: 'POST',
-                    body: JSON.stringify({ mesRef, lojas: [Number(loja)] })
-                });
+                let liberacao;
+                try {
+                    liberacao = await apiRequest('/api/escalas/liberar-mensal', {
+                        method: 'POST',
+                        body: JSON.stringify({ mesRef, lojas: [Number(loja)] })
+                    });
+                } catch (error) {
+                    showInfoModal(getApiErrorMessages(error), 'error');
+                    return;
+                }
                 if (!escalaLiberacaoFoiCriada(liberacao)) return;
                 window.location.hash = '/escala-banco-mensal/' + loja + '/' + mesRef;
             } catch (error) {
-                showInfoModal(error.message, 'error');
+                showInfoModal(getApiErrorMessages(error), 'error');
             }
         });
 
@@ -6136,10 +6147,16 @@
                     continue;
                 }
 
-                const liberacao = await apiRequest('/api/escalas/liberar-mensal', {
-                    method: 'POST',
-                    body: JSON.stringify({ mesRef, lojas: [Number(loja)] })
-                });
+                let liberacao;
+                try {
+                    liberacao = await apiRequest('/api/escalas/liberar-mensal', {
+                        method: 'POST',
+                        body: JSON.stringify({ mesRef, lojas: [Number(loja)] })
+                    });
+                } catch (error) {
+                    showInfoModal(getApiErrorMessages(error), 'error');
+                    return;
+                }
                 if (!escalaLiberacaoFoiCriada(liberacao)) return;
                 escalaRascunhoAtivo = false;
                 escalaRascunhoContexto = null;
