@@ -240,6 +240,81 @@ test('monthly release balances rests across the whole section before each shift'
   assert.notDeepEqual(assinaturaPorTurno.get('40'), assinaturaPorTurno.get('41'));
 });
 
+test('monthly release smooths the first generated day and common days', () => {
+  const funcionarios = Array.from({ length: 12 }, (_, index) => ({
+    ESCFUNC_ID: 500 + index,
+    CHAPA: `05050${index}`,
+    NOME: `Funcionario Balanceado ${index + 1}`,
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }));
+  const turnos = [{
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01');
+  const folgasPorDia = new Map();
+  rascunhos.forEach((funcionario) => {
+    funcionario.dias
+      .filter((dia) => dia.programacao === 'F')
+      .forEach((dia) => folgasPorDia.set(dia.data, (folgasPorDia.get(dia.data) || 0) + 1));
+  });
+
+  const limiteDiaComum = Math.ceil(funcionarios.length * 2 / 7);
+  const folgasPrimeiroDia = rascunhos.filter((funcionario) => funcionario.dias[0]?.programacao === 'F').length;
+  const maxFolgasDiaComum = Math.max(...[...folgasPorDia.entries()]
+    .filter(([data]) => new Date(`${data}T00:00:00`).getDay() !== 0)
+    .map(([, total]) => total));
+
+  assert.ok(folgasPrimeiroDia <= limiteDiaComum);
+  assert.ok(maxFolgasDiaComum <= limiteDiaComum);
+});
+
+test('monthly release does not repeat the same 14 day rest shape for every employee', () => {
+  const funcionarios = Array.from({ length: 8 }, (_, index) => ({
+    ESCFUNC_ID: 600 + index,
+    CHAPA: `06060${index}`,
+    NOME: `Funcionario Ciclo ${index + 1}`,
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }));
+  const turnos = [{
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01');
+  const todosRepetemMesmoCiclo = rascunhos.every((funcionario) => {
+    const folgas = funcionario.dias
+      .map((dia, index) => dia.programacao === 'F' ? index : null)
+      .filter((index) => index !== null);
+    const primeiroCiclo = folgas.filter((index) => index < 14).join('|');
+    const segundoCiclo = folgas.filter((index) => index >= 14 && index < 28).map((index) => index - 14).join('|');
+    return primeiroCiclo === segundoCiclo;
+  });
+
+  assert.equal(todosRepetemMesmoCiclo, false);
+});
+
 test('monthly release saves draft even when automatic validation returns critiques', async () => {
   const originals = {
     listEscalasResumo: escalaService.listEscalasResumo,
