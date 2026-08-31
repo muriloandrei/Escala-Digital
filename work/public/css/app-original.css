@@ -1639,11 +1639,25 @@
         .monthly-scale-table .employee-col {
             background: #ffffff;
             box-shadow: 8px 0 12px -12px rgba(15, 23, 42, 0.45);
+            background-clip: padding-box;
             left: 0;
-            min-width: 250px;
+            min-width: 260px;
+            max-width: 260px;
+            overflow: hidden;
             position: sticky;
             text-align: left;
+            width: 260px;
             z-index: 14;
+        }
+
+        .monthly-scale-table .employee-col::after {
+            background: #cbd5e1;
+            bottom: 0;
+            content: "";
+            position: absolute;
+            right: -1px;
+            top: 0;
+            width: 1px;
         }
 
         .monthly-scale-table thead .employee-col {
@@ -1651,9 +1665,16 @@
             z-index: 32;
         }
 
+        .monthly-scale-table thead tr:first-child th.employee-col,
+        .monthly-scale-table thead tr:nth-child(2) th.employee-col,
+        .monthly-scale-table thead tr:nth-child(3) th.employee-col {
+            background: #f8fbff;
+            z-index: 48;
+        }
+
         .monthly-scale-table tbody .employee-col {
             background: #ffffff;
-            z-index: 18;
+            z-index: 28;
         }
 
         .monthly-scale-table .employee-col strong {
