@@ -1674,8 +1674,8 @@
         }
 
         .monthly-total-box.folga {
-            background: #fee2e2;
-            color: #b91c1c;
+            background: #dbeafe;
+            color: #1d4ed8;
         }
 
         .monthly-total-box.trabalho {
@@ -1694,10 +1694,14 @@
         }
 
         .monthly-scale-table .rest-cell {
-            background: #dc2626;
+            background: #0ea5e9;
             color: #ffffff;
             cursor: pointer;
             font-weight: 800;
+        }
+
+        .monthly-scale-table .rest-cell-folga {
+            background: #0ea5e9;
         }
 
         .monthly-scale-table .rest-cell-ferias {
@@ -1709,7 +1713,7 @@
         }
 
         .daily-schedule-rest.rest-cell-folga {
-            background: #dc2626;
+            background: #0ea5e9;
         }
 
         .daily-schedule-rest.rest-cell-ferias {
@@ -2508,6 +2512,23 @@
         #historico-page .data-table,
         #tipos-descanso-page .data-table,
         #roles-page .data-table { min-width: 900px; }
+
+        #historico-page .history-detail-cell {
+            min-width: 360px;
+            max-width: 680px;
+        }
+
+        #historico-page .history-detail-cell pre {
+            color: var(--cor-texto);
+            font-family: inherit;
+            font-size: 0.82rem;
+            line-height: 1.45;
+            margin: 0;
+            max-height: none;
+            overflow: visible;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
 
         @media (max-width: 680px) {
             .permission-row { grid-template-columns: 1fr; }

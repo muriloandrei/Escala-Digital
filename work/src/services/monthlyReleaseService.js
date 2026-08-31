@@ -148,57 +148,138 @@ function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDa
   };
 }
 
-function getGrupoOperacionalKey(funcionario, turno) {
-  return [
-    Number(funcionario.ESCSECAO_ID || 0),
-    turno?.ESCSECAOTURNO_ID ? `turno:${turno.ESCSECAOTURNO_ID}` : getHorarioSignature(turno || funcionario)
-  ].join('|');
+function getSecaoKey(funcionario) {
+  return String(Number(funcionario.ESCSECAO_ID || 0));
 }
 
-function escolherPadraoBalanceado({ funcionario, turno, mesRef, hojeIso, indiceGrupo, diasMes, contagemFolgas }) {
+function getTurnoKey(funcionario, turno) {
+  return turno?.ESCSECAOTURNO_ID ? `turno:${turno.ESCSECAOTURNO_ID}` : getHorarioSignature(turno || funcionario);
+}
+
+function getWeekKeyFromIso(dataIso) {
+  const date = new Date(`${formatDateValue(dataIso)}T00:00:00`);
+  const day = date.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diffToMonday);
+  return formatDateValue(date);
+}
+
+function getCounterValues(counter) {
+  return [...counter.values(), 0];
+}
+
+function escolherPadraoBalanceado({
+  funcionario,
+  turno,
+  mesRef,
+  hojeIso,
+  indiceSecao,
+  diasMes,
+  contagemFolgasSecao,
+  contagemFolgasTurno,
+  contagemFolgasSemanaSecao,
+  turnoSize
+}) {
   const padroes = getPadroesFolgaValidos();
   let melhor = null;
   padroes.forEach((padrao, padraoIndex) => {
-    const rascunho = buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso, indiceGrupo, padrao);
+    const rascunho = buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso, indiceSecao, padrao);
     const errors = validateEscalaPayload({
       lojaId: Number(funcionario.LOJA || 0) || 1,
       mesRef,
       funcionarios: [rascunho]
     });
-    const folgas = diasMes
-      .map((date) => formatDateValue(date))
-      .filter((data) => data >= hojeIso)
-      .filter((data, index) => rascunho.dias[index]?.programacao === 'F');
-    const projetada = new Map(contagemFolgas);
-    folgas.forEach((data) => projetada.set(data, (projetada.get(data) || 0) + 1));
-    const maxFolgasDia = Math.max(...[...projetada.values(), 0]);
-    const somaQuadrados = [...projetada.values()].reduce((acc, value) => acc + (value * value), 0);
-    const desempate = Math.abs(padraoIndex - (indiceGrupo % padroes.length));
-    const score = (errors.length * 100000) + (maxFolgasDia * 1000) + somaQuadrados + (desempate / 1000);
+    const folgas = rascunho.dias
+      .filter((dia) => dia.programacao === 'F')
+      .map((dia) => dia.data)
+      .filter((data) => data >= hojeIso);
+
+    const projetadaSecao = new Map(contagemFolgasSecao);
+    const projetadaTurno = new Map(contagemFolgasTurno);
+    const projetadaSemanaSecao = new Map(contagemFolgasSemanaSecao);
+    folgas.forEach((data) => {
+      projetadaSecao.set(data, (projetadaSecao.get(data) || 0) + 1);
+      projetadaTurno.set(data, (projetadaTurno.get(data) || 0) + 1);
+      const weekKey = getWeekKeyFromIso(data);
+      projetadaSemanaSecao.set(weekKey, (projetadaSemanaSecao.get(weekKey) || 0) + 1);
+    });
+
+    const maxFolgasSecaoDia = Math.max(...getCounterValues(projetadaSecao));
+    const maxFolgasTurnoDia = Math.max(...getCounterValues(projetadaTurno));
+    const somaQuadradosSecao = getCounterValues(projetadaSecao).reduce((acc, value) => acc + (value * value), 0);
+    const somaQuadradosTurno = getCounterValues(projetadaTurno).reduce((acc, value) => acc + (value * value), 0);
+    const somaQuadradosSemana = getCounterValues(projetadaSemanaSecao).reduce((acc, value) => acc + (value * value), 0);
+    const turnoSemCobertura = Number(turnoSize || 0) > 1 && folgas.some((data) => (projetadaTurno.get(data) || 0) >= Number(turnoSize || 0));
+    const limiteDesejadoTurno = Math.max(1, Math.ceil(Number(turnoSize || 1) / 2));
+    const excessoFolgaTurno = Math.max(0, maxFolgasTurnoDia - limiteDesejadoTurno);
+    const desempate = Math.abs(padraoIndex - (indiceSecao % padroes.length));
+    const score = (errors.length * 100000)
+      + (turnoSemCobertura ? 50000 : 0)
+      + (excessoFolgaTurno * 7000)
+      + (maxFolgasTurnoDia * 2600)
+      + (maxFolgasSecaoDia * 1400)
+      + (somaQuadradosSecao * 10)
+      + (somaQuadradosTurno * 8)
+      + (somaQuadradosSemana * 3)
+      + (desempate / 1000);
     if (!melhor || score < melhor.score) melhor = { padrao, folgas, score };
   });
-  return melhor || { padrao: getPadraoFolgaPorIndice(indiceGrupo), folgas: [] };
+  return melhor || { padrao: getPadraoFolgaPorIndice(indiceSecao), folgas: [] };
 }
 
 function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeIso = formatDateValue(new Date())) {
-  const grupos = new Map();
+  const secoes = new Map();
   (funcionarios || []).forEach((funcionario) => {
     const turno = findTurnoParaFuncionario(funcionario, turnos);
-    const key = getGrupoOperacionalKey(funcionario, turno);
-    if (!grupos.has(key)) grupos.set(key, []);
-    grupos.get(key).push({ funcionario, turno });
+    const secaoKey = getSecaoKey(funcionario);
+    if (!secoes.has(secaoKey)) secoes.set(secaoKey, []);
+    secoes.get(secaoKey).push({
+      funcionario,
+      turno,
+      turnoKey: getTurnoKey(funcionario, turno)
+    });
   });
 
   const diasMes = getMonthDays(mesRef);
   const payload = [];
-  [...grupos.values()].forEach((grupo) => {
-    const contagemFolgas = new Map(diasMes.map((date) => [formatDateValue(date), 0]));
-    grupo
-      .sort((left, right) => String(left.funcionario.NOME || '').localeCompare(String(right.funcionario.NOME || '')) || String(left.funcionario.CHAPA || '').localeCompare(String(right.funcionario.CHAPA || '')))
-      .forEach(({ funcionario, turno }, indiceGrupo) => {
-        const escolhido = escolherPadraoBalanceado({ funcionario, turno, mesRef, hojeIso, indiceGrupo, diasMes, contagemFolgas });
-        escolhido.folgas.forEach((data) => contagemFolgas.set(data, (contagemFolgas.get(data) || 0) + 1));
-        payload.push(buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso, indiceGrupo, escolhido.padrao));
+  [...secoes.values()].forEach((secao) => {
+    const contagemFolgasSecao = new Map(diasMes.map((date) => [formatDateValue(date), 0]));
+    const contagemFolgasSemanaSecao = new Map(diasMes.map((date) => [getWeekKeyFromIso(formatDateValue(date)), 0]));
+    const contagensTurno = new Map();
+    const turnoSizes = new Map();
+
+    secao.forEach(({ turnoKey }) => {
+      turnoSizes.set(turnoKey, (turnoSizes.get(turnoKey) || 0) + 1);
+      if (!contagensTurno.has(turnoKey)) {
+        contagensTurno.set(turnoKey, new Map(diasMes.map((date) => [formatDateValue(date), 0])));
+      }
+    });
+
+    secao
+      .sort((left, right) => left.turnoKey.localeCompare(right.turnoKey)
+        || String(left.funcionario.NOME || '').localeCompare(String(right.funcionario.NOME || ''))
+        || String(left.funcionario.CHAPA || '').localeCompare(String(right.funcionario.CHAPA || '')))
+      .forEach(({ funcionario, turno, turnoKey }, indiceSecao) => {
+        const contagemFolgasTurno = contagensTurno.get(turnoKey);
+        const escolhido = escolherPadraoBalanceado({
+          funcionario,
+          turno,
+          mesRef,
+          hojeIso,
+          indiceSecao,
+          diasMes,
+          contagemFolgasSecao,
+          contagemFolgasTurno,
+          contagemFolgasSemanaSecao,
+          turnoSize: turnoSizes.get(turnoKey) || 1
+        });
+        escolhido.folgas.forEach((data) => {
+          contagemFolgasSecao.set(data, (contagemFolgasSecao.get(data) || 0) + 1);
+          contagemFolgasTurno.set(data, (contagemFolgasTurno.get(data) || 0) + 1);
+          const weekKey = getWeekKeyFromIso(data);
+          contagemFolgasSemanaSecao.set(weekKey, (contagemFolgasSemanaSecao.get(weekKey) || 0) + 1);
+        });
+        payload.push(buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso, indiceSecao, escolhido.padrao));
       });
   });
   return payload;

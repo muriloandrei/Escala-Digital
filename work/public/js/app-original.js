@@ -3285,6 +3285,16 @@
             copiarOptionsSelect(anoSelect, historicoAnoSelect, params.mesRef ? String(new Date(params.mesRef + "T00:00:00").getFullYear()) : (escalasFiltroAno?.value || anoSelect?.value));
         };
 
+        const formatarDetalheHistorico = (detalhe) => {
+            const texto = String(detalhe || '').trim();
+            if (!texto) return '-';
+            try {
+                return JSON.stringify(JSON.parse(texto), null, 2);
+            } catch (_) {
+                return texto;
+            }
+        };
+
         const aplicarFiltroHistoricoTela = () => {
             if (!tabelaHistoricoBody) return;
             const termo = normalizarTextoFiltro(historicoPesquisaInput?.value);
@@ -3298,7 +3308,7 @@
                     <td data-label="Mês">${item.MES_REF ? getNomeMesTabela(item.MES_REF) + " " + String(item.MES_REF).slice(0,4) : "-"}</td>
                     <td data-label="Revisão">${escapeHtml(item.REVISAO ?? "-")}</td>
                     <td data-label="Usuário">${escapeHtml(item.NOME_USUARIO || item.LOGIN || "Sistema")}</td>
-                    <td data-label="Detalhe">${escapeHtml(item.DETALHE || "-")}</td>
+                    <td data-label="Detalhe" class="history-detail-cell"><pre>${escapeHtml(formatarDetalheHistorico(item.DETALHE))}</pre></td>
                 </tr>`).join("") : '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum histórico encontrado.</td></tr>';
         };
 
@@ -4908,7 +4918,7 @@
                     '<button class="action-btn-table banco-action banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
                     oficializarAction,
                     inativarAction,
-                    '<button class="action-btn-table banco-action banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver histórico de revisões"><span class="material-symbols-outlined">history</span>Histórico</button>',
+                    '<button class="action-btn-table banco-action banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver relatório de alterações"><span class="material-symbols-outlined">history</span>Histórico</button>',
                     '</td>',
                     '</tr>'
                 ].join('');
@@ -6214,7 +6224,7 @@
             }
 
             if (historicoButton) {
-                await carregarHistoricoRevisoesBanco(loja, mesRef);
+                window.location.hash = '/historico/' + encodeURIComponent(loja) + '/' + encodeURIComponent(mesRef);
                 return;
             }
 
