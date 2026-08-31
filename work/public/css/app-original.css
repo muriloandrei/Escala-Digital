@@ -1992,6 +1992,17 @@
             padding: 14px 16px;
         }
 
+        .turno-operacional-detail {
+            background: #f8fbff;
+            border: 1px solid #dbe7fb;
+            border-radius: 8px;
+            display: grid;
+            gap: 14px;
+            grid-column: 1 / -1;
+            margin-top: 2px;
+            padding: 12px;
+        }
+
         .turno-operacional-row:last-child {
             border-bottom: 0;
         }
@@ -2016,6 +2027,12 @@
             gap: 8px;
         }
 
+        .turno-operacional-actions {
+            align-items: center;
+            display: flex;
+            justify-content: flex-end;
+        }
+
         .turno-worker {
             background: #f3f7fd;
             border: 1px solid #dbe7fb;
@@ -2026,6 +2043,182 @@
         .turno-worker strong,
         .turno-worker small {
             display: block;
+        }
+
+        .turno-inline-grid {
+            display: grid;
+            gap: 10px;
+        }
+
+        .turno-inline-section {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .turno-inline-section header {
+            align-items: center;
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .turno-inline-section header strong,
+        .turno-inline-section header span {
+            display: block;
+        }
+
+        .turno-inline-section header strong {
+            color: var(--cor-texto);
+            font-size: 0.86rem;
+        }
+
+        .turno-inline-section header span {
+            color: var(--cor-texto-leve);
+            font-size: 0.76rem;
+            font-weight: 700;
+        }
+
+        .turno-inline-workers {
+            display: flex;
+            gap: 7px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+            white-space: nowrap;
+        }
+
+        .turno-worker-inline {
+            background: #f3f7fd;
+            border: 1px solid #dbe7fb;
+            border-radius: 7px;
+            color: var(--cor-texto);
+            display: inline-block;
+            flex: 0 0 auto;
+            font-size: 0.76rem;
+            font-weight: 800;
+            max-width: 260px;
+            overflow: hidden;
+            padding: 6px 8px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .turno-inline-timeline-block {
+            display: grid;
+            gap: 8px;
+        }
+
+        .turno-inline-timeline-block h3 {
+            color: var(--cor-texto);
+            font-size: 0.92rem;
+            margin: 0;
+        }
+
+        .turno-section-timeline {
+            background: #ffffff;
+            border: 1px solid var(--cor-borda);
+            border-radius: 8px;
+            min-width: 0;
+            overflow: hidden;
+            width: 100%;
+        }
+
+        .turno-section-timeline-axis,
+        .turno-section-timeline-row {
+            display: grid;
+            grid-template-columns: minmax(140px, 18%) minmax(0, 1fr);
+            min-width: 0;
+        }
+
+        .turno-section-timeline-axis > *,
+        .turno-section-timeline-row > * {
+            min-width: 0;
+        }
+
+        .turno-section-timeline-axis {
+            background: #ffffff;
+            border-bottom: 1px solid #dce6f2;
+            color: var(--cor-texto-leve);
+            font-size: 0.7rem;
+        }
+
+        .turno-section-timeline-markers {
+            height: 30px;
+            position: relative;
+        }
+
+        .turno-section-timeline-markers span {
+            bottom: 6px;
+            position: absolute;
+            transform: translateX(-50%);
+            white-space: nowrap;
+        }
+
+        .turno-section-timeline-markers span:first-child {
+            transform: translateX(0);
+        }
+
+        .turno-section-timeline-markers span:last-child {
+            transform: translateX(-100%);
+        }
+
+        .turno-section-timeline-person {
+            border-bottom: 1px solid #edf2f8;
+            border-right: 1px solid #dce6f2;
+            min-height: 32px;
+            padding: 8px;
+        }
+
+        .turno-section-timeline-person strong {
+            color: var(--cor-texto);
+            display: block;
+            font-size: 0.74rem;
+            line-height: 1.15;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .turno-section-timeline-track {
+            background:
+                repeating-linear-gradient(to right, rgba(148, 163, 184, 0.18) 0, rgba(148, 163, 184, 0.18) 1px, transparent 1px, transparent 4.166%),
+                #f8fafc;
+            border-bottom: 1px solid #edf2f8;
+            min-height: 32px;
+            position: relative;
+        }
+
+        .turno-section-timeline-bar,
+        .turno-section-timeline-break {
+            align-items: center;
+            border-radius: 4px;
+            color: #ffffff;
+            display: inline-flex;
+            font-size: 0.66rem;
+            font-weight: 800;
+            height: 20px;
+            justify-content: center;
+            line-height: 1;
+            overflow: hidden;
+            position: absolute;
+            top: 6px;
+            white-space: nowrap;
+        }
+
+        .turno-section-timeline-bar {
+            background: #0f5dbf;
+        }
+
+        .turno-section-timeline-break {
+            background: #56b5e8;
+        }
+
+        .turno-section-timeline-empty {
+            color: var(--cor-texto-leve);
+            font-size: 0.82rem;
+            padding: 14px;
         }
 
         .compact-section-row {
@@ -2080,9 +2273,28 @@
                 justify-content: flex-start;
             }
 
+            .turno-operacional-row,
+            .compact-section-row {
+                grid-template-columns: 1fr;
+            }
+
+            .turno-operacional-actions {
+                justify-content: flex-start;
+            }
+
             .turno-detail-section header {
                 align-items: flex-start;
                 flex-direction: column;
+            }
+
+            .turno-inline-section header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .turno-section-timeline-axis,
+            .turno-section-timeline-row {
+                grid-template-columns: minmax(110px, 28%) minmax(0, 1fr);
             }
         }
 

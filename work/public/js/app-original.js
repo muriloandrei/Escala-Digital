@@ -803,6 +803,7 @@
         let ausenciasLojaCache = [];
         let secoesLojaCache = [];
         let turnosSecaoCache = [];
+        let turnoSecaoExpandidaKey = null;
         let escalaDetalheAtual = { escprogId: null, lojaId: null, mesRef: null, modo: 'individual', visao: 'mensal', dias: [], secaoAtiva: null, secoes: [], subsetorAtivo: null, subsetores: [] };
         let lojasPermitidasCache = [];
         let lojaPrincipalCache = null;
@@ -2715,12 +2716,99 @@
             renderizarTurnosOperacionais(filtrados);
         };
 
+        const normalizarHorarioTurnoTela = (value) => {
+            const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+            if (!match) return '';
+            return match[1].padStart(2, '0') + ':' + match[2];
+        };
+
         const funcionarioPertenceAoTurno = (funcionario, turno) => {
             if (String(funcionario.ESCSECAO_ID || '') !== String(turno.ESCSECAO_ID || '')) return false;
-            const horariosFuncionario = [funcionario.HR_ENT1, funcionario.HR_SAI1, funcionario.HR_ENT2, funcionario.HR_SAI2].map(value => String(value || '').trim());
+            const horariosFuncionario = [funcionario.HR_ENT1, funcionario.HR_SAI1, funcionario.HR_ENT2, funcionario.HR_SAI2].map(normalizarHorarioTurnoTela);
             if (horariosFuncionario.some(value => !value)) return false;
-            const horariosTurno = [turno.HR_ENT1, turno.HR_SAI1, turno.HR_ENT2, turno.HR_SAI2].map(value => String(value || '').trim());
+            const horariosTurno = [turno.HR_ENT1, turno.HR_SAI1, turno.HR_ENT2, turno.HR_SAI2].map(normalizarHorarioTurnoTela);
             return horariosFuncionario.every((value, index) => value === horariosTurno[index]);
+        };
+
+        const getTurnoPeriodoLabel = (turno) => [turno.HR_ENT1, turno.HR_SAI1, turno.HR_ENT2, turno.HR_SAI2].map(normalizarHorarioTurnoTela).filter(Boolean).join(' / ');
+
+        const renderizarTimelineTurnosSecao = (turnos, funcionarios) => {
+            const inicioTimeline = 0;
+            const fimTimeline = 24 * 60;
+            const duracaoTimeline = fimTimeline - inicioTimeline;
+            const markers = [];
+            for (let min = 0; min <= fimTimeline; min += 120) {
+                const left = ((min - inicioTimeline) / duracaoTimeline) * 100;
+                markers.push('<span style="left:' + left + '%">' + minutesToTime(min === 1440 ? 0 : min) + '</span>');
+            }
+
+            const funcionariosOrdenados = [...(funcionarios || [])].sort((left, right) => {
+                return timeToMinutes(left.HR_ENT1 || '23:59') - timeToMinutes(right.HR_ENT1 || '23:59')
+                    || String(left.NOME || '').localeCompare(String(right.NOME || ''));
+            });
+
+            if (!funcionariosOrdenados.length) {
+                return '<div class="turno-section-timeline-empty">Nenhum funcionário encontrado para montar a timeline.</div>';
+            }
+
+            const mkBar = (start, end, cls, label, tooltip) => {
+                const width = Math.max(0, ((end - start) / duracaoTimeline) * 100);
+                const left = Math.max(0, ((start - inicioTimeline) / duracaoTimeline) * 100);
+                if (width <= 0) return '';
+                return '<span class="' + cls + '" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(tooltip || label) + '">' + escapeHtml(label) + '</span>';
+            };
+
+            const rows = funcionariosOrdenados.map((funcionario) => {
+                const turno = (turnos || []).find(item => funcionarioPertenceAoTurno(funcionario, item));
+                const ent1Label = normalizarHorarioTurnoTela(funcionario.HR_ENT1 || turno?.HR_ENT1 || '00:00') || '00:00';
+                const sai1Label = normalizarHorarioTurnoTela(funcionario.HR_SAI1 || turno?.HR_SAI1 || funcionario.HR_ENT1 || '00:00') || '00:00';
+                const ent2Label = normalizarHorarioTurnoTela(funcionario.HR_ENT2 || turno?.HR_ENT2 || funcionario.HR_SAI1 || '00:00') || '00:00';
+                const sai2Label = normalizarHorarioTurnoTela(funcionario.HR_SAI2 || turno?.HR_SAI2 || funcionario.HR_ENT2 || '00:00') || '00:00';
+                const ent1 = timeToMinutes(ent1Label);
+                const sai1 = timeToMinutes(sai1Label);
+                const ent2 = timeToMinutes(ent2Label);
+                const sai2 = timeToMinutes(sai2Label);
+                const tooltip = [
+                    funcionario.NOME || '',
+                    funcionario.FUNCAO_DESCR || funcionario.FUNCAO || '',
+                    [ent1Label, sai1Label, ent2Label, sai2Label].filter(Boolean).join(' / ')
+                ].filter(Boolean).join('\n');
+                const bars = mkBar(ent1, sai1, 'turno-section-timeline-bar', ent1Label + ' - ' + sai1Label, tooltip)
+                    + mkBar(sai1, ent2, 'turno-section-timeline-break', '', tooltip)
+                    + mkBar(ent2, sai2, 'turno-section-timeline-bar', ent2Label + ' - ' + sai2Label, tooltip);
+                return '<div class="turno-section-timeline-row">' +
+                    '<div class="turno-section-timeline-person" title="' + escapeHtml(tooltip) + '"><strong>' + escapeHtml((funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '')) + '</strong></div>' +
+                    '<div class="turno-section-timeline-track">' + bars + '</div>' +
+                    '</div>';
+            }).join('');
+
+            return '<div class="turno-section-timeline">' +
+                '<div class="turno-section-timeline-axis"><div></div><div class="turno-section-timeline-markers">' + markers.join('') + '</div></div>' +
+                rows +
+                '</div>';
+        };
+
+        const renderizarDetalheTurnosSecao = (grupo) => {
+            const funcionarios = turnosFuncionariosTelaCache
+                .filter(funcionario => String(funcionario.ESCSECAO_ID || '') === String(grupo.secaoId || ''));
+            const turnosHtml = grupo.turnos.map((turno) => {
+                const funcionariosTurno = funcionarios.filter(funcionario => funcionarioPertenceAoTurno(funcionario, turno));
+                const periodo = getTurnoPeriodoLabel(turno);
+                const editar = hasPermission('turnos-secao', 'editar')
+                    ? '<button type="button" class="action-btn-table banco-action edit-turno-secao" data-id="' + escapeHtml(turno.ESCSECAOTURNO_ID || '') + '" data-loja="' + escapeHtml(turno.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar Turno</button>'
+                    : '';
+                return '<section class="turno-inline-section">' +
+                    '<header><div><strong>' + escapeHtml(periodo) + '</strong><span>' + escapeHtml(funcionariosTurno.length) + ' funcionário(s)</span></div>' + editar + '</header>' +
+                    '<div class="turno-inline-workers">' + (funcionariosTurno.length ? funcionariosTurno.map(funcionario =>
+                        '<span class="turno-worker-inline" title="' + escapeHtml(funcionario.FUNCAO_DESCR || funcionario.FUNCAO || '') + '">' + escapeHtml((funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '')) + '</span>'
+                    ).join('') : '<span class="turnos-operacionais-vazio">Nenhum funcionário neste turno.</span>') + '</div>' +
+                    '</section>';
+            }).join('');
+
+            return '<div class="turno-operacional-detail" data-secao-key="' + escapeHtml(grupo.key) + '">' +
+                '<div class="turno-inline-grid">' + (turnosHtml || '<p class="turnos-operacionais-vazio">Nenhum turno encontrado.</p>') + '</div>' +
+                '<div class="turno-inline-timeline-block"><h3>Timeline dos turnos no dia</h3>' + renderizarTimelineTurnosSecao(grupo.turnos, funcionarios) + '</div>' +
+                '</div>';
         };
 
         const renderizarTurnosOperacionais = (turnos) => {
@@ -2757,11 +2845,13 @@
             });
 
             turnosOperacionaisLista.innerHTML = '<div class="turnos-operacionais-table">' + [...grupos.values()].map((grupo) => {
+                const expandida = String(turnoSecaoExpandidaKey || '') === String(grupo.key);
                 return '<article class="turno-operacional-row compact-section-row">' +
                     '<div class="turno-operacional-section"><strong>' + escapeHtml(grupo.titulo) + '</strong><span>' + escapeHtml(grupo.turnos.length) + ' turno(s) cadastrado(s)</span></div>' +
                     '<div class="turno-operacional-count"><strong>' + escapeHtml(grupo.funcionarios.size) + '</strong><span>funcionários</span></div>' +
-                    '<div class="turno-operacional-workers"><span class="turnos-operacionais-vazio">Detalhe os funcionários e horários apenas quando necessário.</span></div>' +
-                    '<div class="turno-operacional-actions"><button type="button" class="action-btn-table banco-action mostrar-funcionarios-turno" data-secao-key="' + escapeHtml(grupo.key) + '"><span class="material-symbols-outlined">group</span>Mostrar Funcionários</button></div>' +
+                    '<div class="turno-operacional-workers"><span class="turnos-operacionais-vazio">' + (expandida ? 'Funcionários e timeline abertos abaixo.' : 'Detalhe os funcionários e horários apenas quando necessário.') + '</span></div>' +
+                    '<div class="turno-operacional-actions"><button type="button" class="action-btn-table banco-action mostrar-funcionarios-turno" aria-expanded="' + (expandida ? 'true' : 'false') + '" data-secao-key="' + escapeHtml(grupo.key) + '"><span class="material-symbols-outlined">' + (expandida ? 'expand_less' : 'group') + '</span>' + (expandida ? 'Esconder Funcionários' : 'Mostrar Funcionários') + '</button></div>' +
+                    (expandida ? renderizarDetalheTurnosSecao(grupo) : '') +
                     '</article>';
             }).join('') + '</div>';
         };
@@ -2810,7 +2900,10 @@
 
         turnosPesquisaInput?.addEventListener('input', aplicarFiltrosTurnosTela);
         turnosSecaoFiltro?.addEventListener('change', aplicarFiltrosTurnosTela);
-        turnosSecaoLojaSelect?.addEventListener('change', () => carregarTurnosSecaoTela().catch(error => showInfoModal(error.message, 'error')));
+        turnosSecaoLojaSelect?.addEventListener('change', () => {
+            turnoSecaoExpandidaKey = null;
+            carregarTurnosSecaoTela().catch(error => showInfoModal(error.message, 'error'));
+        });
 
         tabelaTurnosSecaoBody?.addEventListener('click', (event) => {
             const editButton = event.target.closest('.edit-turno-secao');
@@ -2825,34 +2918,8 @@
             const detailButton = event.target.closest('.mostrar-funcionarios-turno');
             if (detailButton) {
                 const secaoKey = String(detailButton.dataset.secaoKey || '');
-                const turnos = turnosTelaCache.filter(turno => String(turno.ESCSECAO_ID || turno.COD_SECAO || turno.DESCR || '') === secaoKey);
-                const titulo = turnos[0] ? (turnos[0].COD_SECAO ? turnos[0].COD_SECAO + ' - ' : '') + (turnos[0].DESCR || 'Seção') : 'Seção';
-                const funcionarios = turnosFuncionariosTelaCache.filter(funcionario => String(funcionario.ESCSECAO_ID || '') === String(turnos[0]?.ESCSECAO_ID || ''));
-                const turnosHtml = turnos.map((turno) => {
-                    const funcionariosTurno = funcionarios.filter(funcionario => funcionarioPertenceAoTurno(funcionario, turno));
-                    const periodo = [turno.HR_ENT1, turno.HR_SAI1, turno.HR_ENT2, turno.HR_SAI2].filter(Boolean).join(' / ');
-                    const editar = hasPermission('turnos-secao', 'editar')
-                        ? '<button type="button" class="action-btn-table banco-action edit-turno-detail" data-id="' + escapeHtml(turno.ESCSECAOTURNO_ID || '') + '" data-loja="' + escapeHtml(turno.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar Turno</button>'
-                        : '';
-                    return '<section class="turno-detail-section"><header><div><strong>' + escapeHtml(periodo) + '</strong><span>' + escapeHtml(funcionariosTurno.length) + ' funcionário(s)</span></div>' + editar + '</header>' +
-                        '<div class="turno-operacional-workers">' + (funcionariosTurno.length ? funcionariosTurno.map(funcionario => '<span class="turno-worker"><strong>' + escapeHtml((funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '')) + '</strong><small>' + escapeHtml(funcionario.FUNCAO_DESCR || funcionario.FUNCAO || '') + '</small></span>').join('') : '<span class="turnos-operacionais-vazio">Nenhum funcionário neste turno.</span>') + '</div></section>';
-                }).join('');
-                showInputModal({
-                    title: 'Funcionários - ' + titulo,
-                    inputs: [{ type: 'html', html: '<div class="turno-detail-modal">' + (turnosHtml || '<p>Nenhum turno encontrado.</p>') + '</div>' }],
-                    cancelText: '',
-                    confirmText: 'Fechar',
-                    panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-3xl flex flex-col',
-                    onRender: (modalBody) => {
-                        modalBody.querySelectorAll('.edit-turno-detail').forEach((button) => {
-                            button.addEventListener('click', () => {
-                                if (button.dataset.loja) turnosSecaoLojaSelect.value = button.dataset.loja;
-                                window.location.hash = `/turnos-secao/${button.dataset.id}`;
-                                document.getElementById('inputModal')?.classList.add('hidden');
-                            });
-                        });
-                    }
-                });
+                turnoSecaoExpandidaKey = String(turnoSecaoExpandidaKey || '') === secaoKey ? null : secaoKey;
+                aplicarFiltrosTurnosTela();
                 return;
             }
             if (!editButton) return;
