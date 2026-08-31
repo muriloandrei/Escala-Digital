@@ -349,22 +349,26 @@
         /* --- ESTILOS DA PÁGINA DE REGISTROS --- */
         .header-actions {
             display: flex;
-            gap: 12px;
+            gap: 8px;
             flex-wrap: wrap;
         }
         .action-button {
             background-color: var(--cor-principal);
             color: var(--cor-branco);
             border: none;
-            border-radius: 8px;
-            padding: 9px 14px;
-            font-size: 0.9rem;
+            border-radius: 7px;
+            padding: 8px 12px;
+            font-size: 0.84rem;
             font-weight: 500;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             transition: background-color 0.2s;
+        }
+
+        .action-button .material-symbols-outlined {
+            font-size: 1.1rem;
         }
 
         .action-button:hover {
@@ -1616,29 +1620,40 @@
         }
 
         .monthly-scale-table thead tr:first-child th {
+            height: 44px;
             top: 0;
         }
 
         .monthly-scale-table thead tr:nth-child(2) th {
+            height: 34px;
             top: 44px;
             z-index: 5;
         }
 
         .monthly-scale-table thead tr:nth-child(3) th {
+            height: 34px;
             top: 78px;
             z-index: 5;
         }
 
         .monthly-scale-table .employee-col {
+            background: #ffffff;
+            box-shadow: 8px 0 12px -12px rgba(15, 23, 42, 0.45);
             left: 0;
             min-width: 250px;
             position: sticky;
             text-align: left;
-            z-index: 8;
+            z-index: 14;
+        }
+
+        .monthly-scale-table thead .employee-col {
+            background: #f8fbff;
+            z-index: 32;
         }
 
         .monthly-scale-table tbody .employee-col {
             background: #ffffff;
+            z-index: 18;
         }
 
         .monthly-scale-table .employee-col strong {
@@ -1659,8 +1674,8 @@
         }
 
         .monthly-total-box.folga {
-            background: #dbeafe;
-            color: #1d4ed8;
+            background: #fee2e2;
+            color: #b91c1c;
         }
 
         .monthly-total-box.trabalho {
@@ -1679,10 +1694,30 @@
         }
 
         .monthly-scale-table .rest-cell {
-            background: #0ea5e9;
+            background: #dc2626;
             color: #ffffff;
             cursor: pointer;
             font-weight: 800;
+        }
+
+        .monthly-scale-table .rest-cell-ferias {
+            background: #7c3aed;
+        }
+
+        .monthly-scale-table .rest-cell-afastamento {
+            background: #f97316;
+        }
+
+        .daily-schedule-rest.rest-cell-folga {
+            background: #dc2626;
+        }
+
+        .daily-schedule-rest.rest-cell-ferias {
+            background: #7c3aed;
+        }
+
+        .daily-schedule-rest.rest-cell-afastamento {
+            background: #f97316;
         }
 
         .monthly-scale-table .locked-day {
@@ -2833,15 +2868,16 @@
         .action-button,
         .action-button.secondary,
         .action-btn-table {
-            border-radius: 9px;
+            border-radius: 7px;
             font-weight: 800;
         }
 
         .action-button {
             background: var(--cor-principal);
-            box-shadow: 0 8px 18px rgba(31, 63, 184, 0.16);
-            min-height: 42px;
-            padding: 10px 15px;
+            box-shadow: 0 6px 14px rgba(31, 63, 184, 0.14);
+            font-size: 0.84rem;
+            min-height: 36px;
+            padding: 7px 11px;
         }
 
         .action-button:hover,
@@ -2851,6 +2887,24 @@
 
         .action-button.secondary {
             background: #2563eb;
+        }
+
+        .action-button.officialize-action {
+            background: #059669;
+            box-shadow: 0 6px 14px rgba(5, 150, 105, 0.16);
+        }
+
+        .action-button.officialize-action:hover:not(:disabled) {
+            background: #047857;
+        }
+
+        .action-button.danger-action {
+            background: #dc2626;
+            box-shadow: 0 6px 14px rgba(220, 38, 38, 0.16);
+        }
+
+        .action-button.danger-action:hover:not(:disabled) {
+            background: #b91c1c;
         }
 
         .warning-button {

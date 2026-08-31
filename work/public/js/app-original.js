@@ -3367,7 +3367,20 @@
 
 
         const isProgramacaoDescanso = (programacao) => String(programacao || 'TRB').toUpperCase() !== 'TRB';
-        const getValorDescanso = (dia) => String(dia?.PROGRAMACAO || 'F').toUpperCase();
+        const getValorDescanso = (dia) => {
+            const valor = String(dia?.PROGRAMACAO || dia?.HR_ENT1 || 'F').trim().toUpperCase();
+            const normalized = valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (['F', 'FOLGA'].includes(normalized)) return 'F';
+            if (['FER', 'FERIAS'].includes(normalized)) return 'FER';
+            if (['AFA', 'AFASTAMENTO'].includes(normalized)) return 'AFA';
+            return valor.slice(0, 3);
+        };
+        const getClasseDescanso = (dia) => {
+            const sigla = getValorDescanso(dia);
+            if (sigla === 'FER') return 'rest-cell-ferias';
+            if (sigla === 'AFA') return 'rest-cell-afastamento';
+            return 'rest-cell-folga';
+        };
         const getHojeIsoApp = () => {
             const hoje = new Date();
             return hoje.getFullYear() + '-' + String(hoje.getMonth() + 1).padStart(2, '0') + '-' + String(hoje.getDate()).padStart(2, '0');
@@ -5276,7 +5289,7 @@
                 const attrs = !bloqueado ? ' data-escprog-id="' + escapeHtml(dia.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(dia.ESCPROGDIA_ID || '') + '"' : '';
                 let bars = '';
                 if (descanso) {
-                    bars = '<button type="button" class="daily-schedule-rest daily-bank-edit" title="' + escapeHtml(tituloCompleto) + '"' + attrs + '>' + escapeHtml(getValorDescanso(dia)) + '</button>';
+                    bars = '<button type="button" class="daily-schedule-rest daily-bank-edit ' + getClasseDescanso(dia) + '" title="' + escapeHtml(tituloCompleto) + '"' + attrs + '>' + escapeHtml(getValorDescanso(dia)) + '</button>';
                 } else {
                     const ent1 = timeToMinutes(dia.HR_ENT1 || '00:00');
                     const sai1 = timeToMinutes(dia.HR_SAI1 || dia.HR_ENT1 || '00:00');
@@ -5375,6 +5388,7 @@
                     const value = descanso ? getValorDescanso(registro) : (registro.HR_ENT1 || '--');
                     const cellClass = [
                         descanso ? 'rest-cell' : 'work-cell',
+                        descanso ? getClasseDescanso(registro) : '',
                         getWeekClass(dia).trim(),
                         critica ? 'manual-critical-day' : '',
                         bloqueado ? 'locked-day' : ''
@@ -5572,7 +5586,7 @@
                         timeoutMs: 120000
                     });
                     showInfoModal('Escala oficializada. ' + (result.rm?.message || ''), result.rm?.ok === false ? 'error' : 'success');
-                    await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
+                    window.location.hash = '/escalas-geradas';
                     return;
                 }
                 showInfoModal('Nenhuma alteração pendente para salvar.', 'info');
@@ -5619,9 +5633,8 @@
                     });
                 }
                 showInfoModal(oficializar ? 'Alterações salvas, oficializadas e enviadas para o RM.' : 'Rascunho salvo em nova revisão.', 'success');
-                const lojaId = escalaDetalheAtual.lojaId;
-                const mesRef = escalaDetalheAtual.mesRef;
-                await carregarDetalheEscalaMensal(lojaId, mesRef);
+                escalaDetalheBancoAlterados = new Map();
+                window.location.hash = '/escalas-geradas';
             } catch (error) {
                 showInfoModal(error.details?.length ? error.details : 'Não foi possível salvar a revisão individual: ' + error.message, 'error');
             } finally {
