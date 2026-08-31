@@ -104,6 +104,17 @@ test('backend rejects more than two weekly rests counting Sunday', () => {
   assert.ok(errors.some((error) => error.includes('folgas na semana')));
 });
 
+test('backend does not criticize weekly rest limit for fixed manual rests', () => {
+  const errors = validateEscalaPayload(buildPayload([
+    trabalho('2026-09-01'),
+    descanso('2026-09-02', 'FXF'),
+    descanso('2026-09-04', 'FXF'),
+    descanso('2026-09-06', 'FXF')
+  ]));
+
+  assert.deepEqual(errors, []);
+});
+
 test('backend allows Sunday rest plus one more rest in same week', () => {
   const errors = validateEscalaPayload(buildPayload([
     trabalho('2026-09-01'),

@@ -123,6 +123,7 @@
         const escalaBancoDiaAtualLabel = document.getElementById('escalaBancoDiaAtualLabel');
         const escalaBancoDiaProximoBtn = document.getElementById('escalaBancoDiaProximoBtn');
         const escalaHeaderDayNav = document.querySelector('.scale-header-day-nav');
+        const resetarEscalaSecaoBancoBtn = document.getElementById('resetarEscalaSecaoBancoBtn');
         const escalaBancoDetalhadaCard = document.getElementById('escalaBancoDetalhadaCard');
         const escalaBancoDetalhadaContent = document.getElementById('escalaBancoDetalhadaContent');
         const escalaSecaoTimelineTitulo = document.getElementById('escalaSecaoTimelineTitulo');
@@ -3526,6 +3527,7 @@
         const isDataBloqueadaParaEdicao = (dataIso) => String(dataIso || '').slice(0, 10) <= getHojeIsoApp();
         const isDiaMesBloqueadoParaEdicao = (ano, mes, dia) => isDataBloqueadaParaEdicao(formatDateForDb(Number(ano), Number(mes), Number(dia)));
         const isFolgaSemanalApp = (dia) => ['F', 'FOLGA', 'FXF', 'FOLGA_FIXA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
+        const isFolgaSemanalAutomaticaApp = (dia) => ['F', 'FOLGA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
         const getWeekKeyIsoApp = (dataIso) => {
             const date = new Date(String(dataIso || '').slice(0, 10) + 'T00:00:00');
             const day = date.getDay();
@@ -3556,7 +3558,7 @@
             [...(dias || [])].sort((a,b)=>String(a.DT || a.data).localeCompare(String(b.DT || b.data))).forEach((dia) => {
                 const dataIso = String(dia.DT || dia.data || '').slice(0,10);
                 const data = new Date(dataIso + 'T00:00:00');
-                if (isFolgaSemanalApp(dia)) {
+                if (isFolgaSemanalAutomaticaApp(dia)) {
                     const weekKey = getWeekKeyIsoApp(dataIso);
                     const totalFolgasSemana = (folgasPorSemana.get(weekKey) || 0) + 1;
                     folgasPorSemana.set(weekKey, totalFolgasSemana);
@@ -5302,11 +5304,11 @@
             prepararSecoesDetalheEscala();
         };
 
-        const salvarFixoSecaoBanco = async (payload, mensagemSucesso = 'Fixo cadastrado para a geração da seção.') => {
+        const salvarFixoSecaoBanco = async (payload, mensagemSucesso = 'Fixo cadastrado para a geração da seção.', options = {}) => {
             const lojaId = escalaDetalheAtual.lojaId;
             const mesRef = escalaDetalheAtual.mesRef;
             const secaoAtiva = escalaDetalheAtual.secaoAtiva;
-            await apiRequest('/api/escalas/fixos', {
+            const response = await apiRequest('/api/escalas/fixos', {
                 method: 'POST',
                 body: JSON.stringify({
                     lojaId: Number(lojaId),
@@ -5315,7 +5317,28 @@
                     ...payload
                 })
             });
-            await recarregarSecaoAtualEscalaBanco(lojaId, mesRef, secaoAtiva);
+            if (options.recarregar === false) {
+                const fixoSalvo = response.fixo || {
+                    ESCFUNC_ID: payload.escfuncId,
+                    ESCSECAO_ID: secaoAtiva,
+                    DT: payload.DT,
+                    PROGRAMACAO: payload.PROGRAMACAO === 'F' ? 'FXF' : payload.PROGRAMACAO,
+                    HR_ENT1: payload.HR_ENT1,
+                    HR_SAI1: payload.HR_SAI1,
+                    HR_ENT2: payload.HR_ENT2,
+                    HR_SAI2: payload.HR_SAI2,
+                    JUSTIFICATIVA: payload.JUSTIFICATIVA
+                };
+                const novoKey = getFixoDiaKeyBanco(fixoSalvo.ESCFUNC_ID || fixoSalvo.escfunc_id || payload.escfuncId, fixoSalvo.DT || fixoSalvo.dt || payload.DT);
+                escalaDetalheAtual.fixos = (escalaDetalheAtual.fixos || []).filter((fixo) => {
+                    const key = getFixoDiaKeyBanco(fixo.ESCFUNC_ID || fixo.escfunc_id, fixo.DT || fixo.dt);
+                    return key !== novoKey;
+                });
+                escalaDetalheAtual.fixos.push(fixoSalvo);
+                renderizarSecaoAtivaEscala();
+            } else {
+                await recarregarSecaoAtualEscalaBanco(lojaId, mesRef, secaoAtiva);
+            }
             if (mensagemSucesso) showInfoModal(mensagemSucesso, 'success');
         };
 
@@ -5785,7 +5808,7 @@
                 const fixosMap = mapearFixosSecaoAtualBanco();
                 let html = '<div class="pending-section-scale pending-section-shell">' +
                     '<div class="pending-section-shell-header">' +
-                    '<div><strong>Escala liberada para geração</strong><span>' + escapeHtml(String(total)) + ' funcionário(s) nesta seção. ' + escapeHtml(String(fixosPendentes.length)) + ' fixo(s) cadastrado(s).</span></div>' +
+                    '<div><strong>Escala liberada para distribuição das Folgas Fixas e Horários Fixos.</strong><span>Folga Fixa: Clique nos dias para distribuir as Folgas Fixas.</span><span>Horário Fixo: Clique duas vezes para inserir um horário fixo.</span><span>' + escapeHtml(String(total)) + ' funcionário(s) nesta seção. ' + escapeHtml(String(fixosPendentes.length)) + ' fixo(s) cadastrado(s).</span></div>' +
                     '<div class="pending-section-actions"><button type="button" class="action-button gerar-escala-secao-banco" data-secao-key="' + escapeHtml(escalaDetalheAtual.secaoAtiva || '') + '"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção</button></div>' +
                     '</div>';
 
@@ -6047,6 +6070,7 @@
             renderizarTimelineDiariaBanco(dias);
             renderizarDetalhadaSecaoBanco(dias);
             aplicarVisaoEscalaBanco();
+            resetarEscalaSecaoBancoBtn?.classList.toggle('hidden', escalaDetalheAtual.status === 'FINALIZADA' || !escalaDetalheAtual.secaoAtiva);
             atualizarAcoesValidacaoBanco();
         };
 
@@ -6155,6 +6179,35 @@
 
         escalaBancoDiaAnteriorBtn?.addEventListener('click', () => moverDiaTimelineBanco(-1));
         escalaBancoDiaProximoBtn?.addEventListener('click', () => moverDiaTimelineBanco(1));
+
+        resetarEscalaSecaoBancoBtn?.addEventListener('click', async () => {
+            if (!escalaDetalheAtual.lojaId || !escalaDetalheAtual.mesRef || !escalaDetalheAtual.secaoAtiva) return;
+            const confirmacao = await showInputModal({
+                title: 'Resetar Escala',
+                inputs: [{ type: 'message', text: 'A seção voltará para a etapa de liberação, mantendo os funcionários e os fixos cadastrados.' }],
+                confirmText: 'Resetar',
+                cancelText: 'Cancelar'
+            });
+            if (!confirmacao) return;
+            resetarEscalaSecaoBancoBtn.disabled = true;
+            try {
+                await apiRequest('/api/escalas/resetar-secao', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        lojaId: Number(escalaDetalheAtual.lojaId),
+                        mesRef: escalaDetalheAtual.mesRef,
+                        escsecaoId: Number(escalaDetalheAtual.secaoAtiva)
+                    }),
+                    timeoutMs: 120000
+                });
+                await recarregarSecaoAtualEscalaBanco(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef, escalaDetalheAtual.secaoAtiva);
+                showInfoModal('Escala da seção resetada para liberação.', 'success');
+            } catch (error) {
+                showInfoModal(getApiErrorMessages(error), 'error');
+            } finally {
+                resetarEscalaSecaoBancoBtn.disabled = false;
+            }
+        });
 
         imprimirTimelineBancoBtn?.addEventListener('click', () => {
             const dias = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
@@ -6421,7 +6474,6 @@
                 clearTimeout(escalaBancoPendingClickTimer);
                 escalaBancoPendingClickTimer = setTimeout(() => {
                     if (pendingCell.dataset.hasFixo === '1') {
-                        showInfoModal('Este dia ja possui um fixo cadastrado. Use dois cliques para ajustar.', 'info');
                         return;
                     }
                     salvarFixoSecaoBanco({
@@ -6433,7 +6485,7 @@
                         HR_ENT2: null,
                         HR_SAI2: null,
                         JUSTIFICATIVA: 'Folga fixa cadastrada na liberacao da escala.'
-                    }, 'Folga fixa cadastrada.').catch(error => showInfoModal(error.message, 'error'));
+                    }, '', { recarregar: false }).catch(error => showInfoModal(error.message, 'error'));
                 }, 220);
                 return;
             }

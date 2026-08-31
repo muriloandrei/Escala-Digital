@@ -37,6 +37,11 @@ function isFolgaSemanal(dia) {
   return programacao === 'F' || programacao === 'FOLGA' || programacao === 'FXF' || programacao === 'FOLGA_FIXA';
 }
 
+function isFolgaSemanalAutomatica(dia) {
+  const programacao = String(dia?.programacao || dia?.PROGRAMACAO || 'TRB').trim().toUpperCase();
+  return programacao === 'F' || programacao === 'FOLGA';
+}
+
 function getWeekKey(dataIso) {
   const date = new Date(`${formatDate(dataIso)}T00:00:00`);
   const day = date.getDay();
@@ -106,7 +111,7 @@ function validarRegrasFuncionario(funcionario) {
     const descanso = isDescanso(dia);
     errors.push(...validarTurnoDia(label, dia));
 
-    if (isFolgaSemanal(dia)) {
+    if (isFolgaSemanalAutomatica(dia)) {
       const weekKey = getWeekKey(dataIso);
       const totalFolgasSemana = (folgasPorSemana.get(weekKey) || 0) + 1;
       folgasPorSemana.set(weekKey, totalFolgasSemana);

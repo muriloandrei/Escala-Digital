@@ -123,6 +123,29 @@ router.post('/gerar-secao', requirePermission('escalas', 'editar'), resolveLojaR
   }
 });
 
+router.post('/resetar-secao', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({
+      lojaId: z.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      escsecaoId: z.number().int().positive()
+    }).parse(req.body);
+    await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+    const resultado = await monthlyReleaseService.resetarEscalaSecao(payload);
+    await auditService.registerAudit({
+      action: 'RESETAR_ESCALA_SECAO',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      details: resultado
+    });
+    return res.status(resultado.resetada ? 200 : 422).json({ resultado });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de reset da secao invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
 router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = fixoEscalaSchema.parse(req.body);

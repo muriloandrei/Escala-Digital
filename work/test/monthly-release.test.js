@@ -150,6 +150,39 @@ test('monthly release draft keeps at most two rests per employee week', () => {
   });
 });
 
+test('monthly release does not add automatic rest to a week already filled by fixed rests', () => {
+  const funcionarios = [{
+    ESCFUNC_ID: 880,
+    CHAPA: '088000',
+    NOME: 'Funcionario Com Fixos Semanais',
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+  const turnos = [{
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+  const fixos = [
+    { ESCFUNC_ID: 880, DT: '2026-09-02', PROGRAMACAO: 'FXF' },
+    { ESCFUNC_ID: 880, DT: '2026-09-04', PROGRAMACAO: 'FXF' }
+  ];
+
+  const [rascunho] = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01', { fixos });
+  const semanaInicial = rascunho.dias.filter((dia) => dia.data >= '2026-09-01' && dia.data <= '2026-09-06');
+
+  assert.equal(semanaInicial.filter((dia) => dia.programacao === 'F').length, 0);
+  assert.equal(semanaInicial.filter((dia) => dia.programacao === 'FXF').length, 2);
+});
+
 test('monthly release applies vacations and absences as protected rest days', () => {
   const funcionarios = [{
     ESCFUNC_ID: 800,
