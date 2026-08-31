@@ -1377,6 +1377,61 @@
             color: #1d4ed8;
         }
 
+        .subsection-tabs {
+            align-items: center;
+            border-bottom: 1px solid #eadcff;
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding: 8px 4px 10px 26px;
+        }
+
+        .subsection-tab {
+            align-items: center;
+            background: #faf5ff;
+            border: 1px solid #e9d5ff;
+            border-radius: 999px;
+            color: #7e22ce;
+            cursor: pointer;
+            display: inline-flex;
+            font-family: inherit;
+            font-size: 0.82rem;
+            font-weight: 800;
+            gap: 7px;
+            min-height: 32px;
+            padding: 6px 11px;
+            white-space: nowrap;
+        }
+
+        .subsection-tab:hover {
+            background: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        .subsection-tab.active {
+            background: #7c3aed;
+            border-color: #7c3aed;
+            color: #ffffff;
+            box-shadow: 0 8px 18px rgba(124, 58, 237, 0.18);
+        }
+
+        .subsection-tab span {
+            align-items: center;
+            background: rgba(124, 58, 237, 0.12);
+            border-radius: 999px;
+            display: inline-flex;
+            font-size: 0.7rem;
+            height: 20px;
+            justify-content: center;
+            min-width: 20px;
+            padding: 0 6px;
+        }
+
+        .subsection-tab.active span {
+            background: rgba(255, 255, 255, 0.18);
+            color: #ffffff;
+        }
+
         .bank-detailed-scale {
             display: grid;
             gap: 18px;

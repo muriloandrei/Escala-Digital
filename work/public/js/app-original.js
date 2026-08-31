@@ -110,6 +110,7 @@
         const escalaDetalheTitulo = document.getElementById('escalaDetalheTitulo');
         const escalaDetalheResumo = document.getElementById('escalaDetalheResumo');
         const escalaSecaoTabs = document.getElementById('escalaSecaoTabs');
+        const escalaSubsetorTabs = document.getElementById('escalaSubsetorTabs');
         const escalaBancoMensalContent = document.getElementById('escalaBancoMensalContent');
         const escalaBancoMensalPanel = document.getElementById('escalaBancoMensalPanel');
         const escalaBancoDiariaPanel = document.getElementById('escalaBancoDiariaPanel');
@@ -802,7 +803,7 @@
         let ausenciasLojaCache = [];
         let secoesLojaCache = [];
         let turnosSecaoCache = [];
-        let escalaDetalheAtual = { escprogId: null, lojaId: null, mesRef: null, modo: 'individual', visao: 'mensal', dias: [], secaoAtiva: null, secoes: [] };
+        let escalaDetalheAtual = { escprogId: null, lojaId: null, mesRef: null, modo: 'individual', visao: 'mensal', dias: [], secaoAtiva: null, secoes: [], subsetorAtivo: null, subsetores: [] };
         let lojasPermitidasCache = [];
         let lojaPrincipalCache = null;
         let usuarioSessaoCache = null;
@@ -5085,6 +5086,14 @@
             const codigo = dia.COD_SECAO ? dia.COD_SECAO + ' - ' : '';
             return codigo + (dia.SECAO_DESCR || 'Sem seção');
         };
+        const normalizarTextoComparacao = (texto = '') => String(texto || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+        const isSecaoFrenteCaixa = (nome = '') => normalizarTextoComparacao(nome).includes('frente de caixa');
+        const getSubsetorDetalheKey = (dia) => String(dia.ESCFUNCAO_ID || dia.FUNCAO_DESCR || dia.FUNCAO || 'SEM_CARGO');
+        const getSubsetorDetalheNome = (dia) => String(dia.FUNCAO_DESCR || dia.FUNCAO || (dia.ESCFUNCAO_ID ? 'Cargo ' + dia.ESCFUNCAO_ID : 'Sem cargo'));
 
         const resetarEstadoEdicaoBanco = () => {
             escalaDetalheBancoValidada = false;
@@ -5575,6 +5584,44 @@
             }).join('');
         };
 
+        const prepararSubsetoresDetalheEscala = (diasSecao, nomeSecao) => {
+            if (!escalaSubsetorTabs) return diasSecao;
+            if (!isSecaoFrenteCaixa(nomeSecao)) {
+                escalaDetalheAtual.subsetores = [];
+                escalaDetalheAtual.subsetorAtivo = null;
+                escalaSubsetorTabs.classList.add('hidden');
+                escalaSubsetorTabs.innerHTML = '';
+                return diasSecao;
+            }
+
+            const map = new Map();
+            (diasSecao || []).forEach((dia) => {
+                const key = getSubsetorDetalheKey(dia);
+                if (!map.has(key)) {
+                    map.set(key, { key, nome: getSubsetorDetalheNome(dia), funcionarios: new Set() });
+                }
+                map.get(key).funcionarios.add(getFuncionarioDetalheKey(dia));
+            });
+
+            escalaDetalheAtual.subsetores = [...map.values()]
+                .map(item => ({ ...item, funcionarios: item.funcionarios.size }))
+                .sort((a, b) => a.nome.localeCompare(b.nome));
+
+            if (!escalaDetalheAtual.subsetores.some(item => String(item.key) === String(escalaDetalheAtual.subsetorAtivo))) {
+                escalaDetalheAtual.subsetorAtivo = escalaDetalheAtual.subsetores[0]?.key || null;
+            }
+
+            escalaSubsetorTabs.classList.toggle('hidden', escalaDetalheAtual.subsetores.length === 0);
+            escalaSubsetorTabs.innerHTML = escalaDetalheAtual.subsetores.map((subsetor) => {
+                const ativa = String(subsetor.key) === String(escalaDetalheAtual.subsetorAtivo);
+                return '<button type="button" class="subsection-tab' + (ativa ? ' active' : '') + '" role="tab" aria-selected="' + ativa + '" data-subsetor-key="' + escapeHtml(subsetor.key) + '">' + escapeHtml(subsetor.nome) + '<span>' + subsetor.funcionarios + '</span></button>';
+            }).join('');
+
+            return escalaDetalheAtual.subsetorAtivo
+                ? (diasSecao || []).filter(dia => String(getSubsetorDetalheKey(dia)) === String(escalaDetalheAtual.subsetorAtivo))
+                : diasSecao;
+        };
+
         const renderizarDetalhadaSecaoBanco = (dias) => {
             if (!escalaBancoDetalhadaContent) return;
             const dataRef = escalaDetalheAtual.mesRef ? new Date(escalaDetalheAtual.mesRef + 'T00:00:00') : null;
@@ -5639,9 +5686,10 @@
 
         const renderizarSecaoAtivaEscala = () => {
             const secao = escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva));
-            const dias = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
+            const diasSecao = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
             const nome = secao?.nome || 'Seção';
             const nomeSemCodigo = getNomeSecaoSemCodigo(nome);
+            const dias = prepararSubsetoresDetalheEscala(diasSecao, nome);
             if (escalaSecaoMensalTitulo) escalaSecaoMensalTitulo.textContent = 'Escala - ' + nomeSemCodigo;
             if (escalaSecaoTimelineTitulo) escalaSecaoTimelineTitulo.textContent = 'Timeline diária - ' + nomeSemCodigo;
             if (escalaSecaoDetalheTitulo) escalaSecaoDetalheTitulo.textContent = 'Escala detalhada - ' + nomeSemCodigo;
@@ -5667,7 +5715,7 @@
 
         const carregarDetalheEscalaBanco = async (escprogId) => {
             resetarEstadoEdicaoBanco();
-            escalaDetalheAtual = { escprogId, lojaId: null, mesRef: null, modo: 'individual', visao: 'mensal', status: null, dias: [], secoes: [], secaoAtiva: null };
+            escalaDetalheAtual = { escprogId, lojaId: null, mesRef: null, modo: 'individual', visao: 'mensal', status: null, dias: [], secoes: [], secaoAtiva: null, subsetorAtivo: null, subsetores: [] };
             escalaDetalheTitulo.textContent = 'Escala ' + escprogId;
             escalaDetalheResumo.textContent = 'Carregando dias da escala...';
             const data = await apiRequest('/api/escalas/' + encodeURIComponent(escprogId) + '/dias');
@@ -5679,7 +5727,7 @@
 
         const carregarDetalheEscalaMensal = async (lojaId, mesRef) => {
             resetarEstadoEdicaoBanco();
-            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', visao: 'mensal', status: null, dias: [], secoes: [], secaoAtiva: null };
+            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', visao: 'mensal', status: null, dias: [], secoes: [], secaoAtiva: null, subsetorAtivo: null, subsetores: [] };
             escalaDetalheTitulo.textContent = 'Escala Loja ' + lojaId + ' - ' + formatarMesTabela(mesRef);
             escalaDetalheResumo.textContent = 'Carregando escala mensal...';
             const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
@@ -5695,6 +5743,14 @@
             const tab = event.target.closest('.section-tab');
             if (!tab) return;
             escalaDetalheAtual.secaoAtiva = tab.dataset.secaoKey;
+            escalaDetalheAtual.subsetorAtivo = null;
+            renderizarSecaoAtivaEscala();
+        });
+
+        escalaSubsetorTabs?.addEventListener('click', (event) => {
+            const tab = event.target.closest('.subsection-tab');
+            if (!tab) return;
+            escalaDetalheAtual.subsetorAtivo = tab.dataset.subsetorKey;
             renderizarSecaoAtivaEscala();
         });
 
