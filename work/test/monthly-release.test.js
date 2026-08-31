@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildFuncionarioRascunho, buildFuncionariosRascunhoBalanceado } = require('../src/services/monthlyReleaseService');
+const { buildFuncionarioRascunho, buildFuncionariosRascunhoBalanceado, getPadroesFolgaValidos } = require('../src/services/monthlyReleaseService');
 const { _private } = require('../src/services/escalaService');
 const { validateEscalaPayload } = require('../src/rules/escalaRules');
 
@@ -57,6 +57,41 @@ test('monthly release distributes 5x2 rests without consecutive Sunday work', ()
 
   assert.deepEqual(errors, []);
   assert.equal(rascunho.dias.filter((dia) => dia.programacao === 'F').length >= 8, true);
+});
+
+test('monthly release automatic patterns do not create consecutive rests', () => {
+  const patterns = getPadroesFolgaValidos();
+  assert.ok(patterns.length > 0);
+  patterns.forEach((pattern) => {
+    const folgas = new Set(pattern);
+    for (let index = 0; index < 14; index += 1) {
+      assert.equal(folgas.has(index) && folgas.has((index + 1) % 14), false, `padrao invalido: ${pattern.join(',')}`);
+    }
+  });
+});
+
+test('monthly release draft does not include consecutive automatic rests', () => {
+  const funcionario = {
+    ESCFUNC_ID: 12,
+    CHAPA: '000012',
+    NOME: 'Funcionario Sem Folga Seguida',
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30
+  };
+  const turno = {
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  };
+
+  const rascunho = buildFuncionarioRascunho(funcionario, turno, '2026-09-01', '2026-09-01', 0);
+  const dias = rascunho.dias;
+  for (let index = 1; index < dias.length; index += 1) {
+    assert.equal(dias[index - 1].programacao === 'F' && dias[index].programacao === 'F', false);
+  }
 });
 
 test('monthly release balances rests between employees in the same section and shift', () => {

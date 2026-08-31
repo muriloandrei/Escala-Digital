@@ -64,6 +64,13 @@ function hasMaxConsecutiveWorkCircular(folgas, maxDias = 5) {
   return true;
 }
 
+function hasNoConsecutiveRestsCircular(folgas) {
+  for (let index = 0; index < 14; index += 1) {
+    if (folgas.has(index) && folgas.has((index + 1) % 14)) return false;
+  }
+  return true;
+}
+
 let padroesFolgaCache = null;
 function getPadroesFolgaValidos() {
   if (padroesFolgaCache) return padroesFolgaCache;
@@ -75,6 +82,7 @@ function getPadroesFolgaValidos() {
           const folgas = new Set([a, b, c, d]);
           const domingosFolga = (folgas.has(6) ? 1 : 0) + (folgas.has(13) ? 1 : 0);
           if (domingosFolga !== 1) continue;
+          if (!hasNoConsecutiveRestsCircular(folgas)) continue;
           if (!hasMaxConsecutiveWorkCircular(folgas, 5)) continue;
           padroes.push([a, b, c, d]);
         }
@@ -91,7 +99,7 @@ function getPadroesFolgaValidos() {
 
 function getPadraoFolgaPorIndice(index = 0) {
   const padroes = getPadroesFolgaValidos();
-  return padroes[Number(index || 0) % padroes.length] || [0, 1, 6, 8];
+  return padroes[Number(index || 0) % padroes.length] || [0, 3, 6, 10];
 }
 
 function isFolgaAutomatica(date, funcionarioIndex = 0) {
