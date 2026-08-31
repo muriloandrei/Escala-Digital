@@ -1377,6 +1377,16 @@
             color: #1d4ed8;
         }
 
+        .section-tab.has-critical span {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .section-tab.has-critical.active span {
+            background: #dc2626;
+            color: #ffffff;
+        }
+
         .subsection-tabs {
             align-items: center;
             border-bottom: 1px solid #eadcff;
@@ -1895,6 +1905,38 @@
             font-size: 0.76rem;
             overflow: hidden;
             text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .monthly-summary-label {
+            align-items: center;
+            gap: 8px;
+        }
+
+        .monthly-summary-label.has-critical {
+            color: #b91c1c;
+        }
+
+        .monthly-summary-label.has-critical > span {
+            color: #b91c1c;
+            font-weight: 900;
+        }
+
+        .critical-section-chip {
+            align-items: center;
+            background: #dc2626;
+            border: 0;
+            border-radius: 6px;
+            color: #ffffff;
+            cursor: pointer;
+            display: inline-flex;
+            font-size: 0.68rem;
+            font-weight: 900;
+            justify-content: center;
+            line-height: 1;
+            min-height: 22px;
+            padding: 4px 7px;
+            text-transform: uppercase;
             white-space: nowrap;
         }
 
@@ -3173,6 +3215,61 @@
             padding: 4px 8px;
             text-transform: uppercase;
             white-space: nowrap;
+        }
+
+        .critical-section-list {
+            display: grid;
+            gap: 12px;
+            max-height: 66vh;
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        .critical-section-group {
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .critical-section-group header {
+            align-items: center;
+            background: #fef2f2;
+            color: #991b1b;
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+            padding: 9px 11px;
+        }
+
+        .critical-section-group header strong {
+            font-size: 0.88rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .critical-section-group header span {
+            background: #fee2e2;
+            border-radius: 999px;
+            color: #b91c1c;
+            flex: 0 0 auto;
+            font-size: 0.72rem;
+            font-weight: 900;
+            padding: 4px 8px;
+        }
+
+        .critical-section-group ul {
+            display: grid;
+            gap: 6px;
+            list-style: disc;
+            margin: 0;
+            padding: 10px 14px 12px 28px;
+        }
+
+        .critical-section-group li {
+            color: #374151;
+            font-size: 0.82rem;
+            line-height: 1.35;
         }
 
         .detailed-day-button {

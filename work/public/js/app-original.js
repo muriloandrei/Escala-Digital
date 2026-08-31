@@ -5245,12 +5245,53 @@
             return criticasValidacao;
         };
 
-        const getTodasCriticasBanco = () => {
+        const getCriticasFuncionariosBanco = (funcionarios = []) => {
             const criticas = [];
-            agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).forEach((funcionario) => {
+            (funcionarios || []).forEach((funcionario) => {
                 getCriticasFuncionarioBanco(funcionario).forEach((critica) => criticas.push(critica));
             });
             return [...new Set(criticas.filter(Boolean))];
+        };
+
+        const getCriticasSecaoBanco = (secaoKey) => {
+            const diasSecao = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(secaoKey));
+            return getCriticasFuncionariosBanco(agruparDiasPorFuncionario(diasSecao));
+        };
+
+        const getTodasCriticasBanco = () => {
+            return getCriticasFuncionariosBanco(agruparDiasPorFuncionario(escalaDetalheAtual.dias || []));
+        };
+
+        const getCriticasBancoAgrupadasPorSecao = () => {
+            return (escalaDetalheAtual.secoes || [])
+                .map((secao) => ({
+                    secao,
+                    criticas: getCriticasSecaoBanco(secao.key)
+                }))
+                .filter((grupo) => grupo.criticas.length > 0);
+        };
+
+        const exibirCriticasBancoAgrupadas = () => {
+            const grupos = getCriticasBancoAgrupadasPorSecao();
+            if (!grupos.length) {
+                showInfoModal('Nenhuma critica pendente.', 'success');
+                return;
+            }
+
+            const html = '<div class="critical-section-list">' + grupos.map((grupo) => {
+                return '<section class="critical-section-group">' +
+                    '<header><strong>' + escapeHtml(grupo.secao.nome || 'Seção') + '</strong><span>' + escapeHtml(grupo.criticas.length) + ' crítica(s)</span></header>' +
+                    '<ul>' + grupo.criticas.map((critica) => '<li>' + escapeHtml(critica) + '</li>').join('') + '</ul>' +
+                    '</section>';
+            }).join('') + '</div>';
+
+            showInputModal({
+                title: 'Críticas por Seção',
+                inputs: [{ type: 'html', html }],
+                cancelText: '',
+                confirmText: 'Fechar',
+                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-4xl flex flex-col'
+            });
         };
 
         const atualizarAcoesValidacaoBanco = () => {
@@ -5564,6 +5605,7 @@
             const diasNoMes = new Date(ano, mes + 1, 0).getDate();
             const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
             const funcionarios = agruparDiasPorFuncionario(dias);
+            const criticasSecao = getCriticasFuncionariosBanco(funcionarios);
             const getWeekClass = (dia) => dia > 1 && new Date(ano, mes, dia).getDay() === 1 ? ' week-start' : '';
             const getDiaTitle = (registro) => registro ? montarTooltipHorarioEscala(registro) : '';
             const getFuncionarioTitle = (funcionario) => {
@@ -5585,7 +5627,10 @@
             }
 
             let html = '<div class="monthly-scale-scroll"><table class="monthly-scale-table"><thead>';
-            html += '<tr class="monthly-totals-row"><th class="employee-col monthly-summary-label">' + funcionarios.length + ' funcionário(s)</th>';
+            html += '<tr class="monthly-totals-row"><th class="employee-col monthly-summary-label' + (criticasSecao.length ? ' has-critical' : '') + '">' +
+                '<span>' + funcionarios.length + ' funcionário(s)</span>' +
+                (criticasSecao.length ? '<button type="button" class="critical-section-chip banco-critical-section-chip" title="Ver críticas da seção">CRITICA</button>' : '') +
+                '</th>';
             for (let dia = 1; dia <= diasNoMes; dia += 1) {
                 let folgas = 0;
                 let trabalhando = 0;
@@ -5647,7 +5692,8 @@
             if (!escalaSecaoTabs) return;
             escalaSecaoTabs.innerHTML = escalaDetalheAtual.secoes.map((secao) => {
                 const ativa = String(secao.key) === String(escalaDetalheAtual.secaoAtiva);
-                return '<button type="button" class="section-tab' + (ativa ? ' active' : '') + '" role="tab" aria-selected="' + ativa + '" data-secao-key="' + escapeHtml(secao.key) + '">' + escapeHtml(secao.nome) + '<span>' + secao.funcionarios + '</span></button>';
+                const temCritica = getCriticasSecaoBanco(secao.key).length > 0;
+                return '<button type="button" class="section-tab' + (ativa ? ' active' : '') + (temCritica ? ' has-critical' : '') + '" role="tab" aria-selected="' + ativa + '" data-secao-key="' + escapeHtml(secao.key) + '">' + escapeHtml(secao.nome) + '<span>' + secao.funcionarios + '</span></button>';
             }).join('');
         };
 
@@ -5942,8 +5988,7 @@
         });
 
         criticasDetalheBancoBtn?.addEventListener('click', () => {
-            const criticas = getTodasCriticasBanco();
-            showInfoModal(criticas.length ? criticas : 'Nenhuma critica pendente.', criticas.length ? 'error' : 'success');
+            exibirCriticasBancoAgrupadas();
         });
 
         const editarDiaEscalaPorId = async (escprogId, escprogdiaId) => {
@@ -5988,6 +6033,11 @@
         };
 
         escalaBancoMensalContent?.addEventListener('click', (event) => {
+            const criticalSectionButton = event.target.closest('.banco-critical-section-chip');
+            if (criticalSectionButton) {
+                exibirCriticasBancoAgrupadas();
+                return;
+            }
             const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
             if (!cell) return;
             if (cell.classList.contains('locked-day')) {
