@@ -3458,11 +3458,7 @@
             const diasSemana = ['D','S','T','Q','Q','S','S'];
             const map = new Map(atual.dias.map(dia => [Number(String(dia.DT).slice(8,10)), dia]));
             const getWeekClass = (dia) => dia > 1 && new Date(ref.getFullYear(), ref.getMonth(), dia).getDay() === 1 ? ' week-start' : '';
-            const getDiaTitle = (dia) => {
-                if (!dia) return '';
-                if (isProgramacaoDescanso(dia.PROGRAMACAO)) return 'Descanso: ' + getValorDescanso(dia);
-                return 'Trabalho: ' + [dia.HR_ENT1, dia.HR_SAI1, dia.HR_ENT2, dia.HR_SAI2].filter(Boolean).join(' / ');
-            };
+            const getDiaTitle = (dia) => dia ? montarTooltipHorarioEscala(dia, { nome: atual.nome, funcao: atual.funcao, secao: atual.secao }) : '';
             const fields = [{key:'HR_ENT1',label:'ENT.'},{key:'HR_SAI1',label:'SAI.INT.'},{key:'INTERVALO',label:'INTER.'},{key:'HR_ENT2',label:'RET.INT.'},{key:'HR_SAI2',label:'SAI.'},{key:'TRABALHADAS',label:'H.TRAB'}];
             const criticasManuais = atual.dias
                 .filter(dia => dia.CRITICA_MANUAL)
@@ -3495,7 +3491,7 @@
                     const domingo=new Date(ref.getFullYear(),ref.getMonth(),d).getDay()===0;
                     const cls=[descanso?(domingo?'day-off sunday':'day-off'):(domingo?'sunday':''), getWeekClass(d).trim(), dia.CRITICA_MANUAL ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
                     const marker = dia.CRITICA_MANUAL && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Critica: ajuste manual">!</span>' : '';
-                    table+='<td class="' + cls + '" data-dia="' + d + '" title="' + escapeHtml(getDiaTitle(dia)) + '">' + marker + escapeHtml(value) + '</td>';
+                    table+='<td class="' + cls + '" data-dia="' + d + '" data-schedule-tooltip="' + escapeHtml(getDiaTitle(dia)) + '">' + marker + escapeHtml(value) + '</td>';
                 }
                 table+='</tr>';
             });
@@ -5218,6 +5214,110 @@
             return String(date.getDate()).padStart(2, '0') + '/' + String(date.getMonth() + 1).padStart(2, '0') + '/' + date.getFullYear() + ' ' + dias[date.getDay()];
         };
 
+        const getDuracaoHorario = (inicio, fim) => {
+            const total = timeToMinutes(fim || '00:00') - timeToMinutes(inicio || '00:00');
+            return Math.max(0, total);
+        };
+
+        const getCargoTooltipHorario = (registro = {}, funcionario = {}) => {
+            return registro.FUNCAO_DESCR || registro.FUNCAO || funcionario.funcao || funcionario.secao || registro.SECAO_DESCR || registro.DESCR || '';
+        };
+
+        const montarTooltipHorarioEscala = (registro = {}, funcionario = {}) => {
+            const nome = registro.NOME || funcionario.nome || '';
+            const cargo = getCargoTooltipHorario(registro, funcionario);
+            const descanso = isProgramacaoDescanso(registro.PROGRAMACAO);
+            if (descanso) {
+                return [
+                    '<div class="schedule-tooltip-card">',
+                    '<strong class="schedule-tooltip-name">' + escapeHtml(nome || 'Funcionário') + '</strong>',
+                    cargo ? '<span class="schedule-tooltip-role">' + escapeHtml(cargo) + '</span>' : '',
+                    '<div class="schedule-tooltip-divider"></div>',
+                    '<div class="schedule-tooltip-section"><strong>Descanso</strong>',
+                    '<div class="schedule-tooltip-row"><span>Tipo:</span><b>' + escapeHtml(getValorDescanso(registro)) + '</b></div>',
+                    registro.JUSTIFICATIVA_ALTERACAO ? '<div class="schedule-tooltip-note">' + escapeHtml(registro.JUSTIFICATIVA_ALTERACAO) + '</div>' : '',
+                    '</div>',
+                    '</div>'
+                ].join('');
+            }
+
+            const turno1 = getDuracaoHorario(registro.HR_ENT1, registro.HR_SAI1);
+            const intervalo = getDuracaoHorario(registro.HR_SAI1, registro.HR_ENT2);
+            const turno2 = getDuracaoHorario(registro.HR_ENT2, registro.HR_SAI2);
+            const carga = turno1 + turno2;
+            return [
+                '<div class="schedule-tooltip-card">',
+                '<strong class="schedule-tooltip-name">' + escapeHtml(nome || 'Funcionário') + '</strong>',
+                cargo ? '<span class="schedule-tooltip-role">' + escapeHtml(cargo) + '</span>' : '',
+                '<div class="schedule-tooltip-divider"></div>',
+                '<div class="schedule-tooltip-section"><strong>Turno 1</strong>',
+                '<div class="schedule-tooltip-row"><span>Horário:</span><b>' + escapeHtml((registro.HR_ENT1 || '--') + ' - ' + (registro.HR_SAI1 || '--')) + '</b></div>',
+                '<div class="schedule-tooltip-row"><span>Duração:</span><b>' + escapeHtml(minutesToTime(turno1)) + '</b></div>',
+                '</div>',
+                '<div class="schedule-tooltip-divider"></div>',
+                '<div class="schedule-tooltip-section"><strong>Intervalo</strong>',
+                '<div class="schedule-tooltip-row"><span>Horário:</span><b>' + escapeHtml((registro.HR_SAI1 || '--') + ' - ' + (registro.HR_ENT2 || '--')) + '</b></div>',
+                '<div class="schedule-tooltip-row"><span>Duração:</span><b>' + escapeHtml(minutesToTime(intervalo)) + '</b></div>',
+                '</div>',
+                '<div class="schedule-tooltip-divider"></div>',
+                '<div class="schedule-tooltip-section"><strong>Turno 2</strong>',
+                '<div class="schedule-tooltip-row"><span>Horário:</span><b>' + escapeHtml((registro.HR_ENT2 || '--') + ' - ' + (registro.HR_SAI2 || '--')) + '</b></div>',
+                '<div class="schedule-tooltip-row"><span>Duração:</span><b>' + escapeHtml(minutesToTime(turno2)) + '</b></div>',
+                '</div>',
+                '<div class="schedule-tooltip-divider"></div>',
+                '<div class="schedule-tooltip-row schedule-tooltip-total"><span>Carga horária total:</span><b>' + escapeHtml(minutesToTime(carga)) + '</b></div>',
+                '</div>'
+            ].join('');
+        };
+
+        const getTooltipHorarioAttr = (registro, funcionario = {}) => {
+            return ' data-schedule-tooltip="' + escapeHtml(montarTooltipHorarioEscala(registro, funcionario)) + '"';
+        };
+
+        let scheduleTooltipElement = null;
+        let scheduleTooltipTarget = null;
+
+        const ensureScheduleTooltip = () => {
+            if (scheduleTooltipElement) return scheduleTooltipElement;
+            scheduleTooltipElement = document.createElement('div');
+            scheduleTooltipElement.className = 'schedule-hover-tooltip hidden';
+            document.body.appendChild(scheduleTooltipElement);
+            return scheduleTooltipElement;
+        };
+
+        const positionScheduleTooltip = (event) => {
+            if (!scheduleTooltipElement || scheduleTooltipElement.classList.contains('hidden')) return;
+            const margin = 14;
+            const rect = scheduleTooltipElement.getBoundingClientRect();
+            let left = event.clientX + margin;
+            let top = event.clientY + margin;
+            if (left + rect.width > window.innerWidth - margin) left = event.clientX - rect.width - margin;
+            if (top + rect.height > window.innerHeight - margin) top = window.innerHeight - rect.height - margin;
+            scheduleTooltipElement.style.left = Math.max(margin, left) + 'px';
+            scheduleTooltipElement.style.top = Math.max(margin, top) + 'px';
+        };
+
+        document.addEventListener('mouseover', (event) => {
+            const target = event.target.closest('[data-schedule-tooltip]');
+            if (!target) return;
+            scheduleTooltipTarget = target;
+            const tooltip = ensureScheduleTooltip();
+            tooltip.innerHTML = target.dataset.scheduleTooltip || '';
+            tooltip.classList.remove('hidden');
+            positionScheduleTooltip(event);
+        });
+
+        document.addEventListener('mousemove', (event) => {
+            if (!scheduleTooltipTarget) return;
+            positionScheduleTooltip(event);
+        });
+
+        document.addEventListener('mouseout', (event) => {
+            if (!scheduleTooltipTarget || scheduleTooltipTarget.contains(event.relatedTarget)) return;
+            ensureScheduleTooltip().classList.add('hidden');
+            scheduleTooltipTarget = null;
+        });
+
         const aplicarVisaoEscalaBanco = () => {
             const visao = escalaDetalheAtual.visao === 'diaria' ? 'diaria' : 'mensal';
             escalaBancoMensalPanel?.classList.toggle('hidden', visao !== 'mensal');
@@ -5292,21 +5392,11 @@
                 const bloqueado = isDataBloqueadaParaEdicao(String(dia.DT || '').slice(0, 10)) || somenteLeitura;
                 const funcionario = agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).find(item => String(item.escfuncId) === String(dia.ESCFUNC_ID));
                 const temCritica = funcionario ? getCriticasFuncionarioBanco(funcionario).length > 0 : false;
-                const periodo = descanso
-                    ? getValorDescanso(dia)
-                    : [dia.HR_ENT1, dia.HR_SAI1, dia.HR_ENT2, dia.HR_SAI2].filter(Boolean).join(' / ');
-                const tituloCompleto = [
-                    dia.NOME || '',
-                    dia.CHAPA ? 'Chapa: ' + dia.CHAPA : '',
-                    dia.FUNCAO_DESCR || dia.FUNCAO || '',
-                    descanso ? 'Descanso: ' + getValorDescanso(dia) : 'Turno 1: ' + (dia.HR_ENT1 || '') + ' - ' + (dia.HR_SAI1 || ''),
-                    descanso ? '' : 'Intervalo: ' + (dia.HR_SAI1 || '') + ' - ' + (dia.HR_ENT2 || ''),
-                    descanso ? '' : 'Turno 2: ' + (dia.HR_ENT2 || '') + ' - ' + (dia.HR_SAI2 || '')
-                ].filter(Boolean).join('\n');
                 const attrs = !bloqueado ? ' data-escprog-id="' + escapeHtml(dia.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(dia.ESCPROGDIA_ID || '') + '"' : '';
+                const tooltipAttr = getTooltipHorarioAttr(dia);
                 let bars = '';
                 if (descanso) {
-                    bars = '<button type="button" class="daily-schedule-rest daily-bank-edit ' + getClasseDescanso(dia) + '" title="' + escapeHtml(tituloCompleto) + '"' + attrs + '>' + escapeHtml(getValorDescanso(dia)) + '</button>';
+                    bars = '<button type="button" class="daily-schedule-rest daily-bank-edit ' + getClasseDescanso(dia) + '"' + tooltipAttr + attrs + '>' + escapeHtml(getValorDescanso(dia)) + '</button>';
                 } else {
                     const ent1 = timeToMinutes(dia.HR_ENT1 || '00:00');
                     const sai1 = timeToMinutes(dia.HR_SAI1 || dia.HR_ENT1 || '00:00');
@@ -5316,7 +5406,7 @@
                         const width = Math.max(0, ((end - start) / duracaoTimeline) * 100);
                         const left = Math.max(0, ((start - inicioTimeline) / duracaoTimeline) * 100);
                         if (width <= 0) return '';
-                        return '<button type="button" class="' + cls + ' daily-bank-edit" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(tituloCompleto) + '"' + attrs + '>' + escapeHtml(label) + '</button>';
+                        return '<button type="button" class="' + cls + ' daily-bank-edit" style="left:' + left + '%;width:' + width + '%"' + tooltipAttr + attrs + '>' + escapeHtml(label) + '</button>';
                     };
                     bars = mkBar(ent1, sai1, 'daily-schedule-bar', (dia.HR_ENT1 || '') + ' - ' + (dia.HR_SAI1 || ''))
                         + mkBar(sai1, ent2, 'daily-schedule-break', '')
@@ -5324,7 +5414,7 @@
                 }
                 const criticas = temCritica ? '<span class="critical-marker" title="Crítica validada">!</span>' : '';
                 return '<div class="daily-schedule-row">' +
-                    '<div class="daily-schedule-person" title="' + escapeHtml(tituloCompleto) + '"><strong>' + escapeHtml((dia.CHAPA || '') + ' - ' + (dia.NOME || '')) + '</strong><span>' + escapeHtml(dia.FUNCAO_DESCR || dia.FUNCAO || '') + '</span></div>' +
+                    '<div class="daily-schedule-person"' + tooltipAttr + '><strong>' + escapeHtml((dia.CHAPA || '') + ' - ' + (dia.NOME || '')) + '</strong><span>' + escapeHtml(dia.FUNCAO_DESCR || dia.FUNCAO || '') + '</span></div>' +
                     '<div class="daily-schedule-track' + (temCritica ? ' manual-critical-day' : '') + '">' + criticas + bars + '</div>' +
                     '</div>';
             }).join('');
@@ -5340,11 +5430,7 @@
             const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
             const funcionarios = agruparDiasPorFuncionario(dias);
             const getWeekClass = (dia) => dia > 1 && new Date(ano, mes, dia).getDay() === 1 ? ' week-start' : '';
-            const getDiaTitle = (registro) => {
-                if (!registro) return '';
-                if (isProgramacaoDescanso(registro.PROGRAMACAO)) return 'Descanso: ' + getValorDescanso(registro);
-                return 'Trabalho: ' + [registro.HR_ENT1, registro.HR_SAI1, registro.HR_ENT2, registro.HR_SAI2].filter(Boolean).join(' / ');
-            };
+            const getDiaTitle = (registro) => registro ? montarTooltipHorarioEscala(registro) : '';
             const getFuncionarioTitle = (funcionario) => {
                 const primeiroDia = [...funcionario.dias.values()].find(Boolean) || {};
                 const horario = primeiroDia && !isProgramacaoDescanso(primeiroDia.PROGRAMACAO)
@@ -5413,7 +5499,7 @@
                     const editAttrs = !bloqueado
                         ? ' role="button" tabindex="0" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '"'
                         : '';
-                    html += '<td class="' + cellClass + ' monthly-editable-day" title="' + escapeHtml(getDiaTitle(registro)) + '"' + editAttrs + '>' + escapeHtml(value) + '</td>';
+                    html += '<td class="' + cellClass + ' monthly-editable-day" data-schedule-tooltip="' + escapeHtml(getDiaTitle(registro)) + '"' + editAttrs + '>' + escapeHtml(value) + '</td>';
                 }
                 html += '</tr>';
             });
@@ -5439,13 +5525,7 @@
             const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
             const somenteLeitura = escalaDetalheAtual.status === 'FINALIZADA';
             const getWeekClass = (dia) => dia > 1 && new Date(ano, mes, dia).getDay() === 1 ? ' week-start' : '';
-            const getDiaTitle = (registro) => {
-                if (!registro) return '';
-                if (isProgramacaoDescanso(registro.PROGRAMACAO)) {
-                    return 'Descanso: ' + getValorDescanso(registro);
-                }
-                return 'Trabalho: ' + [registro.HR_ENT1, registro.HR_SAI1, registro.HR_ENT2, registro.HR_SAI2].filter(Boolean).join(' / ');
-            };
+            const getDiaTitle = (registro, funcionario = {}) => registro ? montarTooltipHorarioEscala(registro, funcionario) : '';
             const fields = [
                 { key: 'HR_ENT1', label: 'ENT.' },
                 { key: 'HR_SAI1', label: 'SAÍ.INT.' },
@@ -5483,7 +5563,7 @@
                         const temCriticaFuncionario = criticas.length > 0;
                         const cellClass = [folga ? (domingo ? 'day-off sunday' : 'day-off') : (domingo ? 'sunday' : ''), getWeekClass(numeroDia).trim(), temCriticaFuncionario ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
                         const marker = temCriticaFuncionario && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Crítica validada">!</span>' : '';
-                        table += '<td class="' + cellClass + '" title="' + escapeHtml(getDiaTitle(registro)) + '">' + marker + escapeHtml(value) + '</td>';
+                        table += '<td class="' + cellClass + '" data-schedule-tooltip="' + escapeHtml(getDiaTitle(registro, funcionario)) + '">' + marker + escapeHtml(value) + '</td>';
                     }
                     table += '</tr>';
                 });
