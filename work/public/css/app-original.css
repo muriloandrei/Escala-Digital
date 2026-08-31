@@ -1501,8 +1501,25 @@
 
         .daily-schedule {
             border: 1px solid var(--cor-borda);
-            border-radius: 10px;
-            overflow-x: auto;
+            border-radius: 8px;
+            min-width: 0;
+            overflow: hidden;
+            width: 100%;
+        }
+
+        .daily-timeline-list {
+            min-width: 0;
+            overflow-x: hidden;
+        }
+
+        .daily-schedule-axis,
+        .daily-schedule-row {
+            min-width: 0;
+        }
+
+        .daily-schedule-axis > *,
+        .daily-schedule-row > * {
+            min-width: 0;
         }
 
         .view-switch {
@@ -1603,7 +1620,7 @@
         .daily-schedule-axis,
         .daily-schedule-row {
             display: grid;
-            grid-template-columns: 220px minmax(900px, 1fr);
+            grid-template-columns: minmax(140px, 18%) minmax(0, 1fr);
         }
 
         .daily-schedule-axis {
@@ -1618,6 +1635,7 @@
 
         .daily-schedule-markers {
             height: 34px;
+            min-width: 0;
             position: relative;
         }
 
@@ -1625,6 +1643,15 @@
             bottom: 6px;
             position: absolute;
             transform: translateX(-50%);
+            white-space: nowrap;
+        }
+
+        .daily-schedule-markers span:first-child {
+            transform: translateX(0);
+        }
+
+        .daily-schedule-markers span:last-child {
+            transform: translateX(-100%);
         }
 
         .daily-schedule-person {
@@ -1632,20 +1659,17 @@
             border-bottom: 1px solid #edf2f8;
             border-right: 1px solid #dce6f2;
             left: 0;
-            min-height: 42px;
-            padding: 8px 10px;
+            min-height: 34px;
+            padding: 8px 9px;
             position: sticky;
             z-index: 2;
         }
 
-        .daily-schedule-person strong,
-        .daily-schedule-person span {
+        .daily-schedule-person strong {
+            color: var(--cor-texto);
             display: block;
-        }
-
-        .daily-schedule-person span {
-            color: var(--cor-texto-leve);
-            font-size: 0.72rem;
+            font-size: 0.78rem;
+            line-height: 1.15;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -1656,7 +1680,7 @@
                 repeating-linear-gradient(to right, rgba(148, 163, 184, 0.18) 0, rgba(148, 163, 184, 0.18) 1px, transparent 1px, transparent 4.166%),
                 #f8fafc;
             border-bottom: 1px solid #edf2f8;
-            min-height: 42px;
+            min-height: 34px;
             position: relative;
         }
 
@@ -1668,14 +1692,14 @@
             border-radius: 4px;
             color: #ffffff;
             display: inline-flex;
-            font-size: 0.72rem;
+            font-size: 0.68rem;
             font-weight: 800;
-            height: 24px;
+            height: 22px;
             justify-content: center;
             line-height: 1;
             overflow: hidden;
             position: absolute;
-            top: 9px;
+            top: 6px;
             white-space: nowrap;
         }
 
@@ -1830,12 +1854,12 @@
             box-shadow: 8px 0 12px -12px rgba(15, 23, 42, 0.45);
             background-clip: padding-box;
             left: 0;
-            min-width: 260px;
-            max-width: 260px;
+            min-width: 220px;
+            max-width: 220px;
             overflow: hidden;
             position: sticky;
             text-align: left;
-            width: 260px;
+            width: 220px;
             z-index: 14;
         }
 
@@ -1868,6 +1892,7 @@
 
         .monthly-scale-table .employee-col strong {
             display: block;
+            font-size: 0.76rem;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;

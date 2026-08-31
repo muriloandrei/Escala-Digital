@@ -5482,7 +5482,7 @@
                 }
                 const criticas = temCritica ? '<span class="critical-marker" title="Crítica validada">!</span>' : '';
                 return '<div class="daily-schedule-row">' +
-                    '<div class="daily-schedule-person"' + tooltipAttr + '><strong>' + escapeHtml((dia.CHAPA || '') + ' - ' + (dia.NOME || '')) + '</strong><span>' + escapeHtml(dia.FUNCAO_DESCR || dia.FUNCAO || '') + '</span></div>' +
+                    '<div class="daily-schedule-person"' + tooltipAttr + '><strong>' + escapeHtml((dia.CHAPA || '') + ' - ' + (dia.NOME || '')) + '</strong></div>' +
                     '<div class="daily-schedule-track' + (temCritica ? ' manual-critical-day' : '') + '">' + criticas + bars + '</div>' +
                     '</div>';
             }).join('');
