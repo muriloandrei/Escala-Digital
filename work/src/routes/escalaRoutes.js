@@ -80,14 +80,6 @@ router.post('/liberar-mensal', requirePermission('escalas', 'criar'), async (req
       mesRef: payload.mesRef,
       details: { lojas, resultados }
     });
-    const criticas = resultados.flatMap((resultado) => resultado.criticas || []);
-    if (criticas.length) {
-      return res.status(422).json({
-        error: 'A escala automatica gerou criticas e nao foi gravada.',
-        details: criticas,
-        resultados
-      });
-    }
     return res.json({ resultados });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de liberacao invalidos.', details: error.errors });

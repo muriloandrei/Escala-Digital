@@ -1,8 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildFuncionarioRascunho, buildFuncionariosRascunhoBalanceado, getPadroesFolgaValidos } = require('../src/services/monthlyReleaseService');
+const monthlyReleaseService = require('../src/services/monthlyReleaseService');
+const { buildFuncionarioRascunho, buildFuncionariosRascunhoBalanceado, getPadroesFolgaValidos } = monthlyReleaseService;
 const { _private } = require('../src/services/escalaService');
 const { validateEscalaPayload } = require('../src/rules/escalaRules');
+const catalogService = require('../src/services/catalogService');
+const escalaService = require('../src/services/escalaService');
 
 test('monthly release builds draft only from today onward', () => {
   const funcionario = {
@@ -207,6 +210,54 @@ test('monthly release balances rests across the whole section before each shift'
     assert.ok(Math.max(...counter.values()) <= 2);
   });
   assert.notDeepEqual(assinaturaPorTurno.get('40'), assinaturaPorTurno.get('41'));
+});
+
+test('monthly release saves draft even when automatic validation returns critiques', async () => {
+  const originals = {
+    listEscalasResumo: escalaService.listEscalasResumo,
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  let savedPayload = null;
+
+  escalaService.listEscalasResumo = async () => [];
+  catalogService.listFuncionariosByLoja = async () => [{
+    ESCFUNC_ID: 300,
+    CHAPA: '030030',
+    NOME: 'Funcionario Com Critica',
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '15:00',
+    HR_ENT2: '16:10',
+    HR_SAI2: '17:58'
+  }];
+  catalogService.listTurnosByLoja = async () => [];
+  escalaService.saveEscalasBatch = async (payload) => {
+    savedPayload = payload;
+    return payload.funcionarios;
+  };
+
+  try {
+    const result = await monthlyReleaseService.liberarEscalaLojaMes({
+      lojaId: 10,
+      mesRef: '2026-09-01',
+      hojeIso: '2026-09-01'
+    });
+
+    assert.equal(result.criada, true);
+    assert.equal(result.funcionarios, 1);
+    assert.ok(result.criticas.length > 0);
+    assert.equal(savedPayload.oficializada, 0);
+    assert.equal(savedPayload.funcionarios.length, 1);
+  } finally {
+    escalaService.listEscalasResumo = originals.listEscalasResumo;
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+  }
 });
 
 test('date lock blocks only previous days, not current day', () => {

@@ -308,15 +308,6 @@ async function liberarEscalaLojaMes({ lojaId, mesRef, hojeIso = formatDateValue(
   }
 
   const ruleErrors = validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload });
-  if (ruleErrors.length) {
-    return {
-      lojaId,
-      mesRef,
-      criada: false,
-      motivo: 'Distribuicao automatica gerou criticas e nao foi gravada.',
-      criticas: ruleErrors.slice(0, 20)
-    };
-  }
 
   const saved = await escalaService.saveEscalasBatch({
     lojaId,
@@ -329,7 +320,8 @@ async function liberarEscalaLojaMes({ lojaId, mesRef, hojeIso = formatDateValue(
     lojaId,
     mesRef,
     criada: true,
-    funcionarios: saved.length
+    funcionarios: saved.length,
+    criticas: ruleErrors.slice(0, 50)
   };
 }
 

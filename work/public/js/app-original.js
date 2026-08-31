@@ -2774,7 +2774,17 @@
 
         const escalaLiberacaoFoiCriada = (resultado) => {
             const resultados = resultado?.resultados || [];
-            if (resultados.some(item => item.criada)) return true;
+            const criadas = resultados.filter(item => item.criada);
+            if (criadas.length) {
+                const criticas = criadas.flatMap(item => item.criticas || []).filter(Boolean);
+                if (criticas.length) {
+                    showInfoModal([
+                        'Escala criada como rascunho com criticas. Revise a escala antes de oficializar.',
+                        ...criticas
+                    ], 'error');
+                }
+                return true;
+            }
             const mensagens = resultados.flatMap((item) => [
                 item.motivo || item.erro || 'A escala não foi criada.',
                 ...(item.criticas || [])
