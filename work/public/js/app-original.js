@@ -5057,11 +5057,11 @@
         const consultarEscalasBancoLocal = async () => {
             const lojasSelecionadas = getEscalasFiltroLojasSelecionadas();
             if (!lojasSelecionadas.length) {
-                tabelaBancoBody.innerHTML = '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhuma loja permitida para consulta.</td></tr>';
+                tabelaBancoBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Nenhuma loja permitida para consulta.</td></tr>';
                 return;
             }
 
-            tabelaBancoBody.innerHTML = '<tr><td colspan="9" class="text-center text-gray-500 py-8">Carregando escalas do banco...</td></tr>';
+            tabelaBancoBody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">Carregando escalas do banco...</td></tr>';
             const ano = String(escalasFiltroAno?.value || 'all');
             const mes = String(escalasFiltroMes?.value || 'all');
             const mesRef = ano !== 'all' && mes !== 'all' ? formatDateForDb(Number(ano), Number(mes), 1) : null;
@@ -5628,13 +5628,20 @@
             escalaBancoDetalhadaContent.innerHTML = html || '<p class="text-center text-gray-500 py-8">Nenhum colaborador encontrado nesta seção.</p>';
         };
 
+        const getNomeSecaoSemCodigo = (nome = '') => {
+            const texto = String(nome || '').trim();
+            const semCodigo = texto.replace(/^\d{3}\.\d{2}\.\d{3}\s*-\s*/i, '').trim();
+            return semCodigo || texto || 'Seção';
+        };
+
         const renderizarSecaoAtivaEscala = () => {
             const secao = escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva));
             const dias = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
             const nome = secao?.nome || 'Seção';
-            if (escalaSecaoMensalTitulo) escalaSecaoMensalTitulo.textContent = 'Escala da Seção - ' + nome;
-            if (escalaSecaoTimelineTitulo) escalaSecaoTimelineTitulo.textContent = 'Timeline diária - ' + nome;
-            if (escalaSecaoDetalheTitulo) escalaSecaoDetalheTitulo.textContent = 'Escala detalhada - ' + nome;
+            const nomeSemCodigo = getNomeSecaoSemCodigo(nome);
+            if (escalaSecaoMensalTitulo) escalaSecaoMensalTitulo.textContent = 'Escala - ' + nomeSemCodigo;
+            if (escalaSecaoTimelineTitulo) escalaSecaoTimelineTitulo.textContent = 'Timeline diária - ' + nomeSemCodigo;
+            if (escalaSecaoDetalheTitulo) escalaSecaoDetalheTitulo.textContent = 'Escala detalhada - ' + nomeSemCodigo;
             renderizarTabsSecoesEscala();
             renderizarMensalSecaoBanco(dias);
             renderizarTimelineDiariaBanco(dias);

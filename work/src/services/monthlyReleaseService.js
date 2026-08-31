@@ -2,6 +2,13 @@ const catalogService = require('./catalogService');
 const escalaService = require('./escalaService');
 const { validateEscalaPayload } = require('../rules/escalaRules');
 
+const DEFAULT_SHIFT = {
+  HR_ENT1: '08:00',
+  HR_SAI1: '12:00',
+  HR_ENT2: '13:10',
+  HR_SAI2: '17:58'
+};
+
 function formatDateValue(value) {
   if (value instanceof Date) {
     const year = value.getFullYear();
@@ -32,9 +39,11 @@ function normalizeTime(value, fallback) {
 }
 
 function findTurnoParaFuncionario(funcionario, turnos) {
-  const turnosSecao = (turnos || []).filter((turno) => Number(turno.ESCSECAO_ID) === Number(funcionario.ESCSECAO_ID));
-  const horarioFuncionario = getHorarioSignature(funcionario);
-  return turnosSecao.find((turno) => getHorarioSignature(turno) === horarioFuncionario) || turnosSecao[0] || null;
+  const turnosSecao = (turnos || [])
+    .filter((turno) => Number(turno.ESCSECAO_ID) === Number(funcionario.ESCSECAO_ID))
+    .filter(isHorarioPadraoEscala);
+  const horarioFuncionario = isHorarioPadraoEscala(funcionario) ? getHorarioSignature(funcionario) : null;
+  return turnosSecao.find((turno) => horarioFuncionario && getHorarioSignature(turno) === horarioFuncionario) || turnosSecao[0] || null;
 }
 
 function getCycleIndex(date, seed = 0) {
@@ -48,6 +57,40 @@ function getHorarioSignature(source) {
   return [source?.HR_ENT1, source?.HR_SAI1, source?.HR_ENT2, source?.HR_SAI2]
     .map((value) => String(value || '').trim())
     .join('|');
+}
+
+function getHorarioMetrics(source) {
+  const values = [source?.HR_ENT1, source?.HR_SAI1, source?.HR_ENT2, source?.HR_SAI2]
+    .map((value) => {
+      const text = String(value || '').trim();
+      if (!/^\d{2}:\d{2}$/.test(text)) return null;
+      const [hours, minutes] = text.split(':').map(Number);
+      return (hours * 60) + minutes;
+    });
+  if (values.some((value) => value === null)) return null;
+  const [ent1, sai1, ent2, sai2] = values;
+  if (!(ent1 < sai1 && sai1 < ent2 && ent2 < sai2)) return null;
+  return {
+    jornada: (sai1 - ent1) + (sai2 - ent2),
+    intervalo: ent2 - sai1,
+    periodo1: sai1 - ent1,
+    periodo2: sai2 - ent2
+  };
+}
+
+function isHorarioPadraoEscala(source) {
+  const metrics = getHorarioMetrics(source);
+  return Boolean(metrics
+    && metrics.jornada === 528
+    && metrics.intervalo === 70
+    && metrics.periodo1 <= 360
+    && metrics.periodo2 <= 360);
+}
+
+function getHorarioBaseParaGeracao(turno, funcionario) {
+  if (isHorarioPadraoEscala(turno)) return turno;
+  if (isHorarioPadraoEscala(funcionario)) return funcionario;
+  return DEFAULT_SHIFT;
 }
 
 function hasMaxConsecutiveWorkCircular(folgas, maxDias = 5) {
@@ -108,10 +151,11 @@ function isFolgaAutomatica(date, funcionarioIndex = 0) {
 }
 
 function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), funcionarioIndex = 0, padraoFolga = null) {
-  const hrEnt1 = normalizeTime(turno?.HR_ENT1 || funcionario.HR_ENT1, '08:00');
-  const hrSai1 = normalizeTime(turno?.HR_SAI1 || funcionario.HR_SAI1, '12:00');
-  const hrEnt2 = normalizeTime(turno?.HR_ENT2 || funcionario.HR_ENT2, '13:10');
-  const hrSai2 = normalizeTime(turno?.HR_SAI2 || funcionario.HR_SAI2, '17:58');
+  const horarioBase = getHorarioBaseParaGeracao(turno, funcionario);
+  const hrEnt1 = normalizeTime(horarioBase.HR_ENT1, DEFAULT_SHIFT.HR_ENT1);
+  const hrSai1 = normalizeTime(horarioBase.HR_SAI1, DEFAULT_SHIFT.HR_SAI1);
+  const hrEnt2 = normalizeTime(horarioBase.HR_ENT2, DEFAULT_SHIFT.HR_ENT2);
+  const hrSai2 = normalizeTime(horarioBase.HR_SAI2, DEFAULT_SHIFT.HR_SAI2);
   const folgasCiclo = new Set(padraoFolga || getPadraoFolgaPorIndice(funcionarioIndex));
 
   const dias = getMonthDays(mesRef)

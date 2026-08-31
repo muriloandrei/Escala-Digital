@@ -658,7 +658,7 @@
 
         .data-table th, .data-table td {
             border-bottom: 1px solid var(--cor-borda);
-            padding: 16px;
+            padding: 12px 14px;
             text-align: left;
             vertical-align: middle;
         }
@@ -684,7 +684,7 @@
         }
         
         .data-table td {
-            font-size: 1rem;
+            font-size: 0.92rem;
         }
 
         .actions-cell {
@@ -702,7 +702,7 @@
 
         .data-table td.actions-cell .action-btn-table {
             display: inline-flex;
-            margin-right: 8px;
+            margin-right: 6px;
             vertical-align: middle;
         }
 
@@ -716,12 +716,17 @@
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
             color: var(--cor-texto-leve);
             transition: color 0.2s;
-            padding: 4px;
+            padding: 3px 4px;
             font-family: 'Poppins', sans-serif;
-            font-size: 1rem;
+            font-size: 0.82rem;
+            line-height: 1.1;
+        }
+
+        .action-btn-table .material-symbols-outlined {
+            font-size: 18px;
         }
         
         .action-btn-table.load:hover {
@@ -1455,6 +1460,17 @@
             padding: 4px;
         }
 
+        .scale-section-title-row {
+            align-items: center;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .scale-section-title-row h2 {
+            margin: 0;
+        }
+
         .view-switch button {
             background: transparent;
             border: 0;
@@ -1462,7 +1478,7 @@
             color: #475569;
             cursor: pointer;
             font-weight: 800;
-            padding: 8px 14px;
+            padding: 7px 13px;
         }
 
         .view-switch button.active {
@@ -2493,6 +2509,46 @@
 
         /* Containment and responsive tables */
         #registros-page .data-table { min-width: 1120px; }
+        #registros-page .table-card {
+            overflow-x: auto;
+        }
+
+        #registros-page .data-table {
+            min-width: 1040px;
+        }
+
+        #registros-page .data-table th,
+        #registros-page .data-table td {
+            font-size: 0.82rem;
+            padding: 10px 12px;
+        }
+
+        #registros-page .data-table th:nth-child(3),
+        #registros-page .data-table td:nth-child(3) {
+            min-width: 84px;
+            white-space: nowrap;
+        }
+
+        #registros-page .data-table th:nth-child(10),
+        #registros-page .data-table td:nth-child(10) {
+            min-width: 330px;
+        }
+
+        #registros-page .data-table td.actions-cell .action-btn-table {
+            margin-right: 4px;
+        }
+
+        #registros-page .action-btn-table.banco-action {
+            border-radius: 6px;
+            font-size: 0.72rem;
+            gap: 3px;
+            padding: 5px 7px;
+        }
+
+        #registros-page .action-btn-table.banco-action .material-symbols-outlined {
+            font-size: 15px;
+        }
+
         #secoes-page .data-table { min-width: 720px; }
         #turnos-secao-page .data-table { min-width: 900px; }
         #escalas-funcionarios-page .data-table { min-width: 900px; }

@@ -97,6 +97,34 @@ test('monthly release draft does not include consecutive automatic rests', () =>
   }
 });
 
+test('monthly release uses safe default shift when employee has legacy 07:20 schedule', () => {
+  const funcionario = {
+    ESCFUNC_ID: 13,
+    CHAPA: '000013',
+    NOME: 'Funcionario Horario Legado',
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '16:30'
+  };
+
+  const rascunho = buildFuncionarioRascunho(funcionario, null, '2026-09-01', '2026-09-01', 0);
+  const primeiroTrabalho = rascunho.dias.find((dia) => dia.programacao === 'TRB');
+  const errors = validateEscalaPayload({
+    lojaId: 10,
+    mesRef: '2026-09-01',
+    funcionarios: [rascunho]
+  });
+
+  assert.equal(primeiroTrabalho.hrEnt1, '08:00');
+  assert.equal(primeiroTrabalho.hrSai1, '12:00');
+  assert.equal(primeiroTrabalho.hrEnt2, '13:10');
+  assert.equal(primeiroTrabalho.hrSai2, '17:58');
+  assert.deepEqual(errors, []);
+});
+
 test('monthly release balances rests between employees in the same section and shift', () => {
   const funcionarios = Array.from({ length: 6 }, (_, index) => ({
     ESCFUNC_ID: 100 + index,
@@ -212,7 +240,7 @@ test('monthly release balances rests across the whole section before each shift'
   assert.notDeepEqual(assinaturaPorTurno.get('40'), assinaturaPorTurno.get('41'));
 });
 
-test('monthly release saves draft even when automatic validation returns critiques', async () => {
+test('monthly release saves draft after normalizing legacy employee schedule', async () => {
   const originals = {
     listEscalasResumo: escalaService.listEscalasResumo,
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
@@ -249,7 +277,7 @@ test('monthly release saves draft even when automatic validation returns critiqu
 
     assert.equal(result.criada, true);
     assert.equal(result.funcionarios, 1);
-    assert.ok(result.criticas.length > 0);
+    assert.deepEqual(result.criticas, []);
     assert.equal(savedPayload.oficializada, 0);
     assert.equal(savedPayload.funcionarios.length, 1);
   } finally {
