@@ -461,7 +461,7 @@ async function listHistoricoEscala({ lojaId, mesRef, lojasPermitidas = [] }) {
                 a.loja, a.mes_ref, a.revisao, a.detalhe, a.dt_hr_incl
          from sgn_esc_auditoria a
          ${whereSql}
-         order by a.dt_hr_incl desc, a.auditoria_id desc`,
+         order by a.dt_hr_incl asc, a.auditoria_id asc`,
         binds,
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );

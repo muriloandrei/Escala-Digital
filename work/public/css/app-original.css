@@ -2513,25 +2513,54 @@
         #tipos-descanso-page .data-table,
         #roles-page .data-table { min-width: 900px; }
 
+        #historico-page .table-card {
+            overflow-x: auto;
+        }
+
+        #historico-page .catalog-filter-bar.three-filters {
+            gap: 8px;
+            grid-template-columns: minmax(220px, 1fr) minmax(110px, 150px) minmax(100px, 132px) minmax(90px, 120px);
+            min-width: 560px;
+        }
+
+        #historico-page .escala-search-field,
+        #historico-page .escala-filter-select {
+            font-size: 0.82rem;
+            min-height: 36px;
+            padding-left: 9px;
+            padding-right: 9px;
+        }
+
+        #historico-page .escala-search-field {
+            gap: 6px;
+        }
+
+        #historico-page .escala-search-field .material-symbols-outlined {
+            font-size: 1.05rem;
+        }
+
+        #historico-page .data-table th,
+        #historico-page .data-table td {
+            font-size: 0.78rem;
+            line-height: 1.22;
+            padding-bottom: 9px;
+            padding-top: 9px;
+            vertical-align: top;
+        }
+
         #historico-page .history-detail-cell {
             min-width: 360px;
             max-width: 680px;
-        }
-
-        #historico-page .history-detail-cell pre {
             color: var(--cor-texto);
-            font-family: inherit;
-            font-size: 0.82rem;
-            line-height: 1.45;
-            margin: 0;
-            max-height: none;
-            overflow: visible;
-            white-space: pre-wrap;
+            font-size: 0.76rem;
+            line-height: 1.25;
+            white-space: normal;
             word-break: break-word;
         }
 
         @media (max-width: 680px) {
             .permission-row { grid-template-columns: 1fr; }
+            #historico-page .catalog-filter-bar.three-filters { grid-template-columns: minmax(220px, 1fr) minmax(110px, 150px) minmax(100px, 132px) minmax(90px, 120px); }
         }
 
 

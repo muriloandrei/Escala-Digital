@@ -3289,7 +3289,14 @@
             const texto = String(detalhe || '').trim();
             if (!texto) return '-';
             try {
-                return JSON.stringify(JSON.parse(texto), null, 2);
+                const parsed = JSON.parse(texto);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    return Object.entries(parsed)
+                        .filter(([, value]) => value !== undefined && value !== null && value !== '')
+                        .map(([key, value]) => `${key}=${typeof value === 'object' ? JSON.stringify(value) : value}`)
+                        .join('; ');
+                }
+                return JSON.stringify(parsed);
             } catch (_) {
                 return texto;
             }
@@ -3308,7 +3315,7 @@
                     <td data-label="Mês">${item.MES_REF ? getNomeMesTabela(item.MES_REF) + " " + String(item.MES_REF).slice(0,4) : "-"}</td>
                     <td data-label="Revisão">${escapeHtml(item.REVISAO ?? "-")}</td>
                     <td data-label="Usuário">${escapeHtml(item.NOME_USUARIO || item.LOGIN || "Sistema")}</td>
-                    <td data-label="Detalhe" class="history-detail-cell"><pre>${escapeHtml(formatarDetalheHistorico(item.DETALHE))}</pre></td>
+                    <td data-label="Detalhe" class="history-detail-cell">${escapeHtml(formatarDetalheHistorico(item.DETALHE))}</td>
                 </tr>`).join("") : '<tr><td colspan="7" class="text-center text-gray-500 py-8">Nenhum histórico encontrado.</td></tr>';
         };
 
