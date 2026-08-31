@@ -34,24 +34,40 @@ function findTurnoParaFuncionario(funcionario, turnos) {
   return (turnos || []).find((turno) => Number(turno.ESCSECAO_ID) === Number(funcionario.ESCSECAO_ID)) || null;
 }
 
-function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date())) {
+function getCycleIndex(date, seed = 0) {
+  const anchorMonday = Date.UTC(2026, 0, 5);
+  const current = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = Math.floor((current - anchorMonday) / 86400000);
+  return ((days + seed) % 14 + 14) % 14;
+}
+
+function isFolgaAutomatica(date, funcionarioIndex = 0) {
+  const seed = funcionarioIndex % 2 === 0 ? 0 : 7;
+  const cycleIndex = getCycleIndex(date, seed);
+  return [5, 7, 12, 13].includes(cycleIndex);
+}
+
+function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), funcionarioIndex = 0) {
   const hrEnt1 = normalizeTime(turno?.HR_ENT1 || funcionario.HR_ENT1, '08:00');
   const hrSai1 = normalizeTime(turno?.HR_SAI1 || funcionario.HR_SAI1, '12:00');
   const hrEnt2 = normalizeTime(turno?.HR_ENT2 || funcionario.HR_ENT2, '13:10');
   const hrSai2 = normalizeTime(turno?.HR_SAI2 || funcionario.HR_SAI2, '17:58');
 
   const dias = getMonthDays(mesRef)
-    .map(formatDateValue)
-    .filter((data) => data >= hojeIso)
-    .map((data) => ({
-      data,
-      hrEnt1,
-      hrSai1,
-      hrEnt2,
-      hrSai2,
-      programacao: 'TRB',
-      justificativa: 'Liberacao automatica mensal'
-    }));
+    .filter((date) => formatDateValue(date) >= hojeIso)
+    .map((date) => {
+      const data = formatDateValue(date);
+      const folga = isFolgaAutomatica(date, funcionarioIndex);
+      return {
+        data,
+        hrEnt1: folga ? 'F' : hrEnt1,
+        hrSai1: folga ? 'F' : hrSai1,
+        hrEnt2: folga ? 'F' : hrEnt2,
+        hrSai2: folga ? 'F' : hrSai2,
+        programacao: folga ? 'F' : 'TRB',
+        justificativa: folga ? 'Folga 5x2 automatica' : 'Liberacao automatica mensal'
+      };
+    });
 
   return {
     escfuncId: Number(funcionario.ESCFUNC_ID),
@@ -87,7 +103,7 @@ async function liberarEscalaLojaMes({ lojaId, mesRef, hojeIso = formatDateValue(
   ]);
 
   const funcionariosPayload = (funcionarios || [])
-    .map((funcionario) => buildFuncionarioRascunho(funcionario, findTurnoParaFuncionario(funcionario, turnos), mesRef, hojeIso))
+    .map((funcionario, index) => buildFuncionarioRascunho(funcionario, findTurnoParaFuncionario(funcionario, turnos), mesRef, hojeIso, index))
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa && funcionario.dias.length > 0);
 
   if (!funcionariosPayload.length) {
@@ -159,6 +175,7 @@ function startMonthlyReleaseScheduler(env) {
 
 module.exports = {
   buildFuncionarioRascunho,
+  isFolgaAutomatica,
   liberarEscalaLojaMes,
   liberarEscalasMensais,
   startMonthlyReleaseScheduler
