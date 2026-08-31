@@ -5271,7 +5271,55 @@
                 .filter(fixo => String(fixo.ESCSECAO_ID || fixo.escsecao_id || '') === String(escalaDetalheAtual.secaoAtiva || ''));
         };
 
-        const abrirModalFixoSecaoBanco = async () => {
+        const normalizarDataIsoBanco = (value) => {
+            if (value instanceof Date) {
+                return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0');
+            }
+            return String(value || '').slice(0, 10);
+        };
+
+        const getFixoDiaKeyBanco = (escfuncId, dataIso) => String(escfuncId || '') + '|' + normalizarDataIsoBanco(dataIso);
+
+        const mapearFixosSecaoAtualBanco = () => {
+            const map = new Map();
+            getFixosSecaoAtualBanco().forEach((fixo) => {
+                const escfuncId = fixo.ESCFUNC_ID || fixo.escfunc_id || '';
+                const dataIso = normalizarDataIsoBanco(fixo.DT || fixo.dt);
+                if (escfuncId && dataIso) map.set(getFixoDiaKeyBanco(escfuncId, dataIso), fixo);
+            });
+            return map;
+        };
+
+        const getCampoFixoBanco = (fixo, campo) => {
+            const snake = campo.toLowerCase();
+            const camel = snake.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+            return fixo?.[campo] || fixo?.[snake] || fixo?.[camel] || '';
+        };
+
+        const recarregarSecaoAtualEscalaBanco = async (lojaId, mesRef, secaoAtiva) => {
+            await carregarDetalheEscalaMensal(lojaId, mesRef);
+            escalaDetalheAtual.secaoAtiva = secaoAtiva;
+            prepararSecoesDetalheEscala();
+        };
+
+        const salvarFixoSecaoBanco = async (payload, mensagemSucesso = 'Fixo cadastrado para a geração da seção.') => {
+            const lojaId = escalaDetalheAtual.lojaId;
+            const mesRef = escalaDetalheAtual.mesRef;
+            const secaoAtiva = escalaDetalheAtual.secaoAtiva;
+            await apiRequest('/api/escalas/fixos', {
+                method: 'POST',
+                body: JSON.stringify({
+                    lojaId: Number(lojaId),
+                    mesRef,
+                    escsecaoId: Number(secaoAtiva),
+                    ...payload
+                })
+            });
+            await recarregarSecaoAtualEscalaBanco(lojaId, mesRef, secaoAtiva);
+            if (mensagemSucesso) showInfoModal(mensagemSucesso, 'success');
+        };
+
+        const abrirModalFixoSecaoBanco = async (defaults = {}) => {
             const funcionarios = getFuncionariosSecaoAtualBanco();
             if (!funcionarios.length) {
                 showInfoModal('Nenhum funcionário encontrado para cadastrar fixo nesta seção.', 'info');
@@ -5282,44 +5330,34 @@
             const dataPadrao = dataRef.getFullYear() === hoje.getFullYear() && dataRef.getMonth() === hoje.getMonth()
                 ? getHojeIsoApp()
                 : formatDateForDb(dataRef.getFullYear(), dataRef.getMonth(), 1);
+            const funcionarioSelecionado = String(defaults.escfuncId || funcionarios[0]?.ESCFUNC_ID || '');
+            const dataSelecionada = String(defaults.dataIso || defaults.DT || dataPadrao).slice(0, 10);
+            const tipoSelecionado = String(defaults.tipo || defaults.PROGRAMACAO || 'F').toUpperCase() === 'TRB' ? 'TRB' : 'F';
             const values = await showInputModal({
                 title: 'Adicionar fixo',
                 inputs: [
-                    { label: 'Funcionário', type: 'select', id: 'FIXO_ESCFUNC_ID', value: String(funcionarios[0]?.ESCFUNC_ID || ''), options: funcionarios.map(funcionario => ({ value: String(funcionario.ESCFUNC_ID), label: (funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '') })), required: true },
-                    { label: 'Dia', type: 'date', id: 'FIXO_DT', value: dataPadrao, required: true },
-                    { label: 'Tipo', type: 'choice-group', id: 'FIXO_TIPO', value: 'F', options: [{ value: 'F', label: 'Folga fixa' }, { value: 'TRB', label: 'Horário fixo' }], required: true },
-                    { label: 'Entrada 1', type: 'time', id: 'FIXO_HR_ENT1', value: '08:00', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
-                    { label: 'Saída 1', type: 'time', id: 'FIXO_HR_SAI1', value: '12:00', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
-                    { label: 'Entrada 2', type: 'time', id: 'FIXO_HR_ENT2', value: '13:10', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
-                    { label: 'Saída 2', type: 'time', id: 'FIXO_HR_SAI2', value: '17:58', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
-                    { label: 'Justificativa', type: 'textarea', id: 'FIXO_JUSTIFICATIVA', rows: 3, required: true, placeholder: 'Informe o motivo deste fixo.' }
+                    { label: 'Funcionário', type: 'select', id: 'FIXO_ESCFUNC_ID', value: funcionarioSelecionado, options: funcionarios.map(funcionario => ({ value: String(funcionario.ESCFUNC_ID), label: (funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '') })), required: true },
+                    { label: 'Dia', type: 'date', id: 'FIXO_DT', value: dataSelecionada, required: true },
+                    { label: 'Tipo', type: 'choice-group', id: 'FIXO_TIPO', value: tipoSelecionado, options: [{ value: 'F', label: 'Folga fixa' }, { value: 'TRB', label: 'Horário fixo' }], required: true },
+                    { label: 'Entrada 1', type: 'time', id: 'FIXO_HR_ENT1', value: defaults.HR_ENT1 || defaults.hrEnt1 || '08:00', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
+                    { label: 'Saída 1', type: 'time', id: 'FIXO_HR_SAI1', value: defaults.HR_SAI1 || defaults.hrSai1 || '12:00', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
+                    { label: 'Entrada 2', type: 'time', id: 'FIXO_HR_ENT2', value: defaults.HR_ENT2 || defaults.hrEnt2 || '13:10', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
+                    { label: 'Saída 2', type: 'time', id: 'FIXO_HR_SAI2', value: defaults.HR_SAI2 || defaults.hrSai2 || '17:58', dependsOn: 'FIXO_TIPO', showWhen: 'TRB', required: true },
+                    { label: 'Justificativa', type: 'textarea', id: 'FIXO_JUSTIFICATIVA', rows: 3, required: true, placeholder: 'Informe o motivo deste fixo.', value: defaults.JUSTIFICATIVA || defaults.justificativa || '' }
                 ],
                 confirmText: 'Salvar fixo'
             });
             if (!values) return;
-            const lojaId = escalaDetalheAtual.lojaId;
-            const mesRef = escalaDetalheAtual.mesRef;
-            const secaoAtiva = escalaDetalheAtual.secaoAtiva;
-            await apiRequest('/api/escalas/fixos', {
-                method: 'POST',
-                body: JSON.stringify({
-                    lojaId: Number(lojaId),
-                    mesRef,
-                    escfuncId: Number(values.FIXO_ESCFUNC_ID),
-                    escsecaoId: Number(secaoAtiva),
-                    DT: values.FIXO_DT,
-                    PROGRAMACAO: values.FIXO_TIPO,
-                    HR_ENT1: values.FIXO_HR_ENT1 || null,
-                    HR_SAI1: values.FIXO_HR_SAI1 || null,
-                    HR_ENT2: values.FIXO_HR_ENT2 || null,
-                    HR_SAI2: values.FIXO_HR_SAI2 || null,
-                    JUSTIFICATIVA: values.FIXO_JUSTIFICATIVA
-                })
+            await salvarFixoSecaoBanco({
+                escfuncId: Number(values.FIXO_ESCFUNC_ID),
+                DT: values.FIXO_DT,
+                PROGRAMACAO: values.FIXO_TIPO,
+                HR_ENT1: values.FIXO_HR_ENT1 || null,
+                HR_SAI1: values.FIXO_HR_SAI1 || null,
+                HR_ENT2: values.FIXO_HR_ENT2 || null,
+                HR_SAI2: values.FIXO_HR_SAI2 || null,
+                JUSTIFICATIVA: values.FIXO_JUSTIFICATIVA
             });
-            await carregarDetalheEscalaMensal(lojaId, mesRef);
-            escalaDetalheAtual.secaoAtiva = secaoAtiva;
-            prepararSecoesDetalheEscala();
-            showInfoModal('Fixo cadastrado para a geração da seção.', 'success');
         };
 
         const montarPayloadDetalheBancoAtual = () => {
@@ -5744,11 +5782,84 @@
             if (!funcionarios.length) {
                 const secao = escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva));
                 const total = funcionariosPendentes.length || Number(secao?.funcionarios || 0);
-                escalaBancoMensalContent.innerHTML = '<div class="pending-section-scale">' +
-                    '<div><strong>Escala liberada para geração</strong><span>' + escapeHtml(total) + ' funcionário(s) nesta seção. ' + escapeHtml(fixosPendentes.length) + ' fixo(s) cadastrado(s).</span></div>' +
-                    '<div class="pending-section-actions"><button type="button" class="action-button secondary adicionar-fixo-secao-banco"><span class="material-symbols-outlined">push_pin</span>Adicionar fixo</button>' +
-                    '<button type="button" class="action-button gerar-escala-secao-banco" data-secao-key="' + escapeHtml(escalaDetalheAtual.secaoAtiva || '') + '"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção</button></div>' +
+                const fixosMap = mapearFixosSecaoAtualBanco();
+                let html = '<div class="pending-section-scale pending-section-shell">' +
+                    '<div class="pending-section-shell-header">' +
+                    '<div><strong>Escala liberada para geração</strong><span>' + escapeHtml(String(total)) + ' funcionário(s) nesta seção. ' + escapeHtml(String(fixosPendentes.length)) + ' fixo(s) cadastrado(s).</span></div>' +
+                    '<div class="pending-section-actions"><button type="button" class="action-button gerar-escala-secao-banco" data-secao-key="' + escapeHtml(escalaDetalheAtual.secaoAtiva || '') + '"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção</button></div>' +
                     '</div>';
+
+                if (!funcionariosPendentes.length) {
+                    html += '<p class="pending-section-empty">Nenhum funcionário encontrado para esta seção.</p></div>';
+                    escalaBancoMensalContent.innerHTML = html;
+                    return;
+                }
+
+                html += '<div class="monthly-scale-scroll pending-skeleton-scroll"><table class="monthly-scale-table pending-skeleton-table"><thead>';
+                html += '<tr class="monthly-totals-row"><th class="employee-col monthly-summary-label"><span>' + escapeHtml(String(funcionariosPendentes.length)) + ' funcionário(s)</span></th>';
+                for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                    let folgasFixas = 0;
+                    let horariosFixos = 0;
+                    funcionariosPendentes.forEach((funcionario) => {
+                        const dataIso = formatDateForDb(ano, mes, dia);
+                        const fixo = fixosMap.get(getFixoDiaKeyBanco(funcionario.ESCFUNC_ID, dataIso));
+                        const programacao = String(fixo?.PROGRAMACAO || fixo?.programacao || '').toUpperCase();
+                        if (!fixo) return;
+                        if (programacao === 'TRB') horariosFixos += 1;
+                        else folgasFixas += 1;
+                    });
+                    html += '<th class="monthly-quality' + getWeekClass(dia) + '" title="Folgas fixas: ' + folgasFixas + ' | Horários fixos: ' + horariosFixos + '">' +
+                        '<span class="monthly-total-box folga">' + folgasFixas + ' F</span>' +
+                        '<span class="monthly-total-box trabalho">' + horariosFixos + ' H</span>' +
+                        '</th>';
+                }
+                html += '</tr><tr class="monthly-weekday-row"><th class="employee-col">Funcionário</th>';
+                for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                    html += '<th class="' + getWeekClass(dia).trim() + '">' + diasSemana[new Date(ano, mes, dia).getDay()] + '</th>';
+                }
+                html += '</tr><tr class="monthly-day-row"><th class="employee-col"></th>';
+                for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                    html += '<th class="' + getWeekClass(dia).trim() + '">' + dia + '</th>';
+                }
+                html += '</tr></thead><tbody>';
+
+                funcionariosPendentes.forEach((funcionario) => {
+                    const funcionarioLabel = (funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '');
+                    html += '<tr><th class="employee-col" title="' + escapeHtml(funcionarioLabel) + '"><strong>' + escapeHtml(funcionarioLabel) + '</strong></th>';
+                    for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                        const dataIso = formatDateForDb(ano, mes, dia);
+                        const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
+                        const fixo = fixosMap.get(getFixoDiaKeyBanco(funcionario.ESCFUNC_ID, dataIso));
+                        const programacao = String(fixo?.PROGRAMACAO || fixo?.programacao || '').toUpperCase();
+                        const isHorarioFixo = programacao === 'TRB';
+                        const value = fixo ? (isHorarioFixo ? (getCampoFixoBanco(fixo, 'HR_ENT1') || 'Fixo') : getValorDescanso(fixo)) : '';
+                        const title = fixo
+                            ? (isHorarioFixo ? montarTooltipHorarioEscala({
+                                ...fixo,
+                                NOME: funcionario.NOME,
+                                FUNCAO_DESCR: funcionario.FUNCAO_DESCR,
+                                HR_ENT1: getCampoFixoBanco(fixo, 'HR_ENT1'),
+                                HR_SAI1: getCampoFixoBanco(fixo, 'HR_SAI1'),
+                                HR_ENT2: getCampoFixoBanco(fixo, 'HR_ENT2'),
+                                HR_SAI2: getCampoFixoBanco(fixo, 'HR_SAI2')
+                            }) : 'Folga fixa')
+                            : '';
+                        const cellClass = [
+                            'pending-skeleton-cell',
+                            fixo ? (isHorarioFixo ? 'pending-fixed-work fixed-work-cell' : 'pending-fixed-rest rest-cell rest-cell-fixo') : 'pending-empty-cell',
+                            getWeekClass(dia).trim(),
+                            bloqueado ? 'locked-day' : ''
+                        ].filter(Boolean).join(' ');
+                        const attrs = !bloqueado
+                            ? ' role="button" tabindex="0" data-pending-fixed="1" data-escfunc-id="' + escapeHtml(funcionario.ESCFUNC_ID || '') + '" data-data-iso="' + escapeHtml(dataIso) + '" data-has-fixo="' + (fixo ? '1' : '0') + '" data-programacao="' + escapeHtml(programacao || '') + '" data-hr-ent1="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_ENT1')) + '" data-hr-sai1="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_SAI1')) + '" data-hr-ent2="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_ENT2')) + '" data-hr-sai2="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_SAI2')) + '"'
+                            : '';
+                        html += '<td class="' + cellClass + '" data-schedule-tooltip="' + escapeHtml(title) + '"' + attrs + '>' + escapeHtml(value) + '</td>';
+                    }
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table></div></div>';
+                escalaBancoMensalContent.innerHTML = html;
                 return;
             }
 
@@ -6153,6 +6264,7 @@
         });
 
         let escalaBancoSingleClickTimer = null;
+        let escalaBancoPendingClickTimer = null;
         let escalaBancoDragData = null;
         let escalaBancoIgnorarProximoClick = false;
 
@@ -6299,6 +6411,32 @@
                 abrirModalFixoSecaoBanco().catch(error => showInfoModal(error.message, 'error'));
                 return;
             }
+            const pendingCell = event.target.closest('.pending-skeleton-cell[data-pending-fixed="1"]');
+            if (pendingCell) {
+                event.preventDefault();
+                if (pendingCell.classList.contains('locked-day')) {
+                    showInfoModal('Dias ja passados nao podem receber fixos de escala.', 'info');
+                    return;
+                }
+                clearTimeout(escalaBancoPendingClickTimer);
+                escalaBancoPendingClickTimer = setTimeout(() => {
+                    if (pendingCell.dataset.hasFixo === '1') {
+                        showInfoModal('Este dia ja possui um fixo cadastrado. Use dois cliques para ajustar.', 'info');
+                        return;
+                    }
+                    salvarFixoSecaoBanco({
+                        escfuncId: Number(pendingCell.dataset.escfuncId),
+                        DT: pendingCell.dataset.dataIso,
+                        PROGRAMACAO: 'F',
+                        HR_ENT1: null,
+                        HR_SAI1: null,
+                        HR_ENT2: null,
+                        HR_SAI2: null,
+                        JUSTIFICATIVA: 'Folga fixa cadastrada na liberacao da escala.'
+                    }, 'Folga fixa cadastrada.').catch(error => showInfoModal(error.message, 'error'));
+                }, 220);
+                return;
+            }
             const gerarSecaoButton = event.target.closest('.gerar-escala-secao-banco');
             if (gerarSecaoButton) {
                 event.preventDefault();
@@ -6355,6 +6493,26 @@
         });
 
         escalaBancoMensalContent?.addEventListener('dblclick', (event) => {
+            const pendingCell = event.target.closest('.pending-skeleton-cell[data-pending-fixed="1"]');
+            if (pendingCell) {
+                event.preventDefault();
+                clearTimeout(escalaBancoPendingClickTimer);
+                if (pendingCell.classList.contains('locked-day')) {
+                    showInfoModal('Dias ja passados nao podem receber fixos de escala.', 'info');
+                    return;
+                }
+                abrirModalFixoSecaoBanco({
+                    escfuncId: pendingCell.dataset.escfuncId,
+                    dataIso: pendingCell.dataset.dataIso,
+                    tipo: 'TRB',
+                    PROGRAMACAO: pendingCell.dataset.programacao || 'TRB',
+                    HR_ENT1: pendingCell.dataset.hrEnt1 || '08:00',
+                    HR_SAI1: pendingCell.dataset.hrSai1 || '12:00',
+                    HR_ENT2: pendingCell.dataset.hrEnt2 || '13:10',
+                    HR_SAI2: pendingCell.dataset.hrSai2 || '17:58'
+                }).catch(error => showInfoModal(error.message, 'error'));
+                return;
+            }
             const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
             if (!cell) return;
             event.preventDefault();
