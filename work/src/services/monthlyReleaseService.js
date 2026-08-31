@@ -71,6 +71,12 @@ function hasNoConsecutiveRestsCircular(folgas) {
   return true;
 }
 
+function hasMaxWeeklyRestsCircular(folgas, maxFolgasSemana = 2) {
+  const semana1 = [0, 1, 2, 3, 4, 5, 6].filter((index) => folgas.has(index)).length;
+  const semana2 = [7, 8, 9, 10, 11, 12, 13].filter((index) => folgas.has(index)).length;
+  return semana1 <= maxFolgasSemana && semana2 <= maxFolgasSemana;
+}
+
 let padroesFolgaCache = null;
 function getPadroesFolgaValidos() {
   if (padroesFolgaCache) return padroesFolgaCache;
@@ -82,6 +88,7 @@ function getPadroesFolgaValidos() {
           const folgas = new Set([a, b, c, d]);
           const domingosFolga = (folgas.has(6) ? 1 : 0) + (folgas.has(13) ? 1 : 0);
           if (domingosFolga !== 1) continue;
+          if (!hasMaxWeeklyRestsCircular(folgas, 2)) continue;
           if (!hasNoConsecutiveRestsCircular(folgas)) continue;
           if (!hasMaxConsecutiveWorkCircular(folgas, 5)) continue;
           padroes.push([a, b, c, d]);
@@ -264,6 +271,17 @@ function getWeekGroups(datasGeradas) {
   return [...weeks.values()];
 }
 
+function hasMaxFolgasPorSemanaDatas(folgas = [], maxFolgasSemana = 2) {
+  const counter = new Map();
+  for (const data of folgas || []) {
+    const weekKey = getWeekKeyFromIso(data);
+    const total = (counter.get(weekKey) || 0) + 1;
+    if (total > maxFolgasSemana) return false;
+    counter.set(weekKey, total);
+  }
+  return true;
+}
+
 function getPlanoSemanalGreedy({
   datasGeradas,
   contagemFolgasSecao,
@@ -288,7 +306,11 @@ function getPlanoSemanalGreedy({
     let restantes = Math.max(0, quantidade);
     while (restantes > 0) {
       const opcoes = candidatos
-        .filter((data) => !folgas.has(data) && !domingosTrabalhoSet.has(data) && !isDomingoIso(data) && !isFolgaVizinha(folgas, data))
+        .filter((data) => {
+          if (folgas.has(data) || domingosTrabalhoSet.has(data) || isDomingoIso(data) || isFolgaVizinha(folgas, data)) return false;
+          const weekKey = getWeekKeyFromIso(data);
+          return [...folgas].filter((folga) => getWeekKeyFromIso(folga) === weekKey).length < 2;
+        })
         .map((data, index) => ({
           data,
           score: ((localTurno.get(data) || 0) * 1000)
@@ -369,6 +391,7 @@ function escolherPadraoBalanceado({
   planos.forEach(({ padrao, folgas, repeticaoExata }, planoIndex) => {
     if ([...domingosFolgaSet].some((data) => !folgas.includes(data))) return;
     if ([...domingosTrabalhoSet].some((data) => folgas.includes(data))) return;
+    if (!hasMaxFolgasPorSemanaDatas(folgas, 2)) return;
     const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgas);
     if (!hasNoConsecutiveAutomaticRests(rascunho.dias)) return;
     const errors = validateEscalaPayload({

@@ -3522,14 +3522,43 @@
         };
         const isDataBloqueadaParaEdicao = (dataIso) => String(dataIso || '').slice(0, 10) <= getHojeIsoApp();
         const isDiaMesBloqueadoParaEdicao = (ano, mes, dia) => isDataBloqueadaParaEdicao(formatDateForDb(Number(ano), Number(mes), Number(dia)));
+        const isFolgaSemanalApp = (dia) => ['F', 'FOLGA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
+        const getWeekKeyIsoApp = (dataIso) => {
+            const date = new Date(String(dataIso || '').slice(0, 10) + 'T00:00:00');
+            const day = date.getDay();
+            const diffToMonday = day === 0 ? -6 : 1 - day;
+            date.setDate(date.getDate() + diffToMonday);
+            return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+        };
+        const criticasIncluemDia = (criticas = [], registro = {}, numeroDia = null) => {
+            const dataIso = String(registro?.DT || registro?.data || '').slice(0, 10);
+            const dataBr = dataIso ? formatarDataTabela(dataIso) : '';
+            const diaNumero = Number(numeroDia || String(dataIso).slice(8, 10));
+            return (criticas || []).some((critica) => {
+                const texto = String(critica || '');
+                const textoLower = texto.toLowerCase();
+                if (dataIso && texto.includes(dataIso)) return true;
+                if (dataBr && texto.includes(dataBr)) return true;
+                if (diaNumero && textoLower.includes('dia ' + diaNumero + ':')) return true;
+                if (diaNumero && textoLower.includes('dia ' + diaNumero + ' ')) return true;
+                return false;
+            });
+        };
 
         const validarDiasEscalaFuncionario = (dias, nome) => {
             const errors = [];
             let ultimoTrabalho = null;
             let ultimoDomingo = null;
-            [...(dias || [])].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach((dia) => {
-                const dataIso = String(dia.DT || '').slice(0,10);
+            const folgasPorSemana = new Map();
+            [...(dias || [])].sort((a,b)=>String(a.DT || a.data).localeCompare(String(b.DT || b.data))).forEach((dia) => {
+                const dataIso = String(dia.DT || dia.data || '').slice(0,10);
                 const data = new Date(dataIso + 'T00:00:00');
+                if (isFolgaSemanalApp(dia)) {
+                    const weekKey = getWeekKeyIsoApp(dataIso);
+                    const totalFolgasSemana = (folgasPorSemana.get(weekKey) || 0) + 1;
+                    folgasPorSemana.set(weekKey, totalFolgasSemana);
+                    if (totalFolgasSemana > 2) errors.push(`${nome}: Dia ${Number(dataIso.slice(8, 10))}: possui ${totalFolgasSemana} folgas na semana iniciada em ${weekKey}; limite permitido: 2, contando domingo.`);
+                }
                 if (isProgramacaoDescanso(dia.PROGRAMACAO)) return;
                 errors.push(...validarTurnoSimples({inicio:dia.HR_ENT1,inicioIntervalo:dia.HR_SAI1,fimIntervalo:dia.HR_ENT2,fim:dia.HR_SAI2}).map(e=>formatarDataTabela(dia.DT)+': '+e));
                 if (ultimoTrabalho) {
@@ -3845,8 +3874,24 @@
                 if (folgas.length<2) disponiveis.forEach(item=>{if(folgas.length<2&&!folgas.includes(item))folgas.push(item);});
                 folgas.forEach(({dia}) => { dia.PROGRAMACAO='F'; dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F'; });
             });
+            const folgasSemana = new Map();
+            dias.forEach(dia => {
+                if (isFolgaSemanalApp(dia)) {
+                    const weekKey = getWeekKeyIsoApp(String(dia.DT).slice(0, 10));
+                    folgasSemana.set(weekKey, (folgasSemana.get(weekKey) || 0) + 1);
+                }
+            });
             let consecutivos=0;
-            dias.forEach(dia => { if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>5 && !isDataBloqueadaParaEdicao(String(dia.DT).slice(0,10))){dia.PROGRAMACAO='F';dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F';consecutivos=0;} });
+            dias.forEach(dia => {
+                if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;}
+                consecutivos++;
+                const weekKey = getWeekKeyIsoApp(String(dia.DT).slice(0,10));
+                if(consecutivos>5 && !isDataBloqueadaParaEdicao(String(dia.DT).slice(0,10)) && (folgasSemana.get(weekKey) || 0) < 2){
+                    dia.PROGRAMACAO='F';dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F';
+                    folgasSemana.set(weekKey, (folgasSemana.get(weekKey) || 0) + 1);
+                    consecutivos=0;
+                }
+            });
             invalidarValidacaoEscalaFuncionario('Distribuição de folgas pendente de validação.');
             renderizarEscalaFuncionarioEdicao();
             showInfoModal('Folgas 5x2 distribuídas. Revise e valide antes de salvar.','success');
@@ -5567,7 +5612,8 @@
                 const descanso = isProgramacaoDescanso(dia.PROGRAMACAO);
                 const bloqueado = isDataBloqueadaParaEdicao(String(dia.DT || '').slice(0, 10)) || somenteLeitura;
                 const funcionario = agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).find(item => String(item.escfuncId) === String(dia.ESCFUNC_ID));
-                const temCritica = funcionario ? getCriticasFuncionarioBanco(funcionario).length > 0 : false;
+                const criticasFuncionario = funcionario ? getCriticasFuncionarioBanco(funcionario) : [];
+                const temCritica = criticasIncluemDia(criticasFuncionario, dia) || criticasFuncionario.some((critica) => !/\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}|dia\s+\d+/i.test(String(critica || '')));
                 const attrs = !bloqueado ? ' data-escprog-id="' + escapeHtml(dia.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(dia.ESCPROGDIA_ID || '') + '"' : '';
                 const tooltipAttr = getTooltipHorarioAttr(dia);
                 let bars = '';
@@ -5588,10 +5634,9 @@
                         + mkBar(sai1, ent2, 'daily-schedule-break', '')
                         + mkBar(ent2, sai2, 'daily-schedule-bar', (dia.HR_ENT2 || '') + ' - ' + (dia.HR_SAI2 || ''));
                 }
-                const criticas = temCritica ? '<span class="critical-marker" title="Crítica validada">!</span>' : '';
                 return '<div class="daily-schedule-row">' +
                     '<div class="daily-schedule-person"' + tooltipAttr + '><strong>' + escapeHtml((dia.CHAPA || '') + ' - ' + (dia.NOME || '')) + '</strong></div>' +
-                    '<div class="daily-schedule-track' + (temCritica ? ' manual-critical-day' : '') + '">' + criticas + bars + '</div>' +
+                    '<div class="daily-schedule-track' + (temCritica ? ' manual-critical-day' : '') + '">' + bars + '</div>' +
                     '</div>';
             }).join('');
             escalaBancoTimelineContent.innerHTML = '<div class="daily-schedule"><div class="daily-schedule-axis"><div></div><div class="daily-schedule-markers">' + markers.join('') + '</div></div>' + rows + '</div>';
@@ -5629,7 +5674,6 @@
             let html = '<div class="monthly-scale-scroll"><table class="monthly-scale-table"><thead>';
             html += '<tr class="monthly-totals-row"><th class="employee-col monthly-summary-label' + (criticasSecao.length ? ' has-critical' : '') + '">' +
                 '<span>' + funcionarios.length + ' funcionário(s)</span>' +
-                (criticasSecao.length ? '<button type="button" class="critical-section-chip banco-critical-section-chip" title="Ver críticas da seção">CRITICA</button>' : '') +
                 '</th>';
             for (let dia = 1; dia <= diasNoMes; dia += 1) {
                 let folgas = 0;
@@ -5657,8 +5701,7 @@
 
             funcionarios.forEach((funcionario) => {
                 const criticas = getCriticasFuncionarioBanco(funcionario);
-                const criticaButton = criticas.length ? '<button type="button" class="critical-status-chip banco-critical-chip" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '">CRITICA</button>' : '';
-                html += '<tr><th class="employee-col" title="' + escapeHtml(getFuncionarioTitle(funcionario)) + '"><strong>' + escapeHtml((funcionario.chapa || '') + ' - ' + (funcionario.nome || '')) + '</strong>' + criticaButton + '</th>';
+                html += '<tr><th class="employee-col" title="' + escapeHtml(getFuncionarioTitle(funcionario)) + '"><strong>' + escapeHtml((funcionario.chapa || '') + ' - ' + (funcionario.nome || '')) + '</strong></th>';
                 for (let dia = 1; dia <= diasNoMes; dia += 1) {
                     const registro = funcionario.dias.get(dia);
                     if (!registro) {
@@ -5667,7 +5710,7 @@
                     }
                     const descanso = isProgramacaoDescanso(registro.PROGRAMACAO);
                     const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
-                    const critica = getCriticasFuncionarioBanco(funcionario).some(item => String(item).includes('Dia ' + dia + ':') || String(item).includes('dia ' + dia + ' '));
+                    const critica = criticasIncluemDia(criticas, registro, dia);
                     const value = descanso ? getValorDescanso(registro) : (registro.HR_ENT1 || '--');
                     const cellClass = [
                         descanso ? 'rest-cell' : 'work-cell',
@@ -5677,7 +5720,7 @@
                         bloqueado ? 'locked-day' : ''
                     ].filter(Boolean).join(' ');
                     const editAttrs = !bloqueado
-                        ? ' role="button" tabindex="0" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '"'
+                        ? ' role="button" tabindex="0" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" draggable="' + (descanso ? 'true' : 'false') + '"'
                         : '';
                     html += '<td class="' + cellClass + ' monthly-editable-day" data-schedule-tooltip="' + escapeHtml(getDiaTitle(registro)) + '"' + editAttrs + '>' + escapeHtml(value) + '</td>';
                 }
@@ -5991,6 +6034,93 @@
             exibirCriticasBancoAgrupadas();
         });
 
+        let escalaBancoSingleClickTimer = null;
+        let escalaBancoDragData = null;
+        let escalaBancoIgnorarProximoClick = false;
+
+        const getDiaBancoPorId = (escprogdiaId) => {
+            return (escalaDetalheAtual.dias || []).find(item => String(item.ESCPROGDIA_ID || '') === String(escprogdiaId));
+        };
+
+        const getHorarioTrabalhoReferenciaBanco = (diaReferencia) => {
+            const dataReferencia = new Date(String(diaReferencia?.DT || '').slice(0, 10) + 'T00:00:00');
+            const horariosValidos = (escalaDetalheAtual.dias || [])
+                .filter((dia) => String(dia.ESCFUNC_ID || '') === String(diaReferencia?.ESCFUNC_ID || ''))
+                .filter((dia) => !isProgramacaoDescanso(dia.PROGRAMACAO))
+                .filter((dia) => [dia.HR_ENT1, dia.HR_SAI1, dia.HR_ENT2, dia.HR_SAI2].every((value) => /^\d{2}:\d{2}$/.test(String(value || ''))))
+                .sort((left, right) => {
+                    const leftDiff = Math.abs(new Date(String(left.DT || '').slice(0, 10) + 'T00:00:00') - dataReferencia);
+                    const rightDiff = Math.abs(new Date(String(right.DT || '').slice(0, 10) + 'T00:00:00') - dataReferencia);
+                    return leftDiff - rightDiff;
+                });
+            const horario = horariosValidos[0] || {};
+            return {
+                HR_ENT1: horario.HR_ENT1 || '08:00',
+                HR_SAI1: horario.HR_SAI1 || '12:00',
+                HR_ENT2: horario.HR_ENT2 || '13:10',
+                HR_SAI2: horario.HR_SAI2 || '17:58'
+            };
+        };
+
+        const aplicarTrabalhoBancoDia = (dia, horario) => {
+            dia.PROGRAMACAO = 'TRB';
+            dia.HR_ENT1 = horario.HR_ENT1;
+            dia.HR_SAI1 = horario.HR_SAI1;
+            dia.HR_ENT2 = horario.HR_ENT2;
+            dia.HR_SAI2 = horario.HR_SAI2;
+            dia.JUSTIFICATIVA_ALTERACAO = 'Ajuste rapido de folga';
+            marcarDiaBancoAlterado(dia);
+        };
+
+        const aplicarFolgaBancoDia = (dia, sigla = 'F') => {
+            const descansoSigla = String(sigla || 'F').trim().toUpperCase();
+            dia.PROGRAMACAO = descansoSigla;
+            dia.HR_ENT1 = descansoSigla;
+            dia.HR_SAI1 = descansoSigla;
+            dia.HR_ENT2 = descansoSigla;
+            dia.HR_SAI2 = descansoSigla;
+            dia.JUSTIFICATIVA_ALTERACAO = 'Ajuste rapido de folga';
+            marcarDiaBancoAlterado(dia);
+        };
+
+        const alternarFolgaRapidaBanco = async (escprogdiaId) => {
+            const dia = getDiaBancoPorId(escprogdiaId);
+            if (!dia) return;
+            if (isProgramacaoDescanso(dia.PROGRAMACAO)) {
+                aplicarTrabalhoBancoDia(dia, getHorarioTrabalhoReferenciaBanco(dia));
+            } else {
+                aplicarFolgaBancoDia(dia, 'F');
+            }
+            await validarDetalheBancoSilencioso();
+            renderizarSecaoAtivaEscala();
+        };
+
+        const trocarFolgaBanco = async (origemId, destinoId) => {
+            const origem = getDiaBancoPorId(origemId);
+            const destino = getDiaBancoPorId(destinoId);
+            if (!origem || !destino || String(origem.ESCPROGDIA_ID || '') === String(destino.ESCPROGDIA_ID || '')) return;
+            if (String(origem.ESCFUNC_ID || '') !== String(destino.ESCFUNC_ID || '')) {
+                showInfoModal('Arraste a folga apenas dentro da linha do mesmo funcionario.', 'info');
+                return;
+            }
+            if (!isProgramacaoDescanso(origem.PROGRAMACAO)) return;
+            if (isProgramacaoDescanso(destino.PROGRAMACAO)) {
+                showInfoModal('Escolha um dia trabalhado para trocar com a folga.', 'info');
+                return;
+            }
+            const horarioDestino = {
+                HR_ENT1: destino.HR_ENT1,
+                HR_SAI1: destino.HR_SAI1,
+                HR_ENT2: destino.HR_ENT2,
+                HR_SAI2: destino.HR_SAI2
+            };
+            const siglaOrigem = getValorDescanso(origem);
+            aplicarTrabalhoBancoDia(origem, horarioDestino);
+            aplicarFolgaBancoDia(destino, siglaOrigem);
+            await validarDetalheBancoSilencioso();
+            renderizarSecaoAtivaEscala();
+        };
+
         const editarDiaEscalaPorId = async (escprogId, escprogdiaId) => {
             if (escalaDetalheAtual.status === 'FINALIZADA') {
                 showInfoModal('Escala finalizada não pode ser editada.', 'info');
@@ -6038,13 +6168,75 @@
                 exibirCriticasBancoAgrupadas();
                 return;
             }
+            if (escalaBancoIgnorarProximoClick) {
+                escalaBancoIgnorarProximoClick = false;
+                return;
+            }
             const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
             if (!cell) return;
             if (cell.classList.contains('locked-day')) {
                 showInfoModal('Dias ja passados nao podem ser alterados manualmente.', 'info');
                 return;
             }
+            clearTimeout(escalaBancoSingleClickTimer);
+            escalaBancoSingleClickTimer = setTimeout(() => {
+                alternarFolgaRapidaBanco(cell.dataset.escprogdiaId).catch(error => showInfoModal(error.message, 'error'));
+            }, 220);
+        });
+
+        escalaBancoMensalContent?.addEventListener('dblclick', (event) => {
+            const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
+            if (!cell) return;
+            event.preventDefault();
+            clearTimeout(escalaBancoSingleClickTimer);
+            if (cell.classList.contains('locked-day')) {
+                showInfoModal('Dias ja passados nao podem ser alterados manualmente.', 'info');
+                return;
+            }
             editarDiaEscalaPorId(cell.dataset.escprogId, cell.dataset.escprogdiaId);
+        });
+
+        escalaBancoMensalContent?.addEventListener('dragstart', (event) => {
+            const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
+            if (!cell || !cell.classList.contains('rest-cell') || cell.classList.contains('locked-day')) {
+                event.preventDefault();
+                return;
+            }
+            escalaBancoDragData = {
+                escprogdiaId: cell.dataset.escprogdiaId,
+                escfuncId: cell.dataset.escfuncId
+            };
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', cell.dataset.escprogdiaId || '');
+            cell.classList.add('dragging-rest-cell');
+        });
+
+        escalaBancoMensalContent?.addEventListener('dragover', (event) => {
+            const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
+            if (!cell || !escalaBancoDragData || cell.classList.contains('locked-day')) return;
+            if (String(cell.dataset.escfuncId || '') !== String(escalaBancoDragData.escfuncId || '')) return;
+            event.preventDefault();
+            cell.classList.add('drop-rest-target');
+        });
+
+        escalaBancoMensalContent?.addEventListener('dragleave', (event) => {
+            event.target.closest('.monthly-editable-day')?.classList.remove('drop-rest-target');
+        });
+
+        escalaBancoMensalContent?.addEventListener('drop', (event) => {
+            const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
+            if (!cell || !escalaBancoDragData) return;
+            event.preventDefault();
+            escalaBancoIgnorarProximoClick = true;
+            setTimeout(() => { escalaBancoIgnorarProximoClick = false; }, 350);
+            escalaBancoMensalContent.querySelectorAll('.drop-rest-target, .dragging-rest-cell').forEach(item => item.classList.remove('drop-rest-target', 'dragging-rest-cell'));
+            trocarFolgaBanco(escalaBancoDragData.escprogdiaId, cell.dataset.escprogdiaId).catch(error => showInfoModal(error.message, 'error'));
+            escalaBancoDragData = null;
+        });
+
+        escalaBancoMensalContent?.addEventListener('dragend', () => {
+            escalaBancoMensalContent.querySelectorAll('.drop-rest-target, .dragging-rest-cell').forEach(item => item.classList.remove('drop-rest-target', 'dragging-rest-cell'));
+            escalaBancoDragData = null;
         });
 
         escalaBancoMensalContent?.addEventListener('keypress', (event) => {
@@ -6850,9 +7042,27 @@ const distribuirFolgas5x2Auto = async () => {
 
     await carregarAusenciasDaLoja(getLojaContextoEscala());
 
-    const marcarFolgaNoMapa = (colabIdx, date) => {
+    const getWeekKeyDate = (date) => {
+        const segunda = new Date(date);
+        segunda.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+        return segunda.getFullYear() + '-' + String(segunda.getMonth() + 1).padStart(2, '0') + '-' + String(segunda.getDate()).padStart(2, '0');
+    };
+
+    const contarFolgasSemanaMapa = (colabIdx, date) => {
+        const weekKey = getWeekKeyDate(date);
+        let totalSemana = 0;
+        for (let offset = 0; offset < 7; offset += 1) {
+            const cursor = new Date(weekKey + 'T00:00:00');
+            cursor.setDate(cursor.getDate() + offset);
+            if (scheduleMap[colabIdx][cursor.toDateString()] === 'F') totalSemana += 1;
+        }
+        return totalSemana;
+    };
+
+    const marcarFolgaNoMapa = (colabIdx, date, options = {}) => {
         const key = date.toDateString();
         if (scheduleMap[colabIdx][key] === 'F') return;
+        if (!options.force && contarFolgasSemanaMapa(colabIdx, date) >= 2) return;
         scheduleMap[colabIdx][key] = 'F';
         offCountPerDay[key] = (offCountPerDay[key] || 0) + 1;
     };
@@ -6866,7 +7076,7 @@ const distribuirFolgas5x2Auto = async () => {
                 const dataIso = formatDateForDb(date.getFullYear(), date.getMonth(), date.getDate());
                 const ausencia = encontrarAusenciaFuncionario(funcionario.ESCFUNC_ID, funcionario.CHAPA, dataIso);
                 if (ausencia) {
-                    marcarFolgaNoMapa(i, date);
+                    marcarFolgaNoMapa(i, date, { force: true });
                 }
             });
         }
@@ -6922,7 +7132,7 @@ const distribuirFolgas5x2Auto = async () => {
 
                         for (let dIdx = 0; dIdx < 6; dIdx++) { // Tenta de Segunda a Sábado
                             const diaCandidato = weekDays[dIdx];
-                            if (!scheduleMap[i][diaCandidato.toDateString()]) {
+                            if (!scheduleMap[i][diaCandidato.toDateString()] && contarFolgasSemanaMapa(i, diaCandidato) < 2) {
                                 
                                 // Cálculo de penalidade (Score)
                                 let peopleOffHoje = offCountPerDay[diaCandidato.toDateString()] || 0;

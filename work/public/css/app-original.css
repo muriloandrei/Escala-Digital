@@ -1694,6 +1694,17 @@
             position: relative;
         }
 
+        .daily-schedule-track.manual-critical-day {
+            background: #dc2626;
+        }
+
+        .daily-schedule-track.manual-critical-day .daily-schedule-bar,
+        .daily-schedule-track.manual-critical-day .daily-schedule-break,
+        .daily-schedule-track.manual-critical-day .daily-schedule-rest {
+            background: #b91c1c;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+        }
+
         .daily-schedule-bar,
         .daily-schedule-break,
         .daily-schedule-rest {
@@ -1977,6 +1988,19 @@
             font-weight: 800;
         }
 
+        .monthly-scale-table .rest-cell[draggable="true"] {
+            cursor: grab;
+        }
+
+        .monthly-scale-table .rest-cell.dragging-rest-cell {
+            cursor: grabbing;
+            opacity: 0.62;
+        }
+
+        .monthly-scale-table .drop-rest-target {
+            box-shadow: inset 0 0 0 3px #22c55e;
+        }
+
         .monthly-scale-table .rest-cell-folga {
             background: #0ea5e9;
         }
@@ -2007,11 +2031,18 @@
         }
 
         .monthly-scale-table .manual-critical-day {
-            box-shadow: inset 0 0 0 2px #ef4444;
+            background: #dc2626;
+            box-shadow: none;
+            color: #ffffff;
+            font-weight: 900;
         }
 
         .monthly-scale-table td.monthly-editable-day:hover {
             box-shadow: inset 0 0 0 2px var(--cor-principal);
+        }
+
+        .monthly-scale-table td.monthly-editable-day.manual-critical-day:hover {
+            box-shadow: inset 0 0 0 2px #991b1b;
         }
 
         .turnos-operacionais-table {
@@ -2975,7 +3006,7 @@
         }
 
         .manual-critical-day {
-            outline: 2px solid #f59e0b;
+            outline: 2px solid #dc2626;
             outline-offset: -2px;
             position: relative;
         }

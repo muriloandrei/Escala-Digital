@@ -3,6 +3,7 @@ const REGRAS_VIGENTES = [
   { codigo: 'INTERJORNADA_11H', titulo: 'Interjornada minima', descricao: 'Entre o fim de um dia trabalhado e o inicio do proximo deve haver ao menos 11 horas.' },
   { codigo: 'DESCANSO_POS_FOLGA_35H', titulo: 'Descanso apos folga', descricao: 'Ao retornar de uma ou mais folgas, o descanso minimo acumulado deve ser de 35 horas.' },
   { codigo: 'MAX_5_DIAS_CONSECUTIVOS', titulo: 'Limite 5x2', descricao: 'No regime 5x2, o colaborador nao deve trabalhar mais que 5 dias consecutivos.' },
+  { codigo: 'MAX_2_FOLGAS_SEMANA', titulo: 'Limite semanal de folgas', descricao: 'O colaborador nao deve ter mais que 2 folgas na mesma semana, contando domingo.' },
   { codigo: 'JORNADA_08H48', titulo: 'Jornada padrao', descricao: 'Dias trabalhados devem ter jornada total de 08:48.' },
   { codigo: 'INTERVALO_01H10', titulo: 'Intervalo minimo', descricao: 'Dias trabalhados devem ter intervalo minimo de 01:10.' },
   { codigo: 'MAX_06H_CONTINUAS', titulo: 'Jornada continua maxima', descricao: 'Nenhum periodo continuo de trabalho deve passar de 06:00.' },
@@ -29,6 +30,22 @@ function minutesToTime(value) {
 
 function isDescanso(dia) {
   return String(dia?.programacao || dia?.PROGRAMACAO || 'TRB').trim().toUpperCase() !== 'TRB';
+}
+
+function isFolgaSemanal(dia) {
+  const programacao = String(dia?.programacao || dia?.PROGRAMACAO || 'TRB').trim().toUpperCase();
+  return programacao === 'F' || programacao === 'FOLGA';
+}
+
+function getWeekKey(dataIso) {
+  const date = new Date(`${formatDate(dataIso)}T00:00:00`);
+  const day = date.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diffToMonday);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const dayOfMonth = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${dayOfMonth}`;
 }
 
 function getHorarioDia(dia) {
@@ -81,12 +98,22 @@ function validarRegrasFuncionario(funcionario) {
   let ultimoDomingoTrabalhado = null;
   let diasTrabalhadosConsecutivos = 0;
   const maxDiasConsecutivos = Number(funcionario.maxDiasConsecutivos || 5);
+  const folgasPorSemana = new Map();
 
   for (const dia of dias) {
     const dataIso = formatDate(dia.data || dia.DT);
     const data = new Date(`${dataIso}T00:00:00`);
     const descanso = isDescanso(dia);
     errors.push(...validarTurnoDia(label, dia));
+
+    if (isFolgaSemanal(dia)) {
+      const weekKey = getWeekKey(dataIso);
+      const totalFolgasSemana = (folgasPorSemana.get(weekKey) || 0) + 1;
+      folgasPorSemana.set(weekKey, totalFolgasSemana);
+      if (totalFolgasSemana > 2) {
+        errors.push(`${label}: Dia ${Number(dataIso.slice(8, 10))}: possui ${totalFolgasSemana} folgas na semana iniciada em ${weekKey}; limite permitido: 2, contando domingo.`);
+      }
+    }
 
     if (descanso) {
       diasTrabalhadosConsecutivos = 0;

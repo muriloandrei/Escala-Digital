@@ -93,6 +93,28 @@ test('backend allows consecutive rests created manually', () => {
   assert.deepEqual(errors, []);
 });
 
+test('backend rejects more than two weekly rests counting Sunday', () => {
+  const errors = validateEscalaPayload(buildPayload([
+    trabalho('2026-09-01'),
+    descanso('2026-09-02'),
+    descanso('2026-09-04'),
+    descanso('2026-09-06')
+  ]));
+
+  assert.ok(errors.some((error) => error.includes('folgas na semana')));
+});
+
+test('backend allows Sunday rest plus one more rest in same week', () => {
+  const errors = validateEscalaPayload(buildPayload([
+    trabalho('2026-09-01'),
+    trabalho('2026-09-02'),
+    descanso('2026-09-04'),
+    descanso('2026-09-06')
+  ]));
+
+  assert.deepEqual(errors, []);
+});
+
 test('backend rejects rest lower than 35 hours after day off', () => {
   const errors = validateEscalaPayload(buildPayload([
     trabalho('2026-09-01', { hrEnt1: '12:00', hrSai1: '16:00', hrEnt2: '17:10', hrSai2: '21:58' }),

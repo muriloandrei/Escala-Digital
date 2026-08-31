@@ -73,6 +73,17 @@ test('monthly release automatic patterns do not create consecutive rests', () =>
   });
 });
 
+test('monthly release automatic patterns keep at most two rests per week', () => {
+  const patterns = getPadroesFolgaValidos();
+  assert.ok(patterns.length > 0);
+  patterns.forEach((pattern) => {
+    const weekOne = pattern.filter((index) => index >= 0 && index <= 6).length;
+    const weekTwo = pattern.filter((index) => index >= 7 && index <= 13).length;
+    assert.ok(weekOne <= 2, `semana 1 invalida: ${pattern.join(',')}`);
+    assert.ok(weekTwo <= 2, `semana 2 invalida: ${pattern.join(',')}`);
+  });
+});
+
 test('monthly release draft does not include consecutive automatic rests', () => {
   const funcionario = {
     ESCFUNC_ID: 12,
@@ -95,6 +106,48 @@ test('monthly release draft does not include consecutive automatic rests', () =>
   for (let index = 1; index < dias.length; index += 1) {
     assert.equal(dias[index - 1].programacao === 'F' && dias[index].programacao === 'F', false);
   }
+});
+
+test('monthly release draft keeps at most two rests per employee week', () => {
+  const funcionarios = Array.from({ length: 8 }, (_, index) => ({
+    ESCFUNC_ID: 700 + index,
+    CHAPA: `07070${index}`,
+    NOME: `Funcionario Semana ${index + 1}`,
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }));
+  const turnos = [{
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+  const getWeekKey = (dataIso) => {
+    const date = new Date(`${dataIso}T00:00:00`);
+    const diffToMonday = date.getDay() === 0 ? -6 : 1 - date.getDay();
+    date.setDate(date.getDate() + diffToMonday);
+    return date.toISOString().slice(0, 10);
+  };
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01');
+
+  rascunhos.forEach((funcionario) => {
+    const folgasPorSemana = new Map();
+    funcionario.dias
+      .filter((dia) => dia.programacao === 'F')
+      .forEach((dia) => {
+        const weekKey = getWeekKey(dia.data);
+        folgasPorSemana.set(weekKey, (folgasPorSemana.get(weekKey) || 0) + 1);
+      });
+    folgasPorSemana.forEach((total) => assert.ok(total <= 2));
+  });
 });
 
 test('monthly release keeps legacy 07:20 schedule and flags it as critique', () => {
