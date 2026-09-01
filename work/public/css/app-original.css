@@ -1564,7 +1564,7 @@
 
         #escala-detalhe-page .scale-overview-card > .table-card-header.creation-card-header {
             display: grid;
-            grid-template-columns: minmax(250px, max-content) minmax(0, 1fr) auto;
+            grid-template-columns: minmax(250px, max-content) minmax(0, 1fr) auto auto;
             gap: 14px;
             min-height: 54px;
         }
@@ -1576,6 +1576,19 @@
 
         #escala-detalhe-page .scale-header-print {
             justify-self: end;
+        }
+
+        #resetarEscalaSecaoBancoBtn {
+            align-self: center;
+            justify-self: end;
+            min-height: 32px;
+            padding: 6px 10px;
+            white-space: nowrap;
+            width: max-content;
+        }
+
+        #resetarEscalaSecaoBancoBtn .material-symbols-outlined {
+            font-size: 1rem;
         }
 
         .view-switch button {

@@ -423,6 +423,23 @@ function hasMaxFolgasAutomaticasComFixos(folgasAutomaticas = [], folgasFixas = [
   return true;
 }
 
+function limitarFolgasAutomaticasPorFixos(folgasAutomaticas = [], folgasFixas = [], maxFolgasSemana = 2) {
+  const counter = new Map();
+  (folgasFixas || []).forEach((data) => {
+    const weekKey = getWeekKeyFromIso(data);
+    counter.set(weekKey, (counter.get(weekKey) || 0) + 1);
+  });
+  return [...new Set((folgasAutomaticas || []).map(formatDateValue).filter(Boolean))]
+    .sort()
+    .filter((data) => {
+      const weekKey = getWeekKeyFromIso(data);
+      const totalAtual = counter.get(weekKey) || 0;
+      if (totalAtual >= maxFolgasSemana) return false;
+      counter.set(weekKey, totalAtual + 1);
+      return true;
+    });
+}
+
 function hasNoAutomaticRestNearFixedRest(folgasAutomaticas = [], folgasFixas = []) {
   const fixasSet = new Set((folgasFixas || []).map(formatDateValue));
   if (!fixasSet.size) return true;
@@ -540,13 +557,11 @@ function escolherPadraoBalanceado({
   let melhorIdeal = null;
   let melhorComCobertura = null;
   planos.forEach(({ padrao, folgas, repeticaoExata }, planoIndex) => {
-    const folgasEfetivas = folgas.filter((data) => !encontrarAusencia(indiceAusencias, funcionario, data)
+    const folgasPossiveis = folgas.filter((data) => !encontrarAusencia(indiceAusencias, funcionario, data)
       && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`));
-    if ([...domingosFolgaSet].some((data) => !encontrarAusencia(indiceAusencias, funcionario, data) && !folgasFixasSet.has(data) && !folgasEfetivas.includes(data))) return;
-    if ([...domingosTrabalhoSet].some((data) => folgasEfetivas.includes(data))) return;
+    const folgasEfetivas = limitarFolgasAutomaticasPorFixos(folgasPossiveis, folgasFixasFuncionario, 2);
     if (!hasMaxFolgasPorSemanaDatas(folgasEfetivas, 2)) return;
     if (!hasMaxFolgasAutomaticasComFixos(folgasEfetivas, folgasFixasFuncionario, 2)) return;
-    if (!hasNoAutomaticRestNearFixedRest(folgasEfetivas, folgasFixasFuncionario)) return;
     const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas, { indiceAusencias, diasFixos });
     if (!hasNoConsecutiveAutomaticRests(rascunho.dias)) return;
     const errors = validateEscalaPayload({
@@ -579,10 +594,16 @@ function escolherPadraoBalanceado({
     const limiteDesejadoTurno = Math.max(1, Math.ceil(Number(turnoSize || 1) / 2));
     const excessoFolgaTurno = Math.max(0, maxFolgasTurnoDia - limiteDesejadoTurno);
     const diferencaFolgasEsperadas = Math.abs(folgasEfetivas.length - folgasEsperadas);
+    const domingosFolgaPerdidos = [...domingosFolgaSet].filter((data) => !encontrarAusencia(indiceAusencias, funcionario, data) && !folgasFixasSet.has(data) && !folgasEfetivas.includes(data)).length;
+    const domingosTrabalhoViraramFolga = [...domingosTrabalhoSet].filter((data) => folgasEfetivas.includes(data)).length;
+    const folgasAutomaticasPertoFixo = hasNoAutomaticRestNearFixedRest(folgasEfetivas, folgasFixasFuncionario) ? 0 : 1;
     const desempate = Math.abs(planoIndex - (indiceSecao % Math.max(planos.length, 1)));
     const score = (errors.length * 100000)
       + (turnoSemCobertura ? 50000 : 0)
+      + (folgasAutomaticasPertoFixo * 42000)
       + (diferencaFolgasEsperadas * 9000)
+      + (domingosFolgaPerdidos * 8500)
+      + (domingosTrabalhoViraramFolga * 3500)
       + (excessoFolgaSecao * 26000)
       + (excessoFolgaTurno * 70000)
       + (maxFolgasTurnoDia * 2600)

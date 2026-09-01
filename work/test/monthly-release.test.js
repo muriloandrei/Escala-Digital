@@ -181,6 +181,7 @@ test('monthly release does not add automatic rest to a week already filled by fi
 
   assert.equal(semanaInicial.filter((dia) => dia.programacao === 'F').length, 0);
   assert.equal(semanaInicial.filter((dia) => dia.programacao === 'FXF').length, 2);
+  assert.ok(rascunho.dias.filter((dia) => dia.data > '2026-09-06' && dia.programacao === 'F').length > 0);
 });
 
 test('monthly release applies vacations and absences as protected rest days', () => {
