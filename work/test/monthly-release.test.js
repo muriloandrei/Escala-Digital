@@ -501,6 +501,38 @@ test('monthly release does not repeat the same 14 day rest shape for every emplo
   assert.equal(todosRepetemMesmoCiclo, false);
 });
 
+test('monthly release avoids automatic consecutive worked Sundays', () => {
+  const funcionarios = Array.from({ length: 3 }, (_, index) => ({
+    ESCFUNC_ID: 900 + index,
+    CHAPA: `09090${index}`,
+    NOME: `Funcionario Domingo ${index + 1}`,
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }));
+  const turnos = [{
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01');
+  const errors = validateEscalaPayload({
+    lojaId: 10,
+    mesRef: '2026-09-01',
+    funcionarios: rascunhos
+  });
+
+  assert.equal(errors.some((error) => /domingos/i.test(error)), false);
+});
+
 test('section generation saves draft even when automatic validation returns critiques', async () => {
   const originals = {
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
@@ -626,7 +658,7 @@ test('section generation preserves previous days and only generates editable dat
   }
 });
 
-test('section generation reports daily coverage below seventy percent', async () => {
+test('section generation reports daily coverage below sixty percent', async () => {
   const originals = {
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
     listTurnosByLoja: catalogService.listTurnosByLoja,
@@ -666,7 +698,7 @@ test('section generation reports daily coverage below seventy percent', async ()
       hojeIso: '2026-09-01'
     });
 
-    assert.ok(result.criticas.some((critica) => critica.includes('Cobertura minima da secao abaixo de 70% em 2026-09-03')));
+    assert.ok(result.criticas.some((critica) => critica.includes('Cobertura minima da secao abaixo de 60% em 2026-09-03')));
   } finally {
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
     catalogService.listTurnosByLoja = originals.listTurnosByLoja;

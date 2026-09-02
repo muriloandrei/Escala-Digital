@@ -304,9 +304,9 @@ function isDomingoIso(dataIso) {
 }
 
 function calcularExcessoFolgasPorDia(counter, secaoSize = 1) {
-  const limiteFolgas70 = Math.max(1, Math.floor(Number(secaoSize || 1) * 0.3));
+  const limiteFolgas60 = Math.max(1, Math.floor(Number(secaoSize || 1) * 0.4));
   return [...counter.entries()].reduce((acc, [data, total]) => {
-    const limite = limiteFolgas70;
+    const limite = limiteFolgas60;
     const excesso = Math.max(0, Number(total || 0) - limite);
     return acc + (excesso * excesso);
   }, 0);
@@ -580,6 +580,7 @@ function escolherPadraoBalanceado({
       mesRef,
       funcionarios: [rascunho]
     });
+    if (errors.some((error) => /domingos/i.test(String(error || '')))) return;
 
     const projetadaSecao = new Map(contagemFolgasSecao);
     const projetadaTurno = new Map(contagemFolgasTurno);
@@ -774,7 +775,7 @@ function anexarDiasPassados(funcionariosPayload = [], diasAtuais = [], hojeIso =
   });
 }
 
-function getCriticasCoberturaMinima(funcionariosPayload = [], percentualMinimo = 70, hojeIso = formatDateValue(new Date())) {
+function getCriticasCoberturaMinima(funcionariosPayload = [], percentualMinimo = 60, hojeIso = formatDateValue(new Date())) {
   const dias = new Map();
   (funcionariosPayload || []).forEach((funcionario) => {
     (funcionario.dias || []).forEach((dia) => {
@@ -857,7 +858,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = formatDa
 
   const ruleErrors = [
     ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload }),
-    ...getCriticasCoberturaMinima(funcionariosPayload, 70, hojeIso)
+    ...getCriticasCoberturaMinima(funcionariosPayload, 60, hojeIso)
   ];
   const saved = await escalaService.saveEscalasBatch({
     lojaId,

@@ -3549,6 +3549,48 @@
             });
         };
 
+        const normalizarDataCriticaBanco = (valor = '') => {
+            const texto = String(valor || '');
+            const iso = texto.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+            if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+            const br = texto.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
+            if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+            return '';
+        };
+
+        const getCriticaCanonicalKeyBanco = (critica = '') => {
+            const original = String(critica || '').trim();
+            const texto = original.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+            const funcionario = texto.split(':')[0].trim();
+            const datas = [...original.matchAll(/\b(?:\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\b/g)]
+                .map((match) => normalizarDataCriticaBanco(match[0]))
+                .filter(Boolean)
+                .sort();
+            if (texto.includes('domingo') && datas.length >= 2) {
+                return `${funcionario}|DOMINGO_1X1|${datas.join('|')}`;
+            }
+            if (texto.includes('cobertura minima') && datas.length >= 1) {
+                return `COBERTURA_MINIMA|${datas[0]}`;
+            }
+            const dia = texto.match(/\bdia\s+(\d{1,2})\b/)?.[1] || '';
+            if (texto.includes('folgas na semana')) {
+                return `${funcionario}|MAX_2_FOLGAS_SEMANA|${dia}|${datas.join('|')}`;
+            }
+            if (texto.includes('jornada total') && datas.length >= 1) {
+                return `${funcionario}|JORNADA_TOTAL|${datas[0]}`;
+            }
+            return texto.replace(/\s+/g, ' ');
+        };
+
+        const deduplicarCriticasBanco = (criticas = []) => {
+            const map = new Map();
+            (criticas || []).filter(Boolean).forEach((critica) => {
+                const key = getCriticaCanonicalKeyBanco(critica);
+                if (!map.has(key)) map.set(key, critica);
+            });
+            return [...map.values()];
+        };
+
         const validarDiasEscalaFuncionario = (dias, nome) => {
             const errors = [];
             let ultimoTrabalho = null;
@@ -5476,7 +5518,7 @@
             (funcionarios || []).forEach((funcionario) => {
                 getCriticasFuncionarioBanco(funcionario).forEach((critica) => criticas.push(critica));
             });
-            return [...new Set(criticas.filter(Boolean))];
+            return deduplicarCriticasBanco(criticas);
         };
 
         const getCriticasSecaoBanco = (secaoKey) => {
@@ -5548,7 +5590,7 @@
             } catch (error) {
                 errors.push(error.details ? error.details.join(' ') : error.message);
             }
-            const uniqueErrors = [...new Set(errors.filter(Boolean))];
+            const uniqueErrors = deduplicarCriticasBanco(errors);
             agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).forEach((funcionario) => {
                 const criticasFuncionario = uniqueErrors.filter(error => String(error).startsWith(funcionario.nome + ':') || String(error).startsWith(funcionario.nome + ' no dia'));
                 if (criticasFuncionario.length) escalaDetalheAtual.criticasPorFuncionario.set(String(funcionario.escfuncId), criticasFuncionario);
@@ -6155,9 +6197,9 @@
                             else value = registro[field.key] || '--';
                         }
                         const domingo = new Date(ano, mes, numeroDia).getDay() === 0;
-                        const temCriticaFuncionario = criticas.length > 0;
-                        const cellClass = [folga ? (domingo ? 'day-off sunday' : 'day-off') : (domingo ? 'sunday' : ''), getWeekClass(numeroDia).trim(), temCriticaFuncionario ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
-                        const marker = temCriticaFuncionario && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Crítica validada">!</span>' : '';
+                        const temCriticaDia = criticasIncluemDia(criticas, registro, numeroDia);
+                        const cellClass = [folga ? (domingo ? 'day-off sunday' : 'day-off') : (domingo ? 'sunday' : ''), getWeekClass(numeroDia).trim(), temCriticaDia ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
+                        const marker = temCriticaDia && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Crítica validada">!</span>' : '';
                         table += '<td class="' + cellClass + '" data-schedule-tooltip="' + escapeHtml(getDiaTitle(registro, funcionario)) + '">' + marker + escapeHtml(value) + '</td>';
                     }
                     table += '</tr>';
