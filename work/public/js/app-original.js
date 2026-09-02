@@ -1087,7 +1087,7 @@
                     { label: 'Saida 1', type: 'time', id: ids.hrSai1, value: descansoAtual ? '' : getDiaValue('HR_SAI1'), dependsOn: ids.tipoDia, showWhen: 'TRABALHO', required: true, wrapperClass: 'employee-modal-span-2' },
                     { label: 'Entrada 2', type: 'time', id: ids.hrEnt2, value: descansoAtual ? '' : getDiaValue('HR_ENT2'), dependsOn: ids.tipoDia, showWhen: 'TRABALHO', required: true, wrapperClass: 'employee-modal-span-2' },
                     { label: 'Saida 2', type: 'time', id: ids.hrSai2, value: descansoAtual ? '' : getDiaValue('HR_SAI2'), dependsOn: ids.tipoDia, showWhen: 'TRABALHO', required: true, wrapperClass: 'employee-modal-span-2' },
-                    { label: 'Justificativa da mudanca', type: 'textarea', id: ids.justificativa, value: dia.JUSTIFICATIVA_ALTERACAO || '', required: true, rows: 3, placeholder: 'Descreva o motivo da alteracao deste dia.', wrapperClass: 'employee-modal-span-4' }
+                    { label: 'Justificativa da mudanca', type: 'textarea', id: ids.justificativa, value: '', required: true, rows: 3, placeholder: 'Descreva o motivo da alteracao deste dia.', wrapperClass: 'employee-modal-span-4' }
                 ],
                 confirmText: 'Salvar Dia',
                 secondaryActions: [{
@@ -1105,7 +1105,6 @@
                         body.querySelector('#' + ids.hrSai2).value = calculado.HR_SAI2;
                     };
                     ent1?.addEventListener('input', preencher);
-                    preencher();
                 }
             });
             if (!values) return null;
@@ -3524,7 +3523,7 @@
             const hoje = new Date();
             return hoje.getFullYear() + '-' + String(hoje.getMonth() + 1).padStart(2, '0') + '-' + String(hoje.getDate()).padStart(2, '0');
         };
-        const isDataBloqueadaParaEdicao = (dataIso) => String(dataIso || '').slice(0, 10) <= getHojeIsoApp();
+        const isDataBloqueadaParaEdicao = (dataIso) => String(dataIso || '').slice(0, 10) < getHojeIsoApp();
         const isDiaMesBloqueadoParaEdicao = (ano, mes, dia) => isDataBloqueadaParaEdicao(formatDateForDb(Number(ano), Number(mes), Number(dia)));
         const isFolgaSemanalApp = (dia) => ['F', 'FOLGA', 'FXF', 'FOLGA_FIXA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
         const isFolgaSemanalAutomaticaApp = (dia) => ['F', 'FOLGA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
@@ -5217,6 +5216,7 @@
         const getSubsetorDetalheKey = (dia) => String(dia.ESCFUNCAO_ID || dia.FUNCAO_DESCR || dia.FUNCAO || 'SEM_CARGO');
         const getSubsetorDetalheNome = (dia) => String(dia.FUNCAO_DESCR || dia.FUNCAO || (dia.ESCFUNCAO_ID ? 'Cargo ' + dia.ESCFUNCAO_ID : 'Sem cargo'));
         const isProgramacaoProtegidaBanco = (programacao) => ['FER', 'AFA', 'FXF', 'FIX'].includes(String(programacao || '').toUpperCase());
+        const isDiaFixoBanco = (dia) => Number(dia?.FIXO_ESCALA || 0) === 1;
         const isDiaProtegidoBanco = (dia) => isProgramacaoProtegidaBanco(dia?.PROGRAMACAO) || dia?.AUSENCIA_OBRIGATORIA || Number(dia?.FIXO_ESCALA || 0) === 1;
 
         const resetarEstadoEdicaoBanco = () => {
@@ -5335,11 +5335,58 @@
                     return key !== novoKey;
                 });
                 escalaDetalheAtual.fixos.push(fixoSalvo);
-                renderizarSecaoAtivaEscala();
+                if (options.renderizar !== false) renderizarSecaoAtivaEscala();
             } else {
                 await recarregarSecaoAtualEscalaBanco(lojaId, mesRef, secaoAtiva);
             }
             if (mensagemSucesso) showInfoModal(mensagemSucesso, 'success');
+        };
+
+        const removerFixoSecaoBanco = async (payload, mensagemSucesso = '', options = {}) => {
+            const lojaId = escalaDetalheAtual.lojaId;
+            const mesRef = escalaDetalheAtual.mesRef;
+            const secaoAtiva = escalaDetalheAtual.secaoAtiva;
+            await apiRequest('/api/escalas/fixos/remover', {
+                method: 'POST',
+                body: JSON.stringify({
+                    lojaId: Number(lojaId),
+                    mesRef,
+                    escsecaoId: Number(secaoAtiva),
+                    ...payload
+                })
+            });
+            if (options.recarregar === false) {
+                const removerKey = getFixoDiaKeyBanco(payload.escfuncId, payload.DT);
+                escalaDetalheAtual.fixos = (escalaDetalheAtual.fixos || []).filter((fixo) => {
+                    const key = getFixoDiaKeyBanco(fixo.ESCFUNC_ID || fixo.escfunc_id, fixo.DT || fixo.dt);
+                    return key !== removerKey;
+                });
+                if (options.renderizar !== false) renderizarSecaoAtivaEscala();
+            } else {
+                await recarregarSecaoAtualEscalaBanco(lojaId, mesRef, secaoAtiva);
+            }
+            if (mensagemSucesso) showInfoModal(mensagemSucesso, 'success');
+        };
+
+        const removerFixoDiaGeradoBanco = async (dia, { renderizar = true } = {}) => {
+            if (!dia || !isDiaFixoBanco(dia)) return false;
+            await removerFixoSecaoBanco({
+                escfuncId: Number(dia.ESCFUNC_ID),
+                DT: String(dia.DT || '').slice(0, 10)
+            }, '', { recarregar: false, renderizar: false });
+            dia.FIXO_ESCALA = 0;
+            dia.JUSTIFICATIVA_ALTERACAO = null;
+            if (String(dia.PROGRAMACAO || '').toUpperCase() === 'FXF') {
+                dia.PROGRAMACAO = 'F';
+                dia.HR_ENT1 = 'F';
+                dia.HR_SAI1 = 'F';
+                dia.HR_ENT2 = 'F';
+                dia.HR_SAI2 = 'F';
+            } else if (String(dia.PROGRAMACAO || '').toUpperCase() === 'FIX') {
+                dia.PROGRAMACAO = 'TRB';
+            }
+            if (renderizar) renderizarSecaoAtivaEscala();
+            return true;
         };
 
         const abrirModalFixoSecaoBanco = async (defaults = {}) => {
@@ -5629,6 +5676,9 @@
 
         let scheduleTooltipElement = null;
         let scheduleTooltipTarget = null;
+        let scheduleTooltipTimer = null;
+        let scheduleTooltipLastEvent = null;
+        let scheduleTooltipSuspended = false;
 
         const ensureScheduleTooltip = () => {
             if (scheduleTooltipElement) return scheduleTooltipElement;
@@ -5650,25 +5700,49 @@
             scheduleTooltipElement.style.top = Math.max(margin, top) + 'px';
         };
 
+        const esconderScheduleTooltip = () => {
+            clearTimeout(scheduleTooltipTimer);
+            ensureScheduleTooltip().classList.add('hidden');
+            scheduleTooltipTarget = null;
+            scheduleTooltipLastEvent = null;
+        };
+
         document.addEventListener('mouseover', (event) => {
+            if (scheduleTooltipSuspended) return;
             const target = event.target.closest('[data-schedule-tooltip]');
             if (!target) return;
             scheduleTooltipTarget = target;
-            const tooltip = ensureScheduleTooltip();
-            tooltip.innerHTML = target.dataset.scheduleTooltip || '';
-            tooltip.classList.remove('hidden');
-            positionScheduleTooltip(event);
+            scheduleTooltipLastEvent = event;
+            clearTimeout(scheduleTooltipTimer);
+            scheduleTooltipTimer = setTimeout(() => {
+                if (scheduleTooltipSuspended || scheduleTooltipTarget !== target) return;
+                const tooltip = ensureScheduleTooltip();
+                tooltip.innerHTML = target.dataset.scheduleTooltip || '';
+                tooltip.classList.remove('hidden');
+                positionScheduleTooltip(scheduleTooltipLastEvent || event);
+            }, 750);
         });
 
         document.addEventListener('mousemove', (event) => {
             if (!scheduleTooltipTarget) return;
+            scheduleTooltipLastEvent = event;
             positionScheduleTooltip(event);
         });
 
         document.addEventListener('mouseout', (event) => {
             if (!scheduleTooltipTarget || scheduleTooltipTarget.contains(event.relatedTarget)) return;
-            ensureScheduleTooltip().classList.add('hidden');
-            scheduleTooltipTarget = null;
+            esconderScheduleTooltip();
+        });
+
+        document.addEventListener('dragstart', (event) => {
+            if (!event.target.closest('[data-schedule-tooltip]')) return;
+            scheduleTooltipSuspended = true;
+            esconderScheduleTooltip();
+        });
+
+        document.addEventListener('dragend', () => {
+            esconderScheduleTooltip();
+            setTimeout(() => { scheduleTooltipSuspended = false; }, 250);
         });
 
         const aplicarVisaoEscalaBanco = () => {
@@ -5783,10 +5857,26 @@
             const mes = dataRef?.getMonth() || 0;
             const diasNoMes = new Date(ano, mes + 1, 0).getDate();
             const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-            const funcionarios = agruparDiasPorFuncionario(dias);
-            const criticasSecao = getCriticasFuncionariosBanco(funcionarios);
             const funcionariosPendentes = getFuncionariosSecaoAtualBanco();
+            const funcionarios = agruparDiasPorFuncionario(dias);
+            const funcionariosMap = new Set(funcionarios.map((funcionario) => String(funcionario.escfuncId || '')));
+            funcionariosPendentes.forEach((funcionario) => {
+                const escfuncId = String(funcionario.ESCFUNC_ID || '');
+                if (!escfuncId || funcionariosMap.has(escfuncId)) return;
+                funcionarios.push({
+                    key: escfuncId,
+                    nome: funcionario.NOME || funcionario.CHAPA || escfuncId,
+                    chapa: funcionario.CHAPA || '',
+                    funcao: funcionario.FUNCAO_DESCR || funcionario.FUNCAO || '',
+                    escfuncId,
+                    dias: new Map()
+                });
+                funcionariosMap.add(escfuncId);
+            });
+            funcionarios.sort((a, b) => String(a.nome).localeCompare(String(b.nome)) || String(a.chapa).localeCompare(String(b.chapa)));
+            const criticasSecao = getCriticasFuncionariosBanco(funcionarios);
             const fixosPendentes = getFixosSecaoAtualBanco();
+            const fixosMap = mapearFixosSecaoAtualBanco();
             const getWeekClass = (dia) => dia > 1 && new Date(ano, mes, dia).getDay() === 1 ? ' week-start' : '';
             const getDiaTitle = (registro) => registro ? montarTooltipHorarioEscala(registro) : '';
             const getFuncionarioTitle = (funcionario) => {
@@ -5805,7 +5895,6 @@
             if (!funcionarios.length) {
                 const secao = escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva));
                 const total = funcionariosPendentes.length || Number(secao?.funcionarios || 0);
-                const fixosMap = mapearFixosSecaoAtualBanco();
                 let html = '<div class="pending-section-scale pending-section-shell">' +
                     '<div class="pending-section-shell-header">' +
                     '<div><strong>Escala liberada para distribuição das Folgas Fixas e Horários Fixos.</strong><span>Folga Fixa: Clique nos dias para distribuir as Folgas Fixas.</span><span>Horário Fixo: Clique duas vezes para inserir um horário fixo.</span><span>' + escapeHtml(String(total)) + ' funcionário(s) nesta seção. ' + escapeHtml(String(fixosPendentes.length)) + ' fixo(s) cadastrado(s).</span></div>' +
@@ -5920,7 +6009,22 @@
                 for (let dia = 1; dia <= diasNoMes; dia += 1) {
                     const registro = funcionario.dias.get(dia);
                     if (!registro) {
-                        html += '<td class="empty' + getWeekClass(dia) + '">-</td>';
+                        const dataIso = formatDateForDb(ano, mes, dia);
+                        const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
+                        const fixo = fixosMap.get(getFixoDiaKeyBanco(funcionario.escfuncId, dataIso));
+                        const programacao = String(fixo?.PROGRAMACAO || fixo?.programacao || '').toUpperCase();
+                        const isHorarioFixo = programacao === 'TRB';
+                        const value = fixo ? (isHorarioFixo ? (getCampoFixoBanco(fixo, 'HR_ENT1') || 'Fixo') : getValorDescanso(fixo)) : '';
+                        const cellClass = [
+                            'pending-skeleton-cell',
+                            fixo ? (isHorarioFixo ? 'pending-fixed-work fixed-work-cell' : 'pending-fixed-rest rest-cell rest-cell-fixo') : 'pending-empty-cell',
+                            getWeekClass(dia).trim(),
+                            bloqueado ? 'locked-day' : ''
+                        ].filter(Boolean).join(' ');
+                        const attrs = !bloqueado
+                            ? ' role="button" tabindex="0" data-pending-fixed="1" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" data-data-iso="' + escapeHtml(dataIso) + '" data-has-fixo="' + (fixo ? '1' : '0') + '" data-programacao="' + escapeHtml(programacao || '') + '" data-hr-ent1="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_ENT1')) + '" data-hr-sai1="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_SAI1')) + '" data-hr-ent2="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_ENT2')) + '" data-hr-sai2="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_SAI2')) + '"'
+                            : '';
+                        html += '<td class="' + cellClass + '"' + attrs + '>' + escapeHtml(value) + '</td>';
                         continue;
                     }
                     const descanso = isProgramacaoDescanso(registro.PROGRAMACAO);
@@ -6070,7 +6174,7 @@
             renderizarTimelineDiariaBanco(dias);
             renderizarDetalhadaSecaoBanco(dias);
             aplicarVisaoEscalaBanco();
-            resetarEscalaSecaoBancoBtn?.classList.toggle('hidden', escalaDetalheAtual.status === 'FINALIZADA' || !escalaDetalheAtual.secaoAtiva);
+            resetarEscalaSecaoBancoBtn?.classList.toggle('hidden', escalaDetalheAtual.status === 'FINALIZADA' || escalaDetalheAtual.oficializada || !escalaDetalheAtual.secaoAtiva);
             atualizarAcoesValidacaoBanco();
         };
 
@@ -6143,6 +6247,7 @@
             escalaDetalheAtual.fixos = escala.fixos || [];
             escalaDetalheAtual.secoesLiberadas = escala.secoes || [];
             escalaDetalheAtual.status = escala.status || null;
+            escalaDetalheAtual.oficializada = Number(escala.oficializada || escala.OFICIALIZADA || 0) === 1;
             escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s), revisão ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
             prepararSecoesDetalheEscala();
             validarDetalheBancoSilencioso().then(() => renderizarSecaoAtivaEscala()).catch(() => atualizarAcoesValidacaoBanco());
@@ -6419,6 +6524,9 @@
             }
             const dia = (escalaDetalheAtual.dias || []).find(item => String(item.ESCPROGDIA_ID || '') === String(escprogdiaId));
             if (!escprogId || !escprogdiaId || !dia) return;
+            if (isDiaFixoBanco(dia)) {
+                await removerFixoDiaGeradoBanco(dia, { renderizar: false });
+            }
             if (isDiaProtegidoBanco(dia)) {
                 showInfoModal('Este dia possui férias, afastamento ou fixo cadastrado e não pode ser alterado.', 'info');
                 return;
@@ -6474,6 +6582,10 @@
                 clearTimeout(escalaBancoPendingClickTimer);
                 escalaBancoPendingClickTimer = setTimeout(() => {
                     if (pendingCell.dataset.hasFixo === '1') {
+                        removerFixoSecaoBanco({
+                            escfuncId: Number(pendingCell.dataset.escfuncId),
+                            DT: pendingCell.dataset.dataIso
+                        }, '', { recarregar: false }).catch(error => showInfoModal(error.message, 'error'));
                         return;
                     }
                     salvarFixoSecaoBanco({
@@ -6534,6 +6646,13 @@
                 return;
             }
             const dia = getDiaBancoPorId(cell.dataset.escprogdiaId);
+            if (isDiaFixoBanco(dia)) {
+                clearTimeout(escalaBancoSingleClickTimer);
+                escalaBancoSingleClickTimer = setTimeout(() => {
+                    removerFixoDiaGeradoBanco(dia).catch(error => showInfoModal(error.message, 'error'));
+                }, 220);
+                return;
+            }
             if (isDiaProtegidoBanco(dia)) {
                 showInfoModal('Este dia possui férias, afastamento ou folga fixa e não pode ser alterado automaticamente.', 'info');
                 return;
@@ -6574,7 +6693,7 @@
                 return;
             }
             const dia = getDiaBancoPorId(cell.dataset.escprogdiaId);
-            if (isDiaProtegidoBanco(dia)) {
+            if (!isDiaFixoBanco(dia) && isDiaProtegidoBanco(dia)) {
                 showInfoModal('Este dia possui férias, afastamento ou folga fixa e não pode ser alterado.', 'info');
                 return;
             }

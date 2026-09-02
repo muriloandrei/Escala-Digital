@@ -12,6 +12,13 @@ function formatDateValue(value) {
   return String(value || '').slice(0, 10);
 }
 
+function pick(row, ...keys) {
+  for (const key of keys) {
+    if (row?.[key] !== undefined) return row[key];
+  }
+  return undefined;
+}
+
 function getMonthStart(date = new Date()) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
@@ -41,9 +48,13 @@ function normalizarAusenciaSigla(motivo) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-  if (text.includes('ferias')) return 'FER';
-  if (text.includes('afast')) return 'AFA';
+  if (text === 'fer' || text.includes('ferias')) return 'FER';
+  if (text === 'afa' || text.includes('afast')) return 'AFA';
   return 'F';
+}
+
+function getAusenciaMotivo(ausencia = {}) {
+  return pick(ausencia, 'MOTIVO', 'motivo', 'SIGLA', 'sigla', 'TIPO', 'tipo', 'DESCR', 'descr', 'CLASSIFICACAO', 'classificacao') || '';
 }
 
 function ausenciaCobreDia(ausencia, dataIso) {
@@ -215,6 +226,20 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
     .filter((date) => formatDateValue(date) >= hojeIso)
     .map((date) => {
       const data = formatDateValue(date);
+      const ausencia = encontrarAusencia(indiceAusencias, funcionario, data);
+      if (ausencia) {
+        const motivo = getAusenciaMotivo(ausencia);
+        const sigla = normalizarAusenciaSigla(motivo);
+        return {
+          data,
+          hrEnt1: sigla,
+          hrSai1: sigla,
+          hrEnt2: sigla,
+          hrSai2: sigla,
+          programacao: sigla,
+          justificativa: motivo || 'Ausencia'
+        };
+      }
       const fixo = diasFixos.get(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`);
       if (fixo) {
         const programacaoFixa = String(fixo.programacao || fixo.PROGRAMACAO || 'TRB').toUpperCase();
@@ -227,19 +252,6 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
           hrSai2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2),
           programacao: programacaoFixa,
           justificativa: fixo.justificativa || fixo.JUSTIFICATIVA || 'Horario/folga fixa'
-        };
-      }
-      const ausencia = encontrarAusencia(indiceAusencias, funcionario, data);
-      if (ausencia) {
-        const sigla = normalizarAusenciaSigla(ausencia.MOTIVO || ausencia.motivo);
-        return {
-          data,
-          hrEnt1: sigla,
-          hrSai1: sigla,
-          hrEnt2: sigla,
-          hrSai2: sigla,
-          programacao: sigla,
-          justificativa: ausencia.MOTIVO || ausencia.motivo || 'Ausencia'
         };
       }
       const folga = folgas.has(data);
@@ -292,10 +304,9 @@ function isDomingoIso(dataIso) {
 }
 
 function calcularExcessoFolgasPorDia(counter, secaoSize = 1) {
-  const limiteDiaComum = Math.max(1, Math.ceil(Number(secaoSize || 1) * 2 / 7));
-  const limiteDomingo = Math.max(limiteDiaComum, Math.ceil(Number(secaoSize || 1) / 2));
+  const limiteFolgas70 = Math.max(1, Math.floor(Number(secaoSize || 1) * 0.3));
   return [...counter.entries()].reduce((acc, [data, total]) => {
-    const limite = isDomingoIso(data) ? limiteDomingo : limiteDiaComum;
+    const limite = limiteFolgas70;
     const excesso = Math.max(0, Number(total || 0) - limite);
     return acc + (excesso * excesso);
   }, 0);
@@ -722,6 +733,66 @@ function buildFuncionariosLiberacao(funcionarios, turnos) {
   });
 }
 
+function normalizarDiaAtualParaPayload(row = {}) {
+  const programacao = String(pick(row, 'PROGRAMACAO', 'programacao') || 'TRB').trim().toUpperCase() || 'TRB';
+  const descanso = programacao !== 'TRB';
+  return {
+    data: formatDateValue(pick(row, 'DT', 'dt') || row.data),
+    hrEnt1: descanso ? null : pick(row, 'HR_ENT1', 'hr_ent1', 'hrEnt1'),
+    hrSai1: descanso ? null : pick(row, 'HR_SAI1', 'hr_sai1', 'hrSai1'),
+    hrEnt2: descanso ? null : pick(row, 'HR_ENT2', 'hr_ent2', 'hrEnt2'),
+    hrSai2: descanso ? null : pick(row, 'HR_SAI2', 'hr_sai2', 'hrSai2'),
+    programacao,
+    justificativa: null
+  };
+}
+
+function agruparDiasPassadosPorFuncionario(diasAtuais = [], hojeIso = formatDateValue(new Date())) {
+  const grupos = new Map();
+  (diasAtuais || []).forEach((dia) => {
+    const data = formatDateValue(pick(dia, 'DT', 'dt') || dia.data);
+    if (!data || data >= hojeIso) return;
+    const escfuncId = pick(dia, 'ESCFUNC_ID', 'escfunc_id', 'escfuncId');
+    if (!escfuncId) return;
+    if (!grupos.has(String(escfuncId))) grupos.set(String(escfuncId), []);
+    grupos.get(String(escfuncId)).push(normalizarDiaAtualParaPayload(dia));
+  });
+  grupos.forEach((dias) => dias.sort((left, right) => left.data.localeCompare(right.data)));
+  return grupos;
+}
+
+function anexarDiasPassados(funcionariosPayload = [], diasAtuais = [], hojeIso = formatDateValue(new Date())) {
+  const passadosPorFuncionario = agruparDiasPassadosPorFuncionario(diasAtuais, hojeIso);
+  return (funcionariosPayload || []).map((funcionario) => {
+    const passados = passadosPorFuncionario.get(String(funcionario.escfuncId || funcionario.ESCFUNC_ID)) || [];
+    const datasPassadas = new Set(passados.map((dia) => dia.data));
+    const diasFuturos = (funcionario.dias || []).filter((dia) => !datasPassadas.has(formatDateValue(dia.data || dia.DT)));
+    return {
+      ...funcionario,
+      dias: [...passados, ...diasFuturos].sort((left, right) => left.data.localeCompare(right.data))
+    };
+  });
+}
+
+function getCriticasCoberturaMinima(funcionariosPayload = [], percentualMinimo = 70, hojeIso = formatDateValue(new Date())) {
+  const dias = new Map();
+  (funcionariosPayload || []).forEach((funcionario) => {
+    (funcionario.dias || []).forEach((dia) => {
+      const data = formatDateValue(dia.data || dia.DT);
+      if (!data || data < hojeIso) return;
+      if (!dias.has(data)) dias.set(data, { total: 0, trabalhando: 0 });
+      const item = dias.get(data);
+      item.total += 1;
+      if (String(dia.programacao || dia.PROGRAMACAO || 'TRB').toUpperCase() === 'TRB') item.trabalhando += 1;
+    });
+  });
+
+  return [...dias.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .filter(([, item]) => item.total > 0 && (item.trabalhando / item.total) * 100 < percentualMinimo)
+    .map(([data, item]) => `Cobertura minima da secao abaixo de ${percentualMinimo}% em ${data}. Trabalhando: ${item.trabalhando}/${item.total}.`);
+}
+
 async function escalaMensalJaExiste(lojaId, mesRef) {
   const existentes = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas: [lojaId] });
   return existentes.length > 0;
@@ -770,16 +841,24 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = formatDa
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId })
   ]);
+  const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
   const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
-  const funcionariosPayload = buildFuncionariosRascunhoBalanceado(funcionariosSecao, turnosSecao, mesRef, hojeIso, { ausencias, fixos })
+  const funcionariosPayload = anexarDiasPassados(
+    buildFuncionariosRascunhoBalanceado(funcionariosSecao, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
+    diasAtuaisSecao,
+    hojeIso
+  )
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa && funcionario.dias.length > 0);
 
   if (!funcionariosPayload.length) {
     return { lojaId, mesRef, escsecaoId, criada: false, motivo: 'Nenhum funcionario apto para geracao da secao.' };
   }
 
-  const ruleErrors = validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload });
+  const ruleErrors = [
+    ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload }),
+    ...getCriticasCoberturaMinima(funcionariosPayload, 70, hojeIso)
+  ];
   const saved = await escalaService.saveEscalasBatch({
     lojaId,
     mesRef,
@@ -797,14 +876,20 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = formatDa
   };
 }
 
-async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId }) {
+async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = formatDateValue(new Date()) }) {
+  if (await escalaService.isEscalaSecaoOficializada({ lojaId, mesRef, escsecaoId })) {
+    const error = new Error('Escala oficializada nao pode ser resetada.');
+    error.statusCode = 422;
+    throw error;
+  }
   const [funcionarios, turnos] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
     catalogService.listTurnosByLoja(lojaId)
   ]);
+  const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
   const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
-  const funcionariosPayload = buildFuncionariosLiberacao(funcionariosSecao, turnosSecao)
+  const funcionariosPayload = anexarDiasPassados(buildFuncionariosLiberacao(funcionariosSecao, turnosSecao), diasAtuaisSecao, hojeIso)
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa);
 
   if (!funcionariosPayload.length) {

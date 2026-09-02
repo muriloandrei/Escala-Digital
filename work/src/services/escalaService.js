@@ -582,6 +582,111 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data }) {
   });
 }
 
+async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt }) {
+  return withConnection(async (connection) => {
+    try {
+      if (isDiaBloqueadoParaEdicao(dt)) {
+        const error = new Error('Dias ja passados nao podem ter fixos de escala removidos.');
+        error.statusCode = 422;
+        throw error;
+      }
+      const funcionarioDb = await getFuncionarioEscala(connection, escfuncId);
+      if (!funcionarioDb || Number(funcionarioDb.LOJA) !== Number(lojaId) || Number(funcionarioDb.ESCSECAO_ID) !== Number(escsecaoId)) {
+        const error = new Error('Funcionario nao encontrado na loja/secao informada.');
+        error.statusCode = 404;
+        throw error;
+      }
+      const result = await connection.execute(
+        `update sgn_esc_fixo_escala
+            set status = 'I',
+                dt_hr_incl = sysdate
+          where loja = :lojaId
+            and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and escfunc_id = :escfuncId
+            and escsecao_id = :escsecaoId
+            and dt = to_date(:dt, 'YYYY-MM-DD')
+            and nvl(status, 'A') = 'A'`,
+        { lojaId: Number(lojaId), mesRef, escfuncId: Number(escfuncId), escsecaoId: Number(escsecaoId), dt },
+        { autoCommit: true }
+      );
+      return { removed: (result.rowsAffected || 0) > 0, rowsAffected: result.rowsAffected || 0 };
+    } catch (error) {
+      throw normalizeOracleSaveError(error);
+    }
+  });
+}
+
+async function isEscalaSecaoOficializada({ lojaId, mesRef, escsecaoId }) {
+  return withConnection(async (connection) => {
+    const ativaSql = await getAtivaSql(connection, 'p');
+    const ativaSubSql = await getAtivaSql(connection, 'px');
+    const result = await connection.execute(
+      `select count(*) as total
+         from sgn_esc_prog p
+        where p.loja = :lojaId
+          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          and p.escsecao_id = :escsecaoId
+          and nvl(p.oficializada, 0) = 1
+          and p.revisao = (
+            select max(px.revisao)
+              from sgn_esc_prog px
+             where px.loja = p.loja
+               and px.mes_ref = p.mes_ref
+               and px.escfunc_id = p.escfunc_id
+               and ${ativaSubSql}
+          )
+          and ${ativaSql}`,
+      { lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId) },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return Number(pick(result.rows[0], 'TOTAL', 'total') || 0) > 0;
+  });
+}
+
+async function listDiasSecaoAtual({ lojaId, mesRef, escsecaoId }) {
+  return withConnection(async (connection) => {
+    const ativaSql = await getAtivaSql(connection, 'p');
+    const ativaSubSql = await getAtivaSql(connection, 'px');
+    const result = await connection.execute(
+      `select
+          p.escprog_id,
+          p.mes_ref,
+          p.revisao,
+          p.oficializada,
+          p.loja,
+          p.chapa,
+          p.escfunc_id,
+          p.escsecao_id,
+          p.escfuncao_id,
+          d.escprogdia_id,
+          d.dt,
+          d.hr_ent1,
+          d.hr_sai1,
+          d.hr_ent2,
+          d.hr_sai2,
+          d.programacao
+       from sgn_esc_prog p
+       join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
+       where p.loja = :lojaId
+         and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+         and p.escsecao_id = :escsecaoId
+         and p.revisao = (
+           select max(px.revisao)
+             from sgn_esc_prog px
+            where px.loja = p.loja
+              and px.mes_ref = p.mes_ref
+              and px.escfunc_id = p.escfunc_id
+              and ${ativaSubSql}
+         )
+         and ${ativaSql}
+       order by p.escfunc_id, d.dt`,
+      { lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId) },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows || [];
+  });
+}
+
 async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
@@ -698,6 +803,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     return {
       revisao: latestRevision,
       status: getMesStatus(mesRef, latestRevision),
+      oficializada: rows.some((row) => Number(pick(row, 'OFICIALIZADA', 'oficializada') || 0) === 1) ? 1 : 0,
       dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')),
       funcionarios: [...funcionariosMap.values()],
       fixos,
@@ -1451,6 +1557,9 @@ module.exports = {
   listHistoricoEscala,
   listFixosEscala,
   saveFixoEscala,
+  deleteFixoEscala,
+  isEscalaSecaoOficializada,
+  listDiasSecaoAtual,
   getEscalaMensal,
   getEscalaHeader,
   getEscalaDias,

@@ -208,9 +208,10 @@ test('monthly release applies vacations and absences as protected rest days', ()
 
   const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01', {
     ausencias: [
-      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-02', DT_FIM: '2026-09-03', MOTIVO: 'Ferias' },
-      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-08', DT_FIM: '2026-09-08', MOTIVO: 'Afastamento medico' }
-    ]
+      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-02', DT_FIM: '2026-09-03', MOTIVO: 'FER' },
+      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-08', DT_FIM: '2026-09-08', MOTIVO: 'AFA' }
+    ],
+    fixos: [{ ESCFUNC_ID: 800, DT: '2026-09-02', PROGRAMACAO: 'TRB', HR_ENT1: '07:00', HR_SAI1: '11:00', HR_ENT2: '12:10', HR_SAI2: '15:58' }]
   });
   const dias = new Map(rascunhos[0].dias.map((dia) => [dia.data, dia]));
 
@@ -506,6 +507,7 @@ test('section generation saves draft even when automatic validation returns crit
     listTurnosByLoja: catalogService.listTurnosByLoja,
     listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
     listFixosEscala: escalaService.listFixosEscala,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
     saveEscalasBatch: escalaService.saveEscalasBatch
   };
   let savedPayload = null;
@@ -525,6 +527,7 @@ test('section generation saves draft even when automatic validation returns crit
   catalogService.listTurnosByLoja = async () => [];
   catalogService.listAusenciasByLojaMes = async () => [];
   escalaService.listFixosEscala = async () => [];
+  escalaService.listDiasSecaoAtual = async () => [];
   escalaService.saveEscalasBatch = async (payload) => {
     savedPayload = payload;
     return payload.funcionarios;
@@ -548,6 +551,224 @@ test('section generation saves draft even when automatic validation returns crit
     catalogService.listTurnosByLoja = originals.listTurnosByLoja;
     catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
     escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
+    escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+  }
+});
+
+test('section generation preserves previous days and only generates editable dates', async () => {
+  const originals = {
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listFixosEscala: escalaService.listFixosEscala,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  let savedPayload = null;
+
+  catalogService.listFuncionariosByLoja = async () => [{
+    ESCFUNC_ID: 301,
+    CHAPA: '030031',
+    NOME: 'Funcionario Com Passado',
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.listDiasSecaoAtual = async () => [{
+    ESCFUNC_ID: 301,
+    DT: '2026-09-01',
+    HR_ENT1: '07:30',
+    HR_SAI1: '11:30',
+    HR_ENT2: '12:40',
+    HR_SAI2: '16:28',
+    PROGRAMACAO: 'TRB'
+  }];
+  escalaService.saveEscalasBatch = async (payload) => {
+    savedPayload = payload;
+    return payload.funcionarios;
+  };
+
+  try {
+    await monthlyReleaseService.gerarEscalaSecao({
+      lojaId: 10,
+      mesRef: '2026-09-01',
+      escsecaoId: 20,
+      hojeIso: '2026-09-02'
+    });
+
+    const dias = savedPayload.funcionarios[0].dias;
+    assert.deepEqual(dias[0], {
+      data: '2026-09-01',
+      hrEnt1: '07:30',
+      hrSai1: '11:30',
+      hrEnt2: '12:40',
+      hrSai2: '16:28',
+      programacao: 'TRB',
+      justificativa: null
+    });
+    assert.equal(dias.some((dia) => dia.data < '2026-09-01'), false);
+    assert.equal(dias.some((dia) => dia.data === '2026-09-02'), true);
+  } finally {
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
+    escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
+    escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+  }
+});
+
+test('section generation reports daily coverage below seventy percent', async () => {
+  const originals = {
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listFixosEscala: escalaService.listFixosEscala,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  const funcionarios = Array.from({ length: 4 }, (_, index) => ({
+    ESCFUNC_ID: 400 + index,
+    CHAPA: `04040${index}`,
+    NOME: `Funcionario Cobertura ${index + 1}`,
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }));
+
+  catalogService.listFuncionariosByLoja = async () => funcionarios;
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listFixosEscala = async () => [
+    { ESCFUNC_ID: 400, DT: '2026-09-03', PROGRAMACAO: 'FXF' },
+    { ESCFUNC_ID: 401, DT: '2026-09-03', PROGRAMACAO: 'FXF' }
+  ];
+  escalaService.listDiasSecaoAtual = async () => [];
+  escalaService.saveEscalasBatch = async (payload) => payload.funcionarios;
+
+  try {
+    const result = await monthlyReleaseService.gerarEscalaSecao({
+      lojaId: 10,
+      mesRef: '2026-09-01',
+      escsecaoId: 20,
+      hojeIso: '2026-09-01'
+    });
+
+    assert.ok(result.criticas.some((critica) => critica.includes('Cobertura minima da secao abaixo de 70% em 2026-09-03')));
+  } finally {
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
+    escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
+    escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+  }
+});
+
+test('section reset blocks officialized schedule', async () => {
+  const original = escalaService.isEscalaSecaoOficializada;
+  escalaService.isEscalaSecaoOficializada = async () => true;
+
+  try {
+    await assert.rejects(
+      () => monthlyReleaseService.resetarEscalaSecao({
+        lojaId: 10,
+        mesRef: '2026-09-01',
+        escsecaoId: 20,
+        hojeIso: '2026-09-02'
+      }),
+      (error) => error.statusCode === 422 && /oficializada/i.test(error.message)
+    );
+  } finally {
+    escalaService.isEscalaSecaoOficializada = original;
+  }
+});
+
+test('section reset preserves previous days and clears only editable dates', async () => {
+  const originals = {
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    isEscalaSecaoOficializada: escalaService.isEscalaSecaoOficializada,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  let savedPayload = null;
+
+  catalogService.listFuncionariosByLoja = async () => [{
+    ESCFUNC_ID: 501,
+    CHAPA: '050001',
+    NOME: 'Funcionario Reset',
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+  catalogService.listTurnosByLoja = async () => [];
+  escalaService.isEscalaSecaoOficializada = async () => false;
+  escalaService.listDiasSecaoAtual = async () => [
+    {
+      ESCFUNC_ID: 501,
+      DT: '2026-09-01',
+      HR_ENT1: '07:30',
+      HR_SAI1: '11:30',
+      HR_ENT2: '12:40',
+      HR_SAI2: '16:28',
+      PROGRAMACAO: 'TRB'
+    },
+    {
+      ESCFUNC_ID: 501,
+      DT: '2026-09-02',
+      HR_ENT1: '08:00',
+      HR_SAI1: '12:00',
+      HR_ENT2: '13:10',
+      HR_SAI2: '17:58',
+      PROGRAMACAO: 'TRB'
+    }
+  ];
+  escalaService.saveEscalasBatch = async (payload) => {
+    savedPayload = payload;
+    return payload.funcionarios;
+  };
+
+  try {
+    const result = await monthlyReleaseService.resetarEscalaSecao({
+      lojaId: 10,
+      mesRef: '2026-09-01',
+      escsecaoId: 20,
+      hojeIso: '2026-09-02'
+    });
+
+    assert.equal(result.resetada, true);
+    assert.equal(savedPayload.funcionarios.length, 1);
+    assert.deepEqual(savedPayload.funcionarios[0].dias, [{
+      data: '2026-09-01',
+      hrEnt1: '07:30',
+      hrSai1: '11:30',
+      hrEnt2: '12:40',
+      hrSai2: '16:28',
+      programacao: 'TRB',
+      justificativa: null
+    }]);
+  } finally {
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    escalaService.isEscalaSecaoOficializada = originals.isEscalaSecaoOficializada;
+    escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
     escalaService.saveEscalasBatch = originals.saveEscalasBatch;
   }
 });

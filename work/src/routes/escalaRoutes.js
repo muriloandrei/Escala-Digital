@@ -177,6 +177,37 @@ router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest
   }
 });
 
+router.post('/fixos/remover', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({
+      lojaId: z.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      escfuncId: z.number().int().positive(),
+      escsecaoId: z.number().int().positive(),
+      DT: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+    }).parse(req.body);
+    await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+    const result = await escalaService.deleteFixoEscala({
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      escfuncId: payload.escfuncId,
+      escsecaoId: payload.escsecaoId,
+      dt: payload.DT
+    });
+    await auditService.registerAudit({
+      action: 'REMOVER_FIXO_ESCALA',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      details: payload
+    });
+    return res.json({ result });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados da remocao do fixo invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
 async function resolveLojaRequest(req, res, next) {
   try {
     const rawLojaId = Number(req.params.lojaId || req.query.lojaId || req.body.lojaId);
