@@ -160,8 +160,12 @@ Antes de subir a versao Linux em um banco ja existente, execute as migrations em
 20260807_rm_rules_horarios.sql
 20260810_add_funcionario_cpf.sql
 20260810_add_permissoes_granulares.sql
+20260826_usuario_loja_principal.sql
+20260831_fixos_pre_geracao.sql
 ```
 
 A migration `20260807_rm_rules_horarios.sql` adiciona horarios padrao, log de integracao RM e campos opcionais de turno oficial na escala mensal.
 A migration `20260810_add_funcionario_cpf.sql` adiciona `SGN_ESC_FUNCIONARIO.CPF`, necessario para buscar o funcionario no RM durante a oficializacao.
 A migration `20260810_add_permissoes_granulares.sql` adiciona permissoes opcionais para criar, oficializar, reprocessar RM e administrar perfis sem quebrar ambientes que ainda usam apenas visualizar/editar/inativar.
+A migration `20260826_usuario_loja_principal.sql` adiciona a loja principal do usuario.
+A migration `20260831_fixos_pre_geracao.sql` adiciona `SGN_ESC_FIXO_ESCALA` e `SGN_ESC_FIXO_ESCALA_SEQ`, necessarios para folgas e horarios fixos antes da geracao da escala por secao.

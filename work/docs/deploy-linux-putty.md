@@ -167,6 +167,8 @@ sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260701_
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260807_rm_rules_horarios.sql
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260810_add_funcionario_cpf.sql
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260810_add_permissoes_granulares.sql
+sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260826_usuario_loja_principal.sql
+sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260831_fixos_pre_geracao.sql
 ```
 
 A migration `20260807_rm_rules_horarios.sql` cria:
@@ -179,6 +181,10 @@ A migration `20260807_rm_rules_horarios.sql` cria:
 A migration `20260810_add_funcionario_cpf.sql` adiciona `SGN_ESC_FUNCIONARIO.CPF`. Preencha esse campo antes de habilitar a integracao RM, pois a oficializacao consulta o funcionario no RM pelo CPF para obter `CODCOLIGADA` e `CODTABFOLGA`.
 
 A migration `20260810_add_permissoes_granulares.sql` adiciona os campos `PODE_CRIAR`, `PODE_OFICIALIZAR`, `PODE_REPROCESSAR` e `PODE_ADMINISTRAR` na tabela de permissao. O codigo continua compativel com bancos ainda nao migrados, mas a tela de Perfil de Acesso so persistira essas permissoes novas apos a migration.
+
+A migration `20260826_usuario_loja_principal.sql` adiciona o campo de loja principal do usuario.
+
+A migration `20260831_fixos_pre_geracao.sql` cria `SGN_ESC_FIXO_ESCALA` e `SGN_ESC_FIXO_ESCALA_SEQ`, usados para distribuir/remover folgas fixas e horarios fixos antes da geracao da escala por secao.
 
 ## 8. Teste manual antes do servico
 
