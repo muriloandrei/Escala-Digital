@@ -5302,6 +5302,7 @@
             await carregarDetalheEscalaMensal(lojaId, mesRef);
             escalaDetalheAtual.secaoAtiva = secaoAtiva;
             prepararSecoesDetalheEscala();
+            renderizarSecaoAtivaEscala();
         };
 
         const salvarFixoSecaoBanco = async (payload, mensagemSucesso = 'Fixo cadastrado para a geração da seção.', options = {}) => {
@@ -5891,6 +5892,17 @@
                     'Horário: ' + horario
                 ].join('\n');
             };
+            const diasEditaveis = Array.from({ length: diasNoMes }, (_, index) => index + 1)
+                .filter((dia) => !isDiaMesBloqueadoParaEdicao(ano, mes, dia));
+            const temDiasPendentesGeracao = funcionariosPendentes.length > 0
+                && escalaDetalheAtual.status !== 'FINALIZADA'
+                && !escalaDetalheAtual.oficializada
+                && diasEditaveis.some((dia) => funcionarios.some((funcionario) => !funcionario.dias.has(dia)));
+            const renderizarBannerGeracaoSecao = (totalFuncionarios) => '<div class="pending-section-scale pending-section-shell section-generation-banner">' +
+                '<div class="pending-section-shell-header">' +
+                '<div><strong>Escala liberada para distribuição das Folgas Fixas e Horários Fixos.</strong><span>Folga Fixa: Clique nos dias para distribuir as Folgas Fixas.</span><span>Horário Fixo: Clique duas vezes para inserir um horário fixo.</span><span>' + escapeHtml(String(totalFuncionarios)) + ' funcionário(s) nesta seção. ' + escapeHtml(String(fixosPendentes.length)) + ' fixo(s) cadastrado(s).</span></div>' +
+                '<div class="pending-section-actions"><button type="button" class="action-button gerar-escala-secao-banco" data-secao-key="' + escapeHtml(escalaDetalheAtual.secaoAtiva || '') + '"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção</button></div>' +
+                '</div></div>';
 
             if (!funcionarios.length) {
                 const secao = escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva));
@@ -5975,7 +5987,8 @@
                 return;
             }
 
-            let html = '<div class="monthly-scale-scroll"><table class="monthly-scale-table"><thead>';
+            let html = (temDiasPendentesGeracao ? renderizarBannerGeracaoSecao(funcionariosPendentes.length || funcionarios.length) : '') +
+                '<div class="monthly-scale-scroll"><table class="monthly-scale-table"><thead>';
             html += '<tr class="monthly-totals-row"><th class="employee-col monthly-summary-label' + (criticasSecao.length ? ' has-critical' : '') + '">' +
                 '<span>' + funcionarios.length + ' funcionário(s)</span>' +
                 '</th>';
