@@ -466,6 +466,37 @@ test('monthly release smooths the first generated day and common days', () => {
   assert.ok(maxFolgasDiaComum <= limiteDiaComum);
 });
 
+test('monthly release first day smoothing keeps minimum rest distribution', () => {
+  const funcionarios = Array.from({ length: 12 }, (_, index) => ({
+    ESCFUNC_ID: 550 + index,
+    CHAPA: `05550${index}`,
+    NOME: `Funcionario Minimo ${index + 1}`,
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }));
+  const turnos = [{
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01');
+  const folgasEsperadas = Math.max(1, Math.round(rascunhos[0].dias.length * 2 / 7));
+
+  rascunhos.forEach((funcionario) => {
+    const folgasFuncionario = funcionario.dias.filter((dia) => dia.programacao === 'F').length;
+    assert.ok(folgasFuncionario >= folgasEsperadas, `${funcionario.nome} ficou com ${folgasFuncionario}/${folgasEsperadas} folgas`);
+  });
+});
+
 test('monthly release does not repeat the same 14 day rest shape for every employee', () => {
   const funcionarios = Array.from({ length: 8 }, (_, index) => ({
     ESCFUNC_ID: 600 + index,
