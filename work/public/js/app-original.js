@@ -5,6 +5,7 @@
         const escalaCriacaoPage = document.getElementById('escala-criacao-page');
         const secoesPage = document.getElementById('secoes-page');
         const secaoFormPage = document.getElementById('secao-form-page');
+        const subsecoesPage = document.getElementById('subsecoes-page');
         const turnosSecaoPage = document.getElementById('turnos-secao-page');
         const escalaDetalhePage = document.getElementById('escala-detalhe-page');
         const escalasFuncionariosPage = document.getElementById('escalas-funcionarios-page');
@@ -83,6 +84,23 @@
         const secaoFormLoja = document.getElementById('secaoFormLoja');
         const secaoFormCodigo = document.getElementById('secaoFormCodigo');
         const secaoFormDescr = document.getElementById('secaoFormDescr');
+        const subsecoesTitulo = document.getElementById('subsecoesTitulo');
+        const subsecoesResumo = document.getElementById('subsecoesResumo');
+        const subsecoesListaResumo = document.getElementById('subsecoesListaResumo');
+        const voltarSubsecoesBtn = document.getElementById('voltarSubsecoesBtn');
+        const subsecoesLista = document.getElementById('subsecoesLista');
+        const subsecoesBuscaInput = document.getElementById('subsecoesBuscaInput');
+        const novaSubsecaoInlineBtn = document.getElementById('novaSubsecaoInlineBtn');
+        const subsecoesDetalheTitulo = document.getElementById('subsecoesDetalheTitulo');
+        const subsecoesDetalheResumo = document.getElementById('subsecoesDetalheResumo');
+        const subsecoesVincularFuncionarioBtn = document.getElementById('subsecoesVincularFuncionarioBtn');
+        const subsecoesVincularPanel = document.getElementById('subsecoesVincularPanel');
+        const subsecoesFuncionarioBusca = document.getElementById('subsecoesFuncionarioBusca');
+        const subsecoesFuncionariosSugestoes = document.getElementById('subsecoesFuncionariosSugestoes');
+        const subsecoesTransferirSelect = document.getElementById('subsecoesTransferirSelect');
+        const subsecoesTransferirSelecionadosBtn = document.getElementById('subsecoesTransferirSelecionadosBtn');
+        const subsecoesSelecionarTodos = document.getElementById('subsecoesSelecionarTodos');
+        const subsecoesFuncionariosBody = document.getElementById('subsecoesFuncionariosBody');
         const turnosSecaoLojaSelect = document.getElementById('turnosSecaoLojaSelect');
         const novoTurnoSecaoBtn = document.getElementById('novoTurnoSecaoBtn');
         const gerarEscalaTurnosBtn = document.getElementById('gerarEscalaTurnosBtn');
@@ -242,6 +260,7 @@
             escalaCriacaoPage?.classList.add('hidden');
             secoesPage.classList.add('hidden');
             secaoFormPage.classList.add('hidden');
+            subsecoesPage?.classList.add('hidden');
             turnosSecaoPage.classList.add('hidden');
             turnoSecaoFormPage.classList.add('hidden');
             escalaDetalhePage.classList.add('hidden');
@@ -387,6 +406,15 @@
             expandActiveNavGroup(navSecoes);
             setCurrentPageTitle('secaoForm');
             catalogosPageController?.prepararFormularioSecao?.(escsecaoId);
+        }
+
+        function showSubsecoesSecaoPage(escsecaoId = '') {
+            hideAllPages();
+            subsecoesPage?.classList.remove('hidden');
+            navSecoes.classList.add('active');
+            expandActiveNavGroup(navSecoes);
+            setCurrentPageTitle('subsecoes');
+            carregarSubsecoesSecaoPage(escsecaoId).catch(error => showInfoModal(error.message, 'error'));
         }
 
         function showTurnosSecaoPage() {
@@ -581,6 +609,10 @@
             }
             if (pageKey.startsWith('escala-banco/')) {
                 showEscalaDetalhePage(pageKey.split('/')[1]);
+                return;
+            }
+            if (pageKey.startsWith('secoes/') && pageKey.endsWith('/subsecoes')) {
+                showSubsecoesSecaoPage(pageKey.split('/')[1]);
                 return;
             }
             if (pageKey.startsWith('secoes/')) {
@@ -814,6 +846,8 @@
         let acessosPesquisaTimeout = null;
         let liberacaoSecoesCache = { usuarios: [], secoes: [], liberadas: new Set(), selecionadasDisponiveis: new Set(), selecionadasLiberadas: new Set(), tableReady: false };
         let secoesTelaCache = [];
+        const SUBSECAO_SEM_VINCULO_KEY = 'SEM_SUBSECAO';
+        let subsecoesPageState = { loja: '', secao: null, subsecoes: [], funcionarios: [], selecionadaId: null, criando: false, editandoId: null, selecionados: new Set(), painelVinculoAberto: false, menuAberto: null };
         let turnosTelaCache = [];
         let turnosFuncionariosTelaCache = [];
         let funcionariosTelaCache = [];
@@ -2707,6 +2741,357 @@
             await carregarSecoesTela(false);
         };
 
+        const getSubsecoesPageBaseUrl = () => '/api/catalog/lojas/' + encodeURIComponent(subsecoesPageState.loja) + '/secoes/' + encodeURIComponent(subsecoesPageState.secao?.ESCSECAO_ID || '') + '/subsecoes';
+        const canManageSubsecoesPage = () => hasPermission('secoes', 'editar') || hasPermission('escalas', 'editar');
+        const getFuncionarioSubsecaoExplicitamente = (funcionario) => Number(funcionario?.ESCSUBSECAO_ID || 0);
+        const hasSubsecaoExplicitaNaSecao = () => subsecoesPageState.funcionarios.some(funcionario => getFuncionarioSubsecaoExplicitamente(funcionario) > 0);
+        const getSubsecaoSelecionadaPage = () => String(subsecoesPageState.selecionadaId) === SUBSECAO_SEM_VINCULO_KEY
+            ? { ESCSUBSECAO_ID: SUBSECAO_SEM_VINCULO_KEY, DESCR: 'Sem subseção', STATUS: 'A', virtual: true }
+            : subsecoesPageState.subsecoes.find(item => Number(item.ESCSUBSECAO_ID) === Number(subsecoesPageState.selecionadaId)) || null;
+        const getFuncionariosDaSecaoSubsecoes = () => subsecoesPageState.funcionarios.filter(funcionario => Number(funcionario.ESCSECAO_ID) === Number(subsecoesPageState.secao?.ESCSECAO_ID));
+        const getFuncionarioSubsecaoPageId = (funcionario) => {
+            const explicita = getFuncionarioSubsecaoExplicitamente(funcionario);
+            const idsCadastrados = new Set(subsecoesPageState.subsecoes.map(item => Number(item.ESCSUBSECAO_ID || 0)).filter(Boolean));
+            if (explicita > 0) return idsCadastrados.has(explicita) ? explicita : SUBSECAO_SEM_VINCULO_KEY;
+            return SUBSECAO_SEM_VINCULO_KEY;
+        };
+        const getFuncionarioSubsecaoPageIdLegado = (funcionario) => {
+            const atual = getFuncionarioSubsecaoPageId(funcionario);
+            if (atual !== SUBSECAO_SEM_VINCULO_KEY || hasSubsecaoExplicitaNaSecao()) return atual;
+            const catalogo = subsecoesPageState.subsecoes.map(item => ({
+                key: String(item.ESCSUBSECAO_ID),
+                nome: item.DESCR,
+                raw: item
+            }));
+            const fallback = classificarSubsecaoFuncionario(funcionario, catalogo);
+            return Number(fallback?.key || 0);
+        };
+        const getFuncionariosSubsecaoSelecionada = () => {
+            const selecionadaId = String(subsecoesPageState.selecionadaId || '');
+            return getFuncionariosDaSecaoSubsecoes()
+                .filter(funcionario => String(getFuncionarioSubsecaoPageId(funcionario)) === selecionadaId)
+                .sort((a, b) => String(a.NOME || '').localeCompare(String(b.NOME || '')));
+        };
+        const getFuncionariosDisponiveisSubsecao = () => {
+            const selecionadaId = String(subsecoesPageState.selecionadaId || '');
+            const termo = normalizarTextoFiltro(subsecoesFuncionarioBusca?.value);
+            return getFuncionariosDaSecaoSubsecoes()
+                .filter(funcionario => String(getFuncionarioSubsecaoPageId(funcionario)) !== selecionadaId)
+                .filter(funcionario => !termo || normalizarTextoFiltro((funcionario.NOME || '') + ' ' + (funcionario.CHAPA || '') + ' ' + (funcionario.FUNCAO_DESCR || '')).includes(termo))
+                .sort((a, b) => String(a.NOME || '').localeCompare(String(b.NOME || '')))
+                .slice(0, 20);
+        };
+        const getFuncionarioIniciaisSubsecao = (funcionario) => String(funcionario?.NOME || '?')
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map(parte => parte[0])
+            .join('')
+            .toUpperCase() || '?';
+
+        const carregarSubsecoesSecaoPage = async (escsecaoId = '') => {
+            const lojaAtual = secoesLojaSelect?.value && secoesLojaSelect.value !== 'all' ? secoesLojaSelect.value : (lojaEscalaSelect?.value || '');
+            if (!secoesTelaCache.length || (lojaAtual && !secoesTelaCache.some(item => String(item.CODFILIAL || item.LOJA) === String(lojaAtual)))) {
+                await carregarSecoesTela();
+            }
+            let secao = secoesTelaCache.find(item => Number(item.ESCSECAO_ID) === Number(escsecaoId));
+            if (!secao && escsecaoId) {
+                const lojasBusca = lojaAtual && lojaAtual !== 'all' ? [lojaAtual] : lojasPermitidasCache;
+                for (const loja of lojasBusca) {
+                    const data = await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/secoes');
+                    secao = (data.secoes || []).find(item => Number(item.ESCSECAO_ID) === Number(escsecaoId));
+                    if (secao) break;
+                }
+            }
+            if (!secao) {
+                showInfoModal('Seção não encontrada.', 'error');
+                window.location.hash = '/secoes';
+                return;
+            }
+            const loja = secao.CODFILIAL || secao.LOJA || lojaAtual || lojaEscalaSelect?.value;
+            subsecoesPageState = {
+                loja: String(loja),
+                secao,
+                subsecoes: [],
+                funcionarios: [],
+                selecionadaId: null,
+                criando: false,
+                editandoId: null,
+                selecionados: new Set(),
+                painelVinculoAberto: false,
+                menuAberto: null
+            };
+            subsecoesTitulo.textContent = 'Subseções: ' + (secao.DESCR || secao.COD_SECAO || '');
+            subsecoesResumo.textContent = 'Loja ' + loja + ' | ' + (secao.COD_SECAO || 'sem código');
+            const [subData, funcData] = await Promise.all([
+                apiRequest(getSubsecoesPageBaseUrl() + '?includeInactive=1'),
+                apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/funcionarios')
+            ]);
+            subsecoesPageState.subsecoes = subData.subsecoes || [];
+            subsecoesPageState.funcionarios = funcData.funcionarios || [];
+            const temSemSubsecao = getFuncionariosDaSecaoSubsecoes().some(funcionario => String(getFuncionarioSubsecaoPageId(funcionario)) === SUBSECAO_SEM_VINCULO_KEY);
+            const primeiraAtiva = subsecoesPageState.subsecoes.find(item => String(item.STATUS || 'A') === 'A') || subsecoesPageState.subsecoes[0];
+            subsecoesPageState.selecionadaId = temSemSubsecao ? SUBSECAO_SEM_VINCULO_KEY : primeiraAtiva?.ESCSUBSECAO_ID || null;
+            renderizarSubsecoesPage();
+        };
+
+        const recarregarSubsecoesPage = async () => {
+            if (!subsecoesPageState.secao?.ESCSECAO_ID || !subsecoesPageState.loja) return;
+            const [subData, funcData] = await Promise.all([
+                apiRequest(getSubsecoesPageBaseUrl() + '?includeInactive=1'),
+                apiRequest('/api/catalog/lojas/' + encodeURIComponent(subsecoesPageState.loja) + '/funcionarios')
+            ]);
+            subsecoesPageState.subsecoes = subData.subsecoes || [];
+            subsecoesPageState.funcionarios = funcData.funcionarios || [];
+            if (!subsecoesPageState.subsecoes.some(item => Number(item.ESCSUBSECAO_ID) === Number(subsecoesPageState.selecionadaId))) {
+                const temSemSubsecao = getFuncionariosDaSecaoSubsecoes().some(funcionario => String(getFuncionarioSubsecaoPageId(funcionario)) === SUBSECAO_SEM_VINCULO_KEY);
+                subsecoesPageState.selecionadaId = temSemSubsecao ? SUBSECAO_SEM_VINCULO_KEY : subsecoesPageState.subsecoes.find(item => String(item.STATUS || 'A') === 'A')?.ESCSUBSECAO_ID || subsecoesPageState.subsecoes[0]?.ESCSUBSECAO_ID || null;
+            }
+            renderizarSubsecoesPage();
+        };
+
+        const salvarSubsecaoInline = async (id = null) => {
+            if (!canManageSubsecoesPage()) return showInfoModal('Usuario sem permissao para editar subsecoes.', 'error');
+            const input = subsecoesLista?.querySelector(id ? `[data-edit-subsecao="${CSS.escape(String(id))}"]` : '[data-new-subsecao]');
+            const descr = String(input?.value || '').trim();
+            if (!descr) return showInfoModal('Informe o nome da subseção.', 'error');
+            if (id) {
+                const atual = subsecoesPageState.subsecoes.find(item => Number(item.ESCSUBSECAO_ID) === Number(id));
+                await apiRequest(getSubsecoesPageBaseUrl() + '/' + encodeURIComponent(id), {
+                    method: 'PUT',
+                    body: JSON.stringify({ DESCR: descr, STATUS: String(atual?.STATUS || 'A') })
+                });
+            } else {
+                const result = await apiRequest(getSubsecoesPageBaseUrl(), {
+                    method: 'POST',
+                    body: JSON.stringify({ DESCR: descr })
+                });
+                subsecoesPageState.selecionadaId = result.subsecao?.ESCSUBSECAO_ID || subsecoesPageState.selecionadaId;
+            }
+            subsecoesPageState.criando = false;
+            subsecoesPageState.editandoId = null;
+            await recarregarSubsecoesPage();
+        };
+
+        const atualizarStatusSubsecaoPage = async (subsecaoId, status) => {
+            const subsecao = subsecoesPageState.subsecoes.find(item => Number(item.ESCSUBSECAO_ID) === Number(subsecaoId));
+            if (!subsecao) return;
+            await apiRequest(getSubsecoesPageBaseUrl() + '/' + encodeURIComponent(subsecaoId), {
+                method: 'PUT',
+                body: JSON.stringify({ DESCR: subsecao.DESCR, STATUS: status })
+            });
+            await recarregarSubsecoesPage();
+        };
+
+        const atualizarFuncionarioSubsecaoPage = async (escfuncId, subsecaoId) => {
+            if (!canManageSubsecoesPage()) return showInfoModal('Usuario sem permissao para editar subsecoes.', 'error');
+            await apiRequest(getSubsecoesPageBaseUrl() + '/funcionarios/' + encodeURIComponent(escfuncId), {
+                method: 'PATCH',
+                body: JSON.stringify({ ESCSUBSECAO_ID: subsecaoId ? Number(subsecaoId) : null })
+            });
+            subsecoesPageState.selecionados.delete(String(escfuncId));
+            await recarregarSubsecoesPage();
+        };
+
+        const abrirModalTransferenciaSubsecao = async (funcionario, options = {}) => {
+            if (!funcionario) return;
+            const origemEscala = options.origemEscala === true;
+            const subsecoesAtivas = (options.subsecoes || subsecoesPageState.subsecoes || []).filter(item => String(item.STATUS || 'A') === 'A');
+            const atualId = funcionario.ESCSUBSECAO_ID || getFuncionarioSubsecaoPageId(funcionario);
+            const destinos = subsecoesAtivas
+                .filter(item => String(item.ESCSUBSECAO_ID) !== String(atualId))
+                .map(item => ({ value: String(item.ESCSUBSECAO_ID), label: item.DESCR }));
+            if (!destinos.length) {
+                showInfoModal('Nenhuma subseção de destino disponível.', 'info');
+                return;
+            }
+            const values = await showInputModal({
+                title: 'Transferir ' + (funcionario.NOME || funcionario.nome || funcionario.CHAPA || funcionario.chapa || 'funcionário'),
+                inputs: [
+                    { type: 'message', text: origemEscala ? 'A transferência muda a subseção do funcionário e recalcula a escala para evitar buracos e conflitos. Se a vigência for no meio do mês, apenas os dias a partir dela serão regerados.' : 'O funcionário será movido para a subseção selecionada. Ele sai da lista atual e passa a aparecer na nova subseção.' },
+                    { label: 'Nova Subseção', type: 'select', id: 'ESCSUBSECAO_ID', value: destinos[0]?.value || '', options: destinos, required: true },
+                    { label: 'A partir de quando?', type: 'select', id: 'VIGENCIA', value: 'IMEDIATO', options: [
+                        { value: 'IMEDIATO', label: 'Imediatamente' },
+                        { value: 'PROXIMA_SEMANA', label: 'A partir da próxima semana' },
+                        { value: 'PROXIMO_MES', label: 'A partir do próximo mês' }
+                    ] }
+                ],
+                confirmText: 'Confirmar Transferência',
+                cancelText: 'Cancelar',
+                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-md flex flex-col'
+            });
+            if (!values?.ESCSUBSECAO_ID) return;
+            const loja = origemEscala ? escalaDetalheAtual.lojaId : subsecoesPageState.loja;
+            const escsecaoId = origemEscala ? (funcionario.ESCSECAO_ID || funcionario.escsecaoId || escalaDetalheAtual.secaoAtiva) : subsecoesPageState.secao?.ESCSECAO_ID;
+            await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/secoes/' + encodeURIComponent(escsecaoId) + '/subsecoes/funcionarios/' + encodeURIComponent(funcionario.ESCFUNC_ID || funcionario.escfuncId), {
+                method: 'PATCH',
+                body: JSON.stringify({ ESCSUBSECAO_ID: Number(values.ESCSUBSECAO_ID) })
+            });
+            if (origemEscala && values.VIGENCIA !== 'PROXIMO_MES' && escalaDetalheAtual.mesRef) {
+                const inicio = values.VIGENCIA === 'PROXIMA_SEMANA' ? getProximaSegundaIsoBanco() : getHojeIsoBanco();
+                await apiRequest('/api/escalas/gerar-secao', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        lojaId: Number(escalaDetalheAtual.lojaId),
+                        mesRef: escalaDetalheAtual.mesRef,
+                        escsecaoId: Number(escsecaoId),
+                        hojeIso: inicio
+                    }),
+                    timeoutMs: 120000
+                });
+                await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
+                escalaDetalheAtual.secaoAtiva = String(escsecaoId);
+                escalaDetalheAtual.subsetorAtivo = String(values.ESCSUBSECAO_ID);
+                prepararSecoesDetalheEscala();
+            } else if (origemEscala) {
+                await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
+                escalaDetalheAtual.secaoAtiva = String(escsecaoId);
+                escalaDetalheAtual.subsetorAtivo = String(values.ESCSUBSECAO_ID);
+                prepararSecoesDetalheEscala();
+            } else {
+                subsecoesPageState.selecionadaId = values.ESCSUBSECAO_ID;
+                subsecoesPageState.selecionados.clear();
+                subsecoesPageState.menuAberto = null;
+                await recarregarSubsecoesPage();
+            }
+            showInfoModal('Funcionário transferido de subseção.', 'success');
+        };
+
+        const excluirSubsecaoPage = async (subsecaoId) => {
+            const subsecao = subsecoesPageState.subsecoes.find(item => Number(item.ESCSUBSECAO_ID) === Number(subsecaoId));
+            if (!subsecao) return;
+            const confirmacao = await showInputModal({
+                title: 'Excluir subseção',
+                inputs: [{ type: 'message', text: 'A subseção "' + (subsecao.DESCR || '') + '" será removida. Funcionários vinculados a ela voltarão para Sem subseção.' }],
+                confirmText: 'Excluir',
+                cancelText: 'Cancelar'
+            });
+            if (!confirmacao) return;
+            await apiRequest(getSubsecoesPageBaseUrl() + '/' + encodeURIComponent(subsecaoId), { method: 'DELETE' });
+            subsecoesPageState.selecionadaId = SUBSECAO_SEM_VINCULO_KEY;
+            subsecoesPageState.selecionados.clear();
+            await recarregarSubsecoesPage();
+        };
+
+        const renderizarSubsecoesSugestoes = () => {
+            if (!subsecoesFuncionariosSugestoes) return;
+            if (!subsecoesPageState.painelVinculoAberto) {
+                subsecoesFuncionariosSugestoes.innerHTML = '';
+                return;
+            }
+            const funcionarios = getFuncionariosDisponiveisSubsecao();
+            subsecoesFuncionariosSugestoes.innerHTML = funcionarios.length ? funcionarios.map(funcionario => `
+                <div class="subsection-suggestion">
+                    <div class="subsection-employee-cell">
+                        <span class="subsection-avatar">${escapeHtml(getFuncionarioIniciaisSubsecao(funcionario))}</span>
+                        <div>
+                            <span class="subsection-employee-name">${escapeHtml(funcionario.NOME || '')}</span>
+                            <span class="subsection-manage-meta">${escapeHtml(funcionario.CHAPA || '')} | ${escapeHtml(funcionario.FUNCAO_DESCR || '')}</span>
+                        </div>
+                    </div>
+                    <button type="button" class="action-button compact vincular-funcionario-subsecao" data-id="${escapeHtml(funcionario.ESCFUNC_ID || '')}">
+                        <span class="material-symbols-outlined">add</span>Vincular
+                    </button>
+                </div>
+            `).join('') : '<div class="subsection-empty-state">Nenhum funcionário disponível para esta busca.</div>';
+        };
+
+        const renderizarSubsecoesPage = () => {
+            const termo = normalizarTextoFiltro(subsecoesBuscaInput?.value);
+            const totalSemSubsecao = getFuncionariosDaSecaoSubsecoes().filter(funcionario => String(getFuncionarioSubsecaoPageId(funcionario)) === SUBSECAO_SEM_VINCULO_KEY).length;
+            const itensLista = [
+                { ESCSUBSECAO_ID: SUBSECAO_SEM_VINCULO_KEY, DESCR: 'Sem subseção', STATUS: 'A', virtual: true },
+                ...subsecoesPageState.subsecoes
+            ];
+            const subsecoes = itensLista.filter(item => !termo || normalizarTextoFiltro(item.DESCR).includes(termo));
+            const totalAtivas = subsecoesPageState.subsecoes.filter(item => String(item.STATUS || 'A') === 'A').length;
+            const podeGerenciar = canManageSubsecoesPage();
+            if (subsecoesListaResumo) subsecoesListaResumo.textContent = totalAtivas + ' ativa(s) de ' + subsecoesPageState.subsecoes.length;
+            novaSubsecaoInlineBtn?.classList.toggle('hidden', !podeGerenciar);
+
+            const novoHtml = subsecoesPageState.criando && podeGerenciar ? `
+                <div class="subsection-inline-form">
+                    <input type="text" data-new-subsecao maxlength="100" placeholder="Nome da nova subseção" autofocus>
+                    <div class="subsection-actions">
+                        <button type="button" class="subsection-icon-button save-new-subsecao" title="Salvar"><span class="material-symbols-outlined">check</span></button>
+                        <button type="button" class="subsection-icon-button danger cancel-subsecao-inline" title="Cancelar"><span class="material-symbols-outlined">close</span></button>
+                    </div>
+                </div>
+            ` : '';
+            subsecoesLista.innerHTML = novoHtml + (subsecoes.length ? subsecoes.map(item => {
+                const id = String(item.ESCSUBSECAO_ID || '');
+                const ativa = String(item.STATUS || 'A') === 'A';
+                const virtual = item.virtual === true;
+                const selecionada = String(id) === String(subsecoesPageState.selecionadaId);
+                const qtd = virtual ? totalSemSubsecao : getFuncionariosDaSecaoSubsecoes().filter(funcionario => String(getFuncionarioSubsecaoPageId(funcionario)) === String(id)).length;
+                if (!virtual && Number(subsecoesPageState.editandoId) === Number(id)) {
+                    return `
+                        <div class="subsection-inline-form">
+                            <input type="text" data-edit-subsecao="${escapeHtml(id)}" maxlength="100" value="${escapeHtml(item.DESCR || '')}">
+                            <div class="subsection-actions">
+                                <button type="button" class="subsection-icon-button save-edit-subsecao" data-id="${escapeHtml(id)}" title="Salvar"><span class="material-symbols-outlined">check</span></button>
+                                <button type="button" class="subsection-icon-button danger cancel-subsecao-inline" title="Cancelar"><span class="material-symbols-outlined">close</span></button>
+                            </div>
+                        </div>
+                    `;
+                }
+                return `
+                    <button type="button" class="subsection-manage-item ${selecionada ? 'active' : ''} ${ativa ? '' : 'inactive'}" data-id="${escapeHtml(id)}">
+                        <span>
+                            <span class="subsection-manage-name">${escapeHtml(item.DESCR || '')}</span>
+                            <span class="subsection-manage-meta">${qtd} funcionário(s)${virtual ? ' pendente(s)' : ' | ' + (ativa ? 'ativa' : 'inativa')}</span>
+                        </span>
+                        <span class="subsection-actions ${podeGerenciar && !virtual ? '' : 'hidden'}">
+                            <span role="button" tabindex="0" class="subsection-toggle ${ativa ? 'active' : ''}" data-toggle-id="${escapeHtml(id)}" title="${ativa ? 'Inativar' : 'Ativar'}"></span>
+                            <span role="button" tabindex="0" class="subsection-icon-button edit-subsecao-inline" data-id="${escapeHtml(id)}" title="Editar"><span class="material-symbols-outlined">edit</span></span>
+                            <span role="button" tabindex="0" class="subsection-icon-button danger delete-subsecao-inline" data-id="${escapeHtml(id)}" title="Excluir"><span class="material-symbols-outlined">delete</span></span>
+                        </span>
+                    </button>
+                `;
+            }).join('') : '<div class="subsection-empty-state">Nenhuma subseção encontrada.</div>');
+
+            const selecionada = getSubsecaoSelecionadaPage();
+            const funcionariosSelecionados = selecionada ? getFuncionariosSubsecaoSelecionada() : [];
+            if (subsecoesDetalheTitulo) subsecoesDetalheTitulo.textContent = selecionada?.DESCR || 'Selecione uma subseção';
+            if (subsecoesDetalheResumo) subsecoesDetalheResumo.textContent = selecionada ? funcionariosSelecionados.length + ' funcionário(s) alocado(s) nesta subseção' : 'Os funcionários alocados aparecerão aqui.';
+            subsecoesVincularFuncionarioBtn?.toggleAttribute('disabled', !selecionada || selecionada.virtual);
+            subsecoesVincularFuncionarioBtn?.classList.toggle('hidden', !podeGerenciar || Boolean(selecionada?.virtual));
+            subsecoesVincularPanel?.classList.toggle('hidden', !podeGerenciar || Boolean(selecionada?.virtual) || !subsecoesPageState.painelVinculoAberto || !selecionada);
+            if (subsecoesTransferirSelect) {
+                subsecoesTransferirSelect.innerHTML = '<option value="">Transferir para...</option>' + subsecoesPageState.subsecoes
+                    .filter(item => String(item.STATUS || 'A') === 'A' && Number(item.ESCSUBSECAO_ID) !== Number(subsecoesPageState.selecionadaId))
+                    .map(item => '<option value="' + escapeHtml(item.ESCSUBSECAO_ID || '') + '">' + escapeHtml(item.DESCR || '') + '</option>')
+                    .join('');
+            }
+            if (subsecoesSelecionarTodos) {
+                subsecoesSelecionarTodos.checked = funcionariosSelecionados.length > 0 && funcionariosSelecionados.every(funcionario => subsecoesPageState.selecionados.has(String(funcionario.ESCFUNC_ID)));
+                subsecoesSelecionarTodos.disabled = !podeGerenciar || funcionariosSelecionados.length === 0;
+            }
+            subsecoesTransferirSelecionadosBtn?.toggleAttribute('disabled', subsecoesPageState.selecionados.size === 0);
+            subsecoesTransferirSelect?.classList.toggle('hidden', !podeGerenciar);
+            subsecoesTransferirSelecionadosBtn?.classList.toggle('hidden', !podeGerenciar);
+            subsecoesFuncionariosBody.innerHTML = funcionariosSelecionados.length ? funcionariosSelecionados.map(funcionario => `
+                <tr>
+                    <td>${podeGerenciar ? `<input type="checkbox" class="subsecao-funcionario-check" data-id="${escapeHtml(funcionario.ESCFUNC_ID || '')}" ${subsecoesPageState.selecionados.has(String(funcionario.ESCFUNC_ID)) ? 'checked' : ''}>` : '-'}</td>
+                    <td data-label="Funcionário">
+                        <div class="subsection-employee-cell subsection-employee-with-menu">
+                            <span class="subsection-avatar">${escapeHtml(getFuncionarioIniciaisSubsecao(funcionario))}</span>
+                            <span class="subsection-employee-name">${escapeHtml(funcionario.NOME || '')}</span>
+                            ${podeGerenciar ? `<span class="subsection-kebab-wrap"><button type="button" class="subsection-kebab-btn" data-menu-id="${escapeHtml(funcionario.ESCFUNC_ID || '')}" aria-label="Mais ações"><span class="material-symbols-outlined">more_vert</span></button><span class="subsection-kebab-menu ${String(subsecoesPageState.menuAberto) === String(funcionario.ESCFUNC_ID) ? '' : 'hidden'}">
+                                <button type="button" class="subsection-menu-action ver-detalhes-funcionario" data-id="${escapeHtml(funcionario.ESCFUNC_ID || '')}"><span class="material-symbols-outlined">badge</span>Ver detalhes</button>
+                                <button type="button" class="subsection-menu-action editar-horarios-funcionario" data-id="${escapeHtml(funcionario.ESCFUNC_ID || '')}"><span class="material-symbols-outlined">schedule</span>Editar horários</button>
+                                <button type="button" class="subsection-menu-action transferir-funcionario-subsecao" data-id="${escapeHtml(funcionario.ESCFUNC_ID || '')}"><span class="material-symbols-outlined">swap_horiz</span>Transferir de Subseção</button>
+                                ${selecionada?.virtual ? '' : `<button type="button" class="subsection-menu-action danger remover-funcionario-subsecao" data-id="${escapeHtml(funcionario.ESCFUNC_ID || '')}"><span class="material-symbols-outlined">person_remove</span>Remover da Subseção</button>`}
+                            </span></span>` : ''}
+                        </div>
+                    </td>
+                    <td data-label="Matrícula">${escapeHtml(funcionario.CHAPA || '')}</td>
+                    <td data-label="Cargo">${escapeHtml(funcionario.FUNCAO_DESCR || '')}</td>
+                </tr>
+            `).join('') : '<tr><td colspan="4" class="subsection-empty-state">Nenhum funcionário alocado nesta subseção.</td></tr>';
+            renderizarSubsecoesSugestoes();
+        };
+
         secoesPesquisaInput?.addEventListener('input', aplicarFiltrosSecoesTela);
         secoesLojaSelect?.addEventListener('change', () => carregarSecoesTela().catch(error => showInfoModal(error.message, 'error')));
 
@@ -2717,12 +3102,8 @@
             if (!hasPermission('secoes', 'editar')) return showInfoModal('Usuario sem permissao para editar secoes.', 'error');
 
             if (subsecoesButton) {
-                const secao = secoesTelaCache.find(item => Number(item.ESCSECAO_ID) === Number(subsecoesButton.dataset.id));
-                try {
-                    await abrirCrudSubsecoesSecao(secao);
-                } catch (error) {
-                    showInfoModal(error.message, 'error');
-                }
+                if (subsecoesButton.dataset.loja) secoesLojaSelect.value = subsecoesButton.dataset.loja;
+                window.location.hash = `/secoes/${subsecoesButton.dataset.id}/subsecoes`;
                 return;
             }
 
@@ -2737,6 +3118,198 @@
 
         voltarSecoesBtn?.addEventListener('click', () => {
             window.location.hash = '/secoes';
+        });
+
+        voltarSubsecoesBtn?.addEventListener('click', () => {
+            window.location.hash = '/secoes';
+        });
+
+        subsecoesBuscaInput?.addEventListener('input', renderizarSubsecoesPage);
+        subsecoesFuncionarioBusca?.addEventListener('input', renderizarSubsecoesSugestoes);
+        novaSubsecaoInlineBtn?.addEventListener('click', () => {
+            if (!canManageSubsecoesPage()) return showInfoModal('Usuario sem permissao para criar subsecoes.', 'error');
+            subsecoesPageState.criando = true;
+            subsecoesPageState.editandoId = null;
+            renderizarSubsecoesPage();
+            subsecoesLista?.querySelector('[data-new-subsecao]')?.focus();
+        });
+        subsecoesVincularFuncionarioBtn?.addEventListener('click', () => {
+            subsecoesPageState.painelVinculoAberto = !subsecoesPageState.painelVinculoAberto;
+            renderizarSubsecoesPage();
+            if (subsecoesPageState.painelVinculoAberto) subsecoesFuncionarioBusca?.focus();
+        });
+        subsecoesLista?.addEventListener('click', async (event) => {
+            const toggle = event.target.closest('[data-toggle-id]');
+            const edit = event.target.closest('.edit-subsecao-inline');
+            const excluir = event.target.closest('.delete-subsecao-inline');
+            const saveNew = event.target.closest('.save-new-subsecao');
+            const saveEdit = event.target.closest('.save-edit-subsecao');
+            const cancel = event.target.closest('.cancel-subsecao-inline');
+            const item = event.target.closest('.subsection-manage-item');
+            try {
+                if (saveNew) return await salvarSubsecaoInline();
+                if (saveEdit) return await salvarSubsecaoInline(saveEdit.dataset.id);
+                if (cancel) {
+                    subsecoesPageState.criando = false;
+                    subsecoesPageState.editandoId = null;
+                    renderizarSubsecoesPage();
+                    return;
+                }
+                if (toggle) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const atual = subsecoesPageState.subsecoes.find(subsecao => Number(subsecao.ESCSUBSECAO_ID) === Number(toggle.dataset.toggleId));
+                    await atualizarStatusSubsecaoPage(toggle.dataset.toggleId, String(atual?.STATUS || 'A') === 'A' ? 'I' : 'A');
+                    return;
+                }
+                if (edit) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    subsecoesPageState.criando = false;
+                    subsecoesPageState.editandoId = edit.dataset.id;
+                    renderizarSubsecoesPage();
+                    subsecoesLista?.querySelector(`[data-edit-subsecao="${CSS.escape(String(edit.dataset.id))}"]`)?.focus();
+                    return;
+                }
+                if (excluir) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    await excluirSubsecaoPage(excluir.dataset.id);
+                    return;
+                }
+                if (item) {
+                    subsecoesPageState.selecionadaId = item.dataset.id;
+                    subsecoesPageState.selecionados.clear();
+                    subsecoesPageState.painelVinculoAberto = false;
+                    renderizarSubsecoesPage();
+                }
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+        subsecoesLista?.addEventListener('keydown', async (event) => {
+            if (event.key !== 'Enter') return;
+            const novo = event.target.closest('[data-new-subsecao]');
+            const editando = event.target.closest('[data-edit-subsecao]');
+            try {
+                if (novo) await salvarSubsecaoInline();
+                if (editando) await salvarSubsecaoInline(editando.dataset.editSubsecao);
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+        subsecoesFuncionariosSugestoes?.addEventListener('click', async (event) => {
+            const button = event.target.closest('.vincular-funcionario-subsecao');
+            if (!button || !subsecoesPageState.selecionadaId) return;
+            try {
+                await atualizarFuncionarioSubsecaoPage(button.dataset.id, subsecoesPageState.selecionadaId);
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+        subsecoesSelecionarTodos?.addEventListener('change', () => {
+            const funcionarios = getFuncionariosSubsecaoSelecionada();
+            funcionarios.forEach(funcionario => {
+                const key = String(funcionario.ESCFUNC_ID);
+                if (subsecoesSelecionarTodos.checked) subsecoesPageState.selecionados.add(key);
+                else subsecoesPageState.selecionados.delete(key);
+            });
+            renderizarSubsecoesPage();
+        });
+        subsecoesFuncionariosBody?.addEventListener('change', async (event) => {
+            const checkbox = event.target.closest('.subsecao-funcionario-check');
+            try {
+                if (checkbox) {
+                    if (checkbox.checked) subsecoesPageState.selecionados.add(String(checkbox.dataset.id));
+                    else subsecoesPageState.selecionados.delete(String(checkbox.dataset.id));
+                    renderizarSubsecoesPage();
+                    return;
+                }
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+        subsecoesFuncionariosBody?.addEventListener('click', async (event) => {
+            const menuButton = event.target.closest('.subsection-kebab-btn');
+            const detalhe = event.target.closest('.ver-detalhes-funcionario');
+            const editarHorarios = event.target.closest('.editar-horarios-funcionario');
+            const transferir = event.target.closest('.transferir-funcionario-subsecao');
+            const remover = event.target.closest('.remover-funcionario-subsecao');
+            if (menuButton) {
+                event.stopPropagation();
+                subsecoesPageState.menuAberto = String(subsecoesPageState.menuAberto) === String(menuButton.dataset.menuId) ? null : menuButton.dataset.menuId;
+                renderizarSubsecoesPage();
+                return;
+            }
+            const actionId = detalhe?.dataset.id || editarHorarios?.dataset.id || transferir?.dataset.id || remover?.dataset.id;
+            const funcionario = subsecoesPageState.funcionarios.find(item => Number(item.ESCFUNC_ID) === Number(actionId));
+            if (!funcionario) return;
+            try {
+                subsecoesPageState.menuAberto = null;
+                if (detalhe) {
+                    showInfoModal([
+                        'Nome: ' + (funcionario.NOME || ''),
+                        'Matrícula: ' + (funcionario.CHAPA || ''),
+                        'Cargo: ' + (funcionario.FUNCAO_DESCR || ''),
+                        'Horário: ' + [funcionario.HR_ENT1, funcionario.HR_SAI1, funcionario.HR_ENT2, funcionario.HR_SAI2].filter(Boolean).join(' / ')
+                    ], 'info');
+                    return;
+                }
+                if (editarHorarios) {
+                    if (!hasPermission('funcionarios', 'editar')) return showInfoModal('Usuario sem permissao para editar horarios do funcionario.', 'error');
+                    const values = await showInputModal({
+                        title: 'Editar horários - ' + (funcionario.NOME || funcionario.CHAPA || ''),
+                        inputs: [
+                            { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || '' },
+                            { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || '' },
+                            { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: funcionario.HR_ENT2 || '' },
+                            { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || '' }
+                        ],
+                        confirmText: 'Salvar'
+                    });
+                    if (!values) return;
+                    await apiRequest('/api/catalog/lojas/' + encodeURIComponent(subsecoesPageState.loja) + '/funcionarios/' + encodeURIComponent(funcionario.ESCFUNC_ID), {
+                        method: 'PATCH',
+                        body: JSON.stringify({
+                            HR_ENT1: values.HR_ENT1 || null,
+                            HR_SAI1: values.HR_SAI1 || null,
+                            HR_ENT2: values.HR_ENT2 || null,
+                            HR_SAI2: values.HR_SAI2 || null
+                        })
+                    });
+                    await recarregarSubsecoesPage();
+                    showInfoModal('Horários atualizados.', 'success');
+                    return;
+                }
+                if (transferir) {
+                    await abrirModalTransferenciaSubsecao(funcionario);
+                    return;
+                }
+                if (remover) {
+                    await atualizarFuncionarioSubsecaoPage(remover.dataset.id, null);
+                }
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
+        });
+        subsecoesTransferirSelecionadosBtn?.addEventListener('click', async () => {
+            const destino = subsecoesTransferirSelect?.value;
+            if (!destino) return showInfoModal('Selecione a subseção de destino.', 'error');
+            if (!subsecoesPageState.selecionados.size) return showInfoModal('Selecione pelo menos um funcionário.', 'error');
+            try {
+                const selecionados = [...subsecoesPageState.selecionados];
+                for (const escfuncId of selecionados) {
+                    await apiRequest(getSubsecoesPageBaseUrl() + '/funcionarios/' + encodeURIComponent(escfuncId), {
+                        method: 'PATCH',
+                        body: JSON.stringify({ ESCSUBSECAO_ID: Number(destino) })
+                    });
+                }
+                subsecoesPageState.selecionadaId = destino;
+                subsecoesPageState.selecionados.clear();
+                await recarregarSubsecoesPage();
+            } catch (error) {
+                showInfoModal(error.message, 'error');
+            }
         });
 
         secaoForm?.addEventListener('submit', async (event) => {
@@ -3606,7 +4179,7 @@
         };
         const getClasseDescanso = (dia) => {
             const programacao = String(dia?.PROGRAMACAO || dia?.programacao || '').toUpperCase();
-            if (['FXF', 'FOLGA_FIXA'].includes(programacao)) return 'rest-cell-fixo';
+            if (Number(dia?.FIXO_ESCALA || dia?.fixoEscala || 0) === 1 || ['FXF', 'FOLGA_FIXA'].includes(programacao)) return 'rest-cell-fixo';
             const sigla = getValorDescanso(dia);
             if (sigla === 'FER') return 'rest-cell-ferias';
             if (sigla === 'AFA') return 'rest-cell-afastamento';
@@ -3614,6 +4187,14 @@
         };
         const getHojeIsoApp = () => {
             const hoje = new Date();
+            return hoje.getFullYear() + '-' + String(hoje.getMonth() + 1).padStart(2, '0') + '-' + String(hoje.getDate()).padStart(2, '0');
+        };
+        const getHojeIsoBanco = () => getHojeIsoApp();
+        const getProximaSegundaIsoBanco = () => {
+            const hoje = new Date(getHojeIsoApp() + 'T00:00:00');
+            const day = hoje.getDay();
+            const diff = day === 1 ? 7 : ((8 - day) % 7 || 7);
+            hoje.setDate(hoje.getDate() + diff);
             return hoje.getFullYear() + '-' + String(hoje.getMonth() + 1).padStart(2, '0') + '-' + String(hoje.getDate()).padStart(2, '0');
         };
         const isDataBloqueadaParaEdicao = (dataIso) => String(dataIso || '').slice(0, 10) < getHojeIsoApp();
@@ -3775,7 +4356,14 @@
                         else value=dia[field.key]||'--';
                     }
                     const domingo=new Date(ref.getFullYear(),ref.getMonth(),d).getDay()===0;
-                    const cls=[descanso?(domingo?'day-off sunday':'day-off'):(domingo?'sunday':''), getWeekClass(d).trim(), dia.CRITICA_MANUAL ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
+                    const cls = [
+                        descanso ? 'day-off' : '',
+                        descanso ? getClasseDescanso(dia) : '',
+                        !descanso && Number(dia.FIXO_ESCALA || 0) === 1 ? 'fixed-work-cell' : '',
+                        domingo ? 'sunday' : '',
+                        getWeekClass(d).trim(),
+                        dia.CRITICA_MANUAL ? 'manual-critical-day' : ''
+                    ].filter(Boolean).join(' ');
                     const marker = dia.CRITICA_MANUAL && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Critica: ajuste manual">!</span>' : '';
                     table+='<td class="' + cls + '" data-dia="' + d + '" data-schedule-tooltip="' + escapeHtml(getDiaTitle(dia)) + '">' + marker + escapeHtml(value) + '</td>';
                 }
@@ -5370,6 +5958,16 @@
             }));
         };
         const classificarSubsecaoFuncionario = (funcionario = {}, subsecoes = []) => {
+            const subsecaoExplicita = funcionario.ESCSUBSECAO_ID || funcionario.escsubsecaoId;
+            const temCampoSubsecao = Object.prototype.hasOwnProperty.call(funcionario, 'ESCSUBSECAO_ID') || Object.prototype.hasOwnProperty.call(funcionario, 'escsubsecaoId');
+            if (subsecaoExplicita) {
+                const matchExplicito = (subsecoes || []).find(item => String(item.key || item.ESCSUBSECAO_ID || item.raw?.ESCSUBSECAO_ID || '') === String(subsecaoExplicita));
+                if (matchExplicito) return matchExplicito;
+                return { key: SUBSECAO_SEM_VINCULO_KEY, nome: 'Sem subseção' };
+            }
+            if (temCampoSubsecao) {
+                return { key: SUBSECAO_SEM_VINCULO_KEY, nome: 'Sem subseção' };
+            }
             const funcao = normalizarTextoComparacao(funcionario.FUNCAO_DESCR || funcionario.FUNCAO || funcionario.funcao || '');
             const ordered = [...(subsecoes || [])].sort((left, right) => {
                 const a = normalizarTextoComparacao(left.nome);
@@ -5440,6 +6038,13 @@
                         chapa: dia.CHAPA || '',
                         funcao: dia.FUNCAO_DESCR || '',
                         escfuncId: dia.ESCFUNC_ID || '',
+                        ESCFUNC_ID: dia.ESCFUNC_ID || '',
+                        ESCSECAO_ID: dia.ESCSECAO_ID || '',
+                        ESCSUBSECAO_ID: dia.ESCSUBSECAO_ID || '',
+                        SUBSECAO_DESCR: dia.SUBSECAO_DESCR || '',
+                        NOME: dia.NOME || '',
+                        CHAPA: dia.CHAPA || '',
+                        FUNCAO_DESCR: dia.FUNCAO_DESCR || '',
                         dias: new Map()
                     });
                 }
@@ -5459,6 +6064,39 @@
                     return String(classificarSubsecaoFuncionario(funcionario, subsecoes).key) === String(escalaDetalheAtual.subsetorAtivo);
                 })
                 .sort((a, b) => String(a.NOME || '').localeCompare(String(b.NOME || '')) || String(a.CHAPA || '').localeCompare(String(b.CHAPA || '')));
+        };
+
+        const getSecaoAtualBanco = () => escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva)) || null;
+        const isSecaoAtualFrenteCaixaBanco = () => isSecaoFrenteCaixa(getSecaoAtualBanco()?.nome || getSecaoAtualBanco()?.DESCR || '');
+        const getSubsecoesRawSecaoAtualBanco = () => {
+            const secao = (escalaDetalheAtual.secoesLiberadas || []).find(item => String(item.ESCSECAO_ID || '') === String(escalaDetalheAtual.secaoAtiva || ''));
+            return (secao?.SUBSECOES || []).filter(item => String(item.STATUS || 'A') === 'A');
+        };
+        const getFuncionarioBancoPorId = (escfuncId) => {
+            const id = String(escfuncId || '');
+            const funcionario = (escalaDetalheAtual.funcionarios || []).find(item => String(item.ESCFUNC_ID || '') === id);
+            if (funcionario) return funcionario;
+            const dia = (escalaDetalheAtual.dias || []).find(item => String(item.ESCFUNC_ID || '') === id);
+            return dia ? {
+                ESCFUNC_ID: dia.ESCFUNC_ID,
+                ESCSECAO_ID: dia.ESCSECAO_ID,
+                ESCSUBSECAO_ID: dia.ESCSUBSECAO_ID,
+                CHAPA: dia.CHAPA,
+                NOME: dia.NOME,
+                FUNCAO_DESCR: dia.FUNCAO_DESCR
+            } : null;
+        };
+        const renderizarMenuFuncionarioEscalaBanco = (funcionario) => {
+            if (!isSecaoAtualFrenteCaixaBanco() || !canManageSubsecoesPage()) return '';
+            const id = funcionario.ESCFUNC_ID || funcionario.escfuncId;
+            if (!id) return '';
+            return '<span class="subsection-kebab-wrap scale-kebab-wrap">' +
+                '<button type="button" class="subsection-kebab-btn scale-kebab-btn" data-scale-menu-id="' + escapeHtml(id) + '" aria-label="Mais ações"><span class="material-symbols-outlined">more_vert</span></button>' +
+                '<span class="subsection-kebab-menu ' + (String(escalaDetalheAtual.menuFuncionarioAberto || '') === String(id) ? '' : 'hidden') + '">' +
+                '<button type="button" class="subsection-menu-action scale-ver-detalhes-funcionario" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">badge</span>Ver detalhes</button>' +
+                '<button type="button" class="subsection-menu-action scale-editar-horarios-funcionario" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">schedule</span>Editar horários</button>' +
+                '<button type="button" class="subsection-menu-action scale-transferir-funcionario-subsecao" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">swap_horiz</span>Transferir de Subseção</button>' +
+                '</span></span>';
         };
 
         const getFixosSecaoAtualBanco = () => {
@@ -6158,7 +6796,7 @@
 
                 funcionariosPendentes.forEach((funcionario) => {
                     const funcionarioLabel = (funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '');
-                    html += '<tr><th class="employee-col" title="' + escapeHtml(funcionarioLabel) + '"><strong>' + escapeHtml(funcionarioLabel) + '</strong></th>';
+                    html += '<tr><th class="employee-col" title="' + escapeHtml(funcionarioLabel) + '"><span class="scale-employee-name-row"><strong>' + escapeHtml(funcionarioLabel) + '</strong>' + renderizarMenuFuncionarioEscalaBanco(funcionario) + '</span></th>';
                     for (let dia = 1; dia <= diasNoMes; dia += 1) {
                         const dataIso = formatDateForDb(ano, mes, dia);
                         const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
@@ -6236,7 +6874,7 @@
 
             funcionarios.forEach((funcionario) => {
                 const criticas = getCriticasFuncionarioBanco(funcionario);
-                html += '<tr><th class="employee-col" title="' + escapeHtml(getFuncionarioTitle(funcionario)) + '"><strong>' + escapeHtml((funcionario.chapa || '') + ' - ' + (funcionario.nome || '')) + '</strong></th>';
+                html += '<tr><th class="employee-col" title="' + escapeHtml(getFuncionarioTitle(funcionario)) + '"><span class="scale-employee-name-row"><strong>' + escapeHtml((funcionario.chapa || '') + ' - ' + (funcionario.nome || '')) + '</strong>' + renderizarMenuFuncionarioEscalaBanco(funcionario) + '</span></th>';
                 for (let dia = 1; dia <= diasNoMes; dia += 1) {
                     const registro = funcionario.dias.get(dia);
                     if (!registro) {
@@ -6384,7 +7022,14 @@
                         }
                         const domingo = new Date(ano, mes, numeroDia).getDay() === 0;
                         const temCriticaDia = criticasIncluemDia(criticas, registro, numeroDia);
-                        const cellClass = [folga ? (domingo ? 'day-off sunday' : 'day-off') : (domingo ? 'sunday' : ''), getWeekClass(numeroDia).trim(), temCriticaDia ? 'manual-critical-day' : ''].filter(Boolean).join(' ');
+                        const cellClass = [
+                            folga ? 'day-off' : '',
+                            folga ? getClasseDescanso(registro) : '',
+                            !folga && Number(registro.FIXO_ESCALA || 0) === 1 ? 'fixed-work-cell' : '',
+                            domingo ? 'sunday' : '',
+                            getWeekClass(numeroDia).trim(),
+                            temCriticaDia ? 'manual-critical-day' : ''
+                        ].filter(Boolean).join(' ');
                         const marker = temCriticaDia && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Crítica validada">!</span>' : '';
                         table += '<td class="' + cellClass + '" data-schedule-tooltip="' + escapeHtml(getDiaTitle(registro, funcionario)) + '">' + marker + escapeHtml(value) + '</td>';
                     }
@@ -6817,6 +7462,46 @@
         };
 
         escalaBancoMensalContent?.addEventListener('click', (event) => {
+            const scaleMenuButton = event.target.closest('.scale-kebab-btn');
+            const scaleDetalhe = event.target.closest('.scale-ver-detalhes-funcionario');
+            const scaleEditarHorarios = event.target.closest('.scale-editar-horarios-funcionario');
+            const scaleTransferir = event.target.closest('.scale-transferir-funcionario-subsecao');
+            if (scaleMenuButton) {
+                event.preventDefault();
+                event.stopPropagation();
+                escalaDetalheAtual.menuFuncionarioAberto = String(escalaDetalheAtual.menuFuncionarioAberto || '') === String(scaleMenuButton.dataset.scaleMenuId) ? null : scaleMenuButton.dataset.scaleMenuId;
+                renderizarSecaoAtivaEscala();
+                return;
+            }
+            if (scaleDetalhe || scaleEditarHorarios || scaleTransferir) {
+                event.preventDefault();
+                event.stopPropagation();
+                const escfuncId = scaleDetalhe?.dataset.id || scaleEditarHorarios?.dataset.id || scaleTransferir?.dataset.id;
+                const funcionario = getFuncionarioBancoPorId(escfuncId);
+                escalaDetalheAtual.menuFuncionarioAberto = null;
+                if (!funcionario) return showInfoModal('Funcionário não encontrado na escala.', 'error');
+                if (scaleDetalhe) {
+                    showInfoModal([
+                        'Nome: ' + (funcionario.NOME || ''),
+                        'Matrícula: ' + (funcionario.CHAPA || ''),
+                        'Cargo: ' + (funcionario.FUNCAO_DESCR || ''),
+                        'Subseção: ' + (funcionario.SUBSECAO_DESCR || getSubsetorDetalheNome(funcionario) || 'Sem subseção')
+                    ], 'info');
+                    renderizarSecaoAtivaEscala();
+                    return;
+                }
+                if (scaleEditarHorarios) {
+                    window.location.hash = '/escala-funcionario/' + encodeURIComponent(escfuncId) + '/' + encodeURIComponent(escalaDetalheAtual.lojaId) + '/' + encodeURIComponent(escalaDetalheAtual.mesRef);
+                    return;
+                }
+                if (scaleTransferir) {
+                    abrirModalTransferenciaSubsecao(funcionario, {
+                        origemEscala: true,
+                        subsecoes: getSubsecoesRawSecaoAtualBanco()
+                    }).catch(error => showInfoModal(error.message, 'error'));
+                    return;
+                }
+            }
             const adicionarFixoButton = event.target.closest('.adicionar-fixo-secao-banco');
             if (adicionarFixoButton) {
                 event.preventDefault();

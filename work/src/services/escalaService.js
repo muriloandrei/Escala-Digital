@@ -691,6 +691,11 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
     if (latestRevision === null) return { revisao: null, status: null, dias: [], funcionarios: [], secoes: [] };
+    const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
+    const hasFuncionarioSubsecao = funcionarioColumns.has('ESCSUBSECAO_ID');
+    const subsecaoSelect = hasFuncionarioSubsecao ? 'f.escsubsecao_id' : 'cast(null as number) as escsubsecao_id';
+    const subsecaoDescrSelect = hasFuncionarioSubsecao ? 'ss.descr as subsecao_descr' : 'cast(null as varchar2(100)) as subsecao_descr';
+    const subsecaoJoinSql = hasFuncionarioSubsecao ? 'left join sgn_esc_subsecao ss on ss.escsubsecao_id = f.escsubsecao_id and ss.escsecao_id = p.escsecao_id' : '';
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
     const binds = { lojaId, mesRef };
@@ -710,6 +715,8 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           p.escsecao_id,
           p.escfuncao_id,
           f.nome,
+          ${subsecaoSelect},
+          ${subsecaoDescrSelect},
           s.cod_secao,
           s.descr as secao_descr,
           fn.descr as funcao_descr,
@@ -728,6 +735,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           end as status
        from sgn_esc_prog p
        left join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
+       ${subsecaoJoinSql}
        left join sgn_esc_secao s on s.escsecao_id = p.escsecao_id
        left join sgn_esc_funcao fn on fn.escfuncao_id = p.escfuncao_id
        left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
@@ -775,6 +783,8 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           CHAPA: pick(row, 'CHAPA', 'chapa'),
           NOME: pick(row, 'NOME', 'nome'),
           ESCSECAO_ID: escsecaoId,
+          ESCSUBSECAO_ID: pick(row, 'ESCSUBSECAO_ID', 'escsubsecao_id'),
+          SUBSECAO_DESCR: pick(row, 'SUBSECAO_DESCR', 'subsecao_descr'),
           ESCFUNCAO_ID: pick(row, 'ESCFUNCAO_ID', 'escfuncao_id'),
           COD_SECAO: pick(row, 'COD_SECAO', 'cod_secao'),
           SECAO_DESCR: pick(row, 'SECAO_DESCR', 'secao_descr'),

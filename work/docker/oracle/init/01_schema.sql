@@ -56,6 +56,7 @@ create table SGN_ESC_FUNCIONARIO (
   DT_ADMISS date not null,
   BRIGADISTA varchar2(1) not null,
   ESCSECAO_ID number(15) not null,
+  ESCSUBSECAO_ID number(15),
   ESCFUNCAO_ID number(15) not null,
   CODCOLIGADA_ANT number(10),
   CHAPA_ANT varchar2(8),
@@ -69,6 +70,7 @@ create table SGN_ESC_FUNCIONARIO (
   constraint SGN_ESC_FUNC_PK primary key (ESCFUNC_ID),
   constraint SGN_ESC_FUNC_1_UK unique (CHAPA),
   constraint SGN_ESC_FUNC_SECAO_FK foreign key (ESCSECAO_ID) references SGN_ESC_SECAO (ESCSECAO_ID),
+  constraint SGN_ESC_FUNC_SUBSECAO_FK foreign key (ESCSUBSECAO_ID) references SGN_ESC_SUBSECAO (ESCSUBSECAO_ID),
   constraint SGN_ESC_FUNC_FUNCAO_FK foreign key (ESCFUNCAO_ID) references SGN_ESC_FUNCAO (ESCFUNCAO_ID)
 );
 
@@ -297,5 +299,6 @@ create sequence SGN_ESC_HORARIO_PADRAO_SEQ start with 10 increment by 1 nocache;
 create sequence SGN_ESC_RM_LOG_SEQ start with 1 increment by 1 nocache;
 
 create index SGN_ESC_FUNC_1_IDX on SGN_ESC_FUNCIONARIO (LOJA);
+create index SGN_ESC_FUNC_SUBSECAO_IDX on SGN_ESC_FUNCIONARIO (ESCSUBSECAO_ID);
 create index SGN_ESC_AUSENCIA_1_IDX on SGN_ESC_AUSENCIA (CHAPA, DT_INIC);
 create index SGN_ESC_PROG_1_IDX on SGN_ESC_PROG (LOJA, MES_REF, REVISAO);

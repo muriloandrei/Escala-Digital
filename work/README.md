@@ -169,3 +169,4 @@ A migration `20260810_add_funcionario_cpf.sql` adiciona `SGN_ESC_FUNCIONARIO.CPF
 A migration `20260810_add_permissoes_granulares.sql` adiciona permissoes opcionais para criar, oficializar, reprocessar RM e administrar perfis sem quebrar ambientes que ainda usam apenas visualizar/editar/inativar.
 A migration `20260826_usuario_loja_principal.sql` adiciona a loja principal do usuario.
 A migration `20260831_fixos_pre_geracao.sql` adiciona `SGN_ESC_FIXO_ESCALA` e `SGN_ESC_FIXO_ESCALA_SEQ`, necessarios para folgas e horarios fixos antes da geracao da escala por secao.
+A migration `20260903_funcionario_subsecao.sql` adiciona o vinculo `SGN_ESC_FUNCIONARIO.ESCSUBSECAO_ID`, usado para alocar funcionarios nas subsecoes da Frente de Caixa.

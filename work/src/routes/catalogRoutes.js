@@ -9,6 +9,7 @@ const router = express.Router();
 const funcionarioEscalaSchema = z.object({
   BRIGADISTA: z.string().max(1).optional(),
   ESCSECAO_ID: z.number().int().positive().optional(),
+  ESCSUBSECAO_ID: z.number().int().positive().nullable().optional(),
   HR_ENT1: z.string().max(5).nullable().optional(),
   HR_SAI1: z.string().max(5).nullable().optional(),
   HR_ENT2: z.string().max(5).nullable().optional(),
@@ -351,7 +352,7 @@ router.get('/lojas/:lojaId/secoes/:escsecaoId/subsecoes', resolveLojaParam, requ
   }
 });
 
-router.post('/lojas/:lojaId/secoes/:escsecaoId/subsecoes', resolveLojaParam, requireLojaAccess, requirePermission('secoes', 'editar'), async (req, res, next) => {
+router.post('/lojas/:lojaId/secoes/:escsecaoId/subsecoes', resolveLojaParam, requireLojaAccess, requirePermission('escalas', 'editar'), async (req, res, next) => {
   try {
     const data = subsecaoSchema.pick({ DESCR: true }).parse(req.body);
     await accessService.assertSecoesPermitidas(req.user, Number(req.params.lojaId), [Number(req.params.escsecaoId)]);
@@ -369,7 +370,7 @@ router.post('/lojas/:lojaId/secoes/:escsecaoId/subsecoes', resolveLojaParam, req
   }
 });
 
-router.put('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/:escsubsecaoId', resolveLojaParam, requireLojaAccess, requirePermission('secoes', 'editar'), async (req, res, next) => {
+router.put('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/:escsubsecaoId', resolveLojaParam, requireLojaAccess, requirePermission('escalas', 'editar'), async (req, res, next) => {
   try {
     const data = subsecaoSchema.parse(req.body);
     await accessService.assertSecoesPermitidas(req.user, Number(req.params.lojaId), [Number(req.params.escsecaoId)]);
@@ -388,18 +389,42 @@ router.put('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/:escsubsecaoId', resolve
   }
 });
 
-router.delete('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/:escsubsecaoId', resolveLojaParam, requireLojaAccess, requirePermission('secoes', 'editar'), async (req, res, next) => {
+router.delete('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/:escsubsecaoId', resolveLojaParam, requireLojaAccess, requirePermission('escalas', 'editar'), async (req, res, next) => {
   try {
     await accessService.assertSecoesPermitidas(req.user, Number(req.params.lojaId), [Number(req.params.escsecaoId)]);
-    const subsecao = await catalogService.updateSubsecao({
+    const subsecao = await catalogService.deleteSubsecao({
       lojaId: Number(req.params.lojaId),
       escsecaoId: Number(req.params.escsecaoId),
-      escsubsecaoId: Number(req.params.escsubsecaoId),
-      data: { STATUS: 'I' }
+      escsubsecaoId: Number(req.params.escsubsecaoId)
     });
     if (!subsecao) return res.status(404).json({ error: 'Subsecao nao encontrada para a secao.' });
     return res.json({ subsecao });
   } catch (error) {
+    if (error.statusCode === 422) return res.status(422).json({ error: error.message });
+    return next(error);
+  }
+});
+
+router.patch('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/funcionarios/:escfuncId', resolveLojaParam, requireLojaAccess, requirePermission('escalas', 'editar'), async (req, res, next) => {
+  try {
+    const data = z.object({
+      ESCSUBSECAO_ID: z.number().int().positive().nullable()
+    }).strict().parse(req.body);
+    const lojaId = Number(req.params.lojaId);
+    const escsecaoId = Number(req.params.escsecaoId);
+    const escfuncId = Number(req.params.escfuncId);
+    await accessService.assertSecoesPermitidas(req.user, lojaId, [escsecaoId]);
+    const funcionarios = await catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [escsecaoId] });
+    const funcionarioPermitido = funcionarios.some((funcionario) => Number(funcionario.ESCFUNC_ID) === escfuncId && Number(funcionario.ESCSECAO_ID) === escsecaoId);
+    if (!funcionarioPermitido) return res.status(404).json({ error: 'Funcionario nao encontrado para a secao.' });
+    const funcionario = await catalogService.updateFuncionarioEscala({
+      lojaId,
+      escfuncId,
+      data
+    });
+    return res.json({ funcionario });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Campos de funcionario invalidos.', details: error.errors });
     if (error.statusCode === 422) return res.status(422).json({ error: error.message });
     return next(error);
   }

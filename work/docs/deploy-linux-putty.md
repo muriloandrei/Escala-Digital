@@ -169,6 +169,8 @@ sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260810_
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260810_add_permissoes_granulares.sql
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260826_usuario_loja_principal.sql
 sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260831_fixos_pre_geracao.sql
+sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260902_subsecoes_frente_caixa.sql
+sqlplus USUARIO/SENHA@HOST:1521/SERVICE @work/docker/oracle/migrations/20260903_funcionario_subsecao.sql
 ```
 
 A migration `20260807_rm_rules_horarios.sql` cria:
@@ -185,6 +187,8 @@ A migration `20260810_add_permissoes_granulares.sql` adiciona os campos `PODE_CR
 A migration `20260826_usuario_loja_principal.sql` adiciona o campo de loja principal do usuario.
 
 A migration `20260831_fixos_pre_geracao.sql` cria `SGN_ESC_FIXO_ESCALA` e `SGN_ESC_FIXO_ESCALA_SEQ`, usados para distribuir/remover folgas fixas e horarios fixos antes da geracao da escala por secao.
+
+A migration `20260903_funcionario_subsecao.sql` adiciona o campo `SGN_ESC_FUNCIONARIO.ESCSUBSECAO_ID`, usado pela tela master-detail de subsecoes para vincular, remover e transferir funcionarios entre subsetores da Frente de Caixa.
 
 ## 8. Teste manual antes do servico
 

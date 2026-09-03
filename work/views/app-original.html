@@ -417,6 +417,80 @@
                     </form>
                 </div>
             </div>
+            <div id="subsecoes-page" class="hidden">
+                <header class="main-header">
+                    <div>
+                        <h1 id="subsecoesTitulo">Subseções</h1>
+                        <p class="table-card-subtitle" id="subsecoesResumo">Organize as equipes internas da seção.</p>
+                    </div>
+                    <div class="header-actions">
+                        <button type="button" class="action-button secondary" id="voltarSubsecoesBtn">
+                            <span class="material-symbols-outlined">arrow_back</span>
+                            Voltar
+                        </button>
+                    </div>
+                </header>
+                <div class="subsections-layout">
+                    <aside class="subsections-sidebar">
+                        <div class="subsections-panel-header">
+                            <div>
+                                <h2>Subseções</h2>
+                                <span id="subsecoesListaResumo">0 cadastrada(s)</span>
+                            </div>
+                            <button type="button" class="action-button compact" id="novaSubsecaoInlineBtn">
+                                <span class="material-symbols-outlined">add</span>
+                                Nova
+                            </button>
+                        </div>
+                        <label class="escala-search-field subsections-search">
+                            <span class="material-symbols-outlined">search</span>
+                            <input id="subsecoesBuscaInput" type="search" placeholder="Buscar subseção">
+                        </label>
+                        <div id="subsecoesLista" class="subsections-list" aria-live="polite"></div>
+                    </aside>
+                    <section class="subsections-detail">
+                        <div class="subsections-detail-header">
+                            <div>
+                                <h2 id="subsecoesDetalheTitulo">Selecione uma subseção</h2>
+                                <p id="subsecoesDetalheResumo" class="table-card-subtitle">Os funcionários alocados aparecerão aqui.</p>
+                            </div>
+                            <button type="button" class="action-button compact" id="subsecoesVincularFuncionarioBtn">
+                                <span class="material-symbols-outlined">person_add</span>
+                                Vincular Funcionário
+                            </button>
+                        </div>
+                        <div id="subsecoesVincularPanel" class="subsections-link-panel hidden">
+                            <label class="escala-search-field">
+                                <span class="material-symbols-outlined">search</span>
+                                <input id="subsecoesFuncionarioBusca" type="search" placeholder="Digite nome, matrícula ou cargo">
+                            </label>
+                            <div id="subsecoesFuncionariosSugestoes" class="subsections-suggestions"></div>
+                        </div>
+                        <div class="subsections-bulk-actions">
+                            <select id="subsecoesTransferirSelect" class="escala-filter-select" aria-label="Transferir selecionados para"></select>
+                            <button type="button" class="action-button secondary compact" id="subsecoesTransferirSelecionadosBtn">
+                                <span class="material-symbols-outlined">drive_file_move</span>
+                                Transferir selecionados
+                            </button>
+                        </div>
+                        <div class="subsections-employee-table-wrap">
+                            <table class="data-table subsections-employee-table">
+                                <thead>
+                                    <tr>
+                                        <th><input type="checkbox" id="subsecoesSelecionarTodos" aria-label="Selecionar todos"></th>
+                                        <th>Funcionário</th>
+                                        <th>Matrícula</th>
+                                        <th>Cargo</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="subsecoesFuncionariosBody">
+                                    <tr><td colspan="4" class="text-center text-gray-500 py-8">Selecione uma subseção.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </div>
             <div id="turnos-secao-page" class="hidden">
                 <header class="main-header">
                     <div>
