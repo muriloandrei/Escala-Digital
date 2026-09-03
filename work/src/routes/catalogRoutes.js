@@ -39,6 +39,11 @@ const subsecaoSchema = z.object({
   STATUS: z.enum(['A', 'I']).optional()
 }).strict();
 
+const funcionarioSubsecaoSchema = z.object({
+  ESCSECAO_ID: z.number().int().positive().optional(),
+  ESCSUBSECAO_ID: z.number().int().positive().nullable()
+}).strict();
+
 const turnoSecaoSchema = secaoTurnoSchema.extend({
   ESCSECAO_ID: z.number().int().positive()
 }).strict();
@@ -407,9 +412,7 @@ router.delete('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/:escsubsecaoId', reso
 
 router.patch('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/funcionarios/:escfuncId', resolveLojaParam, requireLojaAccess, requirePermission('escalas', 'editar'), async (req, res, next) => {
   try {
-    const data = z.object({
-      ESCSUBSECAO_ID: z.number().int().positive().nullable()
-    }).strict().parse(req.body);
+    const data = funcionarioSubsecaoSchema.pick({ ESCSUBSECAO_ID: true }).parse(req.body);
     const lojaId = Number(req.params.lojaId);
     const escsecaoId = Number(req.params.escsecaoId);
     const escfuncId = Number(req.params.escfuncId);
@@ -422,6 +425,36 @@ router.patch('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/funcionarios/:escfuncI
       escfuncId,
       data
     });
+    return res.json({ funcionario });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Campos de funcionario invalidos.', details: error.errors });
+    if (error.statusCode === 422) return res.status(422).json({ error: error.message });
+    return next(error);
+  }
+});
+
+router.patch('/lojas/:lojaId/funcionarios/:escfuncId/subsecao', resolveLojaParam, requireLojaAccess, requirePermission('escalas', 'editar'), async (req, res, next) => {
+  try {
+    const data = funcionarioSubsecaoSchema.parse(req.body);
+    const lojaId = Number(req.params.lojaId);
+    const escfuncId = Number(req.params.escfuncId);
+    const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
+    const funcionarios = await catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas });
+    const funcionarioAtual = funcionarios.find((funcionario) => Number(funcionario.ESCFUNC_ID) === escfuncId);
+    if (!funcionarioAtual) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja ou secoes permitidas.' });
+
+    const escsecaoId = Number(data.ESCSECAO_ID || funcionarioAtual.ESCSECAO_ID);
+    if (!escsecaoId || Number(funcionarioAtual.ESCSECAO_ID) !== escsecaoId) {
+      return res.status(422).json({ error: 'Subsecao deve pertencer a secao atual do funcionario.' });
+    }
+    await accessService.assertSecoesPermitidas(req.user, lojaId, [escsecaoId]);
+
+    const funcionario = await catalogService.updateFuncionarioEscala({
+      lojaId,
+      escfuncId,
+      data: { ESCSUBSECAO_ID: data.ESCSUBSECAO_ID }
+    });
+    if (!funcionario) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja.' });
     return res.json({ funcionario });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Campos de funcionario invalidos.', details: error.errors });

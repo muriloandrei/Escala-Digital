@@ -2883,11 +2883,27 @@
             await recarregarSubsecoesPage();
         };
 
+        const atualizarFuncionarioSubsecaoApi = async ({ loja, escsecaoId, escfuncId, escsubsecaoId }) => {
+            if (!loja || !escfuncId) {
+                throw new Error('Não foi possível identificar loja ou funcionário para transferir.');
+            }
+            const payload = {
+                ESCSUBSECAO_ID: escsubsecaoId ? Number(escsubsecaoId) : null
+            };
+            if (escsecaoId) payload.ESCSECAO_ID = Number(escsecaoId);
+            return apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/funcionarios/' + encodeURIComponent(escfuncId) + '/subsecao', {
+                method: 'PATCH',
+                body: JSON.stringify(payload)
+            });
+        };
+
         const atualizarFuncionarioSubsecaoPage = async (escfuncId, subsecaoId) => {
             if (!canManageSubsecoesPage()) return showInfoModal('Usuario sem permissao para editar subsecoes.', 'error');
-            await apiRequest(getSubsecoesPageBaseUrl() + '/funcionarios/' + encodeURIComponent(escfuncId), {
-                method: 'PATCH',
-                body: JSON.stringify({ ESCSUBSECAO_ID: subsecaoId ? Number(subsecaoId) : null })
+            await atualizarFuncionarioSubsecaoApi({
+                loja: subsecoesPageState.loja,
+                escsecaoId: subsecoesPageState.secao?.ESCSECAO_ID,
+                escfuncId,
+                escsubsecaoId: subsecaoId
             });
             subsecoesPageState.selecionados.delete(String(escfuncId));
             await recarregarSubsecoesPage();
@@ -2923,9 +2939,11 @@
             if (!values?.ESCSUBSECAO_ID) return;
             const loja = origemEscala ? escalaDetalheAtual.lojaId : subsecoesPageState.loja;
             const escsecaoId = origemEscala ? (funcionario.ESCSECAO_ID || funcionario.escsecaoId || escalaDetalheAtual.secaoAtiva) : subsecoesPageState.secao?.ESCSECAO_ID;
-            await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/secoes/' + encodeURIComponent(escsecaoId) + '/subsecoes/funcionarios/' + encodeURIComponent(funcionario.ESCFUNC_ID || funcionario.escfuncId), {
-                method: 'PATCH',
-                body: JSON.stringify({ ESCSUBSECAO_ID: Number(values.ESCSUBSECAO_ID) })
+            await atualizarFuncionarioSubsecaoApi({
+                loja,
+                escsecaoId,
+                escfuncId: funcionario.ESCFUNC_ID || funcionario.escfuncId,
+                escsubsecaoId: values.ESCSUBSECAO_ID
             });
             if (origemEscala && values.VIGENCIA !== 'PROXIMO_MES' && escalaDetalheAtual.mesRef) {
                 const inicio = values.VIGENCIA === 'PROXIMA_SEMANA' ? getProximaSegundaIsoBanco() : getHojeIsoBanco();
@@ -7469,8 +7487,13 @@
             if (scaleMenuButton) {
                 event.preventDefault();
                 event.stopPropagation();
-                escalaDetalheAtual.menuFuncionarioAberto = String(escalaDetalheAtual.menuFuncionarioAberto || '') === String(scaleMenuButton.dataset.scaleMenuId) ? null : scaleMenuButton.dataset.scaleMenuId;
-                renderizarSecaoAtivaEscala();
+                const menuId = String(scaleMenuButton.dataset.scaleMenuId || '');
+                const wrap = scaleMenuButton.closest('.scale-kebab-wrap');
+                const menu = wrap?.querySelector('.subsection-kebab-menu');
+                const shouldOpen = menu?.classList.contains('hidden');
+                escalaBancoMensalContent.querySelectorAll('.scale-kebab-wrap .subsection-kebab-menu').forEach(item => item.classList.add('hidden'));
+                escalaDetalheAtual.menuFuncionarioAberto = shouldOpen ? menuId : null;
+                if (shouldOpen) menu.classList.remove('hidden');
                 return;
             }
             if (scaleDetalhe || scaleEditarHorarios || scaleTransferir) {
