@@ -1,5 +1,6 @@
 const path = require('path');
 const crypto = require('crypto');
+const fs = require('fs');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
@@ -19,6 +20,39 @@ const monthlyReleaseService = require('./services/monthlyReleaseService');
 
 const env = getEnv();
 const app = express();
+
+function getLatestMtime(pathsToInspect) {
+  let latest = 0;
+  for (const targetPath of pathsToInspect) {
+    if (!fs.existsSync(targetPath)) continue;
+    const stat = fs.statSync(targetPath);
+    latest = Math.max(latest, stat.mtimeMs);
+    if (stat.isDirectory()) {
+      const children = fs.readdirSync(targetPath).map((child) => path.join(targetPath, child));
+      latest = Math.max(latest, getLatestMtime(children));
+    }
+  }
+  return latest;
+}
+
+const appVersion = crypto
+  .createHash('sha1')
+  .update([
+    process.env.APP_VERSION || '',
+    String(getLatestMtime([
+      path.join(__dirname, '..', 'public', 'js'),
+      path.join(__dirname, '..', 'public', 'css'),
+      path.join(__dirname, '..', 'views')
+    ]))
+  ].join('|'))
+  .digest('hex')
+  .slice(0, 12);
+
+function setNoStore(res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
 
 if (env.trustProxy !== false) {
   app.set('trust proxy', env.trustProxy);
@@ -54,15 +88,29 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res, filePath) => {
+    if (/\.(?:html|js|css)$/i.test(filePath)) {
+      setNoStore(res);
+    }
+  }
+}));
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 app.get('/', (req, res) => {
+  setNoStore(res);
   res.sendFile(path.join(__dirname, '..', 'public', 'login.html'));
 });
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', database: 'oracle' });
+});
+
+app.get('/api/app-version', (req, res) => {
+  setNoStore(res);
+  res.json({ version: appVersion });
 });
 
 const loginLimiter = rateLimit({
@@ -91,6 +139,7 @@ function redirectToLoginWhenMissingSession(req, res, next) {
 }
 
 app.get('/app', redirectToLoginWhenMissingSession, requireAuth, (req, res) => {
+  setNoStore(res);
   res.sendFile(path.join(__dirname, '..', 'views', 'app-original.html'));
 });
 

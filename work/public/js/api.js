@@ -5,6 +5,7 @@ const api = {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     const response = await fetch(path, {
+      cache: 'no-store',
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',

@@ -271,12 +271,15 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
 
 function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), funcionarioIndex = 0, padraoFolga = null, opcoes = {}) {
   const folgasCiclo = new Set(padraoFolga || getPadraoFolgaPorIndice(funcionarioIndex));
-  const folgasDatas = getMonthDays(mesRef)
+  const datasGeradas = getMonthDays(mesRef)
     .filter((date) => formatDateValue(date) >= hojeIso)
+    .map(formatDateValue);
+  const folgasDatas = datasGeradas
+    .map((data) => new Date(`${data}T00:00:00`))
     .filter((date) => folgasCiclo.has(getCycleIndex(date)))
     .map(formatDateValue);
 
-  return buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasDatas, opcoes);
+  return buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, completarFolgasMinimasSemanais(datasGeradas, folgasDatas), opcoes);
 }
 
 function getSecaoKey(funcionario) {
@@ -393,6 +396,31 @@ function getWeekGroups(datasGeradas) {
     weeks.get(key).push(data);
   });
   return [...weeks.values()];
+}
+
+function completarFolgasMinimasSemanais(datasGeradas = [], folgasDatas = []) {
+  const folgas = new Set((folgasDatas || []).map(formatDateValue).filter(Boolean));
+  getWeekGroups(datasGeradas).forEach((semana) => {
+    const minimoSemana = Math.min(2, Math.round(semana.length * 2 / 7));
+    let folgasSemana = semana.filter((data) => folgas.has(data)).length;
+    if (folgasSemana >= minimoSemana) return;
+
+    const candidatos = semana
+      .filter((data) => !folgas.has(data) && !isDomingoIso(data))
+      .sort((left, right) => {
+        const leftDay = new Date(`${left}T00:00:00`).getDay();
+        const rightDay = new Date(`${right}T00:00:00`).getDay();
+        return rightDay - leftDay || left.localeCompare(right);
+      });
+
+    for (const data of candidatos) {
+      if (folgasSemana >= minimoSemana) break;
+      if (isFolgaVizinha(folgas, data)) continue;
+      folgas.add(data);
+      folgasSemana += 1;
+    }
+  });
+  return [...folgas].sort();
 }
 
 function hasMaxFolgasPorSemanaDatas(folgas = [], maxFolgasSemana = 2) {

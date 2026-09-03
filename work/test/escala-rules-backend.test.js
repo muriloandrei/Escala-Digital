@@ -69,11 +69,11 @@ test('backend rejects more than five consecutive worked days in 5x2', () => {
   assert.ok(errors.some((error) => error.includes('dias consecutivos')));
 });
 
-test('backend allows five consecutive worked days followed by rest', () => {
+test('backend allows a proportional 5x2 week with enough rests', () => {
   const errors = validateEscalaPayload(buildPayload([
     trabalho('2026-09-01'),
     trabalho('2026-09-02'),
-    trabalho('2026-09-03'),
+    descanso('2026-09-03'),
     trabalho('2026-09-04'),
     trabalho('2026-09-05'),
     descanso('2026-09-06')
@@ -124,6 +124,20 @@ test('backend allows Sunday rest plus one more rest in same week', () => {
   ]));
 
   assert.deepEqual(errors, []);
+});
+
+test('backend rejects 5x2 week with fewer than two proportional rests', () => {
+  const errors = validateEscalaPayload(buildPayload([
+    trabalho('2026-09-01'),
+    trabalho('2026-09-02'),
+    trabalho('2026-09-03'),
+    trabalho('2026-09-04'),
+    trabalho('2026-09-05'),
+    descanso('2026-09-06'),
+    trabalho('2026-09-07')
+  ]));
+
+  assert.ok(errors.some((error) => error.includes('minimo esperado no 5x2')));
 });
 
 test('backend rejects rest lower than 35 hours after day off', () => {

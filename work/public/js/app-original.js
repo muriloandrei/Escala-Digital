@@ -2317,6 +2317,25 @@
             if (Array.isArray(error?.details?.errors) && error.details.errors.length) return error.details.errors;
             return [error?.message || 'Erro na comunicação com o servidor.'];
         };
+        let appVersionAtual = null;
+        const verificarVersaoApp = async () => {
+            try {
+                const data = await apiRequest('/api/app-version', { timeoutMs: 8000 });
+                const version = String(data?.version || '');
+                if (!version) return;
+                if (!appVersionAtual) {
+                    appVersionAtual = version;
+                    return;
+                }
+                if (appVersionAtual !== version) {
+                    window.location.reload();
+                }
+            } catch (error) {
+                // A verificacao e silenciosa para nao atrapalhar o trabalho do usuario.
+            }
+        };
+        verificarVersaoApp();
+        setInterval(verificarVersaoApp, 60000);
         const carregarUsuarioSessao = async () => {
             const data = await apiRequest('/api/auth/me');
             const user = data.user || {};
@@ -4290,11 +4309,17 @@
             let ultimoTrabalho = null;
             let ultimoDomingo = null;
             const folgasPorSemana = new Map();
+            const descansosPorSemana = new Map();
+            const diasPorSemana = new Map();
             [...(dias || [])].sort((a,b)=>String(a.DT || a.data).localeCompare(String(b.DT || b.data))).forEach((dia) => {
                 const dataIso = String(dia.DT || dia.data || '').slice(0,10);
                 const data = new Date(dataIso + 'T00:00:00');
+                const weekKey = getWeekKeyIsoApp(dataIso);
+                diasPorSemana.set(weekKey, (diasPorSemana.get(weekKey) || 0) + 1);
+                if (isProgramacaoDescanso(dia.PROGRAMACAO)) {
+                    descansosPorSemana.set(weekKey, (descansosPorSemana.get(weekKey) || 0) + 1);
+                }
                 if (isFolgaSemanalAutomaticaApp(dia)) {
-                    const weekKey = getWeekKeyIsoApp(dataIso);
                     const totalFolgasSemana = (folgasPorSemana.get(weekKey) || 0) + 1;
                     folgasPorSemana.set(weekKey, totalFolgasSemana);
                     if (totalFolgasSemana > 2) errors.push(`${nome}: Dia ${Number(dataIso.slice(8, 10))}: possui ${totalFolgasSemana} folgas na semana iniciada em ${weekKey}; limite permitido: 2, contando domingo.`);
@@ -4312,6 +4337,13 @@
                     ultimoDomingo = data;
                 }
                 ultimoTrabalho = dia;
+            });
+            diasPorSemana.forEach((totalDiasSemana, weekKey) => {
+                const minimoDescansosSemana = Math.min(2, Math.round((Number(totalDiasSemana) || 0) * 2 / 7));
+                const totalDescansosSemana = descansosPorSemana.get(weekKey) || 0;
+                if (minimoDescansosSemana > 0 && totalDescansosSemana < minimoDescansosSemana) {
+                    errors.push(`${nome}: possui ${totalDescansosSemana} descanso(s) na semana iniciada em ${weekKey}; minimo esperado no 5x2: ${minimoDescansosSemana}.`);
+                }
             });
             return errors;
         };
@@ -7066,7 +7098,37 @@
             return semCodigo || texto || 'Seção';
         };
 
+        const capturarPosicaoEscalaBanco = () => {
+            const mensalScroll = escalaBancoMensalContent?.querySelector('.monthly-scale-scroll');
+            const diariaScroll = escalaBancoTimelineContent?.querySelector('.daily-timeline-scroll, .timeline-scroll-container');
+            return {
+                pageY: window.scrollY || 0,
+                mensalLeft: mensalScroll?.scrollLeft || 0,
+                mensalTop: mensalScroll?.scrollTop || 0,
+                diariaLeft: diariaScroll?.scrollLeft || 0,
+                diariaTop: diariaScroll?.scrollTop || 0
+            };
+        };
+
+        const restaurarPosicaoEscalaBanco = (posicao) => {
+            if (!posicao) return;
+            requestAnimationFrame(() => {
+                const mensalScroll = escalaBancoMensalContent?.querySelector('.monthly-scale-scroll');
+                const diariaScroll = escalaBancoTimelineContent?.querySelector('.daily-timeline-scroll, .timeline-scroll-container');
+                if (mensalScroll) {
+                    mensalScroll.scrollLeft = posicao.mensalLeft || 0;
+                    mensalScroll.scrollTop = posicao.mensalTop || 0;
+                }
+                if (diariaScroll) {
+                    diariaScroll.scrollLeft = posicao.diariaLeft || 0;
+                    diariaScroll.scrollTop = posicao.diariaTop || 0;
+                }
+                window.scrollTo({ top: posicao.pageY || 0, left: 0, behavior: 'auto' });
+            });
+        };
+
         const renderizarSecaoAtivaEscala = () => {
+            const posicaoEscala = capturarPosicaoEscalaBanco();
             const secao = escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva));
             const diasSecao = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
             const nome = secao?.nome || 'Seção';
@@ -7082,6 +7144,7 @@
             aplicarVisaoEscalaBanco();
             resetarEscalaSecaoBancoBtn?.classList.toggle('hidden', escalaDetalheAtual.status === 'FINALIZADA' || escalaDetalheAtual.oficializada || !escalaDetalheAtual.secaoAtiva);
             atualizarAcoesValidacaoBanco();
+            restaurarPosicaoEscalaBanco(posicaoEscala);
         };
 
         const prepararSecoesDetalheEscala = () => {

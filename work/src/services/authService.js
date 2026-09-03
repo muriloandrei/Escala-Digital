@@ -123,12 +123,35 @@ async function findUserStores(usuarioId) {
     const result = await connection.execute(
       `select loja
        from sgn_esc_usuario_loja
-       where usuario_id = :usuarioId`,
+       where usuario_id = :usuarioId
+       order by loja`,
       { usuarioId },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
     return result.rows.map((row) => Number(pick(row, 'LOJA', 'loja')));
+  });
+}
+
+function resolveLojaPrincipal(user, lojas) {
+  const permitidas = (lojas || []).map(Number).filter(Boolean);
+  const atual = Number(pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || 0);
+  if (atual && permitidas.includes(atual)) return atual;
+  return permitidas[0] || null;
+}
+
+async function syncLojaPrincipal(usuarioId, lojaPrincipalAtual, lojaPrincipalResolvida) {
+  if (!lojaPrincipalResolvida || Number(lojaPrincipalAtual || 0) === Number(lojaPrincipalResolvida)) return;
+  await withConnection(async (connection) => {
+    const columns = await getTableColumns(connection, 'SGN_ESC_USUARIO');
+    if (!columns.has('LOJA_PRINCIPAL')) return;
+    await connection.execute(
+      `update sgn_esc_usuario
+          set loja_principal = :lojaPrincipal
+        where usuario_id = :usuarioId`,
+      { usuarioId, lojaPrincipal: lojaPrincipalResolvida },
+      { autoCommit: true }
+    );
   });
 }
 
@@ -138,13 +161,16 @@ async function getSessionUserById(usuarioId) {
 
   const currentUsuarioId = pick(user, 'USUARIO_ID', 'usuario_id');
   const lojas = await findUserStores(currentUsuarioId);
+  const lojaPrincipalAtual = pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || null;
+  const lojaPrincipal = resolveLojaPrincipal(user, lojas);
+  await syncLojaPrincipal(currentUsuarioId, lojaPrincipalAtual, lojaPrincipal);
   const sessionUser = {
     sub: String(currentUsuarioId),
     login: pick(user, 'LOGIN', 'login'),
     nome: pick(user, 'NOME', 'nome'),
     perfil: pick(user, 'PERFIL', 'perfil'),
     lojas,
-    lojaPrincipal: pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || null
+    lojaPrincipal
   };
   sessionUser.permissoes = await getUserPermissions(sessionUser.perfil);
   return sessionUser;
@@ -173,6 +199,9 @@ async function login({ login, password }) {
   }
 
   const lojas = await findUserStores(usuarioId);
+  const lojaPrincipalAtual = pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || null;
+  const lojaPrincipal = resolveLojaPrincipal(user, lojas);
+  await syncLojaPrincipal(usuarioId, lojaPrincipalAtual, lojaPrincipal);
   const { auth } = getEnv();
   const payload = {
     sub: String(usuarioId),
@@ -180,7 +209,7 @@ async function login({ login, password }) {
     nome: pick(user, 'NOME', 'nome'),
     perfil: pick(user, 'PERFIL', 'perfil'),
     lojas,
-    lojaPrincipal: pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || null
+    lojaPrincipal
   };
   payload.permissoes = await getUserPermissions(payload.perfil);
 
@@ -229,6 +258,7 @@ module.exports = {
     md5Hex,
     verifyPasswordHash,
     getTableColumns,
-    upgradeLegacyMd5Password
+    upgradeLegacyMd5Password,
+    resolveLojaPrincipal
   }
 };
