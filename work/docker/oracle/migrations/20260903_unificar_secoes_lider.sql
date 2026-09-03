@@ -1,14 +1,5 @@
 set serveroutput on
 
-declare
-  function normalizar(p_texto varchar2) return varchar2 is
-  begin
-    return upper(translate(
-      p_texto,
-      'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç',
-      'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'
-    ));
-  end;
 begin
   for par in (
     with secoes_norm as (
@@ -18,7 +9,11 @@ begin
         codcoligada,
         cod_secao,
         descr,
-        normalizar(descr) descr_norm
+        upper(translate(
+          descr,
+          'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç',
+          'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'
+        )) descr_norm
       from sgn_esc_secao
     ),
     pares as (
