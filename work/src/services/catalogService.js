@@ -49,7 +49,18 @@ function normalizeSecao(row, turnos = []) {
     COD_SECAO: pick(row, 'COD_SECAO', 'cod_secao'),
     DESCR: pick(row, 'DESCR', 'descr'),
     DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl'),
-    TURNOS: turnos
+    TURNOS: turnos,
+    SUBSECOES: []
+  };
+}
+
+function normalizeSubsecao(row) {
+  return {
+    ESCSUBSECAO_ID: pick(row, 'ESCSUBSECAO_ID', 'escsubsecao_id'),
+    ESCSECAO_ID: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
+    DESCR: pick(row, 'DESCR', 'descr'),
+    STATUS: pick(row, 'STATUS', 'status') || 'A',
+    DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl')
   };
 }
 
@@ -100,6 +111,18 @@ function isMissingObjectError(error) {
 
 function isInvalidIdentifierError(error) {
   return error?.errorNum === 904 || error?.code === 'ORA-00904';
+}
+
+function normalizarTextoComparacao(texto = '') {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function isSecaoFrenteCaixa(secao = {}) {
+  return normalizarTextoComparacao(secao.DESCR || secao.SECAO_DESCR || secao.descr).includes('frente de caixa');
 }
 
 const tableColumnsCache = new Map();
@@ -396,7 +419,12 @@ async function listSecoesByLoja(lojaId, options = {}) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return secoesResult.rows.map((row) => normalizeSecao(row, []));
+    const secoes = secoesResult.rows.map((row) => normalizeSecao(row, []));
+    const subsecoesMap = await listSubsecoesBySecaoIdsInConnection(connection, secoes.map((secao) => secao.ESCSECAO_ID));
+    return secoes.map((secao) => ({
+      ...secao,
+      SUBSECOES: subsecoesMap.get(String(secao.ESCSECAO_ID)) || []
+    }));
   });
 }
 
@@ -504,6 +532,123 @@ async function findSecaoById(connection, { lojaId, escsecaoId }) {
   );
 
   return result.rows[0] || null;
+}
+
+async function listSubsecoesBySecaoIdsInConnection(connection, escsecaoIds = [], { includeInactive = false } = {}) {
+  const ids = [...new Set((escsecaoIds || []).map(Number).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const columns = await getTableColumns(connection, 'SGN_ESC_SUBSECAO');
+  if (!columns.has('ESCSUBSECAO_ID') || !columns.has('ESCSECAO_ID')) return new Map();
+
+  const binds = {};
+  const placeholders = ids.map((id, index) => {
+    const key = `subsecaoSecao${index}`;
+    binds[key] = id;
+    return `:${key}`;
+  });
+  const statusSql = includeInactive || !columns.has('STATUS') ? '' : "and nvl(status, 'A') = 'A'";
+  const statusSelect = columns.has('STATUS') ? 'status' : "'A' as status";
+  const dtHrInclSelect = columns.has('DT_HR_INCL') ? 'dt_hr_incl' : 'cast(null as date) as dt_hr_incl';
+  const result = await connection.execute(
+    `select escsubsecao_id, escsecao_id, descr, ${statusSelect}, ${dtHrInclSelect}
+     from sgn_esc_subsecao
+     where escsecao_id in (${placeholders.join(', ')})
+       ${statusSql}
+     order by escsecao_id, descr`,
+    binds,
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+
+  const map = new Map();
+  result.rows.map(normalizeSubsecao).forEach((subsecao) => {
+    const key = String(subsecao.ESCSECAO_ID);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(subsecao);
+  });
+  return map;
+}
+
+async function listSubsecoesBySecao({ lojaId, escsecaoId, includeInactive = false }) {
+  const lojaCodigo = await resolveLojaCodigo(lojaId);
+  return withConnection(async (connection) => {
+    const secao = await findSecaoById(connection, { lojaId: lojaCodigo, escsecaoId });
+    if (!secao) return null;
+    const subsecoesMap = await listSubsecoesBySecaoIdsInConnection(connection, [escsecaoId], { includeInactive });
+    return subsecoesMap.get(String(escsecaoId)) || [];
+  });
+}
+
+async function assertSubsecaoFrenteCaixa(connection, lojaCodigo, escsecaoId) {
+  const secao = await findSecaoById(connection, { lojaId: lojaCodigo, escsecaoId });
+  if (!secao) return null;
+  if (!isSecaoFrenteCaixa(normalizeSecao(secao))) {
+    const error = new Error('Subsecoes estao liberadas apenas para Frente de Caixa.');
+    error.statusCode = 422;
+    throw error;
+  }
+  return secao;
+}
+
+async function createSubsecao({ lojaId, escsecaoId, data }) {
+  const lojaCodigo = await resolveLojaCodigo(lojaId);
+  return withConnection(async (connection) => {
+    const columns = await getTableColumns(connection, 'SGN_ESC_SUBSECAO');
+    if (!columns.has('ESCSUBSECAO_ID') || !columns.has('ESCSECAO_ID')) {
+      const error = new Error('Tabela SGN_ESC_SUBSECAO nao encontrada. Rode a migracao de subsecoes.');
+      error.statusCode = 500;
+      throw error;
+    }
+    const secao = await assertSubsecaoFrenteCaixa(connection, lojaCodigo, escsecaoId);
+    if (!secao) return null;
+
+    const result = await connection.execute(
+      `insert into sgn_esc_subsecao (
+         escsubsecao_id, escsecao_id, descr, status, dt_hr_incl
+       ) values (
+         sgn_esc_subsecao_seq.nextval, :escsecaoId, :descr, 'A', sysdate
+       )
+       returning escsubsecao_id into :id`,
+      {
+        escsecaoId,
+        descr: data.DESCR,
+        id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
+      },
+      { autoCommit: false }
+    );
+    await connection.commit();
+    const subsecoesMap = await listSubsecoesBySecaoIdsInConnection(connection, [escsecaoId], { includeInactive: true });
+    return (subsecoesMap.get(String(escsecaoId)) || []).find((item) => Number(item.ESCSUBSECAO_ID) === Number(result.outBinds.id[0])) || null;
+  });
+}
+
+async function updateSubsecao({ lojaId, escsecaoId, escsubsecaoId, data }) {
+  const lojaCodigo = await resolveLojaCodigo(lojaId);
+  return withConnection(async (connection) => {
+    await assertSubsecaoFrenteCaixa(connection, lojaCodigo, escsecaoId);
+    const fields = [];
+    const binds = { escsecaoId, escsubsecaoId };
+    if (data.DESCR !== undefined) {
+      fields.push('descr = :descr');
+      binds.descr = data.DESCR;
+    }
+    if (data.STATUS !== undefined) {
+      fields.push('status = :status');
+      binds.status = data.STATUS;
+    }
+    if (!fields.length) return null;
+
+    const result = await connection.execute(
+      `update sgn_esc_subsecao
+       set ${fields.join(', ')}
+       where escsubsecao_id = :escsubsecaoId
+         and escsecao_id = :escsecaoId`,
+      binds,
+      { autoCommit: true }
+    );
+    if (!result.rowsAffected) return null;
+    const subsecoesMap = await listSubsecoesBySecaoIdsInConnection(connection, [escsecaoId], { includeInactive: true });
+    return (subsecoesMap.get(String(escsecaoId)) || []).find((item) => Number(item.ESCSUBSECAO_ID) === Number(escsubsecaoId)) || null;
+  });
 }
 
 async function createSecao({ lojaId, data }) {
@@ -826,7 +971,7 @@ async function updateTipoDescanso(id, data) {
 
 async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
-  const allowedFields = ['BRIGADISTA', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'];
+  const allowedFields = ['BRIGADISTA', 'ESCSECAO_ID', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'];
   const updates = Object.fromEntries(
     Object.entries(data || {}).filter(([field]) => allowedFields.includes(field))
   );
@@ -836,6 +981,15 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
   }
 
   return withConnection(async (connection) => {
+    if (updates.ESCSECAO_ID !== undefined) {
+      const secao = await findSecaoById(connection, { lojaId: lojaCodigo, escsecaoId: Number(updates.ESCSECAO_ID) });
+      if (!secao) {
+        const error = new Error('Secao informada nao encontrada para a loja.');
+        error.statusCode = 422;
+        throw error;
+      }
+      updates.ESCSECAO_ID = Number(updates.ESCSECAO_ID);
+    }
     const assignments = Object.keys(updates).map((field) => `${field.toLowerCase()} = :${field}`).join(', ');
     const result = await connection.execute(
       `update sgn_esc_funcionario
@@ -863,6 +1017,9 @@ module.exports = {
   listTurnosByLojas,
   createSecao,
   updateSecao,
+  listSubsecoesBySecao,
+  createSubsecao,
+  updateSubsecao,
   listAusenciasByLojaMes,
   listTiposDescanso,
   listHorariosPadrao,

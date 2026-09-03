@@ -105,7 +105,8 @@ router.post('/gerar-secao', requirePermission('escalas', 'editar'), resolveLojaR
     const payload = z.object({
       lojaId: z.number().int().positive(),
       mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      escsecaoId: z.number().int().positive()
+      escsecaoId: z.number().int().positive(),
+      escfuncIds: z.array(z.number().int().positive()).optional()
     }).parse(req.body);
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
     const resultado = await monthlyReleaseService.gerarEscalaSecao(payload);

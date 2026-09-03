@@ -833,7 +833,7 @@ async function liberarEscalaLojaMes({ lojaId, mesRef }) {
   };
 }
 
-async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = formatDateValue(new Date()) }) {
+async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()) }) {
   const inicio = formatDateValue(mesRef);
   const fim = getMonthEndIso(mesRef);
   const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
@@ -843,7 +843,11 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = formatDa
     escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId })
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
-  const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
+  const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
+    ? new Set(escfuncIds.map(Number).filter(Boolean))
+    : null;
+  const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId))
+    .filter((funcionario) => !filtroFuncionarios || filtroFuncionarios.has(Number(funcionario.ESCFUNC_ID)));
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
   const funcionariosPayload = anexarDiasPassados(
     buildFuncionariosRascunhoBalanceado(funcionariosSecao, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
@@ -871,6 +875,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = formatDa
     lojaId,
     mesRef,
     escsecaoId,
+    escfuncIds: filtroFuncionarios ? [...filtroFuncionarios] : null,
     criada: true,
     funcionarios: saved.length,
     criticas: ruleErrors.slice(0, 100)

@@ -8,6 +8,7 @@ const router = express.Router();
 
 const funcionarioEscalaSchema = z.object({
   BRIGADISTA: z.string().max(1).optional(),
+  ESCSECAO_ID: z.number().int().positive().optional(),
   HR_ENT1: z.string().max(5).nullable().optional(),
   HR_SAI1: z.string().max(5).nullable().optional(),
   HR_ENT2: z.string().max(5).nullable().optional(),
@@ -30,6 +31,11 @@ const secaoSchema = secaoTurnoSchema.extend({
 const secaoCadastroSchema = z.object({
   COD_SECAO: z.string().trim().min(1).max(10),
   DESCR: z.string().trim().min(1).max(100)
+}).strict();
+
+const subsecaoSchema = z.object({
+  DESCR: z.string().trim().min(1).max(100),
+  STATUS: z.enum(['A', 'I']).optional()
 }).strict();
 
 const turnoSecaoSchema = secaoTurnoSchema.extend({
@@ -326,6 +332,79 @@ router.put('/lojas/:lojaId/secoes/:escsecaoId', resolveLojaParam, requireLojaAcc
   }
 });
 
+router.get('/lojas/:lojaId/secoes/:escsecaoId/subsecoes', resolveLojaParam, requireLojaAccess, requirePermission('secoes', 'visualizar'), async (req, res, next) => {
+  try {
+    const secoesPermitidas = await getSecoesPermitidas(req, Number(req.params.lojaId));
+    await accessService.assertSecoesPermitidas(req.user, Number(req.params.lojaId), [Number(req.params.escsecaoId)]);
+    const subsecoes = await catalogService.listSubsecoesBySecao({
+      lojaId: Number(req.params.lojaId),
+      escsecaoId: Number(req.params.escsecaoId),
+      includeInactive: req.query.includeInactive === '1'
+    });
+    if (!subsecoes) return res.status(404).json({ error: 'Secao nao encontrada para a loja.' });
+    if (Array.isArray(secoesPermitidas) && !secoesPermitidas.map(Number).includes(Number(req.params.escsecaoId))) {
+      return res.status(403).json({ error: 'Secao nao liberada para o usuario.' });
+    }
+    return res.json({ subsecoes });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/lojas/:lojaId/secoes/:escsecaoId/subsecoes', resolveLojaParam, requireLojaAccess, requirePermission('secoes', 'editar'), async (req, res, next) => {
+  try {
+    const data = subsecaoSchema.pick({ DESCR: true }).parse(req.body);
+    await accessService.assertSecoesPermitidas(req.user, Number(req.params.lojaId), [Number(req.params.escsecaoId)]);
+    const subsecao = await catalogService.createSubsecao({
+      lojaId: Number(req.params.lojaId),
+      escsecaoId: Number(req.params.escsecaoId),
+      data
+    });
+    if (!subsecao) return res.status(404).json({ error: 'Secao nao encontrada para a loja.' });
+    return res.status(201).json({ subsecao });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Campos de subsecao invalidos.', details: error.errors });
+    if (error.statusCode === 422) return res.status(422).json({ error: error.message });
+    return next(error);
+  }
+});
+
+router.put('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/:escsubsecaoId', resolveLojaParam, requireLojaAccess, requirePermission('secoes', 'editar'), async (req, res, next) => {
+  try {
+    const data = subsecaoSchema.parse(req.body);
+    await accessService.assertSecoesPermitidas(req.user, Number(req.params.lojaId), [Number(req.params.escsecaoId)]);
+    const subsecao = await catalogService.updateSubsecao({
+      lojaId: Number(req.params.lojaId),
+      escsecaoId: Number(req.params.escsecaoId),
+      escsubsecaoId: Number(req.params.escsubsecaoId),
+      data
+    });
+    if (!subsecao) return res.status(404).json({ error: 'Subsecao nao encontrada para a secao.' });
+    return res.json({ subsecao });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Campos de subsecao invalidos.', details: error.errors });
+    if (error.statusCode === 422) return res.status(422).json({ error: error.message });
+    return next(error);
+  }
+});
+
+router.delete('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/:escsubsecaoId', resolveLojaParam, requireLojaAccess, requirePermission('secoes', 'editar'), async (req, res, next) => {
+  try {
+    await accessService.assertSecoesPermitidas(req.user, Number(req.params.lojaId), [Number(req.params.escsecaoId)]);
+    const subsecao = await catalogService.updateSubsecao({
+      lojaId: Number(req.params.lojaId),
+      escsecaoId: Number(req.params.escsecaoId),
+      escsubsecaoId: Number(req.params.escsubsecaoId),
+      data: { STATUS: 'I' }
+    });
+    if (!subsecao) return res.status(404).json({ error: 'Subsecao nao encontrada para a secao.' });
+    return res.json({ subsecao });
+  } catch (error) {
+    if (error.statusCode === 422) return res.status(422).json({ error: error.message });
+    return next(error);
+  }
+});
+
 router.get('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
     const secoesPermitidas = await getSecoesPermitidas(req, Number(req.params.lojaId));
@@ -433,6 +512,7 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, require
     if (error.name === 'ZodError') {
       return res.status(400).json({ error: 'Campos de funcionario invalidos.', details: error.errors });
     }
+    if (error.statusCode === 422) return res.status(422).json({ error: error.message });
     return next(error);
   }
 });

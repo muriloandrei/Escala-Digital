@@ -22,6 +22,18 @@ create table SGN_ESC_SECAO (
   constraint SGN_ESC_SECAO_2_UK unique (CODFILIAL, DESCR)
 );
 
+create table SGN_ESC_SUBSECAO (
+  ESCSUBSECAO_ID number(15) not null,
+  ESCSECAO_ID number(15) not null,
+  DESCR varchar2(100) not null,
+  STATUS varchar2(1) default 'A' not null,
+  DT_HR_INCL date default sysdate not null,
+  constraint SGN_ESC_SUBSECAO_PK primary key (ESCSUBSECAO_ID),
+  constraint SGN_ESC_SUBSECAO_1_UK unique (ESCSECAO_ID, DESCR),
+  constraint SGN_ESC_SUBSECAO_SEC_FK foreign key (ESCSECAO_ID) references SGN_ESC_SECAO (ESCSECAO_ID),
+  constraint SGN_ESC_SUBSECAO_STATUS_CK check (STATUS in ('A', 'I'))
+);
+
 create table SGN_ESC_FUNCAO (
   ESCFUNCAO_ID number(15) not null,
   CODCOLIGADA number(10) not null,
@@ -269,6 +281,7 @@ create table SGN_ESC_PERFIL_PERMISSAO (
 
 create sequence SGN_ESC_LOJA_SEQ start with 100 increment by 1 nocache;
 create sequence SGN_ESC_SECAO_SEQ start with 100 increment by 1 nocache;
+create sequence SGN_ESC_SUBSECAO_SEQ start with 100 increment by 1 nocache;
 create sequence SGN_ESC_SECAO_TURNO_SEQ start with 100 increment by 1 nocache;
 create sequence SGN_ESC_FUNCAO_SEQ start with 100 increment by 1 nocache;
 create sequence SGN_ESC_FUNCIONARIO_SEQ start with 1000 increment by 1 nocache;

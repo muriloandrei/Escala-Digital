@@ -588,6 +588,59 @@ test('section generation saves draft even when automatic validation returns crit
   }
 });
 
+test('section generation can be limited to selected employees in a subsection', async () => {
+  const originals = {
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listFixosEscala: escalaService.listFixosEscala,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  let savedPayload = null;
+
+  catalogService.listFuncionariosByLoja = async () => [301, 302, 303].map((id) => ({
+    ESCFUNC_ID: id,
+    CHAPA: `030${id}`,
+    NOME: `Funcionario ${id}`,
+    LOJA: 10,
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }));
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.listDiasSecaoAtual = async () => [];
+  escalaService.saveEscalasBatch = async (payload) => {
+    savedPayload = payload;
+    return payload.funcionarios;
+  };
+
+  try {
+    const result = await monthlyReleaseService.gerarEscalaSecao({
+      lojaId: 10,
+      mesRef: '2026-09-01',
+      escsecaoId: 20,
+      escfuncIds: [301, 303],
+      hojeIso: '2026-09-01'
+    });
+
+    assert.equal(result.criada, true);
+    assert.deepEqual(savedPayload.funcionarios.map((funcionario) => funcionario.escfuncId), [301, 303]);
+  } finally {
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
+    escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
+    escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+  }
+});
+
 test('section generation preserves previous days and only generates editable dates', async () => {
   const originals = {
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,

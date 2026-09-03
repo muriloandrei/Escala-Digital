@@ -1442,6 +1442,45 @@
             color: #ffffff;
         }
 
+        .subsection-count-chip {
+            background: #f3e8ff;
+            border: 1px solid #e9d5ff;
+            border-radius: 999px;
+            color: #7e22ce;
+            display: inline-flex;
+            font-size: 0.72rem;
+            font-weight: 800;
+            padding: 4px 8px;
+            white-space: nowrap;
+        }
+
+        .subsection-modal-list {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            display: grid;
+            gap: 0;
+            max-height: 260px;
+            overflow: auto;
+        }
+
+        .subsection-modal-row {
+            align-items: center;
+            border-bottom: 1px solid #eef2f7;
+            display: flex;
+            justify-content: space-between;
+            padding: 9px 10px;
+        }
+
+        .subsection-modal-row:last-child {
+            border-bottom: 0;
+        }
+
+        .subsection-modal-row span {
+            color: #64748b;
+            font-size: 0.75rem;
+            font-weight: 800;
+        }
+
         .bank-detailed-scale {
             display: grid;
             gap: 18px;
@@ -1867,19 +1906,25 @@
         }
 
         .monthly-scale-table thead tr:first-child th {
-            height: 44px;
+            height: 30px;
             top: 0;
         }
 
         .monthly-scale-table thead tr:nth-child(2) th {
-            height: 34px;
-            top: 44px;
+            height: 44px;
+            top: 30px;
             z-index: 5;
         }
 
         .monthly-scale-table thead tr:nth-child(3) th {
             height: 34px;
-            top: 78px;
+            top: 74px;
+            z-index: 5;
+        }
+
+        .monthly-scale-table thead tr:nth-child(4) th {
+            height: 34px;
+            top: 108px;
             z-index: 5;
         }
 
@@ -1914,7 +1959,8 @@
 
         .monthly-scale-table thead tr:first-child th.employee-col,
         .monthly-scale-table thead tr:nth-child(2) th.employee-col,
-        .monthly-scale-table thead tr:nth-child(3) th.employee-col {
+        .monthly-scale-table thead tr:nth-child(3) th.employee-col,
+        .monthly-scale-table thead tr:nth-child(4) th.employee-col {
             background: #f8fbff;
             z-index: 48;
         }
@@ -1944,6 +1990,17 @@
         .monthly-summary-label.has-critical > span {
             color: #b91c1c;
             font-weight: 900;
+        }
+
+        .monthly-quality-row th {
+            color: #16a34a;
+            font-size: 0.68rem;
+            font-weight: 900;
+        }
+
+        .monthly-quality-row .employee-col span {
+            color: #64748b;
+            font-size: 0.72rem;
         }
 
         .critical-section-chip {

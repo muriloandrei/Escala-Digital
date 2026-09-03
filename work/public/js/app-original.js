@@ -2614,9 +2614,14 @@
                 '<td data-label="Descrição">' + escapeHtml(secao.DESCR || '') + '</td>' +
                 '<td data-label="Loja">Loja ' + escapeHtml(secao.CODFILIAL || secao.LOJA || '') + '</td>' +
                 '<td data-label="Codcoligada">' + escapeHtml(secao.CODCOLIGADA || '') + '</td>' +
-                '<td data-label="Ações" class="actions-cell"><button class="action-btn-table banco-action edit-secao" data-id="' + escapeHtml(secao.ESCSECAO_ID || '') + '" data-loja="' + escapeHtml(secao.CODFILIAL || secao.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button></td></tr>').join('') : '<tr><td colspan="5" class="text-center text-gray-500 py-8">Nenhuma seção encontrada.</td></tr>';
+                '<td data-label="Subseções">' + (isSecaoFrenteCaixa(secao.DESCR) ? '<span class="subsection-count-chip">' + escapeHtml(String((secao.SUBSECOES || []).length)) + ' cadastrada(s)</span>' : '<span class="text-gray-500">-</span>') + '</td>' +
+                '<td data-label="Ações" class="actions-cell">' +
+                    '<button class="action-btn-table banco-action edit-secao" data-id="' + escapeHtml(secao.ESCSECAO_ID || '') + '" data-loja="' + escapeHtml(secao.CODFILIAL || secao.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button>' +
+                    (isSecaoFrenteCaixa(secao.DESCR) ? '<button class="action-btn-table banco-action subsecoes-secao" data-id="' + escapeHtml(secao.ESCSECAO_ID || '') + '" data-loja="' + escapeHtml(secao.CODFILIAL || secao.LOJA || '') + '"><span class="material-symbols-outlined">account_tree</span>Subseções</button>' : '') +
+                '</td></tr>').join('') : '<tr><td colspan="6" class="text-center text-gray-500 py-8">Nenhuma seção encontrada.</td></tr>';
             if (!hasPermission('secoes', 'editar')) {
                 tabelaSecoesBody.querySelectorAll('.edit-secao').forEach(button => button.remove());
+                tabelaSecoesBody.querySelectorAll('.subsecoes-secao').forEach(button => button.remove());
             }
             tabelaSecoesBody.querySelectorAll('.actions-cell').forEach(cell => {
                 if (!cell.textContent.trim()) cell.textContent = '-';
@@ -2630,13 +2635,96 @@
             aplicarFiltrosSecoesTela();
         };
 
+        const abrirCrudSubsecoesSecao = async (secao) => {
+            if (!secao) return;
+            const loja = secao.CODFILIAL || secao.LOJA || secoesLojaSelect?.value || lojaEscalaSelect.value;
+            let manterAberto = true;
+            while (manterAberto) {
+                const data = await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/secoes/' + encodeURIComponent(secao.ESCSECAO_ID) + '/subsecoes?includeInactive=1');
+                const subsecoes = data.subsecoes || [];
+                const ativas = subsecoes.filter(item => String(item.STATUS || 'A') === 'A');
+                const listaHtml = '<div class="subsection-modal-list">' + (subsecoes.length ? subsecoes.map(item =>
+                    '<div class="subsection-modal-row"><strong>' + escapeHtml(item.DESCR || '') + '</strong><span>' + (String(item.STATUS || 'A') === 'A' ? 'Ativa' : 'Inativa') + '</span></div>'
+                ).join('') : '<p>Nenhuma subseção cadastrada.</p>') + '</div>';
+                const values = await showInputModal({
+                    title: 'Subseções - ' + (secao.DESCR || secao.COD_SECAO),
+                    inputs: [
+                        { type: 'html', html: listaHtml },
+                        { label: 'Ação', type: 'select', id: 'SUBSECAO_ACAO', value: 'ADICIONAR', options: [
+                            { value: 'ADICIONAR', label: 'Adicionar subseção' },
+                            { value: 'EDITAR', label: 'Editar descrição' },
+                            { value: 'INATIVAR', label: 'Inativar subseção' },
+                            { value: 'FECHAR', label: 'Fechar' }
+                        ] },
+                        { label: 'Subseção', type: 'select', id: 'SUBSECAO_ID', value: ativas[0]?.ESCSUBSECAO_ID || '', options: ativas.map(item => ({ value: String(item.ESCSUBSECAO_ID), label: item.DESCR })) },
+                        { label: 'Descrição', type: 'text', id: 'SUBSECAO_DESCR', value: '', maxlength: 100 }
+                    ],
+                    confirmText: 'Executar',
+                    cancelText: 'Sair',
+                    panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-2xl flex flex-col'
+                });
+                if (!values || values.SUBSECAO_ACAO === 'FECHAR') break;
+                if (values.SUBSECAO_ACAO === 'ADICIONAR') {
+                    const descr = String(values.SUBSECAO_DESCR || '').trim();
+                    if (!descr) {
+                        showInfoModal('Informe a descrição da subseção.', 'error');
+                        continue;
+                    }
+                    await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/secoes/' + encodeURIComponent(secao.ESCSECAO_ID) + '/subsecoes', {
+                        method: 'POST',
+                        body: JSON.stringify({ DESCR: descr })
+                    });
+                    showInfoModal('Subseção adicionada.', 'success');
+                    continue;
+                }
+                const subsecaoId = values.SUBSECAO_ID;
+                if (!subsecaoId) {
+                    showInfoModal('Selecione uma subseção.', 'error');
+                    continue;
+                }
+                if (values.SUBSECAO_ACAO === 'EDITAR') {
+                    const descr = String(values.SUBSECAO_DESCR || '').trim();
+                    if (!descr) {
+                        showInfoModal('Informe a nova descrição.', 'error');
+                        continue;
+                    }
+                    await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/secoes/' + encodeURIComponent(secao.ESCSECAO_ID) + '/subsecoes/' + encodeURIComponent(subsecaoId), {
+                        method: 'PUT',
+                        body: JSON.stringify({ DESCR: descr, STATUS: 'A' })
+                    });
+                    showInfoModal('Subseção atualizada.', 'success');
+                    continue;
+                }
+                if (values.SUBSECAO_ACAO === 'INATIVAR') {
+                    await apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/secoes/' + encodeURIComponent(secao.ESCSECAO_ID) + '/subsecoes/' + encodeURIComponent(subsecaoId), {
+                        method: 'DELETE'
+                    });
+                    showInfoModal('Subseção inativada.', 'success');
+                    continue;
+                }
+                manterAberto = false;
+            }
+            await carregarSecoesTela(false);
+        };
+
         secoesPesquisaInput?.addEventListener('input', aplicarFiltrosSecoesTela);
         secoesLojaSelect?.addEventListener('change', () => carregarSecoesTela().catch(error => showInfoModal(error.message, 'error')));
 
         tabelaSecoesBody?.addEventListener('click', async (event) => {
             const editButton = event.target.closest('.edit-secao');
-            if (!editButton) return;
+            const subsecoesButton = event.target.closest('.subsecoes-secao');
+            if (!editButton && !subsecoesButton) return;
             if (!hasPermission('secoes', 'editar')) return showInfoModal('Usuario sem permissao para editar secoes.', 'error');
+
+            if (subsecoesButton) {
+                const secao = secoesTelaCache.find(item => Number(item.ESCSECAO_ID) === Number(subsecoesButton.dataset.id));
+                try {
+                    await abrirCrudSubsecoesSecao(secao);
+                } catch (error) {
+                    showInfoModal(error.message, 'error');
+                }
+                return;
+            }
 
             if (editButton.dataset.loja) secoesLojaSelect.value = editButton.dataset.loja;
             window.location.hash = `/secoes/${editButton.dataset.id}`;
@@ -3088,10 +3176,14 @@
                 showInfoModal('Funcionário não encontrado para edição.', 'error');
                 return;
             }
+            if (secoesLojaCache.length === 0 || String(secoesLojaCache[0]?.LOJA || secoesLojaCache[0]?.CODFILIAL || '') !== String(loja)) {
+                await carregarSecoesDaLoja(true, loja);
+            }
 
             const values = await showInputModal({
                 title: `Editar escala - ${funcionario.NOME}`,
                 inputs: [
+                    { label: 'Seção', type: 'select', id: 'ESCSECAO_ID', value: String(funcionario.ESCSECAO_ID || ''), options: secoesLojaCache.map(secao => ({ value: String(secao.ESCSECAO_ID || ''), label: (secao.COD_SECAO ? secao.COD_SECAO + ' - ' : '') + (secao.DESCR || '') })), required: true },
                     { label: 'Brigadista (S/N)', type: 'text', id: 'BRIGADISTA', value: funcionario.BRIGADISTA || '' },
                     { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || '' },
                     { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || '' },
@@ -3106,6 +3198,7 @@
             try {
                 const payload = {
                     BRIGADISTA: String(values.BRIGADISTA || '').trim().toUpperCase().slice(0, 1),
+                    ESCSECAO_ID: Number(values.ESCSECAO_ID),
                     HR_ENT1: values.HR_ENT1 || null,
                     HR_SAI1: values.HR_SAI1 || null,
                     HR_ENT2: values.HR_ENT2 || null,
@@ -5249,14 +5342,66 @@
             const codigo = secao.COD_SECAO ? secao.COD_SECAO + ' - ' : '';
             return codigo + (secao.DESCR || secao.SECAO_DESCR || 'Sem seção');
         };
+        const SUBSECOES_FRENTE_CAIXA_PADRAO = [
+            'Balcao Atendimento',
+            'Caixa',
+            'Casa de Massa',
+            'Empacotador',
+            'Fiscal Caixa',
+            'Padaria Caixa',
+            'Porteiro',
+            'Self',
+            'Vasilhame'
+        ];
         const normalizarTextoComparacao = (texto = '') => String(texto || '')
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .toLowerCase()
             .trim();
         const isSecaoFrenteCaixa = (nome = '') => normalizarTextoComparacao(nome).includes('frente de caixa');
-        const getSubsetorDetalheKey = (dia) => String(dia.ESCFUNCAO_ID || dia.FUNCAO_DESCR || dia.FUNCAO || 'SEM_CARGO');
-        const getSubsetorDetalheNome = (dia) => String(dia.FUNCAO_DESCR || dia.FUNCAO || (dia.ESCFUNCAO_ID ? 'Cargo ' + dia.ESCFUNCAO_ID : 'Sem cargo'));
+        const getSubsecoesCatalogoSecao = (secaoId = escalaDetalheAtual.secaoAtiva) => {
+            const secao = (escalaDetalheAtual.secoesLiberadas || []).find(item => String(item.ESCSECAO_ID || '') === String(secaoId || ''));
+            const cadastradas = (secao?.SUBSECOES || []).filter(item => String(item.STATUS || 'A') === 'A');
+            const base = cadastradas.length ? cadastradas : SUBSECOES_FRENTE_CAIXA_PADRAO.map((descr, index) => ({ ESCSUBSECAO_ID: 'PADRAO_' + index, DESCR: descr }));
+            return base.map(item => ({
+                key: String(item.ESCSUBSECAO_ID || normalizarTextoComparacao(item.DESCR || '')),
+                nome: item.DESCR || 'Subseção',
+                raw: item
+            }));
+        };
+        const classificarSubsecaoFuncionario = (funcionario = {}, subsecoes = []) => {
+            const funcao = normalizarTextoComparacao(funcionario.FUNCAO_DESCR || funcionario.FUNCAO || funcionario.funcao || '');
+            const ordered = [...(subsecoes || [])].sort((left, right) => {
+                const a = normalizarTextoComparacao(left.nome);
+                const b = normalizarTextoComparacao(right.nome);
+                if (a === 'caixa') return 1;
+                if (b === 'caixa') return -1;
+                return b.length - a.length;
+            });
+            const regras = [
+                { termos: ['balcao', 'atendimento'], alvo: 'balcao atendimento' },
+                { termos: ['casa de massa'], alvo: 'casa de massa' },
+                { termos: ['empacotador'], alvo: 'empacotador' },
+                { termos: ['fiscal'], alvo: 'fiscal caixa' },
+                { termos: ['padaria'], alvo: 'padaria caixa' },
+                { termos: ['porteiro'], alvo: 'porteiro' },
+                { termos: ['self'], alvo: 'self' },
+                { termos: ['vasilhame'], alvo: 'vasilhame' },
+                { termos: ['caixa'], alvo: 'caixa' }
+            ];
+            for (const regra of regras) {
+                if (!regra.termos.some(termo => funcao.includes(termo))) continue;
+                const match = ordered.find(item => normalizarTextoComparacao(item.nome) === regra.alvo);
+                if (match) return match;
+            }
+            return ordered.find(item => funcao.includes(normalizarTextoComparacao(item.nome))) || {
+                key: String(funcionario.ESCFUNCAO_ID || funcionario.FUNCAO_DESCR || funcionario.FUNCAO || 'SEM_CARGO'),
+                nome: funcionario.FUNCAO_DESCR || funcionario.FUNCAO || 'Sem cargo'
+            };
+        };
+        const getSubsetorDetalhe = (dia) => classificarSubsecaoFuncionario(dia, getSubsecoesCatalogoSecao(dia.ESCSECAO_ID || escalaDetalheAtual.secaoAtiva));
+        const getSubsetorDetalheKey = (dia) => String(getSubsetorDetalhe(dia).key);
+        const getSubsetorDetalheNome = (dia) => String(getSubsetorDetalhe(dia).nome);
         const isProgramacaoProtegidaBanco = (programacao) => ['FER', 'AFA', 'FXF', 'FIX'].includes(String(programacao || '').toUpperCase());
         const isDiaFixoBanco = (dia) => Number(dia?.FIXO_ESCALA || 0) === 1;
         const isDiaProtegidoBanco = (dia) => isProgramacaoProtegidaBanco(dia?.PROGRAMACAO) || dia?.AUSENCIA_OBRIGATORIA || Number(dia?.FIXO_ESCALA || 0) === 1;
@@ -5304,9 +5449,15 @@
             return [...grupos.values()].sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
         };
 
-        const getFuncionariosSecaoAtualBanco = () => {
+        const getFuncionariosSecaoAtualBanco = (options = {}) => {
+            const filtrarSubsetor = options.filtrarSubsetor !== false;
+            const subsecoes = getSubsecoesCatalogoSecao(escalaDetalheAtual.secaoAtiva);
             return (escalaDetalheAtual.funcionarios || [])
                 .filter(funcionario => String(funcionario.ESCSECAO_ID || '') === String(escalaDetalheAtual.secaoAtiva || ''))
+                .filter(funcionario => {
+                    if (!filtrarSubsetor || !escalaDetalheAtual.subsetorAtivo || !isSecaoFrenteCaixa(escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva))?.nome || '')) return true;
+                    return String(classificarSubsecaoFuncionario(funcionario, subsecoes).key) === String(escalaDetalheAtual.subsetorAtivo);
+                })
                 .sort((a, b) => String(a.NOME || '').localeCompare(String(b.NOME || '')) || String(a.CHAPA || '').localeCompare(String(b.CHAPA || '')));
         };
 
@@ -5922,6 +6073,10 @@
             const fixosMap = mapearFixosSecaoAtualBanco();
             const getWeekClass = (dia) => dia > 1 && new Date(ano, mes, dia).getDay() === 1 ? ' week-start' : '';
             const getDiaTitle = (registro) => registro ? montarTooltipHorarioEscala(registro) : '';
+            const calcularQualidadeDia = (total, trabalhando) => {
+                if (!total) return '-';
+                return Math.round((Number(trabalhando || 0) / Number(total || 1)) * 100) + '%';
+            };
             const getFuncionarioTitle = (funcionario) => {
                 const primeiroDia = [...funcionario.dias.values()].find(Boolean) || {};
                 const horario = primeiroDia && !isProgramacaoDescanso(primeiroDia.PROGRAMACAO)
@@ -5962,7 +6117,19 @@
                 }
 
                 html += '<div class="monthly-scale-scroll pending-skeleton-scroll"><table class="monthly-scale-table pending-skeleton-table"><thead>';
-                html += '<tr class="monthly-totals-row"><th class="employee-col monthly-summary-label"><span>' + escapeHtml(String(funcionariosPendentes.length)) + ' funcionário(s)</span></th>';
+                html += '<tr class="monthly-quality-row"><th class="employee-col monthly-summary-label"><span>Qualidade do planejamento (%)</span></th>';
+                for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                    let folgasFixas = 0;
+                    funcionariosPendentes.forEach((funcionario) => {
+                        const dataIso = formatDateForDb(ano, mes, dia);
+                        const fixo = fixosMap.get(getFixoDiaKeyBanco(funcionario.ESCFUNC_ID, dataIso));
+                        const programacao = String(fixo?.PROGRAMACAO || fixo?.programacao || '').toUpperCase();
+                        if (fixo && programacao !== 'TRB') folgasFixas += 1;
+                    });
+                    const trabalhando = Math.max(0, funcionariosPendentes.length - folgasFixas);
+                    html += '<th class="monthly-quality' + getWeekClass(dia) + '" title="Cobertura planejada: ' + trabalhando + '/' + funcionariosPendentes.length + '">' + escapeHtml(calcularQualidadeDia(funcionariosPendentes.length, trabalhando)) + '</th>';
+                }
+                html += '</tr><tr class="monthly-totals-row"><th class="employee-col monthly-summary-label"><span>' + escapeHtml(String(funcionariosPendentes.length)) + ' funcionário(s)</span></th>';
                 for (let dia = 1; dia <= diasNoMes; dia += 1) {
                     let folgasFixas = 0;
                     let horariosFixos = 0;
@@ -6031,7 +6198,16 @@
 
             let html = (temDiasPendentesGeracao ? renderizarBannerGeracaoSecao(funcionariosPendentes.length || funcionarios.length) : '') +
                 '<div class="monthly-scale-scroll"><table class="monthly-scale-table"><thead>';
-            html += '<tr class="monthly-totals-row"><th class="employee-col monthly-summary-label' + (criticasSecao.length ? ' has-critical' : '') + '">' +
+            html += '<tr class="monthly-quality-row"><th class="employee-col monthly-summary-label"><span>Qualidade do planejamento (%)</span></th>';
+            for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                let trabalhando = 0;
+                funcionarios.forEach((funcionario) => {
+                    const registro = funcionario.dias.get(dia);
+                    if (registro && !isProgramacaoDescanso(registro.PROGRAMACAO)) trabalhando += 1;
+                });
+                html += '<th class="monthly-quality' + getWeekClass(dia) + '" title="Cobertura planejada: ' + trabalhando + '/' + funcionarios.length + '">' + escapeHtml(calcularQualidadeDia(funcionarios.length, trabalhando)) + '</th>';
+            }
+            html += '</tr><tr class="monthly-totals-row"><th class="employee-col monthly-summary-label' + (criticasSecao.length ? ' has-critical' : '') + '">' +
                 '<span>' + funcionarios.length + ' funcionário(s)</span>' +
                 '</th>';
             for (let dia = 1; dia <= diasNoMes; dia += 1) {
@@ -6126,16 +6302,26 @@
             }
 
             const map = new Map();
-            (diasSecao || []).forEach((dia) => {
-                const key = getSubsetorDetalheKey(dia);
-                if (!map.has(key)) {
-                    map.set(key, { key, nome: getSubsetorDetalheNome(dia), funcionarios: new Set() });
+            const subsecoes = getSubsecoesCatalogoSecao(escalaDetalheAtual.secaoAtiva);
+            getFuncionariosSecaoAtualBanco({ filtrarSubsetor: false }).forEach((funcionario) => {
+                const subsetor = classificarSubsecaoFuncionario(funcionario, subsecoes);
+                if (!map.has(subsetor.key)) {
+                    map.set(subsetor.key, { key: subsetor.key, nome: subsetor.nome, funcionarios: new Set(), funcaoIds: new Set() });
                 }
-                map.get(key).funcionarios.add(getFuncionarioDetalheKey(dia));
+                map.get(subsetor.key).funcionarios.add(String(funcionario.ESCFUNC_ID || funcionario.CHAPA || funcionario.NOME || ''));
+                if (funcionario.ESCFUNCAO_ID) map.get(subsetor.key).funcaoIds.add(String(funcionario.ESCFUNCAO_ID));
+            });
+            (diasSecao || []).forEach((dia) => {
+                const subsetor = getSubsetorDetalhe(dia);
+                if (!map.has(subsetor.key)) {
+                    map.set(subsetor.key, { key: subsetor.key, nome: subsetor.nome, funcionarios: new Set(), funcaoIds: new Set() });
+                }
+                map.get(subsetor.key).funcionarios.add(getFuncionarioDetalheKey(dia));
+                if (dia.ESCFUNCAO_ID) map.get(subsetor.key).funcaoIds.add(String(dia.ESCFUNCAO_ID));
             });
 
             escalaDetalheAtual.subsetores = [...map.values()]
-                .map(item => ({ ...item, funcionarios: item.funcionarios.size }))
+                .map(item => ({ ...item, funcionarios: item.funcionarios.size, funcaoIds: [...item.funcaoIds] }))
                 .sort((a, b) => a.nome.localeCompare(b.nome));
 
             if (!escalaDetalheAtual.subsetores.some(item => String(item.key) === String(escalaDetalheAtual.subsetorAtivo))) {
@@ -6297,10 +6483,20 @@
             escalaDetalheResumo.textContent = 'Carregando escala mensal...';
             const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
             const escala = data.escala || {};
+            let secoesCatalogo = [];
+            try {
+                const catalogo = await apiRequest('/api/catalog/lojas/' + encodeURIComponent(lojaId) + '/secoes');
+                secoesCatalogo = catalogo.secoes || [];
+            } catch (error) {
+                secoesCatalogo = [];
+            }
             escalaDetalheAtual.dias = escala.dias || [];
             escalaDetalheAtual.funcionarios = escala.funcionarios || [];
             escalaDetalheAtual.fixos = escala.fixos || [];
-            escalaDetalheAtual.secoesLiberadas = escala.secoes || [];
+            escalaDetalheAtual.secoesLiberadas = (escala.secoes || []).map((secao) => {
+                const catalogo = secoesCatalogo.find(item => String(item.ESCSECAO_ID || '') === String(secao.ESCSECAO_ID || ''));
+                return { ...secao, SUBSECOES: catalogo?.SUBSECOES || [] };
+            });
             escalaDetalheAtual.status = escala.status || null;
             escalaDetalheAtual.oficializada = Number(escala.oficializada || escala.OFICIALIZADA || 0) === 1;
             escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s), revisão ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
@@ -6660,6 +6856,7 @@
             if (gerarSecaoButton) {
                 event.preventDefault();
                 const secaoKey = gerarSecaoButton.dataset.secaoKey;
+                const subsetorKey = escalaDetalheAtual.subsetorAtivo;
                 gerarSecaoButton.disabled = true;
                 gerarSecaoButton.innerHTML = '<span class="material-symbols-outlined">progress_activity</span>Gerando...';
                 apiRequest('/api/escalas/gerar-secao', {
@@ -6667,7 +6864,8 @@
                     body: JSON.stringify({
                         lojaId: Number(escalaDetalheAtual.lojaId),
                         mesRef: escalaDetalheAtual.mesRef,
-                        escsecaoId: Number(secaoKey)
+                        escsecaoId: Number(secaoKey),
+                        escfuncIds: escalaDetalheAtual.subsetorAtivo ? getFuncionariosSecaoAtualBanco().map(funcionario => Number(funcionario.ESCFUNC_ID)).filter(Boolean) : undefined
                     }),
                     timeoutMs: 120000
                 }).then(async (data) => {
@@ -6675,6 +6873,7 @@
                     const criticas = resultado.criticas || [];
                     await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
                     escalaDetalheAtual.secaoAtiva = secaoKey;
+                    escalaDetalheAtual.subsetorAtivo = subsetorKey;
                     escalaBancoDetalhadaCard?.classList.remove('hidden');
                     prepararSecoesDetalheEscala();
                     showInfoModal(criticas.length ? ['Escala da seção gerada com críticas.', ...criticas] : 'Escala da seção gerada com sucesso.', criticas.length ? 'error' : 'success');

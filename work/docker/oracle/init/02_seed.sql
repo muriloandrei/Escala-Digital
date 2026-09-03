@@ -10,6 +10,22 @@ insert into SGN_ESC_SECAO (ESCSECAO_ID, CODFILIAL, COD_SECAO, DESCR, CODCOLIGADA
 insert into SGN_ESC_SECAO (ESCSECAO_ID, CODFILIAL, COD_SECAO, DESCR, CODCOLIGADA, DT_HR_INCL) values (4, 2, '002.01.001', 'ADMINISTRACAO', 1, sysdate);
 insert into SGN_ESC_SECAO (ESCSECAO_ID, CODFILIAL, COD_SECAO, DESCR, CODCOLIGADA, DT_HR_INCL) values (5, 3, '003.01.001', 'ADMINISTRACAO', 1, sysdate);
 
+insert into SGN_ESC_SUBSECAO (ESCSUBSECAO_ID, ESCSECAO_ID, DESCR, STATUS, DT_HR_INCL)
+select SGN_ESC_SUBSECAO_SEQ.nextval, s.ESCSECAO_ID, x.DESCR, 'A', sysdate
+from SGN_ESC_SECAO s
+cross join (
+  select 'Balcao Atendimento' DESCR from dual union all
+  select 'Caixa' from dual union all
+  select 'Casa de Massa' from dual union all
+  select 'Empacotador' from dual union all
+  select 'Fiscal Caixa' from dual union all
+  select 'Padaria Caixa' from dual union all
+  select 'Porteiro' from dual union all
+  select 'Self' from dual union all
+  select 'Vasilhame' from dual
+) x
+where lower(s.DESCR) like '%frente de caixa%';
+
 insert into SGN_ESC_FUNCAO (ESCFUNCAO_ID, CODCOLIGADA, COD_FUNCAO, DESCR, STATUS, DT_HR_INCL) values (1, 1, '0001', 'OPERADOR DE LOJA', 'A', sysdate);
 insert into SGN_ESC_FUNCAO (ESCFUNCAO_ID, CODCOLIGADA, COD_FUNCAO, DESCR, STATUS, DT_HR_INCL) values (2, 1, '0002', 'CAIXA', 'A', sysdate);
 insert into SGN_ESC_FUNCAO (ESCFUNCAO_ID, CODCOLIGADA, COD_FUNCAO, DESCR, STATUS, DT_HR_INCL) values (3, 1, '0003', 'REPOSITOR', 'A', sysdate);
