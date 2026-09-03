@@ -3317,9 +3317,11 @@
             try {
                 const selecionados = [...subsecoesPageState.selecionados];
                 for (const escfuncId of selecionados) {
-                    await apiRequest(getSubsecoesPageBaseUrl() + '/funcionarios/' + encodeURIComponent(escfuncId), {
-                        method: 'PATCH',
-                        body: JSON.stringify({ ESCSUBSECAO_ID: Number(destino) })
+                    await atualizarFuncionarioSubsecaoApi({
+                        loja: subsecoesPageState.loja,
+                        escsecaoId: subsecoesPageState.secao?.ESCSECAO_ID,
+                        escfuncId,
+                        escsubsecaoId: destino
                     });
                 }
                 subsecoesPageState.selecionadaId = destino;

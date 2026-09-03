@@ -129,20 +129,46 @@ function isSecaoFrenteCaixa(secao = {}) {
 
 const tableColumnsCache = new Map();
 
-async function getTableColumns(connection, tableName) {
+async function loadTableColumns(connection, tableName) {
   const normalizedTable = String(tableName).toUpperCase();
-  if (tableColumnsCache.has(normalizedTable)) return tableColumnsCache.get(normalizedTable);
-
   const result = await connection.execute(
     `select column_name
      from user_tab_columns
-     where table_name = :tableName`,
+     where table_name = :tableName
+     union
+     select column_name
+     from all_tab_columns
+     where table_name = :tableName
+       and owner in (user, sys_context('USERENV', 'CURRENT_SCHEMA'))
+     union
+     select c.column_name
+     from all_synonyms s
+     join all_tab_columns c
+       on c.owner = s.table_owner
+      and c.table_name = s.table_name
+     where s.synonym_name = :tableName
+       and s.owner in (user, 'PUBLIC')`,
     { tableName: normalizedTable },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
 
   const columns = new Set(result.rows.map((row) => pick(row, 'COLUMN_NAME', 'column_name')));
   tableColumnsCache.set(normalizedTable, columns);
+  return columns;
+}
+
+async function getTableColumns(connection, tableName, options = {}) {
+  const normalizedTable = String(tableName).toUpperCase();
+  if (!options.refresh && tableColumnsCache.has(normalizedTable)) return tableColumnsCache.get(normalizedTable);
+  return loadTableColumns(connection, normalizedTable);
+}
+
+async function requireTableColumns(connection, tableName, requiredColumns = []) {
+  let columns = await getTableColumns(connection, tableName);
+  const missing = requiredColumns.filter((column) => !columns.has(String(column).toUpperCase()));
+  if (missing.length) {
+    columns = await getTableColumns(connection, tableName, { refresh: true });
+  }
   return columns;
 }
 
@@ -291,7 +317,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
     const secaoLojaColumn = await getSecaoLojaColumn(connection);
-    const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
+    const funcionarioColumns = await requireTableColumns(connection, 'SGN_ESC_FUNCIONARIO', ['ESCSUBSECAO_ID']);
     const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
     const funcaoColumns = await getTableColumns(connection, 'SGN_ESC_FUNCAO');
     const subsecaoColumns = await getTableColumns(connection, 'SGN_ESC_SUBSECAO');
@@ -672,7 +698,7 @@ async function deleteSubsecao({ lojaId, escsecaoId, escsubsecaoId }) {
     const subsecao = (subsecoesMap.get(String(escsecaoId)) || []).find((item) => Number(item.ESCSUBSECAO_ID) === Number(escsubsecaoId));
     if (!subsecao) return null;
 
-    const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
+    const funcionarioColumns = await requireTableColumns(connection, 'SGN_ESC_FUNCIONARIO', ['ESCSUBSECAO_ID']);
     if (funcionarioColumns.has('ESCSUBSECAO_ID')) {
       await connection.execute(
         `update sgn_esc_funcionario
@@ -1031,7 +1057,7 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
   }
 
   return withConnection(async (connection) => {
-    const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
+    const funcionarioColumns = await requireTableColumns(connection, 'SGN_ESC_FUNCIONARIO', ['ESCSUBSECAO_ID']);
     let secaoAtualId = null;
     if (updates.ESCSUBSECAO_ID !== undefined) {
       if (!funcionarioColumns.has('ESCSUBSECAO_ID')) {

@@ -85,7 +85,22 @@ function assertSemDiasBloqueadosEmNovaEscala(dias = [], hojeIso = getHojeIso()) 
 
 async function getTableColumns(connection, tableName) {
   const result = await connection.execute(
-    `select column_name from user_tab_columns where table_name = :tableName`,
+    `select column_name
+     from user_tab_columns
+     where table_name = :tableName
+     union
+     select column_name
+     from all_tab_columns
+     where table_name = :tableName
+       and owner in (user, sys_context('USERENV', 'CURRENT_SCHEMA'))
+     union
+     select c.column_name
+     from all_synonyms s
+     join all_tab_columns c
+       on c.owner = s.table_owner
+      and c.table_name = s.table_name
+     where s.synonym_name = :tableName
+       and s.owner in (user, 'PUBLIC')`,
     { tableName },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
