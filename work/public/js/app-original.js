@@ -7515,11 +7515,11 @@
         const getTextoCelulaGradeImpressao = (registro) => {
             if (!registro) return '-';
             if (isProgramacaoDescanso(registro.PROGRAMACAO)) return escapeHtml(getValorDescanso(registro));
-            const entradas = [registro.HR_ENT1, registro.HR_SAI1, registro.HR_ENT2, registro.HR_SAI2].filter(Boolean);
             if (impressaoEscalaState.tipo === 'mensal') return escapeHtml(registro.HR_ENT1 || 'TRB');
-            if (!entradas.length) return 'TRB';
-            if (entradas.length <= 2) return escapeHtml(entradas.join(' '));
-            return '<strong>' + escapeHtml(entradas[0]) + '</strong> ' + escapeHtml(entradas[1]) + '<br>' + escapeHtml(entradas[2]) + ' <strong>' + escapeHtml(entradas[3]) + '</strong>';
+            const entrada = registro.HR_ENT1 || '';
+            const saida = registro.HR_SAI2 || registro.HR_SAI1 || '';
+            if (!entrada && !saida) return 'TRB';
+            return escapeHtml([entrada, saida].filter(Boolean).join(' - '));
         };
 
         const getTituloTipoImpressao = () => {
@@ -7543,7 +7543,7 @@
             const linhas = [];
             [...grupos.entries()].forEach(([cargo, lista]) => {
                 if (mostrarCargoGrupo) {
-                    linhas.push('<tr class="print-role-group-row"><td colspan="' + (dias.length + 3) + '">' + escapeHtml(cargo) + '</td></tr>');
+                    linhas.push('<tr class="print-role-group-row"><td colspan="' + (dias.length + 1) + '">' + escapeHtml(cargo) + '</td></tr>');
                 }
                 lista.forEach((funcionario) => {
                     const mudouCargo = !mostrarCargoGrupo && cargo !== ultimoCargo;
@@ -7552,7 +7552,7 @@
                         const registro = funcionario.dias.get(dataIso);
                         return '<td class="' + getClasseCelulaGradeImpressao(registro, dataIso) + '">' + getTextoCelulaGradeImpressao(registro) + '</td>';
                     }).join('');
-                    linhas.push('<tr class="' + (mudouCargo ? 'print-role-boundary' : '') + '"><td class="print-name-cell"><strong>' + escapeHtml(funcionario.chapa || '') + '</strong> | ' + escapeHtml(funcionario.nome || '') + '</td><td class="print-role-cell">' + escapeHtml(cargo) + '</td>' + cells + '<td class="print-sign-cell">Ass.</td></tr>');
+                    linhas.push('<tr class="' + (mudouCargo ? 'print-role-boundary' : '') + '"><td class="print-name-cell"><strong>' + escapeHtml(funcionario.chapa || '') + '</strong> | ' + escapeHtml(funcionario.nome || '') + '<span>' + escapeHtml(cargo) + '</span><em>Ass.:</em></td>' + cells + '</tr>');
                 });
             });
             const totaisTrabalhando = dias.map((dataIso) => funcionarios.reduce((total, funcionario) => {
@@ -7563,7 +7563,7 @@
                 const registro = funcionario.dias.get(dataIso);
                 return total + (registro && isProgramacaoDescanso(registro.PROGRAMACAO) ? 1 : 0);
             }, 0));
-            return '<table class="print-scale-grid"><thead><tr><th rowspan="2">Nome</th><th rowspan="2">Cargo</th>' + diaHeader + '<th rowspan="2">Ass.</th></tr><tr>' + semanaHeader + '</tr></thead><tbody>' + linhas.join('') + '</tbody><tfoot><tr><td colspan="2">Trabalhando:</td>' + totaisTrabalhando.map((total) => '<td>' + total + '</td>').join('') + '<td></td></tr><tr><td colspan="2">Folgando:</td>' + totaisFolga.map((total) => '<td>' + total + '</td>').join('') + '<td></td></tr></tfoot></table>';
+            return '<table class="print-scale-grid"><thead><tr><th rowspan="2" class="print-name-cell">Funcionário / Cargo / Ass.</th>' + diaHeader + '</tr><tr>' + semanaHeader + '</tr></thead><tbody>' + linhas.join('') + '</tbody><tfoot><tr><td>Trabalhando:</td>' + totaisTrabalhando.map((total) => '<td>' + total + '</td>').join('') + '</tr><tr><td>Folgando:</td>' + totaisFolga.map((total) => '<td>' + total + '</td>').join('') + '</tr></tfoot></table>';
         };
 
         const getGradeImpressaoBanco = () => {

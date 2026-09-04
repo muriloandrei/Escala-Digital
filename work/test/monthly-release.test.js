@@ -254,7 +254,7 @@ test('monthly release preserves fixed rest days before automatic distribution', 
   assert.equal(diaFixo.justificativa, 'Folga fixa do lider');
 });
 
-test('monthly release liberation creates only monthly headers', () => {
+test('monthly release liberation creates monthly headers with protected absence days', () => {
   const funcionarios = [{
     ESCFUNC_ID: 900,
     CHAPA: '090090',
@@ -276,10 +276,20 @@ test('monthly release liberation creates only monthly headers', () => {
     HR_SAI2: '17:58'
   }];
 
-  const liberados = buildFuncionariosLiberacao(funcionarios, turnos);
+  const liberados = buildFuncionariosLiberacao(funcionarios, turnos, '2026-09-01', '2026-09-01', {
+    ausencias: [
+      { ESCFUNC_ID: 900, DT_INIC: '2026-09-04', DT_FIM: '2026-09-05', MOTIVO: 'FERIAS' },
+      { ESCFUNC_ID: 900, DT_INIC: '2026-09-10', DT_FIM: '2026-09-10', MOTIVO: 'AFASTAMENTO' }
+    ]
+  });
 
   assert.equal(liberados.length, 1);
-  assert.equal(liberados[0].dias.length, 0);
+  assert.equal(liberados[0].dias.length, 3);
+  assert.deepEqual(liberados[0].dias.map((dia) => [dia.data, dia.programacao]), [
+    ['2026-09-04', 'FER'],
+    ['2026-09-05', 'FER'],
+    ['2026-09-10', 'AFA']
+  ]);
   assert.equal(liberados[0].turnoOficial.hrEnt1, '08:00');
 });
 
@@ -848,12 +858,14 @@ test('section reset blocks officialized schedule', async () => {
   }
 });
 
-test('section reset preserves previous days and clears only editable dates', async () => {
+test('section reset preserves previous days and restores future protected absences', async () => {
   const originals = {
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
     listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
     isEscalaSecaoOficializada: escalaService.isEscalaSecaoOficializada,
     listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    listFixosEscala: escalaService.listFixosEscala,
     saveEscalasBatch: escalaService.saveEscalasBatch
   };
   let savedPayload = null;
@@ -871,7 +883,12 @@ test('section reset preserves previous days and clears only editable dates', asy
     HR_SAI2: '17:58'
   }];
   catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [
+    { ESCFUNC_ID: 501, DT_INIC: '2026-09-03', DT_FIM: '2026-09-03', MOTIVO: 'FERIAS' },
+    { ESCFUNC_ID: 501, DT_INIC: '2026-09-04', DT_FIM: '2026-09-04', MOTIVO: 'AFASTAMENTO' }
+  ];
   escalaService.isEscalaSecaoOficializada = async () => false;
+  escalaService.listFixosEscala = async () => [];
   escalaService.listDiasSecaoAtual = async () => [
     {
       ESCFUNC_ID: 501,
@@ -915,12 +932,30 @@ test('section reset preserves previous days and clears only editable dates', asy
       hrSai2: '16:28',
       programacao: 'TRB',
       justificativa: null
+    }, {
+      data: '2026-09-03',
+      hrEnt1: 'FER',
+      hrSai1: 'FER',
+      hrEnt2: 'FER',
+      hrSai2: 'FER',
+      programacao: 'FER',
+      justificativa: 'FERIAS'
+    }, {
+      data: '2026-09-04',
+      hrEnt1: 'AFA',
+      hrSai1: 'AFA',
+      hrEnt2: 'AFA',
+      hrSai2: 'AFA',
+      programacao: 'AFA',
+      justificativa: 'AFASTAMENTO'
     }]);
   } finally {
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
     catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
     escalaService.isEscalaSecaoOficializada = originals.isEscalaSecaoOficializada;
     escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
+    escalaService.listFixosEscala = originals.listFixosEscala;
     escalaService.saveEscalasBatch = originals.saveEscalasBatch;
   }
 });

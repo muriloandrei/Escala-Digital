@@ -926,11 +926,52 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
   return payload;
 }
 
-function buildFuncionariosLiberacao(funcionarios, turnos) {
+function montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, opcoes = {}) {
+  if (!mesRef) return [];
+  const indiceAusencias = opcoes.indiceAusencias || criarIndiceAusencias(opcoes.ausencias || []);
+  const diasFixos = opcoes.diasFixos || criarIndiceFixos(opcoes.fixos || []);
+  return getMonthDays(mesRef)
+    .map(formatDateValue)
+    .filter((data) => data >= hojeIso)
+    .map((data) => {
+      const ausencia = encontrarAusencia(indiceAusencias, funcionario, data);
+      if (ausencia) {
+        const motivo = getAusenciaMotivo(ausencia);
+        const sigla = normalizarAusenciaSigla(motivo);
+        return {
+          data,
+          hrEnt1: sigla,
+          hrSai1: sigla,
+          hrEnt2: sigla,
+          hrSai2: sigla,
+          programacao: sigla,
+          justificativa: motivo || 'Ausencia'
+        };
+      }
+
+      const fixo = diasFixos.get(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`);
+      if (!fixo) return null;
+      const programacaoFixa = String(fixo.programacao || fixo.PROGRAMACAO || 'TRB').toUpperCase();
+      const descansoFixo = programacaoFixa !== 'TRB';
+      return {
+        data,
+        hrEnt1: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrEnt1 || fixo.HR_ENT1, horario.hrEnt1),
+        hrSai1: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai1 || fixo.HR_SAI1, horario.hrSai1),
+        hrEnt2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrEnt2 || fixo.HR_ENT2, horario.hrEnt2),
+        hrSai2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2),
+        programacao: programacaoFixa,
+        justificativa: fixo.justificativa || fixo.JUSTIFICATIVA || 'Horario/folga fixa'
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildFuncionariosLiberacao(funcionarios, turnos, mesRef = null, hojeIso = formatDateValue(new Date()), opcoes = {}) {
   return (funcionarios || []).map((funcionario) => {
     const turno = findTurnoParaFuncionario(funcionario, turnos);
     const horario = getHorarioBaseFuncionario(funcionario, turno);
-    return montarFuncionarioRascunho(funcionario, turno, [], horario);
+    const dias = montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, opcoes);
+    return montarFuncionarioRascunho(funcionario, turno, dias, horario);
   });
 }
 
@@ -999,17 +1040,21 @@ async function escalaMensalJaExiste(lojaId, mesRef) {
   return existentes.length > 0;
 }
 
-async function liberarEscalaLojaMes({ lojaId, mesRef }) {
+async function liberarEscalaLojaMes({ lojaId, mesRef, hojeIso = formatDateValue(new Date()) }) {
   if (await escalaMensalJaExiste(lojaId, mesRef)) {
     return { lojaId, mesRef, criada: false, motivo: 'Escala mensal ja existente.' };
   }
 
-  const [funcionarios, turnos] = await Promise.all([
+  const inicio = formatDateValue(mesRef);
+  const fim = getMonthEndIso(mesRef);
+  const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId),
-    catalogService.listTurnosByLoja(lojaId)
+    catalogService.listTurnosByLoja(lojaId),
+    catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
+    escalaService.listFixosEscala({ lojaId, mesRef })
   ]);
 
-  const funcionariosPayload = buildFuncionariosLiberacao(funcionarios, turnos)
+  const funcionariosPayload = buildFuncionariosLiberacao(funcionarios, turnos, mesRef, hojeIso, { ausencias, fixos })
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa);
 
   if (!funcionariosPayload.length && funcionarios.length === 0) {
@@ -1088,14 +1133,22 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = format
     error.statusCode = 422;
     throw error;
   }
-  const [funcionarios, turnos] = await Promise.all([
+  const inicio = formatDateValue(mesRef);
+  const fim = getMonthEndIso(mesRef);
+  const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
-    catalogService.listTurnosByLoja(lojaId)
+    catalogService.listTurnosByLoja(lojaId),
+    catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
+    escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId })
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
   const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
-  const funcionariosPayload = anexarDiasPassados(buildFuncionariosLiberacao(funcionariosSecao, turnosSecao), diasAtuaisSecao, hojeIso)
+  const funcionariosPayload = anexarDiasPassados(
+    buildFuncionariosLiberacao(funcionariosSecao, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
+    diasAtuaisSecao,
+    hojeIso
+  )
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa);
 
   if (!funcionariosPayload.length) {

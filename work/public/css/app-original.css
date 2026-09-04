@@ -1148,9 +1148,9 @@
             #print-container .print-scale-grid th,
             #print-container .print-scale-grid td { border: 1px solid #d6d6d6; color: #333; font-size: 5.8pt; height: 4.4mm; line-height: 1.1; min-width: 0 !important; overflow: hidden; padding: 0.5mm; text-align: center; white-space: nowrap; }
             #print-container .print-scale-grid th { background: #f5f5f5 !important; font-weight: 800; }
-            #print-container .print-scale-grid .print-name-cell { text-align: left; width: 44mm; }
-            #print-container .print-scale-grid .print-role-cell { width: 14mm; }
-            #print-container .print-scale-grid .print-sign-cell { color: #64748b; width: 22mm; }
+            #print-container .print-scale-grid .print-name-cell { line-height: 1.18; text-align: left; white-space: normal !important; width: 54mm; }
+            #print-container .print-scale-grid .print-name-cell span,
+            #print-container .print-scale-grid .print-name-cell em { color: #475569; display: block; font-style: normal; font-weight: 700; margin-top: 0.5mm; }
             #print-container .print-scale-grid .print-role-boundary td { border-top: 2px solid #b7b7b7; }
             #print-container .print-scale-grid .print-role-group-row td { background: #e5e5e5 !important; font-weight: 800; text-align: left; }
             #print-container .print-scale-cell.rest { background: #0ea5e9 !important; color: #ffffff !important; }
@@ -2479,17 +2479,19 @@
         }
 
         .print-preview-page .print-scale-grid .print-name-cell {
+            line-height: 1.2;
             text-align: left;
-            width: 130px;
+            white-space: normal;
+            width: 165px;
         }
 
-        .print-preview-page .print-scale-grid .print-role-cell {
-            width: 48px;
-        }
-
-        .print-preview-page .print-scale-grid .print-sign-cell {
+        .print-preview-page .print-scale-grid .print-name-cell span,
+        .print-preview-page .print-scale-grid .print-name-cell em {
             color: #64748b;
-            width: 60px;
+            display: block;
+            font-style: normal;
+            font-weight: 800;
+            margin-top: 1px;
         }
 
         .print-preview-page .print-scale-grid .print-role-boundary td {
