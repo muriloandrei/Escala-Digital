@@ -901,14 +901,42 @@
                         <button type="button" data-print-type="diario">Di&aacute;rio</button>
                         <button type="button" data-print-type="periodo">Per&iacute;odo</button>
                     </div>
-                    <label class="print-field">
+                    <div class="print-field">
                         <span>Selecione os cargos</span>
-                        <select id="impressaoCargoSelect"></select>
-                    </label>
-                    <label class="print-field">
+                        <div class="print-multiselect" id="impressaoCargoPicker">
+                            <button type="button" class="print-multiselect-toggle" id="impressaoCargoToggle" aria-expanded="false">
+                                <span id="impressaoCargoResumo">Todos os cargos</span>
+                                <span class="material-symbols-outlined">expand_more</span>
+                            </button>
+                            <div class="print-multiselect-menu hidden" id="impressaoCargoMenu">
+                                <input type="search" id="impressaoCargoBusca" placeholder="Filtrar cargos...">
+                                <label class="print-multiselect-option strong">
+                                    <input type="checkbox" id="impressaoCargoTodos" checked>
+                                    <span>Remover todos</span>
+                                </label>
+                                <span class="print-multiselect-label">Cargos</span>
+                                <div class="print-multiselect-list" id="impressaoCargoLista"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="print-field">
                         <span>Colaboradores</span>
-                        <select id="impressaoColaboradorSelect"></select>
-                    </label>
+                        <div class="print-multiselect" id="impressaoColaboradorPicker">
+                            <button type="button" class="print-multiselect-toggle" id="impressaoColaboradorToggle" aria-expanded="false">
+                                <span id="impressaoColaboradorResumo">Todos os colaboradores</span>
+                                <span class="material-symbols-outlined">expand_more</span>
+                            </button>
+                            <div class="print-multiselect-menu hidden" id="impressaoColaboradorMenu">
+                                <input type="search" id="impressaoColaboradorBusca" placeholder="Filtrar colaboradores...">
+                                <label class="print-multiselect-option strong">
+                                    <input type="checkbox" id="impressaoColaboradorTodos" checked>
+                                    <span>Remover todos</span>
+                                </label>
+                                <span class="print-multiselect-label">Colaboradores</span>
+                                <div class="print-multiselect-list" id="impressaoColaboradorLista"></div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="print-field print-week-field hidden">
                         <span>Selecione a semana</span>
                         <select id="impressaoSemanaSelect"></select>

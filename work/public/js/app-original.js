@@ -154,8 +154,18 @@
         const imprimirDetalheBancoBtn = document.getElementById('imprimirDetalheBancoBtn');
         const impressaoEscalaModal = document.getElementById('impressaoEscalaModal');
         const impressaoEscalaTabs = document.getElementById('impressaoEscalaTabs');
-        const impressaoCargoSelect = document.getElementById('impressaoCargoSelect');
-        const impressaoColaboradorSelect = document.getElementById('impressaoColaboradorSelect');
+        const impressaoCargoToggle = document.getElementById('impressaoCargoToggle');
+        const impressaoCargoResumo = document.getElementById('impressaoCargoResumo');
+        const impressaoCargoMenu = document.getElementById('impressaoCargoMenu');
+        const impressaoCargoBusca = document.getElementById('impressaoCargoBusca');
+        const impressaoCargoTodos = document.getElementById('impressaoCargoTodos');
+        const impressaoCargoLista = document.getElementById('impressaoCargoLista');
+        const impressaoColaboradorToggle = document.getElementById('impressaoColaboradorToggle');
+        const impressaoColaboradorResumo = document.getElementById('impressaoColaboradorResumo');
+        const impressaoColaboradorMenu = document.getElementById('impressaoColaboradorMenu');
+        const impressaoColaboradorBusca = document.getElementById('impressaoColaboradorBusca');
+        const impressaoColaboradorTodos = document.getElementById('impressaoColaboradorTodos');
+        const impressaoColaboradorLista = document.getElementById('impressaoColaboradorLista');
         const impressaoFormatoGrid = document.getElementById('impressaoFormatoGrid');
         const impressaoSemanaSelect = document.getElementById('impressaoSemanaSelect');
         const impressaoDiaSelect = document.getElementById('impressaoDiaSelect');
@@ -7281,8 +7291,8 @@
         let impressaoEscalaState = {
             tipo: 'mensal',
             formato: 'todos',
-            cargo: 'TODOS',
-            colaborador: 'TODOS',
+            cargosSelecionados: null,
+            colaboradoresSelecionados: null,
             orientacao: 'landscape'
         };
 
@@ -7358,6 +7368,65 @@
             return { inicio: dias[0], fim: dias[dias.length - 1] };
         };
 
+        const getDiasPeriodoImpressao = () => {
+            const periodo = getPeriodoImpressao();
+            return getDiasMesImpressao().filter((dataIso) => (!periodo.inicio || dataIso >= periodo.inicio) && (!periodo.fim || dataIso <= periodo.fim));
+        };
+
+        const getFuncionariosFiltradosImpressao = () => {
+            const cargosSelecionados = new Set(impressaoEscalaState.cargosSelecionados || []);
+            const colaboradoresSelecionados = new Set(impressaoEscalaState.colaboradoresSelecionados || []);
+            return getFuncionariosImpressaoBanco().filter((funcionario) => {
+                const cargo = getCargoImpressaoLabel(funcionario.cargo);
+                if (!cargosSelecionados.has(cargo)) return false;
+                return colaboradoresSelecionados.has(String(funcionario.id));
+            });
+        };
+
+        const getDiasFiltradosImpressaoBanco = () => {
+            const ids = new Set(getFuncionariosFiltradosImpressao().map((funcionario) => String(funcionario.id)));
+            const datas = new Set(getDiasPeriodoImpressao());
+            return (escalaDetalheAtual.dias || []).filter((dia) => {
+                if (getSecaoDetalheKey(dia) !== String(escalaDetalheAtual.secaoAtiva)) return false;
+                if (escalaDetalheAtual.subsetorAtivo && String(getSubsetorDetalheKey(dia)) !== String(escalaDetalheAtual.subsetorAtivo)) return false;
+                if (!ids.has(String(dia.ESCFUNC_ID || ''))) return false;
+                return datas.has(String(dia.DT || dia.DATA || dia.DATA_ESCALA || '').slice(0, 10));
+            });
+        };
+
+        const getFuncionariosGradeImpressao = () => {
+            const funcionarios = getFuncionariosFiltradosImpressao();
+            const diasPorFuncionario = new Map();
+            getDiasFiltradosImpressaoBanco().forEach((dia) => {
+                const id = String(dia.ESCFUNC_ID || '');
+                const dataIso = String(dia.DT || dia.DATA || dia.DATA_ESCALA || '').slice(0, 10);
+                if (!id || !dataIso) return;
+                if (!diasPorFuncionario.has(id)) diasPorFuncionario.set(id, new Map());
+                diasPorFuncionario.get(id).set(dataIso, dia);
+            });
+            return funcionarios.map((funcionario) => ({
+                ...funcionario,
+                cargo: getCargoImpressaoLabel(funcionario.cargo),
+                dias: diasPorFuncionario.get(String(funcionario.id)) || new Map()
+            }));
+        };
+
+        const getQualidadeImpressao = () => {
+            const funcionarios = getFuncionariosGradeImpressao();
+            const totalFuncionarios = funcionarios.length;
+            if (!totalFuncionarios) return '-';
+            const percentuais = getDiasPeriodoImpressao().map((dataIso) => {
+                const trabalhando = funcionarios.reduce((total, funcionario) => {
+                    const dia = funcionario.dias.get(dataIso);
+                    return total + (dia && !isProgramacaoDescanso(dia.PROGRAMACAO) ? 1 : 0);
+                }, 0);
+                return Math.round((trabalhando / totalFuncionarios) * 100);
+            });
+            const validos = percentuais.filter((valor) => Number.isFinite(valor));
+            if (!validos.length) return '-';
+            return Math.round(validos.reduce((total, valor) => total + valor, 0) / validos.length) + '%';
+        };
+
         const removerControlesCloneImpressao = (root) => {
             root.querySelectorAll('button, .employee-kebab-wrapper, .subsection-kebab-menu, .critical-status-chip').forEach((node) => {
                 if (node.classList?.contains('daily-schedule-bar') || node.classList?.contains('daily-schedule-break') || node.classList?.contains('daily-schedule-rest')) {
@@ -7373,14 +7442,12 @@
         };
 
         const filtrarLinhasCloneImpressao = (root, filtros = {}) => {
-            const cargo = String(filtros.cargo ?? impressaoEscalaState.cargo ?? 'TODOS');
-            const colaborador = String(filtros.colaborador ?? impressaoEscalaState.colaborador ?? 'TODOS');
-            if (cargo === 'TODOS' && colaborador === 'TODOS') return;
+            const cargoFiltro = filtros.cargo ? new Set([String(filtros.cargo)]) : new Set(impressaoEscalaState.cargosSelecionados || []);
+            const colaboradorFiltro = filtros.colaborador ? new Set([String(filtros.colaborador)]) : new Set(impressaoEscalaState.colaboradoresSelecionados || []);
             root.querySelectorAll('[data-escfunc-id]').forEach((node) => {
                 const nodeId = String(node.dataset.escfuncId || '');
                 const nodeCargo = getCargoImpressaoLabel(node.dataset.funcaoDescr || '');
-                if (colaborador !== 'TODOS' && nodeId !== colaborador) node.remove();
-                else if (cargo !== 'TODOS' && nodeCargo !== cargo) node.remove();
+                if (!colaboradorFiltro.has(nodeId) || !cargoFiltro.has(nodeCargo)) node.remove();
             });
             root.querySelectorAll('thead .monthly-quality-row, thead .monthly-totals-row').forEach((row) => row.remove());
         };
@@ -7409,14 +7476,109 @@
             const agora = new Date();
             const secao = getSecaoAtualBanco();
             const periodo = getPeriodoImpressao();
-            const meta = 'Impresso em: ' + agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            const subtitulo = [
-                'Loja ' + (escalaDetalheAtual.lojaId || '-'),
-                formatarMesTabela(escalaDetalheAtual.mesRef || ''),
-                secao?.nome || '',
-                periodo.inicio && periodo.fim ? formatarDataTabela(periodo.inicio) + ' a ' + formatarDataTabela(periodo.fim) : ''
-            ].filter(Boolean).join(' | ');
-            return '<div class="print-meta">' + escapeHtml(meta) + '<br>Página 1 de 1</div><div class="print-title">' + escapeHtml(titulo) + '</div><div class="print-subtitle">' + escapeHtml(subtitulo) + '</div>';
+            const usuario = usuarioSessaoCache?.nome || usuarioSessaoCache?.login || loggedUserName?.textContent || 'Sistema';
+            const impressoEm = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const periodoTexto = periodo.inicio && periodo.fim ? formatarDataTabela(periodo.inicio) + ' - ' + formatarDataTabela(periodo.fim) : '-';
+            return '<header class="print-sheet-header">' +
+                '<div class="print-sheet-title">' + escapeHtml(titulo) + '</div>' +
+                '<div><strong>Empresa:</strong> ' + escapeHtml(String(escalaDetalheAtual.lojaId || '-').padStart(4, '0')) + ' | LOJA ' + escapeHtml(escalaDetalheAtual.lojaId || '-') + '<br><strong>Seção:</strong> ' + escapeHtml(secao?.nome || '-') + '</div>' +
+                '<div><strong>Período:</strong> ' + escapeHtml(periodoTexto) + ' | ' + escapeHtml(escalaDetalheAtual.status || '-') + '<br><strong>Gerada por:</strong> ' + escapeHtml(usuario) + '</div>' +
+                '<div><strong>Impresso em:</strong> ' + escapeHtml(impressoEm) + '<br><strong>Qualidade do planejamento:</strong> ' + escapeHtml(getQualidadeImpressao()) + '</div>' +
+                '<img src="/assets/escala-inteligente-logo.png" alt="Escala Inteligente">' +
+                '</header>';
+        };
+
+        const getRodapeImpressaoHtml = () => {
+            const usuario = usuarioSessaoCache?.nome || usuarioSessaoCache?.login || loggedUserName?.textContent || 'Sistema';
+            const agora = new Date();
+            const impressoEm = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            return '<footer class="print-sheet-footer"><span>1 de 1</span><span>Impresso por ' + escapeHtml(usuario) + ' em ' + escapeHtml(impressoEm) + '</span></footer>';
+        };
+
+        const getClasseCelulaGradeImpressao = (registro, dataIso) => {
+            const classes = ['print-scale-cell'];
+            const diaSemana = new Date(dataIso + 'T00:00:00').getDay();
+            if (diaSemana === 0) classes.push('weekend');
+            if (!registro) return classes.join(' ');
+            if (registro.TEM_CRITICA || registro.CRITICA) classes.push('critical');
+            if (registro.FIXO || registro.ORIGEM === 'FIXO' || registro.FIXO_MANUAL === 'S') classes.push('fixed');
+            if (isProgramacaoDescanso(registro.PROGRAMACAO)) {
+                const descansoClass = getClasseDescanso(registro);
+                if (descansoClass.includes('ferias') || descansoClass.includes('afastamento')) classes.push('absence');
+                else classes.push('rest');
+            } else {
+                classes.push('work');
+            }
+            return classes.join(' ');
+        };
+
+        const getTextoCelulaGradeImpressao = (registro) => {
+            if (!registro) return '-';
+            if (isProgramacaoDescanso(registro.PROGRAMACAO)) return escapeHtml(getValorDescanso(registro));
+            const entradas = [registro.HR_ENT1, registro.HR_SAI1, registro.HR_ENT2, registro.HR_SAI2].filter(Boolean);
+            if (impressaoEscalaState.tipo === 'mensal') return escapeHtml(registro.HR_ENT1 || 'TRB');
+            if (!entradas.length) return 'TRB';
+            if (entradas.length <= 2) return escapeHtml(entradas.join(' '));
+            return '<strong>' + escapeHtml(entradas[0]) + '</strong> ' + escapeHtml(entradas[1]) + '<br>' + escapeHtml(entradas[2]) + ' <strong>' + escapeHtml(entradas[3]) + '</strong>';
+        };
+
+        const getTituloTipoImpressao = () => {
+            if (impressaoEscalaState.tipo === 'diario') return 'Visão Diária';
+            if (impressaoEscalaState.tipo === 'semanal') return 'Visão Semanal';
+            if (impressaoEscalaState.tipo === 'periodo') return 'Visão Período';
+            return 'Visão Mensal';
+        };
+
+        const getTabelaGradeImpressao = (funcionarios, dias, mostrarCargoGrupo = false) => {
+            if (!funcionarios.length || !dias.length) return '';
+            const diaHeader = dias.map((dataIso) => '<th>' + escapeHtml(String(new Date(dataIso + 'T00:00:00').getDate())) + '</th>').join('');
+            const semanaHeader = dias.map((dataIso) => '<th>' + escapeHtml(['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'][new Date(dataIso + 'T00:00:00').getDay()]) + '</th>').join('');
+            const grupos = new Map();
+            funcionarios.forEach((funcionario) => {
+                const cargo = getCargoImpressaoLabel(funcionario.cargo);
+                if (!grupos.has(cargo)) grupos.set(cargo, []);
+                grupos.get(cargo).push(funcionario);
+            });
+            let ultimoCargo = '';
+            const linhas = [];
+            [...grupos.entries()].forEach(([cargo, lista]) => {
+                if (mostrarCargoGrupo) {
+                    linhas.push('<tr class="print-role-group-row"><td colspan="' + (dias.length + 3) + '">' + escapeHtml(cargo) + '</td></tr>');
+                }
+                lista.forEach((funcionario) => {
+                    const mudouCargo = !mostrarCargoGrupo && cargo !== ultimoCargo;
+                    ultimoCargo = cargo;
+                    const cells = dias.map((dataIso) => {
+                        const registro = funcionario.dias.get(dataIso);
+                        return '<td class="' + getClasseCelulaGradeImpressao(registro, dataIso) + '">' + getTextoCelulaGradeImpressao(registro) + '</td>';
+                    }).join('');
+                    linhas.push('<tr class="' + (mudouCargo ? 'print-role-boundary' : '') + '"><td class="print-name-cell"><strong>' + escapeHtml(funcionario.chapa || '') + '</strong> | ' + escapeHtml(funcionario.nome || '') + '</td><td class="print-role-cell">' + escapeHtml(cargo) + '</td>' + cells + '<td class="print-sign-cell">Ass.</td></tr>');
+                });
+            });
+            const totaisTrabalhando = dias.map((dataIso) => funcionarios.reduce((total, funcionario) => {
+                const registro = funcionario.dias.get(dataIso);
+                return total + (registro && !isProgramacaoDescanso(registro.PROGRAMACAO) ? 1 : 0);
+            }, 0));
+            const totaisFolga = dias.map((dataIso) => funcionarios.reduce((total, funcionario) => {
+                const registro = funcionario.dias.get(dataIso);
+                return total + (registro && isProgramacaoDescanso(registro.PROGRAMACAO) ? 1 : 0);
+            }, 0));
+            return '<table class="print-scale-grid"><thead><tr><th rowspan="2">Nome</th><th rowspan="2">Cargo</th>' + diaHeader + '<th rowspan="2">Ass.</th></tr><tr>' + semanaHeader + '</tr></thead><tbody>' + linhas.join('') + '</tbody><tfoot><tr><td colspan="2">Trabalhando:</td>' + totaisTrabalhando.map((total) => '<td>' + total + '</td>').join('') + '<td></td></tr><tr><td colspan="2">Folgando:</td>' + totaisFolga.map((total) => '<td>' + total + '</td>').join('') + '<td></td></tr></tfoot></table>';
+        };
+
+        const getGradeImpressaoBanco = () => {
+            const funcionarios = getFuncionariosGradeImpressao();
+            const dias = getDiasPeriodoImpressao();
+            if (!funcionarios.length || !dias.length) return null;
+            const separarCargos = impressaoEscalaState.formato === 'cargos';
+            if (!separarCargos) return { outerHTML: '<section class="print-sheet">' + getCabecalhoImpressaoHtml(getTituloTipoImpressao()) + getTabelaGradeImpressao(funcionarios, dias, impressaoEscalaState.tipo === 'periodo') + getRodapeImpressaoHtml() + '</section>' };
+            const grupos = new Map();
+            funcionarios.forEach((funcionario) => {
+                if (!grupos.has(funcionario.cargo)) grupos.set(funcionario.cargo, []);
+                grupos.get(funcionario.cargo).push(funcionario);
+            });
+            const html = [...grupos.entries()].map(([cargo, lista]) => '<section class="print-sheet print-role-section">' + getCabecalhoImpressaoHtml(getTituloTipoImpressao() + ' - ' + cargo) + getTabelaGradeImpressao(lista, dias, false) + getRodapeImpressaoHtml() + '</section>').join('');
+            return html ? { outerHTML: html } : null;
         };
 
         const getCloneMensalImpressao = (filtros = {}) => {
@@ -7457,10 +7619,10 @@
         const getHtmlCargosSeparadosImpressao = () => {
             const funcionarios = getFuncionariosImpressaoBanco();
             const cargos = [...new Set(funcionarios.map((funcionario) => getCargoImpressaoLabel(funcionario.cargo)))].sort((a, b) => a.localeCompare(b));
-            const cargoSelecionado = String(impressaoEscalaState.cargo || 'TODOS');
-            const cargosFiltrados = cargoSelecionado === 'TODOS' ? cargos : cargos.filter((cargo) => cargo === cargoSelecionado);
+            const cargosSelecionados = new Set(impressaoEscalaState.cargosSelecionados || cargos);
+            const cargosFiltrados = cargos.filter((cargo) => cargosSelecionados.has(cargo));
             const html = cargosFiltrados.map((cargo) => {
-                const clone = getCloneMensalImpressao({ cargo, colaborador: impressaoEscalaState.colaborador });
+                const clone = getCloneMensalImpressao({ cargo });
                 if (!clone) return '';
                 return '<section class="print-role-section"><h4>' + escapeHtml(cargo) + '</h4>' + clone.outerHTML + '</section>';
             }).filter(Boolean).join('');
@@ -7481,11 +7643,10 @@
                 ? getCloneTimelineImpressao()
                 : formato === 'colaborador'
                     ? getCloneDetalhadoImpressao()
-                    : formato === 'cargos'
-                        ? getHtmlCargosSeparadosImpressao()
-                    : getCloneMensalImpressao();
-            if (!clone) return getCabecalhoImpressaoHtml(tituloBase) + '<div class="print-preview-empty">Nenhum dado disponível para imprimir com os filtros selecionados.</div>';
-            return getCabecalhoImpressaoHtml(tituloBase) + clone.outerHTML;
+                    : getGradeImpressaoBanco();
+            if (!clone) return '<section class="print-sheet">' + getCabecalhoImpressaoHtml(tituloBase) + '<div class="print-preview-empty">Nenhum dado disponível para imprimir com os filtros selecionados.</div>' + getRodapeImpressaoHtml() + '</section>';
+            if (tipo === 'diario' || formato === 'colaborador') return '<section class="print-sheet">' + getCabecalhoImpressaoHtml(tituloBase) + clone.outerHTML + getRodapeImpressaoHtml() + '</section>';
+            return clone.outerHTML;
         };
 
         const atualizarCamposPeriodoImpressao = () => {
@@ -7495,20 +7656,54 @@
             impressaoEscalaModal?.querySelector('.print-period-field')?.classList.toggle('hidden', tipo !== 'periodo');
         };
 
+        const getNodesMultiSelectImpressao = (tipo) => tipo === 'cargo'
+            ? { resumo: impressaoCargoResumo, menu: impressaoCargoMenu, busca: impressaoCargoBusca, todos: impressaoCargoTodos, lista: impressaoCargoLista, toggle: impressaoCargoToggle, singular: 'cargo', plural: 'cargos' }
+            : { resumo: impressaoColaboradorResumo, menu: impressaoColaboradorMenu, busca: impressaoColaboradorBusca, todos: impressaoColaboradorTodos, lista: impressaoColaboradorLista, toggle: impressaoColaboradorToggle, singular: 'colaborador', plural: 'colaboradores' };
+
+        const renderizarMultiSelectImpressao = (tipo, itens, selecionados) => {
+            const nodes = getNodesMultiSelectImpressao(tipo);
+            if (!nodes.lista || !nodes.resumo) return;
+            const selecionadosSet = new Set((selecionados || []).map(String));
+            const totalSelecionado = itens.filter((item) => selecionadosSet.has(String(item.id))).length;
+            nodes.resumo.textContent = totalSelecionado === 0
+                ? 'Nenhum ' + nodes.singular
+                : totalSelecionado + ' ' + (totalSelecionado === 1 ? nodes.singular : nodes.plural);
+            if (nodes.todos) {
+                nodes.todos.checked = itens.length > 0 && totalSelecionado === itens.length;
+                nodes.todos.indeterminate = totalSelecionado > 0 && totalSelecionado < itens.length;
+            }
+            const termo = (nodes.busca?.value || '').trim().toLowerCase();
+            nodes.lista.innerHTML = itens.map((item) => {
+                const label = String(item.label || '');
+                const hidden = termo && !label.toLowerCase().includes(termo);
+                return '<label class="print-multiselect-option' + (hidden ? ' hidden' : '') + '">' +
+                    '<input type="checkbox" data-print-filter-type="' + tipo + '" value="' + escapeHtml(item.id) + '"' + (selecionadosSet.has(String(item.id)) ? ' checked' : '') + '>' +
+                    '<span>' + escapeHtml(label) + '</span>' +
+                    '</label>';
+            }).join('');
+        };
+
+        const fecharMenusImpressao = () => {
+            impressaoCargoMenu?.classList.add('hidden');
+            impressaoColaboradorMenu?.classList.add('hidden');
+            impressaoCargoToggle?.setAttribute('aria-expanded', 'false');
+            impressaoColaboradorToggle?.setAttribute('aria-expanded', 'false');
+        };
+
         const preencherFiltrosImpressaoBanco = () => {
             const funcionarios = getFuncionariosImpressaoBanco();
             const cargos = [...new Set(funcionarios.map((funcionario) => getCargoImpressaoLabel(funcionario.cargo)))].sort((a, b) => a.localeCompare(b));
-            if (impressaoCargoSelect) {
-                impressaoCargoSelect.innerHTML = '<option value="TODOS">Todos os cargos (' + cargos.length + ')</option>' + cargos.map((cargo) => '<option value="' + escapeHtml(cargo) + '">' + escapeHtml(cargo) + '</option>').join('');
-                impressaoCargoSelect.value = cargos.includes(impressaoEscalaState.cargo) ? impressaoEscalaState.cargo : 'TODOS';
-                impressaoEscalaState.cargo = impressaoCargoSelect.value;
-            }
-            const colaboradores = impressaoEscalaState.cargo === 'TODOS' ? funcionarios : funcionarios.filter((funcionario) => getCargoImpressaoLabel(funcionario.cargo) === impressaoEscalaState.cargo);
-            if (impressaoColaboradorSelect) {
-                impressaoColaboradorSelect.innerHTML = '<option value="TODOS">Todos os colaboradores (' + colaboradores.length + ')</option>' + colaboradores.map((funcionario) => '<option value="' + escapeHtml(funcionario.id) + '">' + escapeHtml((funcionario.chapa ? funcionario.chapa + ' - ' : '') + funcionario.nome) + '</option>').join('');
-                impressaoColaboradorSelect.value = colaboradores.some((funcionario) => funcionario.id === impressaoEscalaState.colaborador) ? impressaoEscalaState.colaborador : 'TODOS';
-                impressaoEscalaState.colaborador = impressaoColaboradorSelect.value;
-            }
+            impressaoEscalaState.cargosSelecionados = Array.isArray(impressaoEscalaState.cargosSelecionados)
+                ? impressaoEscalaState.cargosSelecionados.filter((cargo) => cargos.includes(cargo))
+                : [...cargos];
+            const cargosSelecionados = new Set(impressaoEscalaState.cargosSelecionados);
+            const colaboradores = funcionarios.filter((funcionario) => cargosSelecionados.has(getCargoImpressaoLabel(funcionario.cargo)));
+            const idsColaboradores = colaboradores.map((funcionario) => String(funcionario.id));
+            impressaoEscalaState.colaboradoresSelecionados = Array.isArray(impressaoEscalaState.colaboradoresSelecionados)
+                ? impressaoEscalaState.colaboradoresSelecionados.filter((id) => idsColaboradores.includes(String(id)))
+                : [...idsColaboradores];
+            renderizarMultiSelectImpressao('cargo', cargos.map((cargo) => ({ id: cargo, label: cargo })), impressaoEscalaState.cargosSelecionados);
+            renderizarMultiSelectImpressao('colaborador', colaboradores.map((funcionario) => ({ id: String(funcionario.id), label: (funcionario.chapa ? funcionario.chapa + ' - ' : '') + funcionario.nome })), impressaoEscalaState.colaboradoresSelecionados);
             const dias = getDiasMesImpressao();
             if (impressaoDiaSelect) {
                 impressaoDiaSelect.innerHTML = dias.map((dataIso) => '<option value="' + escapeHtml(dataIso) + '">' + escapeHtml(formatarDiaTimelineBanco(dataIso)) + '</option>').join('');
@@ -7537,8 +7732,8 @@
                 ...impressaoEscalaState,
                 tipo: escalaDetalheAtual.visao === 'diaria' ? 'diario' : 'mensal',
                 formato: escalaDetalheAtual.visao === 'diaria' ? 'todos' : impressaoEscalaState.formato || 'todos',
-                cargo: 'TODOS',
-                colaborador: 'TODOS',
+                cargosSelecionados: null,
+                colaboradoresSelecionados: null,
                 dia: escalaBancoDiaSelect?.value || impressaoEscalaState.dia,
                 orientacao: impressaoOrientacaoSelect?.value || 'landscape'
             };
@@ -7551,6 +7746,7 @@
         };
 
         const fecharPainelImpressaoBanco = () => {
+            fecharMenusImpressao();
             impressaoEscalaModal?.classList.add('hidden');
         };
 
@@ -7605,15 +7801,68 @@
             impressaoFormatoGrid.querySelectorAll('button').forEach((item) => item.classList.toggle('active', item === button));
             atualizarPreviewImpressaoBanco();
         });
-        impressaoCargoSelect?.addEventListener('change', () => {
-            impressaoEscalaState.cargo = impressaoCargoSelect.value;
-            impressaoEscalaState.colaborador = 'TODOS';
+        impressaoCargoToggle?.addEventListener('click', () => {
+            const abrir = impressaoCargoMenu?.classList.contains('hidden');
+            fecharMenusImpressao();
+            impressaoCargoMenu?.classList.toggle('hidden', !abrir);
+            impressaoCargoToggle.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+        });
+        impressaoColaboradorToggle?.addEventListener('click', () => {
+            const abrir = impressaoColaboradorMenu?.classList.contains('hidden');
+            fecharMenusImpressao();
+            impressaoColaboradorMenu?.classList.toggle('hidden', !abrir);
+            impressaoColaboradorToggle.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+        });
+        impressaoCargoBusca?.addEventListener('input', () => {
+            const cargos = [...new Set(getFuncionariosImpressaoBanco().map((funcionario) => getCargoImpressaoLabel(funcionario.cargo)))].sort((a, b) => a.localeCompare(b));
+            renderizarMultiSelectImpressao('cargo', cargos.map((cargo) => ({ id: cargo, label: cargo })), impressaoEscalaState.cargosSelecionados || []);
+        });
+        impressaoColaboradorBusca?.addEventListener('input', () => {
+            const cargosSelecionados = new Set(impressaoEscalaState.cargosSelecionados || []);
+            const colaboradores = getFuncionariosImpressaoBanco().filter((funcionario) => cargosSelecionados.has(getCargoImpressaoLabel(funcionario.cargo)));
+            renderizarMultiSelectImpressao('colaborador', colaboradores.map((funcionario) => ({ id: String(funcionario.id), label: (funcionario.chapa ? funcionario.chapa + ' - ' : '') + funcionario.nome })), impressaoEscalaState.colaboradoresSelecionados || []);
+        });
+        impressaoCargoTodos?.addEventListener('change', () => {
+            const cargos = [...new Set(getFuncionariosImpressaoBanco().map((funcionario) => getCargoImpressaoLabel(funcionario.cargo)))].sort((a, b) => a.localeCompare(b));
+            impressaoEscalaState.cargosSelecionados = impressaoCargoTodos.checked ? [...cargos] : [];
+            impressaoEscalaState.colaboradoresSelecionados = impressaoCargoTodos.checked ? null : [];
             preencherFiltrosImpressaoBanco();
             atualizarPreviewImpressaoBanco();
         });
-        impressaoColaboradorSelect?.addEventListener('change', () => {
-            impressaoEscalaState.colaborador = impressaoColaboradorSelect.value;
+        impressaoColaboradorTodos?.addEventListener('change', () => {
+            const cargosSelecionados = new Set(impressaoEscalaState.cargosSelecionados || []);
+            const ids = getFuncionariosImpressaoBanco()
+                .filter((funcionario) => cargosSelecionados.has(getCargoImpressaoLabel(funcionario.cargo)))
+                .map((funcionario) => String(funcionario.id));
+            impressaoEscalaState.colaboradoresSelecionados = impressaoColaboradorTodos.checked ? ids : [];
+            preencherFiltrosImpressaoBanco();
             atualizarPreviewImpressaoBanco();
+        });
+        impressaoCargoLista?.addEventListener('change', (event) => {
+            const input = event.target.closest('input[data-print-filter-type="cargo"]');
+            if (!input) return;
+            const selecionados = new Set(impressaoEscalaState.cargosSelecionados || []);
+            if (input.checked) selecionados.add(input.value);
+            else selecionados.delete(input.value);
+            impressaoEscalaState.cargosSelecionados = [...selecionados];
+            impressaoEscalaState.colaboradoresSelecionados = null;
+            preencherFiltrosImpressaoBanco();
+            atualizarPreviewImpressaoBanco();
+        });
+        impressaoColaboradorLista?.addEventListener('change', (event) => {
+            const input = event.target.closest('input[data-print-filter-type="colaborador"]');
+            if (!input) return;
+            const selecionados = new Set(impressaoEscalaState.colaboradoresSelecionados || []);
+            if (input.checked) selecionados.add(input.value);
+            else selecionados.delete(input.value);
+            impressaoEscalaState.colaboradoresSelecionados = [...selecionados];
+            preencherFiltrosImpressaoBanco();
+            atualizarPreviewImpressaoBanco();
+        });
+        document.addEventListener('click', (event) => {
+            if (impressaoEscalaModal?.classList.contains('hidden')) return;
+            if (event.target.closest('#impressaoCargoPicker, #impressaoColaboradorPicker')) return;
+            fecharMenusImpressao();
         });
         impressaoSemanaSelect?.addEventListener('change', () => {
             impressaoEscalaState.semana = impressaoSemanaSelect.value;

@@ -1139,6 +1139,27 @@
             #print-container .print-subtitle { color: #475569; font-size: 8pt; margin: 0 0 5mm; text-align: left; }
             #print-container .monthly-scale-scroll,
             #print-container .bank-scale-scroll { overflow: visible !important; max-height: none !important; }
+            #print-container .print-sheet { display: flex; flex-direction: column; min-height: 183mm; page-break-after: always; }
+            #print-container .print-sheet:last-child { page-break-after: auto; }
+            #print-container .print-sheet-header { align-items: center; border: 1px solid #999; display: grid; font-size: 6.5pt; gap: 3mm; grid-template-columns: 28mm 1fr 1.25fr 1fr 42mm; line-height: 1.25; margin-bottom: 1mm; min-height: 14mm; padding: 1.5mm 2mm; }
+            #print-container .print-sheet-header img { justify-self: end; max-height: 10mm; max-width: 40mm; }
+            #print-container .print-sheet-title { font-size: 8pt; font-weight: 800; }
+            #print-container .print-scale-grid { border-collapse: collapse; table-layout: fixed; width: 100%; }
+            #print-container .print-scale-grid th,
+            #print-container .print-scale-grid td { border: 1px solid #d6d6d6; color: #333; font-size: 5.8pt; height: 4.4mm; line-height: 1.1; min-width: 0 !important; overflow: hidden; padding: 0.5mm; text-align: center; white-space: nowrap; }
+            #print-container .print-scale-grid th { background: #f5f5f5 !important; font-weight: 800; }
+            #print-container .print-scale-grid .print-name-cell { text-align: left; width: 44mm; }
+            #print-container .print-scale-grid .print-role-cell { width: 14mm; }
+            #print-container .print-scale-grid .print-sign-cell { color: #64748b; width: 22mm; }
+            #print-container .print-scale-grid .print-role-boundary td { border-top: 2px solid #b7b7b7; }
+            #print-container .print-scale-grid .print-role-group-row td { background: #e5e5e5 !important; font-weight: 800; text-align: left; }
+            #print-container .print-scale-cell.rest { background: #0ea5e9 !important; color: #ffffff !important; }
+            #print-container .print-scale-cell.fixed { background: #9333ea !important; color: #ffffff !important; }
+            #print-container .print-scale-cell.absence { background: #facc15 !important; color: #713f12 !important; }
+            #print-container .print-scale-cell.critical { background: #dc2626 !important; color: #ffffff !important; }
+            #print-container .print-scale-cell.weekend:not(.rest):not(.fixed):not(.absence):not(.critical) { background: #eeeeee !important; }
+            #print-container .print-scale-grid tfoot td { background: #f3f4f6 !important; font-weight: 800; }
+            #print-container .print-sheet-footer { align-items: center; color: #334155; display: flex; font-size: 7pt; justify-content: space-between; margin-top: auto; padding-top: 5mm; }
             #print-container .monthly-scale-table,
             #print-container .bank-employee-scale table { border-collapse: collapse; min-width: 0 !important; table-layout: fixed; width: 100%; }
             #print-container .monthly-scale-table th,
@@ -2232,6 +2253,100 @@
             width: 100%;
         }
 
+        .print-multiselect {
+            position: relative;
+        }
+
+        .print-multiselect-toggle {
+            align-items: center;
+            background: #f7f9fc;
+            border: 1px solid #e3eaf4;
+            border-radius: 8px;
+            color: #334155;
+            cursor: pointer;
+            display: flex;
+            font-size: 0.78rem;
+            font-weight: 800;
+            justify-content: space-between;
+            min-height: 38px;
+            padding: 8px 10px;
+            text-align: left;
+            width: 100%;
+        }
+
+        .print-multiselect-toggle .material-symbols-outlined {
+            color: #94a3b8;
+            font-size: 1rem;
+        }
+
+        .print-multiselect-menu {
+            background: #ffffff;
+            border: 1px solid #d7dee8;
+            border-radius: 6px;
+            box-shadow: 0 16px 36px rgba(15, 23, 42, 0.18);
+            left: 0;
+            max-height: 360px;
+            overflow: hidden;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 6px);
+            z-index: 1100;
+        }
+
+        .print-multiselect-menu input[type="search"] {
+            background: #d1d5db;
+            border: 0;
+            border-bottom: 1px solid #2563eb;
+            border-radius: 4px 4px 0 0;
+            color: #111827;
+            font-size: 0.78rem;
+            min-height: 36px;
+            padding: 8px 12px;
+            width: 100%;
+        }
+
+        .print-multiselect-option {
+            align-items: center;
+            border-bottom: 1px solid #eef2f7;
+            color: #334155;
+            cursor: pointer;
+            display: grid;
+            font-size: 0.78rem;
+            gap: 10px;
+            grid-template-columns: 18px minmax(0, 1fr);
+            min-height: 38px;
+            padding: 9px 12px;
+        }
+
+        .print-multiselect-option.strong {
+            background: #f8fafc;
+            font-weight: 900;
+        }
+
+        .print-multiselect-option input {
+            accent-color: #7dd3fc;
+            height: 14px;
+            width: 14px;
+        }
+
+        .print-multiselect-option span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .print-multiselect-label {
+            color: #64748b;
+            display: block;
+            font-size: 0.72rem;
+            padding: 10px 12px 6px;
+        }
+
+        .print-multiselect-list {
+            max-height: 238px;
+            overflow: auto;
+        }
+
         .print-date-range {
             display: grid;
             gap: 8px;
@@ -2306,6 +2421,124 @@
             font-weight: 900;
             margin: 0 0 4px;
             text-align: left;
+        }
+
+        .print-preview-page .print-sheet {
+            display: flex;
+            flex-direction: column;
+            min-height: 430px;
+        }
+
+        .print-preview-page .print-sheet-header {
+            align-items: center;
+            border: 1px solid #aeb7c2;
+            display: grid;
+            font-size: 0.56rem;
+            gap: 10px;
+            grid-template-columns: 130px 1fr 1.25fr 1fr 150px;
+            line-height: 1.35;
+            margin-bottom: 2px;
+            min-height: 42px;
+            padding: 6px 8px;
+        }
+
+        .print-preview-page .print-sheet-header img {
+            justify-self: end;
+            max-height: 34px;
+            max-width: 140px;
+        }
+
+        .print-preview-page .print-sheet-title {
+            font-size: 0.7rem;
+            font-weight: 900;
+        }
+
+        .print-preview-page .print-scale-grid {
+            border-collapse: collapse;
+            table-layout: fixed;
+            width: 100%;
+        }
+
+        .print-preview-page .print-scale-grid th,
+        .print-preview-page .print-scale-grid td {
+            border: 1px solid #d6d6d6;
+            color: #333333;
+            font-size: 0.47rem !important;
+            height: 15px;
+            line-height: 1.15;
+            min-width: 0 !important;
+            overflow: hidden;
+            padding: 1px 2px !important;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .print-preview-page .print-scale-grid th {
+            background: #f5f5f5;
+            font-weight: 900;
+        }
+
+        .print-preview-page .print-scale-grid .print-name-cell {
+            text-align: left;
+            width: 130px;
+        }
+
+        .print-preview-page .print-scale-grid .print-role-cell {
+            width: 48px;
+        }
+
+        .print-preview-page .print-scale-grid .print-sign-cell {
+            color: #64748b;
+            width: 60px;
+        }
+
+        .print-preview-page .print-scale-grid .print-role-boundary td {
+            border-top: 2px solid #b7b7b7;
+        }
+
+        .print-preview-page .print-scale-grid .print-role-group-row td {
+            background: #e5e5e5;
+            font-weight: 900;
+            text-align: left;
+        }
+
+        .print-preview-page .print-scale-cell.rest {
+            background: #0ea5e9;
+            color: #ffffff;
+        }
+
+        .print-preview-page .print-scale-cell.fixed {
+            background: #9333ea;
+            color: #ffffff;
+        }
+
+        .print-preview-page .print-scale-cell.absence {
+            background: #facc15;
+            color: #713f12;
+        }
+
+        .print-preview-page .print-scale-cell.critical {
+            background: #dc2626;
+            color: #ffffff;
+        }
+
+        .print-preview-page .print-scale-cell.weekend:not(.rest):not(.fixed):not(.absence):not(.critical) {
+            background: #eeeeee;
+        }
+
+        .print-preview-page .print-scale-grid tfoot td {
+            background: #f3f4f6;
+            font-weight: 800;
+        }
+
+        .print-preview-page .print-sheet-footer {
+            align-items: center;
+            color: #334155;
+            display: flex;
+            font-size: 0.6rem;
+            justify-content: space-between;
+            margin-top: auto;
+            padding-top: 22px;
         }
 
         .print-preview-page .print-subtitle {
