@@ -1134,6 +1134,35 @@
             .print-skeleton-table thead, .print-skeleton-table tfoot { display: table-row-group; }
             .print-skeleton-table th, .print-skeleton-table td { border: 1px solid #ccc; padding: 3px; font-size: 9pt; text-align: center; }
             .print-skeleton-table th { background-color: #f2f2f2 !important; font-weight: bold; }
+            #print-container .print-meta { color: #64748b; float: right; font-size: 7pt; line-height: 1.35; text-align: right; }
+            #print-container .print-title { font-size: 14pt; font-weight: 800; margin: 0 0 2mm; text-align: left; }
+            #print-container .print-subtitle { color: #475569; font-size: 8pt; margin: 0 0 5mm; text-align: left; }
+            #print-container .monthly-scale-scroll,
+            #print-container .bank-scale-scroll { overflow: visible !important; max-height: none !important; }
+            #print-container .monthly-scale-table,
+            #print-container .bank-employee-scale table { border-collapse: collapse; min-width: 0 !important; table-layout: fixed; width: 100%; }
+            #print-container .monthly-scale-table th,
+            #print-container .monthly-scale-table td,
+            #print-container .bank-employee-scale th,
+            #print-container .bank-employee-scale td { border: 1px solid #cbd5e1; font-size: 6.5pt; min-width: 0 !important; overflow: hidden; padding: 2px; text-align: center; }
+            #print-container .monthly-scale-table .employee-col,
+            #print-container .bank-employee-scale th:first-child,
+            #print-container .bank-employee-scale td:first-child { left: auto !important; position: static !important; text-align: left; width: 42mm; }
+            #print-container .employee-kebab-wrapper,
+            #print-container .subsection-kebab-menu,
+            #print-container .critical-status-chip,
+            #print-container button { display: none !important; }
+            #print-container .print-role-section { break-after: page; margin-bottom: 8mm; }
+            #print-container .print-role-section:last-child { break-after: auto; }
+            #print-container .print-role-section h4 { color: #1e3a8a; font-size: 11pt; margin: 0 0 3mm; }
+            #print-container .daily-schedule { min-width: 0 !important; }
+            #print-container .daily-schedule-axis,
+            #print-container .daily-schedule-row { display: grid; grid-template-columns: 45mm 1fr; }
+            #print-container .daily-schedule-person strong { font-size: 7pt; white-space: nowrap; }
+            #print-container .daily-schedule-track { min-height: 8mm; position: relative; }
+            #print-container .daily-schedule-bar,
+            #print-container .daily-schedule-break,
+            #print-container .daily-schedule-rest { display: block !important; position: absolute; }
             #print-container .colaborador-escala-detalhada { page-break-inside: avoid; border: 0px solid #ccc !important; margin-bottom: 1rem; padding: 8px 0; }
             #print-container .colaborador-escala-detalhada table { width: 100%; table-layout: fixed; border-collapse: collapse; }
             #print-container .colaborador-escala-detalhada table th, #print-container .colaborador-escala-detalhada table td { font-size: 7pt; padding: 2px; text-align: center; border: 1px solid #ccc; overflow: hidden; }
@@ -2065,6 +2094,325 @@
 
         #resetarEscalaSecaoBancoBtn .material-symbols-outlined {
             font-size: 1rem;
+        }
+
+        .print-config-modal {
+            background: #eef3f9;
+            border-radius: 8px;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+            display: flex;
+            flex-direction: column;
+            height: min(92vh, 860px);
+            overflow: hidden;
+            width: min(96vw, 1280px);
+        }
+
+        .print-config-header {
+            align-items: center;
+            display: flex;
+            gap: 16px;
+            justify-content: space-between;
+            padding: 22px 26px 14px;
+        }
+
+        .print-config-header h3 {
+            color: var(--cor-texto);
+            font-size: 1.35rem;
+            font-weight: 900;
+            margin: 0;
+        }
+
+        .print-config-header p {
+            color: var(--cor-texto-leve);
+            font-size: 0.82rem;
+            margin: 3px 0 0;
+        }
+
+        .print-config-actions {
+            align-items: center;
+            display: flex;
+            gap: 9px;
+        }
+
+        .print-config-close {
+            align-items: center;
+            background: transparent;
+            border: 0;
+            color: #94a3b8;
+            cursor: pointer;
+            display: inline-flex;
+            font-size: 1.6rem;
+            height: 34px;
+            justify-content: center;
+            width: 34px;
+        }
+
+        .print-config-body {
+            display: grid;
+            flex: 1;
+            gap: 20px;
+            grid-template-columns: 280px minmax(0, 1fr);
+            min-height: 0;
+            padding: 0 26px 24px;
+        }
+
+        .print-config-sidebar,
+        .print-preview-panel {
+            background: #ffffff;
+            border: 1px solid #dfe7f2;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+            min-height: 0;
+        }
+
+        .print-config-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            overflow: auto;
+            padding: 16px;
+        }
+
+        .print-tabs {
+            background: #eef4ff;
+            border: 1px solid #dbe7fb;
+            border-radius: 8px;
+            display: grid;
+            gap: 4px;
+            grid-template-columns: repeat(4, 1fr);
+            padding: 4px;
+        }
+
+        .print-tabs button,
+        .print-format-grid button {
+            border: 0;
+            cursor: pointer;
+            font-weight: 800;
+        }
+
+        .print-tabs button {
+            background: transparent;
+            border-radius: 6px;
+            color: #64748b;
+            font-size: 0.68rem;
+            min-height: 30px;
+        }
+
+        .print-tabs button.active {
+            background: #ffffff;
+            color: var(--cor-principal);
+            box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+        }
+
+        .print-field,
+        .print-format-section {
+            display: grid;
+            gap: 7px;
+        }
+
+        .print-field > span,
+        .print-format-section > span {
+            color: #7c8799;
+            font-size: 0.67rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .print-field select,
+        .print-field input {
+            background: #f7f9fc;
+            border: 1px solid #e3eaf4;
+            border-radius: 8px;
+            color: #334155;
+            font-size: 0.78rem;
+            font-weight: 700;
+            min-height: 38px;
+            padding: 8px 10px;
+            width: 100%;
+        }
+
+        .print-date-range {
+            display: grid;
+            gap: 8px;
+            grid-template-columns: 1fr;
+        }
+
+        .print-format-grid {
+            display: grid;
+            gap: 8px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .print-format-grid button {
+            align-items: center;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            color: #64748b;
+            display: flex;
+            flex-direction: column;
+            font-size: 0.71rem;
+            gap: 5px;
+            justify-content: center;
+            min-height: 78px;
+            padding: 8px;
+            text-align: center;
+        }
+
+        .print-format-grid button .material-symbols-outlined {
+            font-size: 1.2rem;
+        }
+
+        .print-format-grid button.active {
+            background: #eaf1ff;
+            border-color: var(--cor-principal);
+            color: var(--cor-principal);
+            box-shadow: 0 0 0 1px rgba(31, 63, 184, 0.1);
+        }
+
+        .print-page-field {
+            border-top: 1px solid #edf2f7;
+            margin-top: auto;
+            padding-top: 14px;
+        }
+
+        .print-preview-panel {
+            align-items: flex-start;
+            display: flex;
+            justify-content: center;
+            overflow: auto;
+            padding: 36px;
+        }
+
+        .print-preview-page {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+            color: #172033;
+            min-height: 480px;
+            overflow: hidden;
+            padding: 28px;
+            transform-origin: top center;
+            width: 900px;
+        }
+
+        .print-preview-page.portrait {
+            width: 640px;
+        }
+
+        .print-preview-page .print-title {
+            font-size: 1.12rem;
+            font-weight: 900;
+            margin: 0 0 4px;
+            text-align: left;
+        }
+
+        .print-preview-page .print-subtitle {
+            color: #64748b;
+            font-size: 0.72rem;
+            margin: 0 0 18px;
+            text-align: left;
+        }
+
+        .print-preview-page .print-meta {
+            color: #64748b;
+            float: right;
+            font-size: 0.62rem;
+            line-height: 1.4;
+            text-align: right;
+        }
+
+        .print-preview-page table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        .print-preview-page .monthly-scale-table,
+        .print-preview-page .bank-employee-scale table {
+            min-width: 0 !important;
+            table-layout: fixed;
+        }
+
+        .print-preview-page th,
+        .print-preview-page td {
+            font-size: 0.58rem !important;
+            min-width: 0 !important;
+            padding: 3px !important;
+        }
+
+        .print-preview-page .employee-col,
+        .print-preview-page .monthly-scale-table th.employee-col,
+        .print-preview-page .monthly-scale-table td.employee-col {
+            left: auto !important;
+            position: static !important;
+            width: 150px !important;
+        }
+
+        .print-preview-page .employee-kebab-wrapper,
+        .print-preview-page button:not(.daily-schedule-bar):not(.daily-schedule-break):not(.daily-schedule-rest) {
+            display: none !important;
+        }
+
+        .print-preview-page .monthly-scale-scroll,
+        .print-preview-page .bank-scale-scroll {
+            max-height: none !important;
+            overflow: visible !important;
+        }
+
+        .print-preview-page .print-role-section {
+            border-bottom: 1px solid #e2e8f0;
+            margin-bottom: 18px;
+            padding-bottom: 18px;
+        }
+
+        .print-preview-page .print-role-section h4 {
+            color: var(--cor-principal);
+            font-size: 0.82rem;
+            font-weight: 900;
+            margin: 0 0 10px;
+        }
+
+        .print-preview-empty {
+            align-items: center;
+            color: #64748b;
+            display: flex;
+            font-size: 0.85rem;
+            justify-content: center;
+            min-height: 340px;
+            text-align: center;
+        }
+
+        @media (max-width: 920px) {
+            .print-config-modal {
+                height: 96vh;
+                width: 98vw;
+            }
+
+            .print-config-header {
+                align-items: flex-start;
+                padding: 18px 18px 12px;
+            }
+
+            .print-config-body {
+                gap: 14px;
+                grid-template-columns: 1fr;
+                overflow: auto;
+                padding: 0 18px 18px;
+            }
+
+            .print-config-sidebar {
+                max-height: none;
+            }
+
+            .print-preview-panel {
+                min-height: 420px;
+                padding: 18px;
+            }
+
+            .print-preview-page {
+                min-width: 760px;
+            }
         }
 
         .view-switch button {

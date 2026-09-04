@@ -150,8 +150,22 @@
         const criticasDetalheBancoBtn = document.getElementById('criticasDetalheBancoBtn');
         const salvarRascunhoBancoBtn = document.getElementById('salvarRascunhoBancoBtn');
         const oficializarBancoBtn = document.getElementById('oficializarBancoBtn');
-        const imprimirTimelineBancoBtn = document.getElementById('imprimirTimelineBancoBtn');
+        const abrirImpressaoEscalaBtn = document.getElementById('abrirImpressaoEscalaBtn');
         const imprimirDetalheBancoBtn = document.getElementById('imprimirDetalheBancoBtn');
+        const impressaoEscalaModal = document.getElementById('impressaoEscalaModal');
+        const impressaoEscalaTabs = document.getElementById('impressaoEscalaTabs');
+        const impressaoCargoSelect = document.getElementById('impressaoCargoSelect');
+        const impressaoColaboradorSelect = document.getElementById('impressaoColaboradorSelect');
+        const impressaoFormatoGrid = document.getElementById('impressaoFormatoGrid');
+        const impressaoSemanaSelect = document.getElementById('impressaoSemanaSelect');
+        const impressaoDiaSelect = document.getElementById('impressaoDiaSelect');
+        const impressaoPeriodoInicio = document.getElementById('impressaoPeriodoInicio');
+        const impressaoPeriodoFim = document.getElementById('impressaoPeriodoFim');
+        const impressaoOrientacaoSelect = document.getElementById('impressaoOrientacaoSelect');
+        const impressaoEscalaPreview = document.getElementById('impressaoEscalaPreview');
+        const cancelarImpressaoEscalaBtn = document.getElementById('cancelarImpressaoEscalaBtn');
+        const fecharImpressaoEscalaBtn = document.getElementById('fecharImpressaoEscalaBtn');
+        const imprimirAgoraEscalaBtn = document.getElementById('imprimirAgoraEscalaBtn');
         const validarDetalheBancoBtn = document.getElementById('validarDetalheBancoBtn');
         const salvarDetalheBancoBtn = document.getElementById('salvarDetalheBancoBtn');
         const escalaFuncionarioPesquisa = document.getElementById('escalaFuncionarioPesquisa');
@@ -6636,7 +6650,7 @@
             escalaViewMensalBtn?.classList.toggle('active', visao === 'mensal');
             escalaViewDiariaBtn?.classList.toggle('active', visao === 'diaria');
             escalaHeaderDayNav?.classList.toggle('hidden', visao !== 'diaria');
-            imprimirTimelineBancoBtn?.classList.toggle('hidden', visao !== 'diaria');
+            abrirImpressaoEscalaBtn?.classList.toggle('hidden', !escalaDetalheAtual.secaoAtiva);
         };
 
         const moverDiaTimelineBanco = (direcao) => {
@@ -6726,7 +6740,7 @@
                         + mkBar(sai1, ent2, 'daily-schedule-break', '')
                         + mkBar(ent2, sai2, 'daily-schedule-bar', (dia.HR_ENT2 || '') + ' - ' + (dia.HR_SAI2 || ''));
                 }
-                return '<div class="daily-schedule-row">' +
+                return '<div class="daily-schedule-row" data-escfunc-id="' + escapeHtml(dia.ESCFUNC_ID || '') + '" data-funcao-descr="' + escapeHtml(dia.FUNCAO_DESCR || '') + '">' +
                     '<div class="daily-schedule-person"' + tooltipAttr + '><strong>' + escapeHtml((dia.CHAPA || '') + ' - ' + (dia.NOME || '')) + '</strong></div>' +
                     '<div class="daily-schedule-track' + (temCritica ? ' manual-critical-day' : '') + '">' + bars + '</div>' +
                     '</div>';
@@ -6848,7 +6862,7 @@
 
                 funcionariosPendentes.forEach((funcionario) => {
                     const funcionarioLabel = (funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '');
-                    html += '<tr><th class="employee-col" title="' + escapeHtml(funcionarioLabel) + '"><span class="scale-employee-name-row"><strong>' + escapeHtml(funcionarioLabel) + '</strong>' + renderizarMenuFuncionarioEscalaBanco(funcionario) + '</span></th>';
+                    html += '<tr data-escfunc-id="' + escapeHtml(funcionario.ESCFUNC_ID || '') + '" data-funcao-descr="' + escapeHtml(funcionario.FUNCAO_DESCR || funcionario.FUNCAO || '') + '"><th class="employee-col" title="' + escapeHtml(funcionarioLabel) + '"><span class="scale-employee-name-row"><strong>' + escapeHtml(funcionarioLabel) + '</strong>' + renderizarMenuFuncionarioEscalaBanco(funcionario) + '</span></th>';
                     for (let dia = 1; dia <= diasNoMes; dia += 1) {
                         const dataIso = formatDateForDb(ano, mes, dia);
                         const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
@@ -6926,7 +6940,7 @@
 
             funcionarios.forEach((funcionario) => {
                 const criticas = getCriticasFuncionarioBanco(funcionario);
-                html += '<tr><th class="employee-col" title="' + escapeHtml(getFuncionarioTitle(funcionario)) + '"><span class="scale-employee-name-row"><strong>' + escapeHtml((funcionario.chapa || '') + ' - ' + (funcionario.nome || '')) + '</strong>' + renderizarMenuFuncionarioEscalaBanco(funcionario) + '</span></th>';
+                html += '<tr data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" data-funcao-descr="' + escapeHtml(funcionario.funcao || '') + '"><th class="employee-col" title="' + escapeHtml(getFuncionarioTitle(funcionario)) + '"><span class="scale-employee-name-row"><strong>' + escapeHtml((funcionario.chapa || '') + ' - ' + (funcionario.nome || '')) + '</strong>' + renderizarMenuFuncionarioEscalaBanco(funcionario) + '</span></th>';
                 for (let dia = 1; dia <= diasNoMes; dia += 1) {
                     const registro = funcionario.dias.get(dia);
                     if (!registro) {
@@ -7050,7 +7064,7 @@
             const html = agruparDiasPorFuncionario(dias).map((funcionario) => {
                 const criticas = getCriticasFuncionarioBanco(funcionario);
                 const criticaButton = criticas.length ? '<button type="button" class="critical-status-chip banco-critical-chip" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" title="Ver criticas do funcionario">CRITICA</button>' : '';
-                let table = '<article class="bank-employee-scale" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '"><header><div><h3>' + escapeHtml(funcionario.nome) + '</h3><p>' + escapeHtml(funcionario.chapa) + (funcionario.funcao ? ' | ' + escapeHtml(funcionario.funcao) : '') + '</p><p class="print-aware-inline">Ciente: ___________________________________________</p></div>' + criticaButton + '</header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
+                let table = '<article class="bank-employee-scale" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" data-funcao-descr="' + escapeHtml(funcionario.funcao || '') + '"><header><div><h3>' + escapeHtml(funcionario.nome) + '</h3><p>' + escapeHtml(funcionario.chapa) + (funcionario.funcao ? ' | ' + escapeHtml(funcionario.funcao) : '') + '</p><p class="print-aware-inline">Ciente: ___________________________________________</p></div>' + criticaButton + '</header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
                 for (let dia = 1; dia <= diasNoMes; dia += 1) table += '<th class="' + getWeekClass(dia).trim() + '">' + diasSemana[new Date(ano, mes, dia).getDay()] + '</th>';
                 table += '</tr><tr><th>DIA</th>';
                 for (let dia = 1; dia <= diasNoMes; dia += 1) {
@@ -7264,6 +7278,282 @@
         escalaBancoDiaAnteriorBtn?.addEventListener('click', () => moverDiaTimelineBanco(-1));
         escalaBancoDiaProximoBtn?.addEventListener('click', () => moverDiaTimelineBanco(1));
 
+        let impressaoEscalaState = {
+            tipo: 'mensal',
+            formato: 'todos',
+            cargo: 'TODOS',
+            colaborador: 'TODOS',
+            orientacao: 'landscape'
+        };
+
+        const getDiasMesImpressao = () => {
+            const dataRef = escalaDetalheAtual.mesRef ? new Date(escalaDetalheAtual.mesRef + 'T00:00:00') : new Date();
+            const ano = dataRef.getFullYear();
+            const mes = dataRef.getMonth();
+            const total = new Date(ano, mes + 1, 0).getDate();
+            return Array.from({ length: total }, (_, index) => formatDateForDb(ano, mes, index + 1));
+        };
+
+        const getSemanasImpressao = () => {
+            const semanas = new Map();
+            getDiasMesImpressao().forEach((dataIso) => {
+                const data = new Date(dataIso + 'T00:00:00');
+                const day = data.getDay();
+                const monday = new Date(data);
+                monday.setDate(data.getDate() + (day === 0 ? -6 : 1 - day));
+                const key = monday.toISOString().slice(0, 10);
+                if (!semanas.has(key)) semanas.set(key, []);
+                semanas.get(key).push(dataIso);
+            });
+            return [...semanas.entries()].map(([key, dias]) => ({ key, dias }));
+        };
+
+        const getFuncionariosImpressaoBanco = () => {
+            const diasSecao = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
+            const diasFiltrados = escalaDetalheAtual.subsetorAtivo
+                ? diasSecao.filter(dia => String(getSubsetorDetalheKey(dia)) === String(escalaDetalheAtual.subsetorAtivo))
+                : diasSecao;
+            const map = new Map();
+            getFuncionariosSecaoAtualBanco().forEach((funcionario) => {
+                map.set(String(funcionario.ESCFUNC_ID || ''), {
+                    id: String(funcionario.ESCFUNC_ID || ''),
+                    chapa: funcionario.CHAPA || '',
+                    nome: funcionario.NOME || '',
+                    cargo: funcionario.FUNCAO_DESCR || funcionario.FUNCAO || ''
+                });
+            });
+            agruparDiasPorFuncionario(diasFiltrados).forEach((funcionario) => {
+                const atual = map.get(String(funcionario.escfuncId || '')) || {};
+                map.set(String(funcionario.escfuncId || ''), {
+                    id: String(funcionario.escfuncId || ''),
+                    chapa: funcionario.chapa || atual.chapa || '',
+                    nome: funcionario.nome || atual.nome || '',
+                    cargo: funcionario.funcao || atual.cargo || ''
+                });
+            });
+            return [...map.values()]
+                .filter((funcionario) => funcionario.id)
+                .sort((a, b) => String(a.nome).localeCompare(String(b.nome)) || String(a.chapa).localeCompare(String(b.chapa)));
+        };
+
+        const getCargoImpressaoLabel = (cargo) => String(cargo || '').trim() || 'Sem cargo';
+
+        const getPeriodoImpressao = () => {
+            const dias = getDiasMesImpressao();
+            if (!dias.length) return { inicio: '', fim: '' };
+            if (impressaoEscalaState.tipo === 'semanal') {
+                const semana = getSemanasImpressao().find((item) => item.key === impressaoEscalaState.semana) || getSemanasImpressao()[0];
+                return { inicio: semana?.dias[0] || dias[0], fim: semana?.dias[semana.dias.length - 1] || dias[dias.length - 1] };
+            }
+            if (impressaoEscalaState.tipo === 'diario') {
+                const dia = impressaoEscalaState.dia || escalaBancoDiaSelect?.value || dias[0];
+                return { inicio: dia, fim: dia };
+            }
+            if (impressaoEscalaState.tipo === 'periodo') {
+                return {
+                    inicio: impressaoPeriodoInicio?.value || dias[0],
+                    fim: impressaoPeriodoFim?.value || dias[dias.length - 1]
+                };
+            }
+            return { inicio: dias[0], fim: dias[dias.length - 1] };
+        };
+
+        const removerControlesCloneImpressao = (root) => {
+            root.querySelectorAll('button, .employee-kebab-wrapper, .subsection-kebab-menu, .critical-status-chip').forEach((node) => {
+                if (node.classList?.contains('daily-schedule-bar') || node.classList?.contains('daily-schedule-break') || node.classList?.contains('daily-schedule-rest')) {
+                    const span = document.createElement('span');
+                    span.className = node.className;
+                    span.setAttribute('style', node.getAttribute('style') || '');
+                    span.textContent = node.textContent || '';
+                    node.replaceWith(span);
+                    return;
+                }
+                node.remove();
+            });
+        };
+
+        const filtrarLinhasCloneImpressao = (root, filtros = {}) => {
+            const cargo = String(filtros.cargo ?? impressaoEscalaState.cargo ?? 'TODOS');
+            const colaborador = String(filtros.colaborador ?? impressaoEscalaState.colaborador ?? 'TODOS');
+            if (cargo === 'TODOS' && colaborador === 'TODOS') return;
+            root.querySelectorAll('[data-escfunc-id]').forEach((node) => {
+                const nodeId = String(node.dataset.escfuncId || '');
+                const nodeCargo = getCargoImpressaoLabel(node.dataset.funcaoDescr || '');
+                if (colaborador !== 'TODOS' && nodeId !== colaborador) node.remove();
+                else if (cargo !== 'TODOS' && nodeCargo !== cargo) node.remove();
+            });
+            root.querySelectorAll('thead .monthly-quality-row, thead .monthly-totals-row').forEach((row) => row.remove());
+        };
+
+        const removerColunasForaPeriodoImpressao = (root, inicio, fim) => {
+            if (!inicio || !fim) return;
+            const dataRef = escalaDetalheAtual.mesRef ? new Date(escalaDetalheAtual.mesRef + 'T00:00:00') : new Date();
+            const ano = dataRef.getFullYear();
+            const mes = dataRef.getMonth();
+            const total = new Date(ano, mes + 1, 0).getDate();
+            const remover = [];
+            for (let dia = 1; dia <= total; dia += 1) {
+                const dataIso = formatDateForDb(ano, mes, dia);
+                if (dataIso < inicio || dataIso > fim) remover.push(dia);
+            }
+            root.querySelectorAll('tr').forEach((row) => {
+                const cells = Array.from(row.children);
+                remover.slice().reverse().forEach((dia) => {
+                    const cell = cells[dia];
+                    if (cell) cell.remove();
+                });
+            });
+        };
+
+        const getCabecalhoImpressaoHtml = (titulo) => {
+            const agora = new Date();
+            const secao = getSecaoAtualBanco();
+            const periodo = getPeriodoImpressao();
+            const meta = 'Impresso em: ' + agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const subtitulo = [
+                'Loja ' + (escalaDetalheAtual.lojaId || '-'),
+                formatarMesTabela(escalaDetalheAtual.mesRef || ''),
+                secao?.nome || '',
+                periodo.inicio && periodo.fim ? formatarDataTabela(periodo.inicio) + ' a ' + formatarDataTabela(periodo.fim) : ''
+            ].filter(Boolean).join(' | ');
+            return '<div class="print-meta">' + escapeHtml(meta) + '<br>Página 1 de 1</div><div class="print-title">' + escapeHtml(titulo) + '</div><div class="print-subtitle">' + escapeHtml(subtitulo) + '</div>';
+        };
+
+        const getCloneMensalImpressao = (filtros = {}) => {
+            const table = escalaBancoMensalContent?.querySelector('.monthly-scale-table');
+            if (!table) return null;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'monthly-scale-scroll';
+            wrapper.appendChild(table.cloneNode(true));
+            removerControlesCloneImpressao(wrapper);
+            filtrarLinhasCloneImpressao(wrapper, filtros);
+            const periodo = getPeriodoImpressao();
+            removerColunasForaPeriodoImpressao(wrapper, periodo.inicio, periodo.fim);
+            return wrapper;
+        };
+
+        const getCloneDetalhadoImpressao = (filtros = {}) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'bank-detailed-scale';
+            const artigos = Array.from(escalaBancoDetalhadaContent?.querySelectorAll('.bank-employee-scale') || []);
+            artigos.forEach((artigo) => wrapper.appendChild(artigo.cloneNode(true)));
+            removerControlesCloneImpressao(wrapper);
+            filtrarLinhasCloneImpressao(wrapper, filtros);
+            const periodo = getPeriodoImpressao();
+            removerColunasForaPeriodoImpressao(wrapper, periodo.inicio, periodo.fim);
+            return wrapper.children.length ? wrapper : null;
+        };
+
+        const getCloneTimelineImpressao = (filtros = {}) => {
+            const wrapper = document.createElement('div');
+            const timeline = escalaBancoTimelineContent?.querySelector('.daily-schedule');
+            if (!timeline) return null;
+            wrapper.appendChild(timeline.cloneNode(true));
+            removerControlesCloneImpressao(wrapper);
+            filtrarLinhasCloneImpressao(wrapper, filtros);
+            return wrapper;
+        };
+
+        const getHtmlCargosSeparadosImpressao = () => {
+            const funcionarios = getFuncionariosImpressaoBanco();
+            const cargos = [...new Set(funcionarios.map((funcionario) => getCargoImpressaoLabel(funcionario.cargo)))].sort((a, b) => a.localeCompare(b));
+            const cargoSelecionado = String(impressaoEscalaState.cargo || 'TODOS');
+            const cargosFiltrados = cargoSelecionado === 'TODOS' ? cargos : cargos.filter((cargo) => cargo === cargoSelecionado);
+            const html = cargosFiltrados.map((cargo) => {
+                const clone = getCloneMensalImpressao({ cargo, colaborador: impressaoEscalaState.colaborador });
+                if (!clone) return '';
+                return '<section class="print-role-section"><h4>' + escapeHtml(cargo) + '</h4>' + clone.outerHTML + '</section>';
+            }).filter(Boolean).join('');
+            return html ? { outerHTML: html } : null;
+        };
+
+        const getConteudoImpressaoBanco = () => {
+            const tipo = impressaoEscalaState.tipo;
+            const formato = impressaoEscalaState.formato;
+            const tituloBase = tipo === 'diario'
+                ? 'Escala de Trabalho - Diario'
+                : tipo === 'semanal'
+                    ? 'Escala de Trabalho - Semanal'
+                    : tipo === 'periodo'
+                        ? 'Escala de Trabalho - Periodo'
+                        : 'Escala de Trabalho - Mensal';
+            const clone = tipo === 'diario'
+                ? getCloneTimelineImpressao()
+                : formato === 'colaborador'
+                    ? getCloneDetalhadoImpressao()
+                    : formato === 'cargos'
+                        ? getHtmlCargosSeparadosImpressao()
+                    : getCloneMensalImpressao();
+            if (!clone) return getCabecalhoImpressaoHtml(tituloBase) + '<div class="print-preview-empty">Nenhum dado disponível para imprimir com os filtros selecionados.</div>';
+            return getCabecalhoImpressaoHtml(tituloBase) + clone.outerHTML;
+        };
+
+        const atualizarCamposPeriodoImpressao = () => {
+            const tipo = impressaoEscalaState.tipo;
+            impressaoEscalaModal?.querySelector('.print-week-field')?.classList.toggle('hidden', tipo !== 'semanal');
+            impressaoEscalaModal?.querySelector('.print-day-field')?.classList.toggle('hidden', tipo !== 'diario');
+            impressaoEscalaModal?.querySelector('.print-period-field')?.classList.toggle('hidden', tipo !== 'periodo');
+        };
+
+        const preencherFiltrosImpressaoBanco = () => {
+            const funcionarios = getFuncionariosImpressaoBanco();
+            const cargos = [...new Set(funcionarios.map((funcionario) => getCargoImpressaoLabel(funcionario.cargo)))].sort((a, b) => a.localeCompare(b));
+            if (impressaoCargoSelect) {
+                impressaoCargoSelect.innerHTML = '<option value="TODOS">Todos os cargos (' + cargos.length + ')</option>' + cargos.map((cargo) => '<option value="' + escapeHtml(cargo) + '">' + escapeHtml(cargo) + '</option>').join('');
+                impressaoCargoSelect.value = cargos.includes(impressaoEscalaState.cargo) ? impressaoEscalaState.cargo : 'TODOS';
+                impressaoEscalaState.cargo = impressaoCargoSelect.value;
+            }
+            const colaboradores = impressaoEscalaState.cargo === 'TODOS' ? funcionarios : funcionarios.filter((funcionario) => getCargoImpressaoLabel(funcionario.cargo) === impressaoEscalaState.cargo);
+            if (impressaoColaboradorSelect) {
+                impressaoColaboradorSelect.innerHTML = '<option value="TODOS">Todos os colaboradores (' + colaboradores.length + ')</option>' + colaboradores.map((funcionario) => '<option value="' + escapeHtml(funcionario.id) + '">' + escapeHtml((funcionario.chapa ? funcionario.chapa + ' - ' : '') + funcionario.nome) + '</option>').join('');
+                impressaoColaboradorSelect.value = colaboradores.some((funcionario) => funcionario.id === impressaoEscalaState.colaborador) ? impressaoEscalaState.colaborador : 'TODOS';
+                impressaoEscalaState.colaborador = impressaoColaboradorSelect.value;
+            }
+            const dias = getDiasMesImpressao();
+            if (impressaoDiaSelect) {
+                impressaoDiaSelect.innerHTML = dias.map((dataIso) => '<option value="' + escapeHtml(dataIso) + '">' + escapeHtml(formatarDiaTimelineBanco(dataIso)) + '</option>').join('');
+                impressaoDiaSelect.value = impressaoEscalaState.dia || escalaBancoDiaSelect?.value || dias[0] || '';
+                impressaoEscalaState.dia = impressaoDiaSelect.value;
+            }
+            const semanas = getSemanasImpressao();
+            if (impressaoSemanaSelect) {
+                impressaoSemanaSelect.innerHTML = semanas.map((semana, index) => '<option value="' + escapeHtml(semana.key) + '">Semana ' + (index + 1) + ' - ' + escapeHtml(formatarDataTabela(semana.dias[0]) + ' a ' + formatarDataTabela(semana.dias[semana.dias.length - 1])) + '</option>').join('');
+                impressaoSemanaSelect.value = semanas.some((semana) => semana.key === impressaoEscalaState.semana) ? impressaoEscalaState.semana : semanas[0]?.key || '';
+                impressaoEscalaState.semana = impressaoSemanaSelect.value;
+            }
+            if (impressaoPeriodoInicio && !impressaoPeriodoInicio.value) impressaoPeriodoInicio.value = dias[0] || '';
+            if (impressaoPeriodoFim && !impressaoPeriodoFim.value) impressaoPeriodoFim.value = dias[dias.length - 1] || '';
+        };
+
+        const atualizarPreviewImpressaoBanco = () => {
+            if (!impressaoEscalaPreview) return;
+            impressaoEscalaState.orientacao = impressaoOrientacaoSelect?.value || 'landscape';
+            impressaoEscalaPreview.classList.toggle('portrait', impressaoEscalaState.orientacao === 'portrait');
+            impressaoEscalaPreview.innerHTML = getConteudoImpressaoBanco();
+        };
+
+        const abrirPainelImpressaoBanco = () => {
+            impressaoEscalaState = {
+                ...impressaoEscalaState,
+                tipo: escalaDetalheAtual.visao === 'diaria' ? 'diario' : 'mensal',
+                formato: escalaDetalheAtual.visao === 'diaria' ? 'todos' : impressaoEscalaState.formato || 'todos',
+                cargo: 'TODOS',
+                colaborador: 'TODOS',
+                dia: escalaBancoDiaSelect?.value || impressaoEscalaState.dia,
+                orientacao: impressaoOrientacaoSelect?.value || 'landscape'
+            };
+            preencherFiltrosImpressaoBanco();
+            atualizarCamposPeriodoImpressao();
+            impressaoEscalaTabs?.querySelectorAll('button').forEach((button) => button.classList.toggle('active', button.dataset.printType === impressaoEscalaState.tipo));
+            impressaoFormatoGrid?.querySelectorAll('button').forEach((button) => button.classList.toggle('active', button.dataset.printFormat === impressaoEscalaState.formato));
+            impressaoEscalaModal?.classList.remove('hidden');
+            atualizarPreviewImpressaoBanco();
+        };
+
+        const fecharPainelImpressaoBanco = () => {
+            impressaoEscalaModal?.classList.add('hidden');
+        };
+
         resetarEscalaSecaoBancoBtn?.addEventListener('click', async () => {
             if (!escalaDetalheAtual.lojaId || !escalaDetalheAtual.mesRef || !escalaDetalheAtual.secaoAtiva) return;
             const confirmacao = await showInputModal({
@@ -7293,9 +7583,57 @@
             }
         });
 
-        imprimirTimelineBancoBtn?.addEventListener('click', () => {
-            const dias = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva));
-            printContainer.innerHTML = '<div class="print-title">' + escapeHtml(escalaSecaoTimelineTitulo?.textContent || 'Timeline da seção') + '</div>' + (escalaBancoTimelineContent?.innerHTML || '');
+        abrirImpressaoEscalaBtn?.addEventListener('click', abrirPainelImpressaoBanco);
+        cancelarImpressaoEscalaBtn?.addEventListener('click', fecharPainelImpressaoBanco);
+        fecharImpressaoEscalaBtn?.addEventListener('click', fecharPainelImpressaoBanco);
+        impressaoEscalaModal?.addEventListener('click', (event) => {
+            if (event.target === impressaoEscalaModal) fecharPainelImpressaoBanco();
+        });
+        impressaoEscalaTabs?.addEventListener('click', (event) => {
+            const button = event.target.closest('button[data-print-type]');
+            if (!button) return;
+            impressaoEscalaState.tipo = button.dataset.printType;
+            impressaoEscalaTabs.querySelectorAll('button').forEach((item) => item.classList.toggle('active', item === button));
+            atualizarCamposPeriodoImpressao();
+            preencherFiltrosImpressaoBanco();
+            atualizarPreviewImpressaoBanco();
+        });
+        impressaoFormatoGrid?.addEventListener('click', (event) => {
+            const button = event.target.closest('button[data-print-format]');
+            if (!button) return;
+            impressaoEscalaState.formato = button.dataset.printFormat;
+            impressaoFormatoGrid.querySelectorAll('button').forEach((item) => item.classList.toggle('active', item === button));
+            atualizarPreviewImpressaoBanco();
+        });
+        impressaoCargoSelect?.addEventListener('change', () => {
+            impressaoEscalaState.cargo = impressaoCargoSelect.value;
+            impressaoEscalaState.colaborador = 'TODOS';
+            preencherFiltrosImpressaoBanco();
+            atualizarPreviewImpressaoBanco();
+        });
+        impressaoColaboradorSelect?.addEventListener('change', () => {
+            impressaoEscalaState.colaborador = impressaoColaboradorSelect.value;
+            atualizarPreviewImpressaoBanco();
+        });
+        impressaoSemanaSelect?.addEventListener('change', () => {
+            impressaoEscalaState.semana = impressaoSemanaSelect.value;
+            atualizarPreviewImpressaoBanco();
+        });
+        impressaoDiaSelect?.addEventListener('change', () => {
+            impressaoEscalaState.dia = impressaoDiaSelect.value;
+            if (escalaBancoDiaSelect && escalaDetalheAtual.visao === 'diaria') {
+                escalaBancoDiaSelect.value = impressaoEscalaState.dia;
+                renderizarSecaoAtivaEscala();
+            }
+            atualizarPreviewImpressaoBanco();
+        });
+        impressaoPeriodoInicio?.addEventListener('change', atualizarPreviewImpressaoBanco);
+        impressaoPeriodoFim?.addEventListener('change', atualizarPreviewImpressaoBanco);
+        impressaoOrientacaoSelect?.addEventListener('change', atualizarPreviewImpressaoBanco);
+        imprimirAgoraEscalaBtn?.addEventListener('click', () => {
+            if (!printContainer) return;
+            const pageSize = impressaoEscalaState.orientacao === 'portrait' ? 'portrait' : 'landscape';
+            printContainer.innerHTML = '<style>@page { size: ' + pageSize + '; margin: 8mm; }</style>' + getConteudoImpressaoBanco();
             window.print();
         });
 

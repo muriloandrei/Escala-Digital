@@ -608,9 +608,9 @@
                             <span class="material-symbols-outlined">restart_alt</span>
                             Resetar Escala
                         </button>
-                        <button type="button" class="action-button secondary scale-header-print hidden" id="imprimirTimelineBancoBtn">
+                        <button type="button" class="action-button secondary scale-header-print hidden" id="abrirImpressaoEscalaBtn">
                             <span class="material-symbols-outlined">print</span>
-                            Imprimir Timeline
+                            Imprimir
                         </button>
                     </div>
                     <div id="escalaBancoMensalPanel">
@@ -638,7 +638,7 @@
                                 <span class="material-symbols-outlined">save</span>
                                 Salvar
                             </button>
-                            <button type="button" class="action-button secondary" id="imprimirDetalheBancoBtn">
+                            <button type="button" class="action-button secondary hidden" id="imprimirDetalheBancoBtn">
                                 <span class="material-symbols-outlined">print</span>
                                 Imprimir Escala
                             </button>
@@ -874,6 +874,89 @@
                         </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="impressaoEscalaModal" class="modal-overlay hidden no-print" style="z-index: 1075;">
+        <div class="print-config-modal">
+            <header class="print-config-header">
+                <div>
+                    <h3>Imprimir escala</h3>
+                    <p>Configure o layout e visualize a folha antes de enviar para a impressora.</p>
+                </div>
+                <div class="print-config-actions">
+                    <button type="button" class="action-button secondary" id="cancelarImpressaoEscalaBtn">Cancelar</button>
+                    <button type="button" class="action-button" id="imprimirAgoraEscalaBtn">
+                        <span class="material-symbols-outlined">print</span>
+                        Imprimir agora
+                    </button>
+                    <button type="button" class="print-config-close" id="fecharImpressaoEscalaBtn" aria-label="Fechar impressao">&times;</button>
+                </div>
+            </header>
+            <main class="print-config-body">
+                <aside class="print-config-sidebar">
+                    <div class="print-tabs" id="impressaoEscalaTabs" role="tablist" aria-label="Tipo de impressao">
+                        <button type="button" class="active" data-print-type="mensal">Mensal</button>
+                        <button type="button" data-print-type="semanal">Semanal</button>
+                        <button type="button" data-print-type="diario">Di&aacute;rio</button>
+                        <button type="button" data-print-type="periodo">Per&iacute;odo</button>
+                    </div>
+                    <label class="print-field">
+                        <span>Selecione os cargos</span>
+                        <select id="impressaoCargoSelect"></select>
+                    </label>
+                    <label class="print-field">
+                        <span>Colaboradores</span>
+                        <select id="impressaoColaboradorSelect"></select>
+                    </label>
+                    <div class="print-field print-week-field hidden">
+                        <span>Selecione a semana</span>
+                        <select id="impressaoSemanaSelect"></select>
+                    </div>
+                    <div class="print-field print-day-field hidden">
+                        <span>Selecione o dia</span>
+                        <select id="impressaoDiaSelect"></select>
+                    </div>
+                    <div class="print-field print-period-field hidden">
+                        <span>Selecione o per&iacute;odo</span>
+                        <div class="print-date-range">
+                            <input type="date" id="impressaoPeriodoInicio">
+                            <input type="date" id="impressaoPeriodoFim">
+                        </div>
+                    </div>
+                    <section class="print-format-section">
+                        <span>Formato de impress&atilde;o</span>
+                        <div class="print-format-grid" id="impressaoFormatoGrid">
+                            <button type="button" class="active" data-print-format="todos">
+                                <span class="material-symbols-outlined">view_list</span>
+                                Todos os cargos juntos
+                            </button>
+                            <button type="button" data-print-format="cargos">
+                                <span class="material-symbols-outlined">view_column</span>
+                                Cargos separados
+                            </button>
+                            <button type="button" data-print-format="colaborador">
+                                <span class="material-symbols-outlined">badge</span>
+                                Por colaborador
+                            </button>
+                            <button type="button" data-print-format="colaboradores">
+                                <span class="material-symbols-outlined">table_rows</span>
+                                Colaboradores juntos
+                            </button>
+                        </div>
+                    </section>
+                    <label class="print-field print-page-field">
+                        <span>Configura&ccedil;&atilde;o de p&aacute;gina</span>
+                        <select id="impressaoOrientacaoSelect">
+                            <option value="landscape">Paisagem (Recomendado)</option>
+                            <option value="portrait">Retrato</option>
+                        </select>
+                    </label>
+                </aside>
+                <section class="print-preview-panel">
+                    <div id="impressaoEscalaPreview" class="print-preview-page"></div>
+                </section>
+            </main>
         </div>
     </div>
 
