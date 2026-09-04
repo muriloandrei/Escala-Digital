@@ -398,15 +398,19 @@ function getWeekGroups(datasGeradas) {
   return [...weeks.values()];
 }
 
-function completarFolgasMinimasSemanais(datasGeradas = [], folgasDatas = []) {
+function completarFolgasMinimasSemanais(datasGeradas = [], folgasDatas = [], opcoes = {}) {
   const folgas = new Set((folgasDatas || []).map(formatDateValue).filter(Boolean));
+  const descansosObrigatorios = new Set((opcoes.descansosObrigatorios || []).map(formatDateValue).filter(Boolean));
+  const bloqueados = new Set((opcoes.bloqueados || []).map(formatDateValue).filter(Boolean));
+  const maxFolgasSemana = Number(opcoes.maxFolgasSemana || 2);
+  const considerarDescansos = (data) => folgas.has(data) || descansosObrigatorios.has(data);
   getWeekGroups(datasGeradas).forEach((semana) => {
     const minimoSemana = Math.min(2, Math.round(semana.length * 2 / 7));
-    let folgasSemana = semana.filter((data) => folgas.has(data)).length;
+    let folgasSemana = semana.filter(considerarDescansos).length;
     if (folgasSemana >= minimoSemana) return;
 
     const candidatos = semana
-      .filter((data) => !folgas.has(data) && !isDomingoIso(data))
+      .filter((data) => !considerarDescansos(data) && !bloqueados.has(data) && !isDomingoIso(data))
       .sort((left, right) => {
         const leftDay = new Date(`${left}T00:00:00`).getDay();
         const rightDay = new Date(`${right}T00:00:00`).getDay();
@@ -415,7 +419,8 @@ function completarFolgasMinimasSemanais(datasGeradas = [], folgasDatas = []) {
 
     for (const data of candidatos) {
       if (folgasSemana >= minimoSemana) break;
-      if (isFolgaVizinha(folgas, data)) continue;
+      if (semana.filter(considerarDescansos).length >= maxFolgasSemana) break;
+      if (isFolgaVizinha(new Set([...folgas, ...descansosObrigatorios]), data)) continue;
       folgas.add(data);
       folgasSemana += 1;
     }
@@ -446,6 +451,29 @@ function getFolgasFixasFuncionario(diasFixos, funcionario, datasGeradas = []) {
     if (programacao && programacao !== 'TRB') folgas.push(data);
   }
   return [...new Set(folgas)].sort();
+}
+
+function getDescansosObrigatoriosFuncionario(diasFixos, indiceAusencias, funcionario, datasGeradas = []) {
+  const datasSet = new Set((datasGeradas || []).map(formatDateValue));
+  const descansos = new Set(getFolgasFixasFuncionario(diasFixos, funcionario, datasGeradas));
+  (datasGeradas || []).forEach((data) => {
+    const dataIso = formatDateValue(data);
+    if (datasSet.size && !datasSet.has(dataIso)) return;
+    if (encontrarAusencia(indiceAusencias, funcionario, dataIso)) descansos.add(dataIso);
+  });
+  return [...descansos].sort();
+}
+
+function getDatasBloqueadasFolgaAutomatica(diasFixos, indiceAusencias, funcionario, datasGeradas = [], extras = []) {
+  const escfuncId = funcionario.ESCFUNC_ID || funcionario.escfuncId;
+  const bloqueados = new Set((extras || []).map(formatDateValue).filter(Boolean));
+  (datasGeradas || []).forEach((data) => {
+    const dataIso = formatDateValue(data);
+    if (diasFixos.has(`${escfuncId}|${dataIso}`) || encontrarAusencia(indiceAusencias, funcionario, dataIso)) {
+      bloqueados.add(dataIso);
+    }
+  });
+  return [...bloqueados].sort();
 }
 
 function hasMaxFolgasAutomaticasComFixos(folgasAutomaticas = [], folgasFixas = [], maxFolgasSemana = 2) {
@@ -580,6 +608,7 @@ function escolherPadraoBalanceado({
   const folgasEsperadas = Math.max(1, Math.round(datasGeradas.length * 2 / 7));
   const folgasFixasFuncionario = getFolgasFixasFuncionario(diasFixos, funcionario, datasGeradas);
   const folgasFixasSet = new Set(folgasFixasFuncionario);
+  const descansosObrigatoriosFuncionario = getDescansosObrigatoriosFuncionario(diasFixos, indiceAusencias, funcionario, datasGeradas);
   const domingosFolgaSet = new Set((domingosFolgaAlvo || []).map(formatDateValue));
   const domingosTrabalhoSet = new Set((domingosTrabalhoAlvo || []).map(formatDateValue));
   const planosMap = new Map();
@@ -599,9 +628,20 @@ function escolherPadraoBalanceado({
   planos.forEach(({ padrao, folgas, repeticaoExata }, planoIndex) => {
     const folgasPossiveis = folgas.filter((data) => !encontrarAusencia(indiceAusencias, funcionario, data)
       && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`));
-    const folgasEfetivas = limitarFolgasAutomaticasPorFixos(folgasPossiveis, folgasFixasFuncionario, 2);
+    const folgasLimitadas = limitarFolgasAutomaticasPorFixos(folgasPossiveis, descansosObrigatoriosFuncionario, 2);
+    const folgasEfetivas = completarFolgasMinimasSemanais(datasGeradas, folgasLimitadas, {
+      descansosObrigatorios: descansosObrigatoriosFuncionario,
+      bloqueados: getDatasBloqueadasFolgaAutomatica(
+        diasFixos,
+        indiceAusencias,
+        funcionario,
+        datasGeradas,
+        [...domingosTrabalhoSet]
+      ),
+      maxFolgasSemana: 2
+    });
     if (!hasMaxFolgasPorSemanaDatas(folgasEfetivas, 2)) return;
-    if (!hasMaxFolgasAutomaticasComFixos(folgasEfetivas, folgasFixasFuncionario, 2)) return;
+    if (!hasMaxFolgasAutomaticasComFixos(folgasEfetivas, descansosObrigatoriosFuncionario, 2)) return;
     const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas, { indiceAusencias, diasFixos });
     if (!hasNoConsecutiveAutomaticRests(rascunho.dias)) return;
     const errors = validateEscalaPayload({
@@ -637,7 +677,7 @@ function escolherPadraoBalanceado({
     const turnoSemCobertura = Number(turnoSize || 0) > 1 && folgasEfetivas.some((data) => (projetadaTurno.get(data) || 0) >= Number(turnoSize || 0));
     const limiteDesejadoTurno = Math.max(1, Math.ceil(Number(turnoSize || 1) / 2));
     const excessoFolgaTurno = Math.max(0, maxFolgasTurnoDia - limiteDesejadoTurno);
-    const folgasPlanejadasFuncionario = new Set([...folgasEfetivas, ...folgasFixasFuncionario]);
+    const folgasPlanejadasFuncionario = new Set([...folgasEfetivas, ...descansosObrigatoriosFuncionario]);
     const folgasAbaixoMinimo = Math.max(0, folgasEsperadas - folgasPlanejadasFuncionario.size);
     const folgasAcimaEsperado = Math.max(0, folgasPlanejadasFuncionario.size - folgasEsperadas);
     const domingosFolgaPerdidos = [...domingosFolgaSet].filter((data) => !encontrarAusencia(indiceAusencias, funcionario, data) && !folgasFixasSet.has(data) && !folgasEfetivas.includes(data)).length;

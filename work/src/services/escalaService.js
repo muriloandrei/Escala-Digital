@@ -1,4 +1,5 @@
 const { withConnection, oracledb } = require('../db/oracle');
+const catalogService = require('./catalogService');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -772,6 +773,22 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     );
 
     const rows = result.rows || [];
+    const funcionariosCatalogo = await catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }).catch(() => []);
+    const catalogoPorFuncionario = new Map((funcionariosCatalogo || [])
+      .map((funcionario) => [String(pick(funcionario, 'ESCFUNC_ID', 'escfunc_id')), funcionario]));
+    rows.forEach((row) => {
+      const atual = catalogoPorFuncionario.get(String(pick(row, 'ESCFUNC_ID', 'escfunc_id')));
+      if (!atual) return;
+      row.CHAPA = pick(atual, 'CHAPA', 'chapa') || pick(row, 'CHAPA', 'chapa');
+      row.NOME = pick(atual, 'NOME', 'nome') || pick(row, 'NOME', 'nome');
+      row.ESCSECAO_ID = pick(atual, 'ESCSECAO_ID', 'escsecao_id') || pick(row, 'ESCSECAO_ID', 'escsecao_id');
+      row.ESCSUBSECAO_ID = pick(atual, 'ESCSUBSECAO_ID', 'escsubsecao_id');
+      row.SUBSECAO_DESCR = pick(atual, 'SUBSECAO_DESCR', 'subsecao_descr');
+      row.ESCFUNCAO_ID = pick(atual, 'ESCFUNCAO_ID', 'escfuncao_id') || pick(row, 'ESCFUNCAO_ID', 'escfuncao_id');
+      row.FUNCAO_DESCR = pick(atual, 'FUNCAO_DESCR', 'funcao_descr') || pick(row, 'FUNCAO_DESCR', 'funcao_descr');
+      row.COD_SECAO = pick(atual, 'COD_SECAO', 'cod_secao') || pick(row, 'COD_SECAO', 'cod_secao');
+      row.SECAO_DESCR = pick(atual, 'SECAO_DESCR', 'secao_descr') || pick(row, 'SECAO_DESCR', 'secao_descr');
+    });
     let fixos = await listFixosEscalaComConnection(connection, { lojaId, mesRef });
     if (Array.isArray(secoesPermitidas)) {
       const permitidasSet = new Set(secoesPermitidas.map(Number).filter(Boolean));
@@ -789,40 +806,56 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     });
     const funcionariosMap = new Map();
     const secoesMap = new Map();
+    const ensureSecaoMap = (secao) => {
+      const escsecaoId = pick(secao, 'ESCSECAO_ID', 'escsecao_id');
+      if (!escsecaoId) return null;
+      const secaoKey = String(escsecaoId);
+      if (!secoesMap.has(secaoKey)) {
+        secoesMap.set(secaoKey, {
+          ESCSECAO_ID: escsecaoId,
+          COD_SECAO: pick(secao, 'COD_SECAO', 'cod_secao'),
+          DESCR: pick(secao, 'SECAO_DESCR', 'secao_descr', 'DESCR', 'descr'),
+          FUNCIONARIOS: new Set(),
+          GERADOS: new Set()
+        });
+      }
+      return secoesMap.get(secaoKey);
+    };
+    const ensureFuncionarioMap = (funcionario, gerada = 0) => {
+      const escfuncId = pick(funcionario, 'ESCFUNC_ID', 'escfunc_id');
+      if (!escfuncId) return;
+      const key = String(escfuncId);
+      const atual = funcionariosMap.get(key) || {};
+      funcionariosMap.set(key, {
+        ...atual,
+        ESCFUNC_ID: escfuncId,
+        CHAPA: pick(funcionario, 'CHAPA', 'chapa') || atual.CHAPA,
+        NOME: pick(funcionario, 'NOME', 'nome') || atual.NOME,
+        ESCSECAO_ID: pick(funcionario, 'ESCSECAO_ID', 'escsecao_id') || atual.ESCSECAO_ID,
+        ESCSUBSECAO_ID: pick(funcionario, 'ESCSUBSECAO_ID', 'escsubsecao_id'),
+        SUBSECAO_DESCR: pick(funcionario, 'SUBSECAO_DESCR', 'subsecao_descr'),
+        ESCFUNCAO_ID: pick(funcionario, 'ESCFUNCAO_ID', 'escfuncao_id') || atual.ESCFUNCAO_ID,
+        COD_SECAO: pick(funcionario, 'COD_SECAO', 'cod_secao') || atual.COD_SECAO,
+        SECAO_DESCR: pick(funcionario, 'SECAO_DESCR', 'secao_descr') || atual.SECAO_DESCR,
+        FUNCAO_DESCR: pick(funcionario, 'FUNCAO_DESCR', 'funcao_descr') || atual.FUNCAO_DESCR,
+        GERADA: gerada || atual.GERADA || 0
+      });
+    };
     rows.forEach((row) => {
       const escfuncId = pick(row, 'ESCFUNC_ID', 'escfunc_id');
       const escsecaoId = pick(row, 'ESCSECAO_ID', 'escsecao_id');
-      if (escfuncId && !funcionariosMap.has(String(escfuncId))) {
-        funcionariosMap.set(String(escfuncId), {
-          ESCFUNC_ID: escfuncId,
-          CHAPA: pick(row, 'CHAPA', 'chapa'),
-          NOME: pick(row, 'NOME', 'nome'),
-          ESCSECAO_ID: escsecaoId,
-          ESCSUBSECAO_ID: pick(row, 'ESCSUBSECAO_ID', 'escsubsecao_id'),
-          SUBSECAO_DESCR: pick(row, 'SUBSECAO_DESCR', 'subsecao_descr'),
-          ESCFUNCAO_ID: pick(row, 'ESCFUNCAO_ID', 'escfuncao_id'),
-          COD_SECAO: pick(row, 'COD_SECAO', 'cod_secao'),
-          SECAO_DESCR: pick(row, 'SECAO_DESCR', 'secao_descr'),
-          FUNCAO_DESCR: pick(row, 'FUNCAO_DESCR', 'funcao_descr'),
-          GERADA: pick(row, 'ESCPROGDIA_ID', 'escprogdia_id') ? 1 : 0
-        });
-      } else if (escfuncId && pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')) {
-        funcionariosMap.get(String(escfuncId)).GERADA = 1;
-      }
+      ensureFuncionarioMap(row, pick(row, 'ESCPROGDIA_ID', 'escprogdia_id') ? 1 : 0);
       if (escsecaoId) {
-        const secaoKey = String(escsecaoId);
-        if (!secoesMap.has(secaoKey)) {
-          secoesMap.set(secaoKey, {
-            ESCSECAO_ID: escsecaoId,
-            COD_SECAO: pick(row, 'COD_SECAO', 'cod_secao'),
-            DESCR: pick(row, 'SECAO_DESCR', 'secao_descr'),
-            FUNCIONARIOS: new Set(),
-            GERADOS: new Set()
-          });
-        }
-        secoesMap.get(secaoKey).FUNCIONARIOS.add(String(escfuncId));
-        if (pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')) secoesMap.get(secaoKey).GERADOS.add(String(escfuncId));
+        const secao = ensureSecaoMap(row);
+        secao.FUNCIONARIOS.add(String(escfuncId));
+        if (pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')) secao.GERADOS.add(String(escfuncId));
       }
+    });
+    funcionariosCatalogo.forEach((funcionario) => {
+      const escfuncId = pick(funcionario, 'ESCFUNC_ID', 'escfunc_id');
+      ensureFuncionarioMap(funcionario, funcionariosMap.get(String(escfuncId))?.GERADA || 0);
+      const secao = ensureSecaoMap(funcionario);
+      if (secao) secao.FUNCIONARIOS.add(String(escfuncId));
     });
 
     return {

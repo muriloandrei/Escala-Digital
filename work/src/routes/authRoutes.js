@@ -32,7 +32,7 @@ router.post('/login', async (req, res, next) => {
       httpOnly: true,
       secure: auth.cookieSecure,
       sameSite: nodeEnv === 'production' ? 'strict' : 'lax',
-      maxAge: 8 * 60 * 60 * 1000
+      maxAge: auth.sessionMaxAgeMs
     });
 
     res.json({ user });

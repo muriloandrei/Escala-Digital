@@ -29,6 +29,10 @@ const api = {
       error.status = response.status;
       error.details = data.details || data.errors;
       error.requestId = data.requestId || null;
+      if (response.status === 401 && !String(path || '').includes('/api/auth/login') && typeof window !== 'undefined') {
+        window.localStorage?.removeItem?.('escala-app-version');
+        if (window.location.pathname !== '/') window.location.href = '/';
+      }
       throw error;
     }
 

@@ -10,6 +10,11 @@ function parseTrustProxy(value) {
   return value;
 }
 
+function parsePositiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function getEnv() {
   const required = ['JWT_SECRET', 'ORACLE_USER', 'ORACLE_PASSWORD', 'ORACLE_CONNECT_STRING'];
 
@@ -17,6 +22,12 @@ function getEnv() {
   if (missing.length > 0) {
     throw new Error(`Variaveis de ambiente obrigatorias ausentes: ${missing.join(', ')}`);
   }
+
+  const sessionMaxAgeHours = parsePositiveNumber(process.env.SESSION_MAX_AGE_HOURS, 4);
+  const sessionMaxAgeMs = parsePositiveNumber(
+    process.env.SESSION_MAX_AGE_MS,
+    sessionMaxAgeHours * 60 * 60 * 1000
+  );
 
   return {
     nodeEnv: process.env.NODE_ENV || 'development',
@@ -31,7 +42,8 @@ function getEnv() {
     },
     auth: {
       jwtSecret: process.env.JWT_SECRET,
-      jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
+      jwtExpiresIn: process.env.JWT_EXPIRES_IN || `${sessionMaxAgeHours}h`,
+      sessionMaxAgeMs,
       cookieSecure: String(process.env.COOKIE_SECURE || 'false') === 'true'
     },
     rateLimit: {
@@ -67,4 +79,4 @@ function getEnv() {
   };
 }
 
-module.exports = { getEnv, parseTrustProxy };
+module.exports = { getEnv, parseTrustProxy, parsePositiveNumber };
