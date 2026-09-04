@@ -497,6 +497,42 @@ test('monthly release first day smoothing keeps minimum rest distribution', () =
   });
 });
 
+test('monthly release rebalancing keeps rest in final partial week', () => {
+  const funcionarios = Array.from({ length: 27 }, (_, index) => {
+    const shift = index % 3;
+    return {
+      ESCFUNC_ID: 650 + index,
+      CHAPA: `0630${String(index).padStart(3, '0')}`,
+      NOME: `Funcionario Frente ${index + 1}`,
+      LOJA: 10,
+      ESCSECAO_ID: 20,
+      ESCFUNCAO_ID: 30,
+      HR_ENT1: shift === 0 ? '12:00' : shift === 1 ? '07:30' : '07:00',
+      HR_SAI1: shift === 0 ? '16:00' : shift === 1 ? '13:00' : '12:00',
+      HR_ENT2: shift === 0 ? '17:10' : shift === 1 ? '14:10' : '13:10',
+      HR_SAI2: shift === 0 ? '21:58' : shift === 1 ? '17:28' : '16:58'
+    };
+  });
+  const turnos = [
+    { ESCSECAOTURNO_ID: 40, ESCSECAO_ID: 20, HR_ENT1: '12:00', HR_SAI1: '16:00', HR_ENT2: '17:10', HR_SAI2: '21:58' },
+    { ESCSECAOTURNO_ID: 41, ESCSECAO_ID: 20, HR_ENT1: '07:30', HR_SAI1: '13:00', HR_ENT2: '14:10', HR_SAI2: '17:28' },
+    { ESCSECAOTURNO_ID: 42, ESCSECAO_ID: 20, HR_ENT1: '07:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '16:58' }
+  ];
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-04');
+  const errors = validateEscalaPayload({
+    lojaId: 10,
+    mesRef: '2026-09-01',
+    funcionarios: rascunhos
+  });
+
+  assert.equal(errors.some((error) => error.includes('semana iniciada em 2026-09-28')), false);
+  rascunhos.forEach((funcionario) => {
+    const descansosSemanaFinal = funcionario.dias.filter((dia) => dia.data >= '2026-09-28' && dia.programacao !== 'TRB').length;
+    assert.ok(descansosSemanaFinal >= 1, `${funcionario.nome} ficou sem descanso na semana parcial final`);
+  });
+});
+
 test('monthly release does not repeat the same 14 day rest shape for every employee', () => {
   const funcionarios = Array.from({ length: 8 }, (_, index) => ({
     ESCFUNC_ID: 600 + index,

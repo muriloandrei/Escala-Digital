@@ -749,6 +749,14 @@ function contarDescansosSemanaFuncionario(funcionario, weekKey, trocas = {}) {
   }).length;
 }
 
+function contarDiasSemanaFuncionario(funcionario, weekKey) {
+  return (funcionario.dias || []).filter((dia) => getWeekKeyFromIso(dia.data) === weekKey).length;
+}
+
+function getMinimoDescansosSemana(totalDiasSemana) {
+  return Math.min(2, Math.round((Number(totalDiasSemana) || 0) * 2 / 7));
+}
+
 function hasFolgaVizinhaAposTroca(funcionario, origem, destino) {
   const programacoes = new Map((funcionario.dias || []).map((dia) => [dia.data, String(dia.programacao || '').toUpperCase()]));
   programacoes.set(origem, 'TRB');
@@ -767,8 +775,13 @@ function podeMoverFolgaAutomatica(funcionario, origemDia, destinoDia) {
   if (hasFolgaVizinhaAposTroca(funcionario, origemDia.data, destinoDia.data)) return false;
   const origemWeek = getWeekKeyFromIso(origemDia.data);
   const destinoWeek = getWeekKeyFromIso(destinoDia.data);
-  if (origemWeek !== destinoWeek && contarDescansosSemanaFuncionario(funcionario, destinoWeek, { origem: origemDia.data, destino: destinoDia.data }) > 2) {
-    return false;
+  if (origemWeek !== destinoWeek) {
+    const descansoOrigemAposTroca = contarDescansosSemanaFuncionario(funcionario, origemWeek, { origem: origemDia.data, destino: destinoDia.data });
+    const minimoOrigem = getMinimoDescansosSemana(contarDiasSemanaFuncionario(funcionario, origemWeek));
+    if (descansoOrigemAposTroca < minimoOrigem) return false;
+    if (contarDescansosSemanaFuncionario(funcionario, destinoWeek, { origem: origemDia.data, destino: destinoDia.data }) > 2) {
+      return false;
+    }
   }
   return true;
 }
