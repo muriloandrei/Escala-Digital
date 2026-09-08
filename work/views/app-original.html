@@ -601,10 +601,6 @@
                         <button type="button" class="action-button danger-action hidden" id="criticasDetalheBancoBtn">
                             Cr&iacute;ticas
                         </button>
-                        <button type="button" class="action-button secondary hidden" id="gerarDetalhadaBancoBtn">
-                            <span class="material-symbols-outlined">view_list</span>
-                            Gerar Escala Detalhada
-                        </button>
                         <button type="button" class="action-button" id="salvarRascunhoBancoBtn">
                             <span class="material-symbols-outlined">save</span>
                             Salvar Rascunho
@@ -638,11 +634,6 @@
                             </div>
                             <p class="table-card-subtitle">Alterne entre a vis&atilde;o mensal e a timeline operacional do dia.</p>
                         </div>
-                        <select id="escalaOrdenacaoSelect" class="escala-filter-select scale-order-select" aria-label="Ordenar colaboradores">
-                            <option value="nome">Nome</option>
-                            <option value="entrada">Entrada</option>
-                            <option value="funcao">Função</option>
-                        </select>
                         <div class="daily-toolbar scale-header-day-nav hidden">
                             <button type="button" class="day-nav-button" id="escalaBancoDiaAnteriorBtn" aria-label="Dia anterior">
                                 <span class="material-symbols-outlined">chevron_left</span>
@@ -681,10 +672,6 @@
                             <p class="table-card-subtitle">Clique no dia para editar o colaborador.</p>
                         </div>
                         <div class="header-actions">
-                            <button type="button" class="action-button secondary warning-button" id="validarDetalheBancoBtn">
-                                <span class="material-symbols-outlined">fact_check</span>
-                                Validar Escala
-                            </button>
                             <button type="button" class="action-button hidden" id="salvarDetalheBancoBtn">
                                 <span class="material-symbols-outlined">save</span>
                                 Salvar
@@ -900,7 +887,7 @@
                 <h3 class="text-lg font-bold text-gray-800">Escala de Trabalho Detalhada</h3>
                 <div class="flex items-center gap-2 md:gap-4 no-print flex-wrap">
                      <span id="detalhadaMesAno" class="text-sm font-semibold text-gray-700"></span>
-                     <button id="validarEscalaBtn" class="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Validar Escala</button>
+                     <button id="validarEscalaBtn" class="hidden text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Validar Escala</button>
                      <button id="salvarEscalaBtn" class="hidden text-sm bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Salvar Escala</button>
                     <button id="imprimirDetalhadaBtn" class="text-sm bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-lg shadow-md transition">Imprimir Escala Detalhada</button>
                     <button id="closeDetalhadaModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl font-bold">&times;</button>

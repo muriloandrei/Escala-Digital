@@ -1561,7 +1561,7 @@
             document.querySelectorAll('#criacaoTimelineContent .delete-btn').forEach(button => { button.disabled = distribuicaoFolgasBloqueada; });
             if (gerarTimelineCriacaoBtn) gerarTimelineCriacaoBtn.disabled = distribuicaoFolgasBloqueada;
             if (autoDistribuirFolgasBtn) autoDistribuirFolgasBtn.disabled = distribuicaoFolgasBloqueada;
-            gerarEscalaDetalhadaBtn?.classList.toggle('hidden', !distribuicaoFolgasBloqueada);
+            gerarEscalaDetalhadaBtn?.classList.add('hidden');
             editarDistribuicaoBtn?.classList.toggle('hidden', !distribuicaoFolgasBloqueada);
             if (editarDistribuicaoBtn) editarDistribuicaoBtn.innerHTML = '<span class="material-symbols-outlined align-middle text-base">edit</span> Editar';
             autoDistribuirFolgasBtn?.classList.remove('hidden');

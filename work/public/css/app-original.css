@@ -2196,11 +2196,6 @@
             white-space: nowrap;
         }
 
-        .scale-order-select {
-            max-width: 150px;
-            min-width: 120px;
-        }
-
         .subsection-kebab-wrap {
             display: inline-flex;
             flex: 0 0 auto;
