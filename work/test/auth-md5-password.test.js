@@ -17,3 +17,10 @@ test('auth falls back to an allowed store when main store is stale', () => {
   assert.equal(_private.resolveLojaPrincipal({ LOJA_PRINCIPAL: 35 }, [35, 36]), 35);
   assert.equal(_private.resolveLojaPrincipal({ LOJA_PRINCIPAL: 24 }, []), null);
 });
+
+test('auth prefers store inferred from operational user login when it is allowed', () => {
+  assert.equal(_private.inferLojaPrincipalUsuario({ PERFIL: 'LIDER', LOGIN: 'lider.frente35' }), 35);
+  assert.equal(_private.resolveLojaPrincipal({ PERFIL: 'LIDER', LOGIN: 'lider.frente35', LOJA_PRINCIPAL: 24 }, [24, 35]), 35);
+  assert.equal(_private.resolveLojaPrincipal({ PERFIL: 'GERENTE', LOGIN: 'gerente35', LOJA_PRINCIPAL: 24 }, [24, 35]), 35);
+  assert.equal(_private.resolveLojaPrincipal({ PERFIL: 'GERENTE', LOGIN: 'gerente35', LOJA_PRINCIPAL: 24 }, [24]), 24);
+});

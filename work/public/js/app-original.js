@@ -888,6 +888,7 @@
         let escalaDetalheAtual = { escprogId: null, lojaId: null, mesRef: null, modo: 'individual', visao: 'mensal', dias: [], secaoAtiva: null, secoes: [], subsetorAtivo: null, subsetores: [] };
         let lojasPermitidasCache = [];
         let lojaPrincipalCache = null;
+        let lojaPrincipalInicialAplicada = false;
         let usuarioSessaoCache = null;
         let usuariosAcessoCache = [];
         let acessosPaginationState = { page: 1, pageSize: 20, total: 0, totalPages: 1, search: '' };
@@ -2610,9 +2611,10 @@
             });
 
             const lojaPrincipal = getLojaPrincipal() || setLojaPrincipal(getLojaCodigo(lojas[0]));
-            const lojaSelecionada = lojasPermitidasCache.includes(Number(lojaAtual))
+            const lojaSelecionada = lojaPrincipalInicialAplicada && lojasPermitidasCache.includes(Number(lojaAtual))
                 ? String(lojaAtual)
                 : lojaPrincipal;
+            lojaPrincipalInicialAplicada = true;
             lojaEscalaSelect.value = lojaSelecionada;
             funcionariosLojaSelect.value = lojaSelecionada;
             if (homeLojaSelect) homeLojaSelect.value = lojaSelecionada;
@@ -2749,6 +2751,8 @@
                 '</td></tr>').join('') : '<tr><td colspan="6" class="text-center text-gray-500 py-8">Nenhuma seção encontrada.</td></tr>';
             if (!hasPermission('secoes', 'editar')) {
                 tabelaSecoesBody.querySelectorAll('.edit-secao').forEach(button => button.remove());
+            }
+            if (!hasPermission('secoes', 'visualizar')) {
                 tabelaSecoesBody.querySelectorAll('.subsecoes-secao').forEach(button => button.remove());
             }
             tabelaSecoesBody.querySelectorAll('.actions-cell').forEach(cell => {
