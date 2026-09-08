@@ -18,6 +18,11 @@ function formatDateValue(value) {
   return String(value || '').slice(0, 10);
 }
 
+function getMonthEndIso(mesRef) {
+  const ref = new Date(`${formatDateValue(mesRef)}T00:00:00`);
+  return formatDateValue(new Date(ref.getFullYear(), ref.getMonth() + 1, 0));
+}
+
 function getHojeIso() {
   return formatDateValue(new Date());
 }
@@ -198,6 +203,71 @@ function getMesStatus(mesRef, revisao = 1) {
   const inicioMesAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   if (ref > inicioMesAtual) return 'AGENDADA';
   return Number(revisao) > 0 ? 'MODIFICADA' : 'ATIVA';
+}
+
+function normalizarAusenciaSigla(motivo) {
+  const text = String(motivo || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  if (text === 'fer' || text.includes('ferias')) return 'FER';
+  if (text === 'afa' || text.includes('afast')) return 'AFA';
+  return 'F';
+}
+
+function ausenciaCobreDia(ausencia, dataIso) {
+  const inicio = formatDateValue(pick(ausencia, 'DT_INIC', 'dt_inic'));
+  const fim = formatDateValue(pick(ausencia, 'DT_FIM', 'dt_fim') || inicio);
+  return Boolean(inicio && fim && inicio <= dataIso && fim >= dataIso);
+}
+
+function criarIndiceAusencias(ausencias = []) {
+  const map = new Map();
+  (ausencias || []).forEach((ausencia) => {
+    [
+      pick(ausencia, 'ESCFUNC_ID', 'escfunc_id'),
+      pick(ausencia, 'CHAPA', 'chapa')
+    ].map((value) => String(value || '').trim()).filter(Boolean).forEach((key) => {
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(ausencia);
+    });
+  });
+  return map;
+}
+
+function encontrarAusenciaFuncionario(indiceAusencias, row, dataIso) {
+  const keys = [
+    pick(row, 'ESCFUNC_ID', 'escfunc_id'),
+    pick(row, 'CHAPA', 'chapa')
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+  for (const key of keys) {
+    const ausencia = (indiceAusencias.get(key) || []).find((item) => ausenciaCobreDia(item, dataIso));
+    if (ausencia) return ausencia;
+  }
+  return null;
+}
+
+async function listAusenciasEscalaMensalComConnection(connection, { lojaId, inicio, fim }) {
+  const result = await connection.execute(
+    `select distinct
+        a.escausen_id,
+        a.escfunc_id,
+        a.chapa,
+        a.dt_inic,
+        a.dt_fim,
+        a.motivo,
+        a.dt_hr_incl
+       from sgn_esc_ausencia a
+       join sgn_esc_funcionario f
+         on (f.escfunc_id = a.escfunc_id or f.chapa = a.chapa)
+      where f.loja = :lojaId
+        and a.dt_inic <= to_date(:fim, 'YYYY-MM-DD')
+        and nvl(a.dt_fim, a.dt_inic) >= to_date(:inicio, 'YYYY-MM-DD')
+      order by a.dt_inic, a.chapa`,
+    { lojaId: Number(lojaId), inicio, fim },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  return result.rows || [];
 }
 
 function isMesFinalizado(mesRef) {
@@ -809,6 +879,24 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       row.COD_SECAO = pick(atual, 'COD_SECAO', 'cod_secao') || pick(row, 'COD_SECAO', 'cod_secao');
       row.SECAO_DESCR = pick(atual, 'SECAO_DESCR', 'secao_descr') || pick(row, 'SECAO_DESCR', 'secao_descr');
     });
+    const inicio = formatDateValue(mesRef);
+    const fim = getMonthEndIso(mesRef);
+    let ausencias = await listAusenciasEscalaMensalComConnection(connection, { lojaId, inicio, fim });
+    if (Array.isArray(secoesPermitidas)) {
+      const funcionariosPermitidos = new Set();
+      const chapasPermitidas = new Set();
+      funcionariosCatalogo.forEach((funcionario) => {
+        const escfuncId = pick(funcionario, 'ESCFUNC_ID', 'escfunc_id');
+        const chapa = pick(funcionario, 'CHAPA', 'chapa');
+        if (escfuncId) funcionariosPermitidos.add(String(escfuncId));
+        if (chapa) chapasPermitidas.add(String(chapa));
+      });
+      ausencias = ausencias.filter((ausencia) => {
+        const escfuncId = pick(ausencia, 'ESCFUNC_ID', 'escfunc_id');
+        const chapa = pick(ausencia, 'CHAPA', 'chapa');
+        return funcionariosPermitidos.has(String(escfuncId)) || chapasPermitidas.has(String(chapa));
+      });
+    }
     let fixos = await listFixosEscalaComConnection(connection, { lojaId, mesRef });
     if (Array.isArray(secoesPermitidas)) {
       const permitidasSet = new Set(secoesPermitidas.map(Number).filter(Boolean));
@@ -823,6 +911,22 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       if (!fixo) return;
       row.FIXO_ESCALA = 1;
       row.JUSTIFICATIVA_ALTERACAO = pick(fixo, 'JUSTIFICATIVA', 'justificativa');
+    });
+    const ausenciasIndice = criarIndiceAusencias(ausencias);
+    rows.forEach((row) => {
+      const data = formatDateValue(pick(row, 'DT', 'dt'));
+      if (!data) return;
+      const ausencia = encontrarAusenciaFuncionario(ausenciasIndice, row, data);
+      if (!ausencia) return;
+      const motivo = pick(ausencia, 'MOTIVO', 'motivo') || 'Ausencia';
+      const sigla = normalizarAusenciaSigla(motivo);
+      row.PROGRAMACAO = sigla;
+      row.HR_ENT1 = sigla;
+      row.HR_SAI1 = sigla;
+      row.HR_ENT2 = sigla;
+      row.HR_SAI2 = sigla;
+      row.AUSENCIA_OBRIGATORIA = 1;
+      row.MOTIVO_AUSENCIA = motivo;
     });
     const funcionariosMap = new Map();
     const secoesMap = new Map();
@@ -885,6 +989,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')),
       funcionarios: [...funcionariosMap.values()],
       fixos,
+      ausencias,
       secoes: [...secoesMap.values()].map((secao) => ({
         ESCSECAO_ID: secao.ESCSECAO_ID,
         COD_SECAO: secao.COD_SECAO,

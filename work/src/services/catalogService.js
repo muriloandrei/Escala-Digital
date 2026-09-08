@@ -910,7 +910,7 @@ async function listAusenciasByLojaMes(lojaId, inicio, fim) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
     const result = await connection.execute(
-      `select
+      `select distinct
           a.escausen_id,
           a.escfunc_id,
           a.chapa,
@@ -919,7 +919,8 @@ async function listAusenciasByLojaMes(lojaId, inicio, fim) {
           a.motivo,
           a.dt_hr_incl
        from sgn_esc_ausencia a
-       join sgn_esc_funcionario f on f.escfunc_id = a.escfunc_id
+       join sgn_esc_funcionario f
+         on (f.escfunc_id = a.escfunc_id or f.chapa = a.chapa)
        where f.loja = :lojaId
          and a.dt_inic <= to_date(:fim, 'YYYY-MM-DD')
          and nvl(a.dt_fim, a.dt_inic) >= to_date(:inicio, 'YYYY-MM-DD')

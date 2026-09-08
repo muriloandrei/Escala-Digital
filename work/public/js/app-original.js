@@ -6631,6 +6631,30 @@
             return fixo?.[campo] || fixo?.[snake] || fixo?.[camel] || '';
         };
 
+        const ausenciaCobreDiaBanco = (ausencia, dataIso) => {
+            const inicio = normalizarDataIsoBanco(ausencia?.DT_INIC || ausencia?.dt_inic);
+            const fim = normalizarDataIsoBanco(ausencia?.DT_FIM || ausencia?.dt_fim || inicio);
+            return Boolean(inicio && fim && inicio <= dataIso && fim >= dataIso);
+        };
+
+        const getSiglaAusenciaBanco = (motivo) => {
+            const texto = String(motivo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+            if (texto === 'fer' || texto.includes('ferias')) return 'FER';
+            if (texto === 'afa' || texto.includes('afast')) return 'AFA';
+            return 'F';
+        };
+
+        const getAusenciaFuncionarioDiaBanco = (funcionario, dataIso) => {
+            const escfuncId = String(funcionario?.ESCFUNC_ID || funcionario?.escfuncId || '');
+            const chapa = String(funcionario?.CHAPA || funcionario?.chapa || '');
+            return (escalaDetalheAtual.ausencias || []).find((ausencia) => {
+                const ausenciaEscfuncId = String(ausencia?.ESCFUNC_ID || ausencia?.escfunc_id || '');
+                const ausenciaChapa = String(ausencia?.CHAPA || ausencia?.chapa || '');
+                const mesmoFuncionario = (escfuncId && ausenciaEscfuncId === escfuncId) || (chapa && ausenciaChapa === chapa);
+                return mesmoFuncionario && ausenciaCobreDiaBanco(ausencia, dataIso);
+            }) || null;
+        };
+
         const recarregarSecaoAtualEscalaBanco = async (lojaId, mesRef, secaoAtiva) => {
             await carregarDetalheEscalaMensal(lojaId, mesRef);
             escalaDetalheAtual.secaoAtiva = secaoAtiva;
@@ -7262,6 +7286,11 @@
                     let folgasFixas = 0;
                     funcionariosPendentes.forEach((funcionario) => {
                         const dataIso = formatDateForDb(ano, mes, dia);
+                        const ausencia = getAusenciaFuncionarioDiaBanco(funcionario, dataIso);
+                        if (ausencia) {
+                            folgasFixas += 1;
+                            return;
+                        }
                         const fixo = fixosMap.get(getFixoDiaKeyBanco(funcionario.ESCFUNC_ID, dataIso));
                         const programacao = String(fixo?.PROGRAMACAO || fixo?.programacao || '').toUpperCase();
                         if (fixo && programacao !== 'TRB') folgasFixas += 1;
@@ -7275,6 +7304,11 @@
                     let horariosFixos = 0;
                     funcionariosPendentes.forEach((funcionario) => {
                         const dataIso = formatDateForDb(ano, mes, dia);
+                        const ausencia = getAusenciaFuncionarioDiaBanco(funcionario, dataIso);
+                        if (ausencia) {
+                            folgasFixas += 1;
+                            return;
+                        }
                         const fixo = fixosMap.get(getFixoDiaKeyBanco(funcionario.ESCFUNC_ID, dataIso));
                         const programacao = String(fixo?.PROGRAMACAO || fixo?.programacao || '').toUpperCase();
                         if (!fixo) return;
@@ -7302,11 +7336,15 @@
                     for (let dia = 1; dia <= diasNoMes; dia += 1) {
                         const dataIso = formatDateForDb(ano, mes, dia);
                         const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
+                        const ausencia = getAusenciaFuncionarioDiaBanco(funcionario, dataIso);
                         const fixo = fixosMap.get(getFixoDiaKeyBanco(funcionario.ESCFUNC_ID, dataIso));
                         const programacao = String(fixo?.PROGRAMACAO || fixo?.programacao || '').toUpperCase();
                         const isHorarioFixo = programacao === 'TRB';
-                        const value = fixo ? (isHorarioFixo ? (getCampoFixoBanco(fixo, 'HR_ENT1') || 'Fixo') : getValorDescanso(fixo)) : '';
-                        const title = fixo
+                        const ausenciaSigla = ausencia ? getSiglaAusenciaBanco(ausencia.MOTIVO || ausencia.motivo) : '';
+                        const value = ausencia ? ausenciaSigla : (fixo ? (isHorarioFixo ? (getCampoFixoBanco(fixo, 'HR_ENT1') || 'Fixo') : getValorDescanso(fixo)) : '');
+                        const title = ausencia
+                            ? 'Ausência: ' + (ausencia.MOTIVO || ausencia.motivo || 'ausência')
+                            : fixo
                             ? (isHorarioFixo ? montarTooltipHorarioEscala({
                                 ...fixo,
                                 NOME: funcionario.NOME,
@@ -7319,11 +7357,13 @@
                             : '';
                         const cellClass = [
                             'pending-skeleton-cell',
-                            fixo ? (isHorarioFixo ? 'pending-fixed-work fixed-work-cell' : 'pending-fixed-rest rest-cell rest-cell-fixo') : 'pending-empty-cell',
+                            ausencia ? 'pending-fixed-rest rest-cell ' + (ausenciaSigla === 'FER' ? 'rest-cell-ferias' : ausenciaSigla === 'AFA' ? 'rest-cell-afastamento' : 'rest-cell-folga') : '',
+                            !ausencia && fixo ? (isHorarioFixo ? 'pending-fixed-work fixed-work-cell' : 'pending-fixed-rest rest-cell rest-cell-fixo') : '',
+                            !ausencia && !fixo ? 'pending-empty-cell' : '',
                             getWeekClass(dia).trim(),
-                            bloqueado ? 'locked-day' : ''
+                            (bloqueado || ausencia) ? 'locked-day' : ''
                         ].filter(Boolean).join(' ');
-                        const attrs = !bloqueado
+                        const attrs = !bloqueado && !ausencia
                             ? ' role="button" tabindex="0" data-pending-fixed="1" data-escfunc-id="' + escapeHtml(funcionario.ESCFUNC_ID || '') + '" data-data-iso="' + escapeHtml(dataIso) + '" data-has-fixo="' + (fixo ? '1' : '0') + '" data-programacao="' + escapeHtml(programacao || '') + '" data-hr-ent1="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_ENT1')) + '" data-hr-sai1="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_SAI1')) + '" data-hr-ent2="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_ENT2')) + '" data-hr-sai2="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_SAI2')) + '"'
                             : '';
                         html += '<td class="' + cellClass + '" data-schedule-tooltip="' + escapeHtml(title) + '"' + attrs + '>' + escapeHtml(value) + '</td>';
@@ -7344,6 +7384,7 @@
                 funcionariosOrdenados.forEach((funcionario) => {
                     const registro = funcionario.dias.get(dia);
                     if (registro && !isProgramacaoDescanso(registro.PROGRAMACAO)) trabalhando += 1;
+                    else if (!registro && !getAusenciaFuncionarioDiaBanco(funcionario, formatDateForDb(ano, mes, dia))) trabalhando += 1;
                 });
                 html += '<th class="monthly-quality' + getWeekClass(dia) + '" title="Cobertura planejada: ' + trabalhando + '/' + funcionariosOrdenados.length + '">' + escapeHtml(calcularQualidadeDia(funcionariosOrdenados.length, trabalhando)) + '</th>';
             }
@@ -7355,7 +7396,11 @@
                 let trabalhando = 0;
                 funcionariosOrdenados.forEach((funcionario) => {
                     const registro = funcionario.dias.get(dia);
-                    if (!registro) return;
+                    if (!registro) {
+                        if (getAusenciaFuncionarioDiaBanco(funcionario, formatDateForDb(ano, mes, dia))) folgas += 1;
+                        else trabalhando += 1;
+                        return;
+                    }
                     if (isProgramacaoDescanso(registro.PROGRAMACAO)) folgas += 1;
                     else trabalhando += 1;
                 });
@@ -7382,20 +7427,25 @@
                     if (!registro) {
                         const dataIso = formatDateForDb(ano, mes, dia);
                         const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
+                        const ausencia = getAusenciaFuncionarioDiaBanco(funcionario, dataIso);
                         const fixo = fixosMap.get(getFixoDiaKeyBanco(funcionario.escfuncId, dataIso));
                         const programacao = String(fixo?.PROGRAMACAO || fixo?.programacao || '').toUpperCase();
                         const isHorarioFixo = programacao === 'TRB';
-                        const value = fixo ? (isHorarioFixo ? (getCampoFixoBanco(fixo, 'HR_ENT1') || 'Fixo') : getValorDescanso(fixo)) : '';
+                        const ausenciaSigla = ausencia ? getSiglaAusenciaBanco(ausencia.MOTIVO || ausencia.motivo) : '';
+                        const value = ausencia ? ausenciaSigla : (fixo ? (isHorarioFixo ? (getCampoFixoBanco(fixo, 'HR_ENT1') || 'Fixo') : getValorDescanso(fixo)) : '');
                         const cellClass = [
                             'pending-skeleton-cell',
-                            fixo ? (isHorarioFixo ? 'pending-fixed-work fixed-work-cell' : 'pending-fixed-rest rest-cell rest-cell-fixo') : 'pending-empty-cell',
+                            ausencia ? 'pending-fixed-rest rest-cell ' + (ausenciaSigla === 'FER' ? 'rest-cell-ferias' : ausenciaSigla === 'AFA' ? 'rest-cell-afastamento' : 'rest-cell-folga') : '',
+                            !ausencia && fixo ? (isHorarioFixo ? 'pending-fixed-work fixed-work-cell' : 'pending-fixed-rest rest-cell rest-cell-fixo') : '',
+                            !ausencia && !fixo ? 'pending-empty-cell' : '',
                             getWeekClass(dia).trim(),
-                            bloqueado ? 'locked-day' : ''
+                            (bloqueado || ausencia) ? 'locked-day' : ''
                         ].filter(Boolean).join(' ');
-                        const attrs = !bloqueado
+                        const attrs = !bloqueado && !ausencia
                             ? ' role="button" tabindex="0" data-pending-fixed="1" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" data-data-iso="' + escapeHtml(dataIso) + '" data-has-fixo="' + (fixo ? '1' : '0') + '" data-programacao="' + escapeHtml(programacao || '') + '" data-hr-ent1="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_ENT1')) + '" data-hr-sai1="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_SAI1')) + '" data-hr-ent2="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_ENT2')) + '" data-hr-sai2="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_SAI2')) + '"'
                             : '';
-                        html += '<td class="' + cellClass + '"' + attrs + '>' + escapeHtml(value) + '</td>';
+                        const title = ausencia ? ' data-schedule-tooltip="' + escapeHtml('Ausência: ' + (ausencia.MOTIVO || ausencia.motivo || 'ausência')) + '"' : '';
+                        html += '<td class="' + cellClass + '"' + title + attrs + '>' + escapeHtml(value) + '</td>';
                         continue;
                     }
                     const descanso = isProgramacaoDescanso(registro.PROGRAMACAO);
@@ -7656,7 +7706,7 @@
 
         const carregarDetalheEscalaMensal = async (lojaId, mesRef) => {
             resetarEstadoEdicaoBanco();
-            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', visao: 'mensal', status: null, dias: [], funcionarios: [], fixos: [], secoesLiberadas: [], secoes: [], secaoAtiva: null, subsetorAtivo: null, subsetores: [] };
+            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', visao: 'mensal', status: null, dias: [], funcionarios: [], fixos: [], ausencias: [], secoesLiberadas: [], secoes: [], secaoAtiva: null, subsetorAtivo: null, subsetores: [] };
             escalaDetalheTitulo.textContent = 'Escala Loja ' + lojaId + ' - ' + formatarMesTabela(mesRef);
             escalaDetalheResumo.textContent = 'Carregando escala mensal...';
             const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
@@ -7671,6 +7721,7 @@
             escalaDetalheAtual.dias = escala.dias || [];
             escalaDetalheAtual.funcionarios = escala.funcionarios || [];
             escalaDetalheAtual.fixos = escala.fixos || [];
+            escalaDetalheAtual.ausencias = escala.ausencias || [];
             escalaDetalheAtual.secoesLiberadas = (escala.secoes || []).map((secao) => {
                 const catalogo = secoesCatalogo.find(item => String(item.ESCSECAO_ID || '') === String(secao.ESCSECAO_ID || ''));
                 return { ...secao, SUBSECOES: catalogo?.SUBSECOES || [] };

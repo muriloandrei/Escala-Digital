@@ -209,7 +209,8 @@ test('monthly release applies vacations and absences as protected rest days', ()
   const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01', {
     ausencias: [
       { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-02', DT_FIM: '2026-09-03', MOTIVO: 'FER' },
-      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-08', DT_FIM: '2026-09-08', MOTIVO: 'AFA' }
+      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-08', DT_FIM: '2026-09-08', MOTIVO: 'AFA' },
+      { ESCFUNC_ID: 999999, CHAPA: '080080', DT_INIC: '2026-09-09', DT_FIM: '2026-09-09', MOTIVO: 'AFASTAMENTO' }
     ],
     fixos: [{ ESCFUNC_ID: 800, DT: '2026-09-02', PROGRAMACAO: 'TRB', HR_ENT1: '07:00', HR_SAI1: '11:00', HR_ENT2: '12:10', HR_SAI2: '15:58' }]
   });
@@ -218,6 +219,7 @@ test('monthly release applies vacations and absences as protected rest days', ()
   assert.equal(dias.get('2026-09-02').programacao, 'FER');
   assert.equal(dias.get('2026-09-03').programacao, 'FER');
   assert.equal(dias.get('2026-09-08').programacao, 'AFA');
+  assert.equal(dias.get('2026-09-09').programacao, 'AFA');
   assert.equal(dias.get('2026-09-02').hrEnt1, 'FER');
   assert.equal(dias.get('2026-09-08').hrSai2, 'AFA');
 });
