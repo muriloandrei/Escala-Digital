@@ -69,6 +69,38 @@ function buildPermissionSelect(permissionColumns) {
     .join(', ');
 }
 
+function getOperationalPermissionDefaults(perfilNome = '', pagina = '') {
+  const perfil = String(perfilNome || '').trim().toUpperCase();
+  const page = String(pagina || '').trim();
+  const empty = {
+    PODE_VISUALIZAR: 0,
+    PODE_CRIAR: 0,
+    PODE_EDITAR: 0,
+    PODE_OFICIALIZAR: 0,
+    PODE_REPROCESSAR: 0,
+    PODE_EXCLUIR: 0,
+    PODE_ADMINISTRAR: 0
+  };
+
+  if (perfil === 'ADMIN') {
+    return Object.fromEntries(Object.keys(empty).map((field) => [field, 1]));
+  }
+
+  if (perfil === 'GERENTE' || perfil === 'RH') {
+    if (page === 'escalas') return { ...empty, PODE_VISUALIZAR: 1, PODE_CRIAR: 1, PODE_EDITAR: 1, PODE_OFICIALIZAR: 1 };
+    if (page === 'escalas-funcionarios') return { ...empty, PODE_VISUALIZAR: 1, PODE_EDITAR: 1 };
+    if (page === 'secoes') return { ...empty, PODE_VISUALIZAR: 1 };
+  }
+
+  if (perfil === 'LIDER') {
+    if (page === 'escalas') return { ...empty, PODE_VISUALIZAR: 1, PODE_EDITAR: 1 };
+    if (page === 'escalas-funcionarios') return { ...empty, PODE_VISUALIZAR: 1, PODE_EDITAR: 1 };
+    if (page === 'secoes') return { ...empty, PODE_VISUALIZAR: 1 };
+  }
+
+  return empty;
+}
+
 function normalizePermission(rawPermission = {}, perfilNome = '') {
   const isAdmin = String(perfilNome || '').toUpperCase() === 'ADMIN';
   if (isAdmin) {
@@ -83,19 +115,21 @@ function normalizePermission(rawPermission = {}, perfilNome = '') {
       PODE_ADMINISTRAR: 1
     };
   }
-  const editar = Number(rawPermission.PODE_EDITAR ?? (isAdmin ? 1 : 0));
-  const visualizar = Number(rawPermission.PODE_VISUALIZAR ?? 1);
-  const excluir = Number(rawPermission.PODE_EXCLUIR ?? (isAdmin ? 1 : 0));
+  const defaults = getOperationalPermissionDefaults(perfilNome, rawPermission.PAGINA);
+  const rawEditar = Number(rawPermission.PODE_EDITAR ?? defaults.PODE_EDITAR);
+  const editar = Math.max(rawEditar, defaults.PODE_EDITAR);
+  const visualizar = Math.max(Number(rawPermission.PODE_VISUALIZAR ?? 1), defaults.PODE_VISUALIZAR);
+  const excluir = Math.max(Number(rawPermission.PODE_EXCLUIR ?? defaults.PODE_EXCLUIR), defaults.PODE_EXCLUIR);
 
   return {
     PAGINA: rawPermission.PAGINA,
     PODE_VISUALIZAR: visualizar,
-    PODE_CRIAR: Number(rawPermission.PODE_CRIAR ?? editar),
+    PODE_CRIAR: Math.max(Number(rawPermission.PODE_CRIAR ?? rawEditar), defaults.PODE_CRIAR),
     PODE_EDITAR: editar,
-    PODE_OFICIALIZAR: Number(rawPermission.PODE_OFICIALIZAR ?? editar),
-    PODE_REPROCESSAR: Number(rawPermission.PODE_REPROCESSAR ?? editar),
+    PODE_OFICIALIZAR: Math.max(Number(rawPermission.PODE_OFICIALIZAR ?? rawEditar), defaults.PODE_OFICIALIZAR),
+    PODE_REPROCESSAR: Math.max(Number(rawPermission.PODE_REPROCESSAR ?? rawEditar), defaults.PODE_REPROCESSAR),
     PODE_EXCLUIR: excluir,
-    PODE_ADMINISTRAR: Number(rawPermission.PODE_ADMINISTRAR ?? (isAdmin ? 1 : 0))
+    PODE_ADMINISTRAR: Math.max(Number(rawPermission.PODE_ADMINISTRAR ?? 0), defaults.PODE_ADMINISTRAR)
   };
 }
 
@@ -729,11 +763,11 @@ async function getPermissaoPerfil(perfilNome, pagina) {
   const { perfis } = await listPerfisAcesso();
   const perfil = perfis.find((item) => String(item.NOME || '').trim().toUpperCase() === normalizedPerfil);
   if (!perfil) {
-    return normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 0, PODE_EDITAR: 0, PODE_EXCLUIR: 0 });
+    return normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 0, PODE_EDITAR: 0, PODE_EXCLUIR: 0 }, normalizedPerfil);
   }
 
   return (perfil.PERMISSOES || []).find((permissao) => String(permissao.PAGINA) === String(pagina))
-    || normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 0, PODE_EDITAR: 0, PODE_EXCLUIR: 0 });
+    || normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 0, PODE_EDITAR: 0, PODE_EXCLUIR: 0 }, normalizedPerfil);
 }
 
 async function getPermissoesPerfil(perfilNome) {
@@ -756,7 +790,7 @@ async function getPermissoesPerfil(perfilNome) {
     PODE_VISUALIZAR: 0,
     PODE_EDITAR: 0,
     PODE_EXCLUIR: 0
-  }));
+  }, normalizedPerfil));
 }
 
 module.exports = {

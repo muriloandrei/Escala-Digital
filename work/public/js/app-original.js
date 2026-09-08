@@ -921,7 +921,7 @@
         }
         function canGenerateEscalaSecaoSessao() {
             const perfil = String(usuarioSessaoCache?.perfil || '').trim().toUpperCase();
-            return ['ADMIN', 'GERENTE', 'RH', 'LIDER'].includes(perfil) && hasPermission('escalas', 'editar');
+            return ['ADMIN', 'GERENTE', 'RH', 'LIDER'].includes(perfil);
         }
         function canCreateEscalaSessao() {
             return hasPermission('escalas', 'criar') && !isPerfilLiderSessao();

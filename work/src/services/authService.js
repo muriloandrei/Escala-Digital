@@ -142,6 +142,13 @@ function resolveLojaPrincipal(user, lojas) {
   return permitidas[0] || null;
 }
 
+function resolveLojasSessao(user, lojas, lojaPrincipal) {
+  const permitidas = [...new Set((lojas || []).map(Number).filter(Boolean))];
+  const inferida = inferLojaPrincipalUsuario(user);
+  if (inferida && permitidas.includes(inferida)) return [inferida];
+  return permitidas;
+}
+
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
@@ -205,12 +212,13 @@ async function getSessionUserById(usuarioId) {
   const lojaPrincipalAtual = pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || null;
   const lojaPrincipal = resolveLojaPrincipal(user, lojas);
   await syncLojaPrincipal(currentUsuarioId, lojaPrincipalAtual, lojaPrincipal);
+  const lojasSessao = resolveLojasSessao(user, lojas, lojaPrincipal);
   const sessionUser = {
     sub: String(currentUsuarioId),
     login: pick(user, 'LOGIN', 'login'),
     nome: pick(user, 'NOME', 'nome'),
     perfil: pick(user, 'PERFIL', 'perfil'),
-    lojas,
+    lojas: lojasSessao,
     lojaPrincipal
   };
   sessionUser.permissoes = await getUserPermissions(sessionUser.perfil);
@@ -243,13 +251,14 @@ async function login({ login, password }) {
   const lojaPrincipalAtual = pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || null;
   const lojaPrincipal = resolveLojaPrincipal(user, lojas);
   await syncLojaPrincipal(usuarioId, lojaPrincipalAtual, lojaPrincipal);
+  const lojasSessao = resolveLojasSessao(user, lojas, lojaPrincipal);
   const { auth } = getEnv();
   const payload = {
     sub: String(usuarioId),
     login: pick(user, 'LOGIN', 'login'),
     nome: pick(user, 'NOME', 'nome'),
     perfil: pick(user, 'PERFIL', 'perfil'),
-    lojas,
+    lojas: lojasSessao,
     lojaPrincipal
   };
   payload.permissoes = await getUserPermissions(payload.perfil);
@@ -301,6 +310,7 @@ module.exports = {
     getTableColumns,
     upgradeLegacyMd5Password,
     inferLojaPrincipalUsuario,
+    resolveLojasSessao,
     resolveLojaPrincipal
   }
 };
