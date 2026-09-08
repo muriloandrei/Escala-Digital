@@ -128,6 +128,20 @@ function isLeaderUser(requestUser) {
   return normalizePerfilName(requestUser) === 'LIDER';
 }
 
+function normalizeAccessText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function isFrenteCaixaLeaderUser(requestUser) {
+  if (!isLeaderUser(requestUser)) return false;
+  const texto = normalizeAccessText(`${requestUser?.login || ''} ${requestUser?.nome || ''}`);
+  return texto.includes('FRENTE') || texto.includes('CAIXA');
+}
+
 function canCreateEscala(requestUser) {
   return !isLeaderUser(requestUser);
 }
@@ -217,7 +231,9 @@ async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
 
   return withConnection(async (connection) => {
     const columns = await getUsuarioSecaoColumns(connection);
-    if (!columns) return [];
+    if (!columns) return isFrenteCaixaLeaderUser(requestUser)
+      ? listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId)
+      : [];
 
     const lojaColumn = await getSecaoLojaColumn(connection);
     const binds = { usuarioId };
@@ -237,8 +253,37 @@ async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
+    const explicitas = result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
+    if (explicitas.length || !isFrenteCaixaLeaderUser(requestUser)) return explicitas;
+    return listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId);
   });
+}
+
+async function listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId = null) {
+  const lojas = lojaId
+    ? [Number(lojaId)]
+    : [...new Set((requestUser?.lojas || []).map(Number).filter(Boolean))];
+  if (!lojas.length) return [];
+
+  const lojaColumn = await getSecaoLojaColumn(connection);
+  const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
+  const binds = {};
+  const filters = [
+    buildInClause(`s.${lojaColumn.toLowerCase()}`, lojas, binds, 'lojaFrente'),
+    "regexp_like(upper(nvl(s.descr, '')), 'FRENTE.*CAIXA')"
+  ];
+  if (secaoColumns.has('STATUS')) filters.push("nvl(s.status, 'A') = 'A'");
+
+  const result = await connection.execute(
+    `select s.escsecao_id
+       from sgn_esc_secao s
+      where ${filters.join(' and ')}
+      order by s.escsecao_id`,
+    binds,
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+
+  return result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
 }
 
 async function assertSecoesPermitidas(requestUser, lojaId, secaoIds = []) {
