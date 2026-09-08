@@ -1,6 +1,6 @@
 (function () {
   const pageTitles = {
-    home: 'Home',
+    home: 'Dashboard',
     escalasCriadas: 'Escalas Criadas',
     escalasGeradas: 'Escalas Liberadas',
     funcionarios: 'Funcionarios',
@@ -24,7 +24,7 @@
   };
 
   const pageParents = {
-    home: 'Escalas',
+    home: 'Home',
     escalasCriadas: 'Escalas',
     escalasGeradas: 'Escalas',
     escalaBanco: 'Escalas',
@@ -48,6 +48,7 @@
   };
 
   const permissionBindings = [
+    ['nav-timeline', 'escalas', 'visualizar'],
     ['nav-registros', 'escalas', 'visualizar'],
     ['nav-escalas-funcionarios', 'escalas-funcionarios', 'visualizar'],
     ['nav-secoes', 'secoes', 'visualizar'],

@@ -53,6 +53,7 @@ create table SGN_ESC_FUNCIONARIO (
   NOME varchar2(100) not null,
   CPF varchar2(20),
   SEXO varchar2(1) not null,
+  DT_NASC date,
   DT_ADMISS date not null,
   BRIGADISTA varchar2(1) not null,
   ESCSECAO_ID number(15) not null,

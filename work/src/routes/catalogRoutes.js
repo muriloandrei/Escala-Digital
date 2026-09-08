@@ -13,7 +13,8 @@ const funcionarioEscalaSchema = z.object({
   HR_ENT1: z.string().max(5).nullable().optional(),
   HR_SAI1: z.string().max(5).nullable().optional(),
   HR_ENT2: z.string().max(5).nullable().optional(),
-  HR_SAI2: z.string().max(5).nullable().optional()
+  HR_SAI2: z.string().max(5).nullable().optional(),
+  DT_DEMISS: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
 }).strict();
 
 const secaoTurnoSchema = z.object({
@@ -247,6 +248,7 @@ router.get('/funcionarios', async (req, res, next) => {
     const secoesPermitidas = await getSecoesPermitidas(req);
     const funcionarios = await catalogService.listFuncionariosByLojas(lojas, {
       mesRef: req.query.mesRef || null,
+      includeInactive: req.query.includeInactive === '1',
       secoesPermitidas
     });
     return res.json({ funcionarios });
@@ -282,6 +284,7 @@ router.get('/lojas/:lojaId/funcionarios', resolveLojaParam, requireLojaAccess, a
     const secoesPermitidas = await getSecoesPermitidas(req, Number(req.params.lojaId));
     const funcionarios = await catalogService.listFuncionariosByLoja(Number(req.params.lojaId), {
       mesRef: req.query.mesRef || null,
+      includeInactive: req.query.includeInactive === '1',
       secoesPermitidas
     });
     res.json({ funcionarios });

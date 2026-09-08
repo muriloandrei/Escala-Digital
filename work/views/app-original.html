@@ -13,7 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <link rel="stylesheet" href="/css/app-original.css">
+    <link rel="stylesheet" href="/css/app-original.css?v=20260907-subsecoes-geracao">
     
 </head>
 <body>
@@ -25,6 +25,9 @@
             </div>
             <nav class="sidebar-nav">
                 <ul>
+                    <li>
+                        <a href="#/home" id="nav-timeline"><span class="material-symbols-outlined">dashboard</span><span class="nav-label">Home</span></a>
+                    </li>
                     <li class="nav-group">
                         <button type="button" class="nav-parent" data-nav-group="escalas"><span class="material-symbols-outlined">event_note</span><span class="nav-label">Escalas</span><span class="material-symbols-outlined nav-chevron">expand_more</span></button>
                         <div class="nav-children">
@@ -90,8 +93,12 @@
 
             <div id="timeline-page" class="hidden">
                 <header class="main-header">
-                    <h1>Home</h1>
+                    <div class="page-title-group">
+                        <h1>Dashboard</h1>
+                        <p id="homeDashboardSubtitulo">Visão geral operacional.</p>
+                    </div>
                     <div class="header-actions">
+                        <input id="homeDataDashboard" type="date" class="rounded-md border-gray-300 shadow-sm text-sm h-10" aria-label="Data do dashboard">
                         <select id="homeLojaSelect" class="rounded-md border-gray-300 shadow-sm text-sm h-10"></select>
                         <button id="abrirTurnoModalBtn" type="button" class="action-button secondary">
                             <span class="material-symbols-outlined">add_circle</span>
@@ -99,11 +106,73 @@
                         </button>
                     </div>
                 </header>
-                <div class="timeline-metrics no-print">
+                <div class="timeline-metrics no-print" id="homeMetricsReports">
                     <div><span>Funcionários na loja</span><strong id="funcionariosLojaCount">0</strong></div>
                     <div><span>Turnos criados</span><strong id="turnosCriadosCount">0</strong></div>
                     <div><span>Turnos restantes</span><strong id="turnosRestantesCount">0</strong></div>
                 </div>
+                <section class="home-dashboard no-print" id="homeDashboardReports" aria-label="Resumo operacional">
+                    <div class="home-dashboard-grid">
+                        <article class="home-dashboard-card"><span class="home-card-icon material-symbols-outlined">groups</span><span class="home-card-label">Ativos</span><strong id="homeFuncionariosAtivosCount">0</strong></article>
+                        <article class="home-dashboard-card"><span class="home-card-icon material-symbols-outlined">person_check</span><span class="home-card-label">Experiência</span><strong id="homeExperienciaCount">0</strong></article>
+                        <article class="home-dashboard-card"><span class="home-card-icon material-symbols-outlined">event_busy</span><span class="home-card-label">Folgas hoje</span><strong id="homeFolgasHojeCount">0</strong></article>
+                        <article class="home-dashboard-card"><span class="home-card-icon material-symbols-outlined">calendar_month</span><span class="home-card-label">Escalas</span><strong id="homeEscalasStatusCount">0</strong></article>
+                    </div>
+                    <div class="home-sector-filter">
+                        <strong>Filtrar gráficos por setor:</strong>
+                        <div id="homeSetorFilterPills" class="home-sector-pills"></div>
+                    </div>
+                    <div class="home-charts-grid">
+                        <article class="home-chart-panel">
+                            <header><h2>Indicadores de Presença</h2></header>
+                            <div id="homeIndicadoresPresenca" class="home-indicator-list"></div>
+                        </article>
+                        <article class="home-chart-panel">
+                            <header><h2>Distribuição de Hoje</h2></header>
+                            <div id="homeDistribuicaoHoje" class="home-pie-report"></div>
+                        </article>
+                        <article class="home-chart-panel chart-wide">
+                            <header><h2>Distribuição Semanal</h2></header>
+                            <div id="homeDistribuicaoSemanal" class="home-weekly-chart"></div>
+                        </article>
+                        <article class="home-chart-panel">
+                            <header><h2>Cobertura por Setor</h2></header>
+                            <div id="homeCoberturaSetor" class="home-dashboard-list dense"></div>
+                        </article>
+                    </div>
+                    <div class="home-dashboard-panels">
+                        <article class="home-dashboard-panel">
+                            <header><h2>Período de Experiência</h2></header>
+                            <div id="homeExperienciaLista" class="home-dashboard-list"></div>
+                        </article>
+                        <article class="home-dashboard-panel">
+                            <header><h2>Aniversariantes</h2></header>
+                            <div id="homeAniversariantesLista" class="home-dashboard-list"></div>
+                        </article>
+                        <article class="home-dashboard-panel">
+                            <header><h2>Datas Comemorativas</h2></header>
+                            <div id="homeDatasComemorativasLista" class="home-dashboard-list"></div>
+                        </article>
+                    </div>
+                    <div class="home-dashboard-wide">
+                        <article class="home-dashboard-panel">
+                            <header><h2>Folgas do Dia por Departamento</h2></header>
+                            <div id="homeFolgasDepartamento" class="home-dashboard-list dense"></div>
+                        </article>
+                        <article class="home-dashboard-panel">
+                            <header><h2>Status das Escalas por Setor</h2></header>
+                            <div id="homeStatusEscalasSetor" class="home-dashboard-list dense"></div>
+                        </article>
+                        <article class="home-dashboard-panel">
+                            <header><h2>Análise de Folgas por Setor</h2></header>
+                            <div id="homeAnaliseFolgasSetor" class="home-dashboard-list dense"></div>
+                        </article>
+                        <article class="home-dashboard-panel">
+                            <header><h2>Quadro Padrão de Funcionários</h2></header>
+                            <div id="homeQuadroPadrao" class="home-dashboard-list dense"></div>
+                        </article>
+                    </div>
+                </section>
                 <div class="max-w-7xl mx-auto">
                     <div class="turno-modal-shell hidden no-print" id="turnoModal">
                         <form id="form-container" class="bg-white p-6 rounded-xl shadow-md">
@@ -125,26 +194,6 @@
                                 </div>
                             </div>
                         </form>
-                    </div>
-                    <div id="timeline-container-for-print" class="bg-white p-4 sm:p-6 rounded-xl shadow-md">
-                        <div class="flex flex-wrap gap-4 justify-between items-center mb-4 no-print">
-                            <h2 class="text-xl font-bold text-gray-800">Linha do Tempo</h2>
-                            <div class="flex items-center gap-4 flex-wrap">
-                                <div id="timeline-zoom-controls" class="flex items-center gap-2 p-1 bg-gray-100 rounded-full">
-                                    <span id="timelineZoomOutBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Diminuir Zoom">zoom_out</span>
-                                    <span id="timelineZoomResetBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Resetar Zoom">restart_alt</span>
-                                    <span id="timelineZoomInBtn" class="material-symbols-outlined cursor-pointer p-1 rounded-full hover:bg-gray-200" title="Aumentar Zoom">zoom_in</span>
-                                </div>
-                                <div class="flex gap-2">
-                                    <button id="abrirModalEscalaBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200">Gerador de Escala</button>
-                                    <button id="printBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200">Imprimir Timeline</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="timeline-scroll-container" class="timeline-scroll-container overflow-x-auto pb-4">
-                            <div id="timeline-content" style="min-width: 1200px; position: relative;">
-                                </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -274,10 +323,11 @@
                         <select id="funcionariosLojaSelect" class="escala-filter-select" aria-label="Filtrar funcionários por loja"></select>
                         <select id="funcionariosSecaoFiltro" class="escala-filter-select"><option value="all">Todas as seções</option></select>
                         <select id="funcionariosFuncaoFiltro" class="escala-filter-select"><option value="all">Todas as funções</option></select>
+                        <select id="funcionariosStatusFiltro" class="escala-filter-select" aria-label="Filtrar por status"><option value="ativos">Ativos</option><option value="inativos">Inativos</option><option value="all">Todos</option></select>
                         <select id="funcionariosMesFiltro" class="escala-filter-select" aria-label="M&ecirc;s da escala"></select>
                     </div>
                     <div class="table-card-header"><h2 id="funcionariosTitulo">Funcionários cadastrados</h2></div>
-                    <table class="data-table"><thead><tr><th>Chapa</th><th>Nome</th><th>Loja</th><th>Seção</th><th>Função</th><th>Brigadista</th><th>Entrada 1</th><th>Saída 1</th><th>Entrada 2</th><th>Saída 2</th><th>Ações</th></tr></thead><tbody id="tabela-funcionarios-body"><tr><td colspan="11" class="text-center text-gray-500 py-8">Carregando funcionários...</td></tr></tbody></table>
+                    <table class="data-table"><thead><tr><th>Chapa</th><th>Nome</th><th>Loja</th><th>Seção</th><th>Função</th><th>Status</th><th>Brigadista</th><th>Entrada 1</th><th>Saída 1</th><th>Entrada 2</th><th>Saída 2</th><th>Ações</th></tr></thead><tbody id="tabela-funcionarios-body"><tr><td colspan="12" class="text-center text-gray-500 py-8">Carregando funcionários...</td></tr></tbody></table>
                 </div>
             </div>
 
@@ -578,7 +628,7 @@
                 <select id="detalheFuncionarioSelect" class="hidden" aria-hidden="true"></select>
 
                 <div class="section-tabs" id="escalaSecaoTabs" role="tablist" aria-label="Seções da escala"></div>
-                <div class="subsection-tabs hidden" id="escalaSubsetorTabs" role="tablist" aria-label="Subsetores da Frente de Caixa"></div>
+                <div class="subsection-tabs hidden" id="escalaSubsetorTabs" role="tablist" aria-label="Subseções da seção"></div>
 
                 <div class="table-card mt-6 scale-overview-card">
                     <div class="table-card-header creation-card-header">
@@ -592,6 +642,11 @@
                             </div>
                             <p class="table-card-subtitle">Alterne entre a vis&atilde;o mensal e a timeline operacional do dia.</p>
                         </div>
+                        <select id="escalaOrdenacaoSelect" class="escala-filter-select scale-order-select" aria-label="Ordenar colaboradores">
+                            <option value="nome">Nome</option>
+                            <option value="entrada">Entrada</option>
+                            <option value="funcao">Função</option>
+                        </select>
                         <div class="daily-toolbar scale-header-day-nav hidden">
                             <button type="button" class="day-nav-button" id="escalaBancoDiaAnteriorBtn" aria-label="Dia anterior">
                                 <span class="material-symbols-outlined">chevron_left</span>
@@ -1024,18 +1079,18 @@
     <script src="/js/api.js"></script>
     <script src="/js/ui-permissions.js"></script>
     <script src="/js/escala-rules-core.js"></script>
-    <script src="/js/navigation-config.js"></script>
+    <script src="/js/navigation-config.js?v=20260907-subsecoes-geracao"></script>
     <script src="/js/formatters.js"></script>
     <script src="/js/modal-service.js"></script>
     <script src="/js/print-service.js"></script>
-    <script src="/js/navigation.js"></script>
+    <script src="/js/navigation.js?v=20260907-subsecoes-geracao"></script>
     <script src="/js/escala-criacao-page.js"></script>
     <script src="/js/escala-detalhe-page.js"></script>
     <script src="/js/escala-funcionario-page.js"></script>
     <script src="/js/catalogos-page.js"></script>
     <script src="/js/access-page.js"></script>
     <script src="/js/rm-page.js"></script>
-    <script src="/js/app-original.js"></script>
+    <script src="/js/app-original.js?v=20260907-subsecoes-geracao"></script>
 <script src="/js/license-lock.js"></script>
 </body>
 </html>

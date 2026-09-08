@@ -25,6 +25,7 @@ function normalizeFuncionario(row) {
     CHAPA: pick(row, 'CHAPA', 'chapa'),
     NOME: pick(row, 'NOME', 'nome'),
     CPF: pick(row, 'CPF', 'cpf', 'CPF_FUNCIONARIO', 'cpf_funcionario'),
+    DT_NASC: pick(row, 'DT_NASC', 'dt_nasc', 'DT_NASCIMENTO', 'dt_nascimento', 'DATA_NASCIMENTO', 'data_nascimento'),
     DT_ADMISS: pick(row, 'DT_ADMISS', 'dt_admiss'),
     BRIGADISTA: pick(row, 'BRIGADISTA', 'brigadista'),
     ESCSECAO_ID: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
@@ -38,7 +39,9 @@ function normalizeFuncionario(row) {
     HR_SAI1: pick(row, 'HR_SAI1', 'hr_sai1'),
     HR_ENT2: pick(row, 'HR_ENT2', 'hr_ent2'),
     HR_SAI2: pick(row, 'HR_SAI2', 'hr_sai2'),
-    DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl')
+    DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl'),
+    DT_DEMISS: pick(row, 'DT_DEMISS', 'dt_demiss'),
+    ATIVO: pick(row, 'DT_DEMISS', 'dt_demiss') ? 'N' : 'S'
   };
 }
 
@@ -339,6 +342,15 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
     const hasSubsecaoTable = subsecaoColumns.has('ESCSUBSECAO_ID') && subsecaoColumns.has('ESCSECAO_ID');
     const subsecaoSelect = hasFuncionarioSubsecao ? 'f.escsubsecao_id' : 'cast(null as number) as escsubsecao_id';
     const subsecaoDescrSelect = hasFuncionarioSubsecao && hasSubsecaoTable ? 'sub.descr as subsecao_descr' : 'cast(null as varchar2(100)) as subsecao_descr';
+    const dtDemissSelect = funcionarioColumns.has('DT_DEMISS') ? 'f.dt_demiss' : 'cast(null as date) as dt_demiss';
+    const dtNascSelect = funcionarioColumns.has('DT_NASC')
+      ? 'f.dt_nasc'
+      : funcionarioColumns.has('DT_NASCIMENTO')
+        ? 'f.dt_nascimento as dt_nasc'
+        : funcionarioColumns.has('DATA_NASCIMENTO')
+          ? 'f.data_nascimento as dt_nasc'
+          : 'cast(null as date) as dt_nasc';
+    const ativoWhere = options.includeInactive || !funcionarioColumns.has('DT_DEMISS') ? '' : 'and f.dt_demiss is null';
     const subsecaoJoinSql = hasFuncionarioSubsecao && hasSubsecaoTable
       ? 'left join sgn_esc_subsecao sub on sub.escsubsecao_id = f.escsubsecao_id and sub.escsecao_id = f.escsecao_id'
       : '';
@@ -354,6 +366,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
           f.chapa,
           f.nome,
           ${cpfSelect},
+          ${dtNascSelect},
           f.dt_admiss,
           f.brigadista,
           f.escsecao_id,
@@ -368,7 +381,8 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
           ${options.mesRef ? 'coalesce(e.hr_ent2, f.hr_ent2)' : 'f.hr_ent2'} as hr_ent2,
           ${options.mesRef ? 'coalesce(e.hr_sai2, f.hr_sai2)' : 'f.hr_sai2'} as hr_sai2,
           ${options.mesRef ? 'e.programacao as escala_programacao, e.revisao as escala_revisao, e.oficializada as escala_oficializada' : "cast(null as varchar2(3)) as escala_programacao, cast(null as number) as escala_revisao, cast(null as number) as escala_oficializada"},
-          f.dt_hr_incl
+          f.dt_hr_incl,
+          ${dtDemissSelect}
        from sgn_esc_funcionario f
        left join sgn_esc_secao s on s.escsecao_id = f.escsecao_id ${secaoJoinLoja} ${secaoJoinColigada}
        left join sgn_esc_funcao fu on fu.escfuncao_id = f.escfuncao_id ${funcaoJoinColigada}
@@ -400,6 +414,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
        where f.loja = :lojaId
          ${funcionarioColigadaWhere}
          ${funcionarioSecaoWhere}
+         ${ativoWhere}
        order by f.nome`;
 
     if (options.mesRef) {
@@ -621,12 +636,6 @@ async function listSubsecoesBySecao({ lojaId, escsecaoId, includeInactive = fals
 
 async function assertSubsecaoFrenteCaixa(connection, lojaCodigo, escsecaoId) {
   const secao = await findSecaoById(connection, { lojaId: lojaCodigo, escsecaoId });
-  if (!secao) return null;
-  if (!isSecaoFrenteCaixa(normalizeSecao(secao))) {
-    const error = new Error('Subsecoes estao liberadas apenas para Frente de Caixa.');
-    error.statusCode = 422;
-    throw error;
-  }
   return secao;
 }
 
@@ -1049,7 +1058,7 @@ async function updateTipoDescanso(id, data) {
 
 async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
-  const allowedFields = ['BRIGADISTA', 'ESCSECAO_ID', 'ESCSUBSECAO_ID', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'];
+  const allowedFields = ['BRIGADISTA', 'ESCSECAO_ID', 'ESCSUBSECAO_ID', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2', 'DT_DEMISS'];
   const updates = Object.fromEntries(
     Object.entries(data || {}).filter(([field]) => allowedFields.includes(field))
   );
@@ -1060,6 +1069,12 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
 
   return withConnection(async (connection) => {
     const funcionarioColumns = await requireTableColumns(connection, 'SGN_ESC_FUNCIONARIO', ['ESCSUBSECAO_ID']);
+    if (updates.DT_DEMISS !== undefined && !funcionarioColumns.has('DT_DEMISS')) {
+      delete updates.DT_DEMISS;
+    }
+    if (Object.keys(updates).length === 0) {
+      throw new Error('Nenhum campo permitido informado para atualizacao.');
+    }
     let secaoAtualId = null;
     if (updates.ESCSUBSECAO_ID !== undefined) {
       if (!funcionarioColumns.has('ESCSUBSECAO_ID')) {
@@ -1104,19 +1119,24 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
       }
       updates.ESCSUBSECAO_ID = Number(updates.ESCSUBSECAO_ID);
     }
-    const assignments = Object.keys(updates).map((field) => `${field.toLowerCase()} = :${field}`).join(', ');
+    const assignments = Object.keys(updates).map((field) => {
+      if (field === 'DT_DEMISS') return `${field.toLowerCase()} = ${updates[field] ? `to_date(:${field}, 'YYYY-MM-DD')` : 'null'}`;
+      return `${field.toLowerCase()} = :${field}`;
+    }).join(', ');
+    const updateBinds = { ...updates, escfuncId, lojaId: lojaCodigo };
+    if (updates.DT_DEMISS === null) delete updateBinds.DT_DEMISS;
     const result = await connection.execute(
       `update sgn_esc_funcionario
        set ${assignments}
        where escfunc_id = :escfuncId
          and loja = :lojaId`,
-      { ...updates, escfuncId, lojaId: lojaCodigo },
+      updateBinds,
       { autoCommit: true }
     );
 
     if (result.rowsAffected === 0) return null;
 
-    const funcionarios = await listFuncionariosByLoja(lojaCodigo);
+    const funcionarios = await listFuncionariosByLoja(lojaCodigo, { includeInactive: true });
     return funcionarios.find((funcionario) => Number(funcionario.ESCFUNC_ID) === Number(escfuncId)) || null;
   });
 }
