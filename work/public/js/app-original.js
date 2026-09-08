@@ -918,6 +918,10 @@
         function isPerfilLiderSessao() {
             return String(usuarioSessaoCache?.perfil || '').trim().toUpperCase() === 'LIDER';
         }
+        function canGenerateEscalaSecaoSessao() {
+            const perfil = String(usuarioSessaoCache?.perfil || '').trim().toUpperCase();
+            return ['ADMIN', 'GERENTE', 'RH', 'LIDER'].includes(perfil) && hasPermission('escalas', 'editar');
+        }
         function canCreateEscalaSessao() {
             return hasPermission('escalas', 'criar') && !isPerfilLiderSessao();
         }
@@ -7259,10 +7263,13 @@
                 && escalaDetalheAtual.status !== 'FINALIZADA'
                 && !escalaDetalheAtual.oficializada
                 && diasEditaveis.some((dia) => funcionarios.some((funcionario) => !funcionario.dias.has(dia)));
+            const renderizarBotaoGeracaoSecao = () => canGenerateEscalaSecaoSessao()
+                ? '<div class="pending-section-actions"><button type="button" class="action-button gerar-escala-secao-banco" data-secao-key="' + escapeHtml(escalaDetalheAtual.secaoAtiva || '') + '"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção</button></div>'
+                : '';
             const renderizarBannerGeracaoSecao = (totalFuncionarios) => '<div class="pending-section-scale pending-section-shell section-generation-banner">' +
                 '<div class="pending-section-shell-header">' +
                 '<div><strong>Escala liberada para distribuição das Folgas Fixas e Horários Fixos.</strong><span>Folga Fixa: Clique nos dias para distribuir as Folgas Fixas.</span><span>Horário Fixo: Clique duas vezes para inserir um horário fixo.</span><span>' + escapeHtml(String(totalFuncionarios)) + ' funcionário(s) nesta seção. ' + escapeHtml(String(fixosPendentes.length)) + ' fixo(s) cadastrado(s).</span></div>' +
-                '<div class="pending-section-actions"><button type="button" class="action-button gerar-escala-secao-banco" data-secao-key="' + escapeHtml(escalaDetalheAtual.secaoAtiva || '') + '"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção</button></div>' +
+                renderizarBotaoGeracaoSecao() +
                 '</div></div>';
 
             if (!funcionarios.length) {
@@ -7271,7 +7278,7 @@
                 let html = '<div class="pending-section-scale pending-section-shell">' +
                     '<div class="pending-section-shell-header">' +
                     '<div><strong>Escala liberada para distribuição das Folgas Fixas e Horários Fixos.</strong><span>Folga Fixa: Clique nos dias para distribuir as Folgas Fixas.</span><span>Horário Fixo: Clique duas vezes para inserir um horário fixo.</span><span>' + escapeHtml(String(total)) + ' funcionário(s) nesta seção. ' + escapeHtml(String(fixosPendentes.length)) + ' fixo(s) cadastrado(s).</span></div>' +
-                    '<div class="pending-section-actions"><button type="button" class="action-button gerar-escala-secao-banco" data-secao-key="' + escapeHtml(escalaDetalheAtual.secaoAtiva || '') + '"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção</button></div>' +
+                    renderizarBotaoGeracaoSecao() +
                     '</div>';
 
                 if (!funcionariosPendentes.length) {
