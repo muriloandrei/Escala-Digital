@@ -15,11 +15,13 @@ create table SGN_ESC_SECAO (
   CODFILIAL number(10) not null,
   COD_SECAO varchar2(10) not null,
   DESCR varchar2(100) not null,
+  STATUS varchar2(1) default 'A' not null,
   DT_HR_INCL date default sysdate not null,
   CODCOLIGADA number(10) not null,
   constraint SGN_ESC_SECAO_PK primary key (ESCSECAO_ID),
   constraint SGN_ESC_SECAO_1_UK unique (COD_SECAO, CODFILIAL),
-  constraint SGN_ESC_SECAO_2_UK unique (CODFILIAL, DESCR)
+  constraint SGN_ESC_SECAO_2_UK unique (CODFILIAL, DESCR),
+  constraint SGN_ESC_SECAO_STATUS_CK check (STATUS in ('A', 'I'))
 );
 
 create table SGN_ESC_SUBSECAO (

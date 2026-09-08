@@ -54,6 +54,7 @@ function normalizeSecao(row, turnos = []) {
     LOJA: pick(row, 'LOJA', 'loja') ?? codfilial,
     COD_SECAO: pick(row, 'COD_SECAO', 'cod_secao'),
     DESCR: pick(row, 'DESCR', 'descr'),
+    STATUS: pick(row, 'STATUS', 'status') || 'A',
     DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl'),
     TURNOS: turnos,
     SUBSECOES: []
@@ -210,6 +211,7 @@ async function buildSecaoSelectList(connection, lojaCodigo) {
     columns.has('CODCOLIGADA') ? 'codcoligada' : 'cast(null as number) as codcoligada',
     'cod_secao',
     'descr',
+    columns.has('STATUS') ? 'status' : "'A' as status",
     columns.has('DT_HR_INCL') ? 'dt_hr_incl' : 'cast(null as date) as dt_hr_incl'
   ].join(', ');
 }
@@ -333,6 +335,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
     const progColumns = options.mesRef ? await getTableColumns(connection, 'SGN_ESC_PROG') : new Set();
     const escalaAtivaSql = progColumns.has('ATIVA') ? 'and nvl(p.ativa, 1) = 1' : '';
     const escalaAtivaInnerSql = progColumns.has('ATIVA') ? 'and nvl(px.ativa, 1) = 1' : '';
+    const secaoAtivaWhere = options.includeInactiveSecoes || !secaoColumns.has('STATUS') ? '' : "and nvl(s.status, 'A') = 'A'";
     const cpfSelect = funcionarioColumns.has('CPF')
       ? 'f.cpf'
       : funcionarioColumns.has('CPF_FUNCIONARIO')
@@ -415,6 +418,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
          ${funcionarioColigadaWhere}
          ${funcionarioSecaoWhere}
          ${ativoWhere}
+         ${secaoAtivaWhere}
        order by f.nome`;
 
     if (options.mesRef) {
@@ -462,6 +466,9 @@ async function listSecoesByLoja(lojaId, options = {}) {
     if (secaoColumns.has('CODCOLIGADA') && lojaCodcoligada !== null) {
       conditions.push('codcoligada = :codcoligada');
       binds.codcoligada = lojaCodcoligada;
+    }
+    if (!options.includeInactive && secaoColumns.has('STATUS')) {
+      conditions.push("nvl(status, 'A') = 'A'");
     }
     addSecoesPermitidasFilter(conditions, binds, 'escsecao_id', options.secoesPermitidas);
 
@@ -519,6 +526,9 @@ async function listTurnosByLoja(lojaId, options = {}) {
     if (secaoColumns.has('CODCOLIGADA') && lojaCodcoligada !== null) {
       conditions.push('s.codcoligada = :codcoligada');
       binds.codcoligada = lojaCodcoligada;
+    }
+    if (!options.includeInactive && secaoColumns.has('STATUS')) {
+      conditions.push("nvl(s.status, 'A') = 'A'");
     }
     addSecoesPermitidasFilter(conditions, binds, 's.escsecao_id', options.secoesPermitidas);
 

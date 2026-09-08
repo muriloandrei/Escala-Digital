@@ -288,10 +288,13 @@ async function getUsuarioSecaoColumns(connection) {
 
 async function listSecoesPorLojaInConnection(connection, lojaId) {
   const lojaColumn = await getSecaoLojaColumn(connection);
+  const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
+  const statusSql = secaoColumns.has('STATUS') ? "and nvl(status, 'A') = 'A'" : '';
   const result = await connection.execute(
     `select escsecao_id, cod_secao, descr, ${lojaColumn.toLowerCase()} as loja
        from sgn_esc_secao
       where ${lojaColumn.toLowerCase()} = :lojaId
+        ${statusSql}
       order by cod_secao, descr`,
     { lojaId },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }

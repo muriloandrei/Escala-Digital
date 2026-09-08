@@ -246,6 +246,17 @@ async function getAtivaSql(connection, alias = 'p') {
   return (await hasProgAtivaColumn(connection)) ? `nvl(${alias}.ativa, 1) = 1` : '1 = 1';
 }
 
+async function getSecaoAtivaProgSql(connection, alias = 'p') {
+  const columns = await getTableColumns(connection, 'SGN_ESC_SECAO');
+  if (!columns.has('STATUS')) return '1 = 1';
+  return `exists (
+    select 1
+    from sgn_esc_secao s_status
+    where s_status.escsecao_id = ${alias}.escsecao_id
+      and nvl(s_status.status, 'A') = 'A'
+  )`;
+}
+
 function addSecoesPermitidasFilter(filters, binds, fieldSql, secoesPermitidas) {
   if (!Array.isArray(secoesPermitidas)) return;
   const normalized = [...new Set(secoesPermitidas.map(Number).filter(Boolean))];
@@ -263,12 +274,14 @@ function addSecoesPermitidasFilter(filters, binds, fieldSql, secoesPermitidas) {
 
 async function getLatestRevision(connection, { lojaId, mesRef, includeInactive = false }) {
   const ativaSql = includeInactive ? '1 = 1' : await getAtivaSql(connection, 'p');
+  const secaoAtivaSql = includeInactive ? '1 = 1' : await getSecaoAtivaProgSql(connection, 'p');
   const result = await connection.execute(
     `select max(p.revisao) as revisao
      from sgn_esc_prog p
      where p.loja = :lojaId
        and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-       and ${ativaSql}`,
+       and ${ativaSql}
+       and ${secaoAtivaSql}`,
     { lojaId, mesRef },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
@@ -300,6 +313,7 @@ async function listEscalas({ lojaId, mesRef, secoesPermitidas = null }) {
     if (latestRevision === null) return [];
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
+    const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
     const binds = { lojaId, mesRef };
     const secaoFilters = [];
     addSecoesPermitidasFilter(secaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
@@ -336,6 +350,7 @@ async function listEscalas({ lojaId, mesRef, secoesPermitidas = null }) {
          where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
          ${secaoSql}
+         and ${secaoAtivaSql}
          and p.revisao = (
            select max(px.revisao)
            from sgn_esc_prog px
@@ -379,6 +394,7 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesP
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
     filters.push(ativaSql);
+    filters.push(await getSecaoAtivaProgSql(connection, 'p'));
     filters.push(`p.revisao = (
       select max(px.revisao)
       from sgn_esc_prog px
@@ -423,6 +439,7 @@ async function listEscalaRevisoes({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     const auditJoin = await getAuditJoinSql(connection, 'p');
     const ativaSql = await getAtivaSql(connection, 'p');
+    const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
     const binds = { lojaId, mesRef };
     const secaoFilters = [];
     addSecoesPermitidasFilter(secaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
@@ -448,6 +465,7 @@ async function listEscalaRevisoes({ lojaId, mesRef, secoesPermitidas = null }) {
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
          ${secaoSql}
          and ${ativaSql}
+         and ${secaoAtivaSql}
        group by p.mes_ref, p.revisao
        order by p.revisao desc`,
       binds,
@@ -714,6 +732,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     const subsecaoJoinSql = hasFuncionarioSubsecao ? 'left join sgn_esc_subsecao ss on ss.escsubsecao_id = f.escsubsecao_id and ss.escsecao_id = p.escsecao_id' : '';
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
+    const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
     const binds = { lojaId, mesRef };
     const secaoFilters = [];
     addSecoesPermitidasFilter(secaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
@@ -758,6 +777,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
          ${secaoSql}
+         and ${secaoAtivaSql}
          and p.revisao = (
            select max(px.revisao)
            from sgn_esc_prog px
@@ -1534,6 +1554,7 @@ async function oficializarEscala({ lojaId, mesRef }) {
     if (latestRevision === null) return { affectedRows: 0, revisao: null };
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
+    const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
     const result = await connection.execute(
       `update sgn_esc_prog p
        set p.oficializada = 1
@@ -1547,7 +1568,8 @@ async function oficializarEscala({ lojaId, mesRef }) {
              and px.escfunc_id = p.escfunc_id
              and ${ativaSubSql}
          )
-         and ${ativaSql}`,
+         and ${ativaSql}
+         and ${secaoAtivaSql}`,
       { lojaId, mesRef },
       { autoCommit: true }
     );
