@@ -342,22 +342,36 @@ function addSecoesPermitidasFilter(filters, binds, fieldSql, secoesPermitidas) {
   filters.push(`${fieldSql} in (${placeholders.join(', ')})`);
 }
 
-async function getLatestRevision(connection, { lojaId, mesRef, includeInactive = false }) {
+async function getLatestRevision(connection, { lojaId, mesRef, includeInactive = false, secoesPermitidas = null }) {
   const ativaSql = includeInactive ? '1 = 1' : await getAtivaSql(connection, 'p');
   const secaoAtivaSql = includeInactive ? '1 = 1' : await getSecaoAtivaProgSql(connection, 'p');
+  const binds = { lojaId, mesRef };
+  const secaoFilters = [];
+  addSecoesPermitidasFilter(secaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
+  const secaoSql = secaoFilters.length ? `and ${secaoFilters.join(' and ')}` : '';
   const result = await connection.execute(
     `select max(p.revisao) as revisao
      from sgn_esc_prog p
      where p.loja = :lojaId
        and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+       ${secaoSql}
        and ${ativaSql}
        and ${secaoAtivaSql}`,
-    { lojaId, mesRef },
+    binds,
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
 
   const value = pick(result.rows[0], 'REVISAO', 'revisao');
   return value === null || value === undefined ? null : Number(value);
+}
+
+function filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo = [], rows = []) {
+  const secoesDaEscala = new Set((rows || [])
+    .map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id')))
+    .filter(Boolean));
+  if (!secoesDaEscala.size) return funcionariosCatalogo || [];
+  return (funcionariosCatalogo || [])
+    .filter((funcionario) => secoesDaEscala.has(Number(pick(funcionario, 'ESCSECAO_ID', 'escsecao_id'))));
 }
 
 async function getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive = false }) {
@@ -379,7 +393,7 @@ async function getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfun
 
 async function listEscalas({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
-    const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
+    const latestRevision = await getLatestRevision(connection, { lojaId, mesRef, secoesPermitidas });
     if (latestRevision === null) return [];
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
@@ -793,7 +807,7 @@ async function listDiasSecaoAtual({ lojaId, mesRef, escsecaoId }) {
 
 async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
-    const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
+    const latestRevision = await getLatestRevision(connection, { lojaId, mesRef, secoesPermitidas });
     if (latestRevision === null) return { revisao: null, status: null, dias: [], funcionarios: [], secoes: [] };
     const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
     const hasFuncionarioSubsecao = funcionarioColumns.has('ESCSUBSECAO_ID');
@@ -863,7 +877,8 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     );
 
     const rows = result.rows || [];
-    const funcionariosCatalogo = await catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }).catch(() => []);
+    const funcionariosCatalogoCompleto = await catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }).catch(() => []);
+    const funcionariosCatalogo = filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogoCompleto, rows);
     const catalogoPorFuncionario = new Map((funcionariosCatalogo || [])
       .map((funcionario) => [String(pick(funcionario, 'ESCFUNC_ID', 'escfunc_id')), funcionario]));
     rows.forEach((row) => {
@@ -1760,6 +1775,7 @@ module.exports = {
   _private: {
     getAlteracoesDiasBloqueados,
     isDiaBloqueadoParaEdicao,
+    filtrarFuncionariosCatalogoPorSecoesEscala,
     montarDiasReconciliadosRm
   }
 };

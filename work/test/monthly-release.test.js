@@ -1044,6 +1044,21 @@ test('monthly release defaults to active Frente de Caixa sections only', async (
   }
 });
 
+test('monthly scale detail does not add catalog sections outside active schedule', () => {
+  const rows = [
+    { ESCFUNC_ID: 1, ESCSECAO_ID: 20, SECAO_DESCR: 'Frente de Caixa' }
+  ];
+  const funcionariosCatalogo = [
+    { ESCFUNC_ID: 1, ESCSECAO_ID: 20, SECAO_DESCR: 'Frente de Caixa' },
+    { ESCFUNC_ID: 2, ESCSECAO_ID: 30, SECAO_DESCR: 'Deposito Lideranca' },
+    { ESCFUNC_ID: 3, ESCSECAO_ID: 40, SECAO_DESCR: 'Mercearia Lideranca' }
+  ];
+
+  const filtrados = _private.filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo, rows);
+
+  assert.deepEqual(filtrados.map((funcionario) => funcionario.ESCFUNC_ID), [1]);
+});
+
 test('date lock blocks only previous days, not current day', () => {
   assert.equal(_private.isDiaBloqueadoParaEdicao('2026-08-14', '2026-08-15'), true);
   assert.equal(_private.isDiaBloqueadoParaEdicao('2026-08-15', '2026-08-15'), false);
