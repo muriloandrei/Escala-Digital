@@ -6273,8 +6273,9 @@
                 const status = String(escala.STATUS || '-').toUpperCase();
                 const finalizada = status === 'FINALIZADA';
                 const oficializada = Number(escala.OFICIALIZADA || 0) === 1;
-                const canOfficializeEscalas = hasPermission('escalas', 'oficializar');
-                const canInactivateEscalas = hasPermission('escalas', 'inativar');
+                const canManageEscalaAdmin = isPerfilAdminSessao();
+                const canOfficializeEscalas = canManageEscalaAdmin && hasPermission('escalas', 'oficializar');
+                const canInactivateEscalas = canManageEscalaAdmin && hasPermission('escalas', 'inativar');
                 const oficializarAction = !canOfficializeEscalas
                     ? ''
                     : finalizada
@@ -6300,7 +6301,7 @@
                     '<button class="action-btn-table banco-action banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
                     oficializarAction,
                     inativarAction,
-                    '<button class="action-btn-table banco-action banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver relatório de alterações"><span class="material-symbols-outlined">history</span>Histórico</button>',
+                    canManageEscalaAdmin ? '<button class="action-btn-table banco-action banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver relatório de alterações"><span class="material-symbols-outlined">history</span>Histórico</button>' : '',
                     '</td>',
                     '</tr>'
                 ].join('');

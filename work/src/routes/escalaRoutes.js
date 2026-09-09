@@ -1,6 +1,6 @@
 const express = require('express');
 const { z } = require('zod');
-const { requireAuth, requireLojaAccess, requirePermission } = require('../middleware/auth');
+const { requireAuth, requireLojaAccess, requireAdmin, requirePermission } = require('../middleware/auth');
 const escalaService = require('../services/escalaService');
 const catalogService = require('../services/catalogService');
 const accessService = require('../services/accessService');
@@ -297,7 +297,7 @@ router.get('/revisoes', requirePermission('escalas', 'visualizar'), resolveLojaR
 });
 
 
-router.get('/historico', requirePermission('historico', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.get('/historico', requireAdmin, requirePermission('historico', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
     const mesRef = req.query.mesRef || null;
@@ -382,7 +382,7 @@ router.post('/rm/reprocessar', requirePermission('integracao-rm', 'reprocessar')
   }
 });
 
-router.post('/oficializar', requirePermission('escalas', 'oficializar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/oficializar', requireAdmin, requirePermission('escalas', 'oficializar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = z.object({
       lojaId: z.number().int().positive(),
@@ -416,7 +416,7 @@ router.post('/oficializar', requirePermission('escalas', 'oficializar'), resolve
   }
 });
 
-router.post('/inativar', requirePermission('escalas', 'inativar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/inativar', requireAdmin, requirePermission('escalas', 'inativar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = z.object({
       lojaId: z.number().int().positive(),
