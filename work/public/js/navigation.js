@@ -7,8 +7,8 @@
 
     const getDefaultAllowedRoute = () => {
       const entry = [
-        ['/home', 'escalas'],
         ['/escalas-geradas', 'escalas'],
+        ['/home', 'home'],
         ['/escalas-funcionarios', 'escalas-funcionarios'],
         ['/funcionarios', 'funcionarios'],
         ['/secoes', 'secoes'],

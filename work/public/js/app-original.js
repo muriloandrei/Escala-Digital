@@ -692,7 +692,7 @@
                 configuracoes: showSettingsPage
             };
 
-            (routes[pageKey] || routes.home)();
+            (routes[pageKey] || routes['escalas-geradas'])();
         }
 
         let hashNavigationLock = false;
@@ -2420,6 +2420,7 @@
             applyPermissionBindings();
             atualizarVisibilidadeRelatoriosHome();
             if (goToTimelineBtn) goToTimelineBtn.classList.toggle('hidden', !canCreateEscalaSessao());
+            navTimeline?.classList.toggle('hidden', !isPerfilAdminSessao());
             const lojas = Array.isArray(user.lojas) ? user.lojas : [];
 
             if (loggedUserName) {
@@ -9617,8 +9618,9 @@
             applyMainTimelineZoom();
             renderizarTimelineCompleta('timeline-content'); 
             atualizarContadoresHome();
-            if (!window.location.hash) {
-                window.location.hash = isPerfilLiderSessao() ? '/turnos-secao' : '/escalas-geradas';
+            const initialRoute = (window.location.hash || '').replace(/^#\/?/, '');
+            if (!window.location.hash || ['home', 'timeline'].includes(initialRoute)) {
+                window.location.hash = '/escalas-geradas';
                 return;
             }
             handleHashNavigation(); 

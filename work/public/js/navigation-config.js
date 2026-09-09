@@ -48,7 +48,7 @@
   };
 
   const permissionBindings = [
-    ['nav-timeline', 'escalas', 'visualizar'],
+    ['nav-timeline', 'home', 'visualizar'],
     ['nav-registros', 'escalas', 'visualizar'],
     ['nav-escalas-funcionarios', 'escalas-funcionarios', 'visualizar'],
     ['nav-secoes', 'secoes', 'visualizar'],
@@ -74,8 +74,8 @@
   ];
 
   const permissionPageByRoute = {
-    '/home': 'escalas',
-    '/timeline': 'escalas',
+    '/home': 'home',
+    '/timeline': 'home',
     '/escalas/nova': 'escalas',
     '/escalas-geradas': 'escalas',
     '/criar-escala': 'escalas',

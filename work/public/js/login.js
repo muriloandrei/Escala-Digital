@@ -12,7 +12,7 @@
 
     try {
       await api.login(login, password);
-      window.location.href = '/app';
+      window.location.href = '/app#/escalas-geradas';
     } catch (error) {
       message.textContent = error.message;
     }
