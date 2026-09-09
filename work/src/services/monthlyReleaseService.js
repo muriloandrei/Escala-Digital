@@ -19,6 +19,19 @@ function pick(row, ...keys) {
   return undefined;
 }
 
+function normalizarTextoComparacao(texto = '') {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function isSecaoFrenteCaixa(secao = {}) {
+  const descricao = pick(secao, 'DESCR', 'descr', 'SECAO_DESCR', 'secao_descr') || '';
+  return /frente.*caixa/.test(normalizarTextoComparacao(descricao));
+}
+
 function getMonthStart(date = new Date()) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
@@ -1035,21 +1048,40 @@ function getCriticasCoberturaMinima(funcionariosPayload = [], percentualMinimo =
     .map(([data, item]) => `Cobertura minima da secao abaixo de ${percentualMinimo}% em ${data}. Trabalhando: ${item.trabalhando}/${item.total}.`);
 }
 
-async function escalaMensalJaExiste(lojaId, mesRef) {
-  const existentes = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas: [lojaId] });
+async function listSecoesFrenteCaixaIds(lojaId) {
+  const secoes = await catalogService.listSecoesByLoja(lojaId);
+  return secoes
+    .filter(isSecaoFrenteCaixa)
+    .map((secao) => Number(pick(secao, 'ESCSECAO_ID', 'escsecao_id', 'escsecaoId')))
+    .filter(Boolean);
+}
+
+async function escalaMensalJaExiste(lojaId, mesRef, secoesPermitidas = null) {
+  const existentes = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas: [lojaId], secoesPermitidas });
   return existentes.length > 0;
 }
 
-async function liberarEscalaLojaMes({ lojaId, mesRef, hojeIso = formatDateValue(new Date()) }) {
-  if (await escalaMensalJaExiste(lojaId, mesRef)) {
+async function liberarEscalaLojaMes({
+  lojaId,
+  mesRef,
+  hojeIso = formatDateValue(new Date()),
+  somenteFrenteCaixa = true
+}) {
+  const secoesLiberacao = somenteFrenteCaixa ? await listSecoesFrenteCaixaIds(lojaId) : null;
+
+  if (somenteFrenteCaixa && !secoesLiberacao.length) {
+    return { lojaId, mesRef, criada: false, motivo: 'Nenhuma secao ativa de Frente de Caixa encontrada para liberacao.' };
+  }
+
+  if (await escalaMensalJaExiste(lojaId, mesRef, secoesLiberacao)) {
     return { lojaId, mesRef, criada: false, motivo: 'Escala mensal ja existente.' };
   }
 
   const inicio = formatDateValue(mesRef);
   const fim = getMonthEndIso(mesRef);
   const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
-    catalogService.listFuncionariosByLoja(lojaId),
-    catalogService.listTurnosByLoja(lojaId),
+    catalogService.listFuncionariosByLoja(lojaId, secoesLiberacao ? { secoesPermitidas: secoesLiberacao } : {}),
+    catalogService.listTurnosByLoja(lojaId, secoesLiberacao ? { secoesPermitidas: secoesLiberacao } : {}),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef })
   ]);
@@ -1058,7 +1090,14 @@ async function liberarEscalaLojaMes({ lojaId, mesRef, hojeIso = formatDateValue(
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa);
 
   if (!funcionariosPayload.length && funcionarios.length === 0) {
-    return { lojaId, mesRef, criada: false, motivo: 'Nenhum funcionario apto para liberacao.' };
+    return {
+      lojaId,
+      mesRef,
+      criada: false,
+      motivo: somenteFrenteCaixa
+        ? 'Nenhum funcionario de Frente de Caixa apto para liberacao.'
+        : 'Nenhum funcionario apto para liberacao.'
+    };
   }
 
   const saved = await escalaService.saveEscalasBatch({
@@ -1073,6 +1112,7 @@ async function liberarEscalaLojaMes({ lojaId, mesRef, hojeIso = formatDateValue(
     mesRef,
     criada: true,
     funcionarios: saved.length,
+    escopo: somenteFrenteCaixa ? 'Frente de Caixa' : 'Todos os setores',
     pendenteGeracao: true,
     criticas: []
   };
@@ -1171,12 +1211,17 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = format
   };
 }
 
-async function liberarEscalasMensais({ mesRef = formatDateValue(getMonthStart()), lojas = null, hojeIso = formatDateValue(new Date()) } = {}) {
+async function liberarEscalasMensais({
+  mesRef = formatDateValue(getMonthStart()),
+  lojas = null,
+  hojeIso = formatDateValue(new Date()),
+  somenteFrenteCaixa = true
+} = {}) {
   const lojasBase = lojas || (await catalogService.listLojas()).map((loja) => Number(loja.LOJA)).filter(Boolean);
   const resultados = [];
   for (const lojaId of [...new Set(lojasBase.map(Number).filter(Boolean))]) {
     try {
-      resultados.push(await liberarEscalaLojaMes({ lojaId, mesRef, hojeIso }));
+      resultados.push(await liberarEscalaLojaMes({ lojaId, mesRef, hojeIso, somenteFrenteCaixa }));
     } catch (error) {
       resultados.push({
         lojaId,

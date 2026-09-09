@@ -962,6 +962,88 @@ test('section reset preserves previous days and restores future protected absenc
   }
 });
 
+test('monthly release defaults to active Frente de Caixa sections only', async () => {
+  const originals = {
+    listSecoesByLoja: catalogService.listSecoesByLoja,
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listEscalasResumo: escalaService.listEscalasResumo,
+    listFixosEscala: escalaService.listFixosEscala,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  let resumoOptions = null;
+  let funcionariosOptions = null;
+  let turnosOptions = null;
+  let savedPayload = null;
+
+  catalogService.listSecoesByLoja = async () => [
+    { ESCSECAO_ID: 20, DESCR: '010.02.002 - Frente de Caixa' },
+    { ESCSECAO_ID: 21, DESCR: '010.02.001 - Deposito Lideranca' },
+    { ESCSECAO_ID: 22, DESCR: '010.02.006 - Mercearia Lideranca' }
+  ];
+  escalaService.listEscalasResumo = async (options) => {
+    resumoOptions = options;
+    return [];
+  };
+  catalogService.listFuncionariosByLoja = async (_lojaId, options) => {
+    funcionariosOptions = options;
+    return [{
+      ESCFUNC_ID: 700,
+      CHAPA: '070000',
+      NOME: 'Funcionario Frente',
+      LOJA: 35,
+      ESCSECAO_ID: 20,
+      ESCFUNCAO_ID: 30,
+      HR_ENT1: '08:00',
+      HR_SAI1: '12:00',
+      HR_ENT2: '13:10',
+      HR_SAI2: '17:58'
+    }];
+  };
+  catalogService.listTurnosByLoja = async (_lojaId, options) => {
+    turnosOptions = options;
+    return [{
+      ESCSECAOTURNO_ID: 40,
+      ESCSECAO_ID: 20,
+      HR_ENT1: '08:00',
+      HR_SAI1: '12:00',
+      HR_ENT2: '13:10',
+      HR_SAI2: '17:58'
+    }];
+  };
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.saveEscalasBatch = async (payload) => {
+    savedPayload = payload;
+    return payload.funcionarios;
+  };
+
+  try {
+    const result = await monthlyReleaseService.liberarEscalaLojaMes({
+      lojaId: 35,
+      mesRef: '2026-09-01',
+      hojeIso: '2026-09-01'
+    });
+
+    assert.equal(result.criada, true);
+    assert.equal(result.escopo, 'Frente de Caixa');
+    assert.deepEqual(resumoOptions.secoesPermitidas, [20]);
+    assert.deepEqual(funcionariosOptions.secoesPermitidas, [20]);
+    assert.deepEqual(turnosOptions.secoesPermitidas, [20]);
+    assert.equal(savedPayload.funcionarios.length, 1);
+    assert.equal(savedPayload.funcionarios[0].escsecaoId, 20);
+  } finally {
+    catalogService.listSecoesByLoja = originals.listSecoesByLoja;
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
+    escalaService.listEscalasResumo = originals.listEscalasResumo;
+    escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+  }
+});
+
 test('date lock blocks only previous days, not current day', () => {
   assert.equal(_private.isDiaBloqueadoParaEdicao('2026-08-14', '2026-08-15'), true);
   assert.equal(_private.isDiaBloqueadoParaEdicao('2026-08-15', '2026-08-15'), false);
