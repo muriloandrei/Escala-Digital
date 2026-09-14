@@ -912,7 +912,15 @@
         let historicoCache = [];
         let perfisAcessoCache = [];
         let perfilPaginasCache = [];
-        if (escalaOrdenacaoSelect) escalaOrdenacaoSelect.value = localStorage.getItem('escalaOrdenacaoBanco') || 'nome';
+        if (escalaOrdenacaoSelect) {
+            const ordemSalvaEscala = localStorage.getItem('escalaOrdenacaoBanco');
+            const ordemMigradaEntrada = localStorage.getItem('escalaOrdenacaoBancoDefaultEntrada');
+            if (!ordemMigradaEntrada && (!ordemSalvaEscala || ordemSalvaEscala === 'nome')) {
+                localStorage.setItem('escalaOrdenacaoBanco', 'entrada');
+                localStorage.setItem('escalaOrdenacaoBancoDefaultEntrada', '1');
+            }
+            escalaOrdenacaoSelect.value = localStorage.getItem('escalaOrdenacaoBanco') || 'entrada';
+        }
         function isPerfilAdminSessao() {
             return String(usuarioSessaoCache?.perfil || '').trim().toUpperCase() === 'ADMIN';
         }
@@ -2273,7 +2281,7 @@
             await carregarTurnosSecaoTela(false);
         });
         escalaOrdenacaoSelect?.addEventListener('change', () => {
-            localStorage.setItem('escalaOrdenacaoBanco', escalaOrdenacaoSelect.value || 'nome');
+            localStorage.setItem('escalaOrdenacaoBanco', escalaOrdenacaoSelect.value || 'entrada');
             if (!escalaDetalhePage?.classList.contains('hidden')) renderizarSecaoAtivaEscala();
         });
         secaoFormDescr?.addEventListener('change', () => aplicarSecaoSelecionadaNoCadastro());
@@ -6522,7 +6530,7 @@
         };
 
         const ordenarFuncionariosBanco = (funcionarios = []) => {
-            const modo = escalaOrdenacaoSelect?.value || 'nome';
+            const modo = escalaOrdenacaoSelect?.value || 'entrada';
             return [...funcionarios].sort((a, b) => {
                 if (modo === 'entrada') {
                     return getEntradaOrdenacaoFuncionarioBanco(a).localeCompare(getEntradaOrdenacaoFuncionarioBanco(b))
@@ -7814,26 +7822,36 @@
                 ? diasSecao.filter(dia => String(getSubsetorDetalheKey(dia)) === String(escalaDetalheAtual.subsetorAtivo))
                 : diasSecao;
             const map = new Map();
+            const diasPorFuncionario = new Map();
+            diasFiltrados.forEach((dia) => {
+                const id = String(dia.ESCFUNC_ID || '');
+                const numeroDia = Number(String(dia.DT || '').slice(8, 10));
+                if (!id || !numeroDia) return;
+                if (!diasPorFuncionario.has(id)) diasPorFuncionario.set(id, new Map());
+                diasPorFuncionario.get(id).set(numeroDia, dia);
+            });
             getFuncionariosSecaoAtualBanco().forEach((funcionario) => {
-                map.set(String(funcionario.ESCFUNC_ID || ''), {
-                    id: String(funcionario.ESCFUNC_ID || ''),
+                const id = String(funcionario.ESCFUNC_ID || '');
+                map.set(id, {
+                    id,
                     chapa: funcionario.CHAPA || '',
                     nome: funcionario.NOME || '',
-                    cargo: funcionario.FUNCAO_DESCR || funcionario.FUNCAO || ''
+                    cargo: funcionario.FUNCAO_DESCR || funcionario.FUNCAO || '',
+                    dias: diasPorFuncionario.get(id) || new Map()
                 });
             });
             agruparDiasPorFuncionario(diasFiltrados).forEach((funcionario) => {
-                const atual = map.get(String(funcionario.escfuncId || '')) || {};
-                map.set(String(funcionario.escfuncId || ''), {
-                    id: String(funcionario.escfuncId || ''),
+                const id = String(funcionario.escfuncId || '');
+                const atual = map.get(id) || {};
+                map.set(id, {
+                    id,
                     chapa: funcionario.chapa || atual.chapa || '',
                     nome: funcionario.nome || atual.nome || '',
-                    cargo: funcionario.funcao || atual.cargo || ''
+                    cargo: funcionario.funcao || atual.cargo || '',
+                    dias: funcionario.dias || atual.dias || diasPorFuncionario.get(id) || new Map()
                 });
             });
-            return [...map.values()]
-                .filter((funcionario) => funcionario.id)
-                .sort((a, b) => String(a.nome).localeCompare(String(b.nome)) || String(a.chapa).localeCompare(String(b.chapa)));
+            return ordenarFuncionariosBanco([...map.values()].filter((funcionario) => funcionario.id));
         };
 
         const getCargoImpressaoLabel = (cargo) => String(cargo || '').trim() || 'Sem cargo';
@@ -8415,6 +8433,10 @@
             if (salvarDetalheBancoBtn) salvarDetalheBancoBtn.disabled = true;
             if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = true;
             if (oficializarBancoBtn) oficializarBancoBtn.disabled = true;
+            const lojaAtual = escalaDetalheAtual.lojaId;
+            const mesAtual = escalaDetalheAtual.mesRef;
+            const secaoAtual = escalaDetalheAtual.secaoAtiva;
+            const subsetorAtual = escalaDetalheAtual.subsetorAtivo;
             try {
                 for (const funcionario of escalaDetalheBancoAlterados.values()) {
                     const dias = (escalaDetalheAtual.dias || [])
@@ -8452,7 +8474,14 @@
                 }
                 showInfoModal(oficializar ? 'Alterações salvas, oficializadas e enviadas para o RM.' : 'Rascunho salvo em nova revisão.', 'success');
                 escalaDetalheBancoAlterados = new Map();
-                window.location.hash = '/escalas-geradas';
+                if (oficializar) {
+                    window.location.hash = '/escalas-geradas';
+                } else if (lojaAtual && mesAtual) {
+                    await carregarDetalheEscalaMensal(lojaAtual, mesAtual);
+                    escalaDetalheAtual.secaoAtiva = secaoAtual;
+                    escalaDetalheAtual.subsetorAtivo = subsetorAtual;
+                    prepararSecoesDetalheEscala();
+                }
             } catch (error) {
                 showInfoModal(error.details?.length ? error.details : 'Não foi possível salvar a revisão individual: ' + error.message, 'error');
             } finally {
