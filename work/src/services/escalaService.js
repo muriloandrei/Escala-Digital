@@ -955,8 +955,12 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           COD_SECAO: pick(secao, 'COD_SECAO', 'cod_secao'),
           DESCR: pick(secao, 'SECAO_DESCR', 'secao_descr', 'DESCR', 'descr'),
           FUNCIONARIOS: new Set(),
-          GERADOS: new Set()
+          GERADOS: new Set(),
+          OFICIALIZADA: 0
         });
+      }
+      if (Number(pick(secao, 'OFICIALIZADA', 'oficializada') || 0) === 1) {
+        secoesMap.get(secaoKey).OFICIALIZADA = 1;
       }
       return secoesMap.get(secaoKey);
     };
@@ -1010,7 +1014,8 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
         COD_SECAO: secao.COD_SECAO,
         DESCR: secao.DESCR,
         FUNCIONARIOS: secao.FUNCIONARIOS.size,
-        GERADOS: secao.GERADOS.size
+        GERADOS: secao.GERADOS.size,
+        OFICIALIZADA: secao.OFICIALIZADA
       }))
     };
   });

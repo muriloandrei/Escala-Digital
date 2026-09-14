@@ -6588,6 +6588,7 @@
 
         const getSecaoAtualBanco = () => escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva)) || null;
         const isSecaoAtualFrenteCaixaBanco = () => isSecaoFrenteCaixa(getSecaoAtualBanco()?.nome || getSecaoAtualBanco()?.DESCR || '');
+        const isSecaoAtualOficializadaBanco = () => Number(getSecaoAtualBanco()?.oficializada || getSecaoAtualBanco()?.OFICIALIZADA || 0) === 1;
         const getSubsecoesRawSecaoAtualBanco = () => {
             const secao = (escalaDetalheAtual.secoesLiberadas || []).find(item => String(item.ESCSECAO_ID || '') === String(escalaDetalheAtual.secaoAtiva || ''));
             return (secao?.SUBSECOES || []).filter(item => String(item.STATUS || 'A') === 'A');
@@ -6806,8 +6807,8 @@
             });
         };
 
-        const montarPayloadDetalheBancoAtual = () => {
-            const funcionarios = agruparDiasPorFuncionario(escalaDetalheAtual.dias || [])
+        const montarPayloadDetalheBancoAtual = (diasBase = escalaDetalheAtual.dias || []) => {
+            const funcionarios = agruparDiasPorFuncionario(diasBase || [])
                 .filter(funcionario => funcionario.escfuncId && funcionario.chapa)
                 .map(funcionario => {
                     const diasOrdenados = [...funcionario.dias.values()].sort((a, b) => String(a.DT).localeCompare(String(b.DT)));
@@ -6859,11 +6860,40 @@
             return getCriticasFuncionariosBanco(agruparDiasPorFuncionario(diasSecao));
         };
 
+        const getDiasEscopoAtualBanco = () => {
+            const diasSecao = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva || ''));
+            return escalaDetalheAtual.subsetorAtivo
+                ? diasSecao.filter(dia => String(getSubsetorDetalheKey(dia)) === String(escalaDetalheAtual.subsetorAtivo))
+                : diasSecao;
+        };
+
+        const getCriticasEscopoAtualBanco = () => {
+            return getCriticasFuncionariosBanco(agruparDiasPorFuncionario(getDiasEscopoAtualBanco()));
+        };
+
+        const getCriticasSubsecaoBanco = (subsetorKey) => {
+            const diasSecao = (escalaDetalheAtual.dias || []).filter(dia => getSecaoDetalheKey(dia) === String(escalaDetalheAtual.secaoAtiva || ''));
+            const diasSubsetor = diasSecao.filter(dia => String(getSubsetorDetalheKey(dia)) === String(subsetorKey));
+            return getCriticasFuncionariosBanco(agruparDiasPorFuncionario(diasSubsetor));
+        };
+
         const getTodasCriticasBanco = () => {
             return getCriticasFuncionariosBanco(agruparDiasPorFuncionario(escalaDetalheAtual.dias || []));
         };
 
         const getCriticasBancoAgrupadasPorSecao = () => {
+            if (escalaDetalheAtual.secaoAtiva && escalaDetalheAtual.subsetores?.length) {
+                const secao = escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva));
+                return escalaDetalheAtual.subsetores
+                    .map((subsetor) => ({
+                        secao: {
+                            key: subsetor.key,
+                            nome: (secao?.nome || 'Seção') + ' / ' + subsetor.nome
+                        },
+                        criticas: getCriticasSubsecaoBanco(subsetor.key)
+                    }))
+                    .filter((grupo) => grupo.criticas.length > 0);
+            }
             return (escalaDetalheAtual.secoes || [])
                 .map((secao) => ({
                     secao,
@@ -6896,13 +6926,17 @@
         };
 
         const atualizarAcoesValidacaoBanco = () => {
-            const criticas = getTodasCriticasBanco();
-            const temDiasGerados = (escalaDetalheAtual.dias || []).length > 0;
-            criticasDetalheBancoBtn?.classList.toggle('hidden', criticas.length === 0);
-            gerarDetalhadaBancoBtn?.classList.toggle('hidden', criticas.length > 0 || !temDiasGerados);
+            const criticasEscopo = getCriticasEscopoAtualBanco();
+            const criticasGlobais = getTodasCriticasBanco();
+            const temDiasGerados = getDiasEscopoAtualBanco().length > 0;
+            criticasDetalheBancoBtn?.classList.toggle('hidden', criticasEscopo.length === 0);
+            gerarDetalhadaBancoBtn?.classList.toggle('hidden', criticasEscopo.length > 0 || !temDiasGerados);
             salvarDetalheBancoBtn?.classList.toggle('hidden', true);
-            if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = !temDiasGerados || criticas.length > 0;
-            if (oficializarBancoBtn) oficializarBancoBtn.disabled = !temDiasGerados || criticas.length > 0 || escalaDetalheAtual.status === 'FINALIZADA';
+            if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = !temDiasGerados || criticasEscopo.length > 0;
+            if (oficializarBancoBtn) {
+                oficializarBancoBtn.classList.toggle('hidden', !isPerfilAdminSessao());
+                oficializarBancoBtn.disabled = !temDiasGerados || criticasGlobais.length > 0 || escalaDetalheAtual.status === 'FINALIZADA';
+            }
         };
 
         const validarDetalheBancoSilencioso = async () => {
@@ -6933,14 +6967,15 @@
             return uniqueErrors;
         };
 
-        const validarDetalheBancoAtual = async () => {
+        const validarDetalheBancoAtual = async ({ global = false } = {}) => {
             const uniqueErrors = await validarDetalheBancoSilencioso();
             if (escalaDetalheBancoValidada) {
                 (escalaDetalheAtual.dias || []).forEach(dia => { delete dia.CRITICA_MANUAL; });
             }
+            const errorsExibidos = global ? uniqueErrors : getCriticasEscopoAtualBanco();
             renderizarSecaoAtivaEscala();
-            showInfoModal(uniqueErrors.length ? uniqueErrors : 'A escala foi validada com sucesso.', uniqueErrors.length ? 'error' : 'success');
-            return escalaDetalheBancoValidada;
+            showInfoModal(errorsExibidos.length ? errorsExibidos : 'A escala foi validada com sucesso.', errorsExibidos.length ? 'error' : 'success');
+            return errorsExibidos.length === 0;
         };
 
         const criarTimelineSecaoBanco = (dias) => {
@@ -7275,9 +7310,9 @@
                 .filter((dia) => !isDiaMesBloqueadoParaEdicao(ano, mes, dia));
             const temDiasPendentesGeracao = funcionariosPendentes.length > 0
                 && escalaDetalheAtual.status !== 'FINALIZADA'
-                && !escalaDetalheAtual.oficializada
+                && !isSecaoAtualOficializadaBanco()
                 && diasEditaveis.some((dia) => funcionarios.some((funcionario) => !funcionario.dias.has(dia)));
-            const renderizarBotaoGeracaoSecao = () => canGenerateEscalaSecaoSessao()
+            const renderizarBotaoGeracaoSecao = () => canGenerateEscalaSecaoSessao() && escalaDetalheAtual.status !== 'FINALIZADA' && !isSecaoAtualOficializadaBanco()
                 ? '<div class="pending-section-actions"><button type="button" class="action-button gerar-escala-secao-banco" data-secao-key="' + escapeHtml(escalaDetalheAtual.secaoAtiva || '') + '"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção</button></div>'
                 : '';
             const renderizarBannerGeracaoSecao = (totalFuncionarios) => '<div class="pending-section-scale pending-section-shell section-generation-banner">' +
@@ -7663,7 +7698,7 @@
             renderizarTimelineDiariaBanco(dias);
             renderizarDetalhadaSecaoBanco(dias);
             aplicarVisaoEscalaBanco();
-            resetarEscalaSecaoBancoBtn?.classList.toggle('hidden', escalaDetalheAtual.status === 'FINALIZADA' || escalaDetalheAtual.oficializada || !escalaDetalheAtual.secaoAtiva);
+            resetarEscalaSecaoBancoBtn?.classList.toggle('hidden', escalaDetalheAtual.status === 'FINALIZADA' || isSecaoAtualOficializadaBanco() || !escalaDetalheAtual.secaoAtiva);
             atualizarAcoesValidacaoBanco();
             restaurarPosicaoEscalaBanco(posicaoEscala);
         };
@@ -7678,7 +7713,8 @@
                         nome: getSecaoLiberadaNome(secao),
                         funcionarios: new Set(),
                         totalLiberado: Number(secao.FUNCIONARIOS || 0),
-                        gerados: Number(secao.GERADOS || 0)
+                        gerados: Number(secao.GERADOS || 0),
+                        oficializada: Number(secao.OFICIALIZADA || secao.oficializada || 0) === 1
                     });
                 }
             });
@@ -7694,20 +7730,23 @@
                         }),
                         funcionarios: new Set(),
                         totalLiberado: 0,
-                        gerados: 0
+                        gerados: 0,
+                        oficializada: false
                     });
                 }
                 map.get(key).funcionarios.add(getFuncionarioDetalheKey(funcionario));
             });
             (escalaDetalheAtual.dias || []).forEach((dia) => {
                 const key = getSecaoDetalheKey(dia);
-                if (!map.has(key)) map.set(key, { key, nome: getSecaoDetalheNome(dia), funcionarios: new Set() });
+                if (!map.has(key)) map.set(key, { key, nome: getSecaoDetalheNome(dia), funcionarios: new Set(), totalLiberado: 0, gerados: 0, oficializada: false });
                 map.get(key).funcionarios.add(getFuncionarioDetalheKey(dia));
+                if (Number(dia.OFICIALIZADA || dia.oficializada || 0) === 1) map.get(key).oficializada = true;
             });
             escalaDetalheAtual.secoes = [...map.values()].map(item => ({
                 ...item,
                 funcionarios: item.funcionarios.size || item.totalLiberado || 0,
-                gerados: item.gerados || 0
+                gerados: item.gerados || 0,
+                oficializada: !!item.oficializada
             })).sort((a, b) => a.nome.localeCompare(b.nome));
             if (!escalaDetalheAtual.secoes.some(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva))) escalaDetalheAtual.secaoAtiva = escalaDetalheAtual.secoes[0]?.key || null;
             renderizarSecaoAtivaEscala();
@@ -8428,7 +8467,7 @@
                 showInfoModal('Nenhuma alteração pendente para salvar.', 'info');
                 return;
             }
-            if (!escalaDetalheBancoValidada && !(await validarDetalheBancoAtual())) return;
+            if (!(await validarDetalheBancoAtual({ global: oficializar }))) return;
 
             if (salvarDetalheBancoBtn) salvarDetalheBancoBtn.disabled = true;
             if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = true;
@@ -9236,7 +9275,7 @@
                 let mensagemSalvamento = 'Escala salva no banco com sucesso para ' + total + ' funcionário(s).';
                 let tipoMensagemSalvamento = 'success';
                 if (!total) throw new Error('Nenhum funcionário foi gravado no banco.');
-                if (hasPermission('escalas', 'oficializar')) {
+                if (isPerfilAdminSessao() && hasPermission('escalas', 'oficializar')) {
                     try {
                         const oficializacao = await apiRequest('/api/escalas/oficializar', {
                             method: 'POST',
