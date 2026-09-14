@@ -29,9 +29,33 @@ test('monthly release builds draft only from today onward', () => {
   assert.equal(rascunho.escfuncId, 10);
   assert.equal(rascunho.escsecaoTurnoId, 40);
   assert.equal(rascunho.dias[0].data, '2026-08-15');
-  assert.equal(rascunho.dias.at(-1).data, '2026-08-31');
+  assert.equal(rascunho.dias.at(-1).data, '2026-09-06');
   assert.equal(rascunho.dias.some((dia) => dia.programacao === 'F'), true);
   assert.equal(rascunho.dias.some((dia) => dia.programacao === 'TRB'), true);
+});
+
+test('monthly release uses complete operational weeks from first Monday to last Sunday', () => {
+  const funcionario = {
+    ESCFUNC_ID: 14,
+    CHAPA: '000014',
+    NOME: 'Funcionario Outubro',
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30
+  };
+  const turno = {
+    ESCSECAOTURNO_ID: 40,
+    ESCSECAO_ID: 20,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  };
+
+  const rascunho = buildFuncionarioRascunho(funcionario, turno, '2026-10-01', '2026-01-01');
+
+  assert.equal(rascunho.dias[0].data, '2026-10-05');
+  assert.equal(rascunho.dias.at(-1).data, '2026-11-01');
+  assert.equal(rascunho.dias.length, 28);
 });
 
 test('monthly release distributes 5x2 rests without consecutive Sunday work', () => {
@@ -60,6 +84,36 @@ test('monthly release distributes 5x2 rests without consecutive Sunday work', ()
 
   assert.deepEqual(errors, []);
   assert.equal(rascunho.dias.filter((dia) => dia.programacao === 'F').length >= 8, true);
+});
+
+test('monthly release fixes apprentice work schedule to 05:45', () => {
+  const funcionario = {
+    ESCFUNC_ID: 15,
+    CHAPA: '000015',
+    NOME: 'Funcionario Aprendiz',
+    FUNCAO_DESCR: 'JOVEM APRENDIZ',
+    ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  };
+
+  const rascunho = buildFuncionarioRascunho(funcionario, null, '2026-09-01', '2026-09-01', 0);
+  const trabalho = rascunho.dias.find((dia) => dia.programacao === 'TRB');
+  const errors = validateEscalaPayload({
+    lojaId: 10,
+    mesRef: '2026-09-01',
+    funcionarios: [rascunho]
+  });
+
+  assert.equal(rascunho.aprendiz, true);
+  assert.equal(trabalho.hrEnt1, '08:00');
+  assert.equal(trabalho.hrSai1, '13:45');
+  assert.equal(trabalho.hrEnt2, null);
+  assert.equal(trabalho.hrSai2, null);
+  assert.deepEqual(errors, []);
 });
 
 test('monthly release automatic patterns do not create consecutive rests', () => {
@@ -172,16 +226,16 @@ test('monthly release does not add automatic rest to a week already filled by fi
     HR_SAI2: '17:58'
   }];
   const fixos = [
-    { ESCFUNC_ID: 880, DT: '2026-09-02', PROGRAMACAO: 'FXF' },
-    { ESCFUNC_ID: 880, DT: '2026-09-04', PROGRAMACAO: 'FXF' }
+    { ESCFUNC_ID: 880, DT: '2026-09-08', PROGRAMACAO: 'FXF' },
+    { ESCFUNC_ID: 880, DT: '2026-09-10', PROGRAMACAO: 'FXF' }
   ];
 
   const [rascunho] = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01', { fixos });
-  const semanaInicial = rascunho.dias.filter((dia) => dia.data >= '2026-09-01' && dia.data <= '2026-09-06');
+  const semanaInicial = rascunho.dias.filter((dia) => dia.data >= '2026-09-07' && dia.data <= '2026-09-13');
 
   assert.equal(semanaInicial.filter((dia) => dia.programacao === 'F').length, 0);
   assert.equal(semanaInicial.filter((dia) => dia.programacao === 'FXF').length, 2);
-  assert.ok(rascunho.dias.filter((dia) => dia.data > '2026-09-06' && dia.programacao === 'F').length > 0);
+  assert.ok(rascunho.dias.filter((dia) => dia.data > '2026-09-13' && dia.programacao === 'F').length > 0);
 });
 
 test('monthly release applies vacations and absences as protected rest days', () => {
@@ -208,20 +262,20 @@ test('monthly release applies vacations and absences as protected rest days', ()
 
   const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01', {
     ausencias: [
-      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-02', DT_FIM: '2026-09-03', MOTIVO: 'FER' },
-      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-08', DT_FIM: '2026-09-08', MOTIVO: 'AFA' },
-      { ESCFUNC_ID: 999999, CHAPA: '080080', DT_INIC: '2026-09-09', DT_FIM: '2026-09-09', MOTIVO: 'AFASTAMENTO' }
+      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-08', DT_FIM: '2026-09-09', MOTIVO: 'FER' },
+      { ESCFUNC_ID: 800, CHAPA: '080080', DT_INIC: '2026-09-10', DT_FIM: '2026-09-10', MOTIVO: 'AFA' },
+      { ESCFUNC_ID: 999999, CHAPA: '080080', DT_INIC: '2026-09-11', DT_FIM: '2026-09-11', MOTIVO: 'AFASTAMENTO' }
     ],
     fixos: [{ ESCFUNC_ID: 800, DT: '2026-09-02', PROGRAMACAO: 'TRB', HR_ENT1: '07:00', HR_SAI1: '11:00', HR_ENT2: '12:10', HR_SAI2: '15:58' }]
   });
   const dias = new Map(rascunhos[0].dias.map((dia) => [dia.data, dia]));
 
-  assert.equal(dias.get('2026-09-02').programacao, 'FER');
-  assert.equal(dias.get('2026-09-03').programacao, 'FER');
-  assert.equal(dias.get('2026-09-08').programacao, 'AFA');
-  assert.equal(dias.get('2026-09-09').programacao, 'AFA');
-  assert.equal(dias.get('2026-09-02').hrEnt1, 'FER');
-  assert.equal(dias.get('2026-09-08').hrSai2, 'AFA');
+  assert.equal(dias.get('2026-09-08').programacao, 'FER');
+  assert.equal(dias.get('2026-09-09').programacao, 'FER');
+  assert.equal(dias.get('2026-09-10').programacao, 'AFA');
+  assert.equal(dias.get('2026-09-11').programacao, 'AFA');
+  assert.equal(dias.get('2026-09-08').hrEnt1, 'FER');
+  assert.equal(dias.get('2026-09-10').hrSai2, 'AFA');
 });
 
 test('monthly release preserves fixed rest days before automatic distribution', () => {
@@ -280,7 +334,7 @@ test('monthly release liberation creates monthly headers with protected absence 
 
   const liberados = buildFuncionariosLiberacao(funcionarios, turnos, '2026-09-01', '2026-09-01', {
     ausencias: [
-      { ESCFUNC_ID: 900, DT_INIC: '2026-09-04', DT_FIM: '2026-09-05', MOTIVO: 'FERIAS' },
+      { ESCFUNC_ID: 900, DT_INIC: '2026-09-08', DT_FIM: '2026-09-09', MOTIVO: 'FERIAS' },
       { ESCFUNC_ID: 900, DT_INIC: '2026-09-10', DT_FIM: '2026-09-10', MOTIVO: 'AFASTAMENTO' }
     ]
   });
@@ -288,8 +342,8 @@ test('monthly release liberation creates monthly headers with protected absence 
   assert.equal(liberados.length, 1);
   assert.equal(liberados[0].dias.length, 3);
   assert.deepEqual(liberados[0].dias.map((dia) => [dia.data, dia.programacao]), [
-    ['2026-09-04', 'FER'],
-    ['2026-09-05', 'FER'],
+    ['2026-09-08', 'FER'],
+    ['2026-09-09', 'FER'],
     ['2026-09-10', 'AFA']
   ]);
   assert.equal(liberados[0].turnoOficial.hrEnt1, '08:00');
@@ -746,15 +800,26 @@ test('section generation preserves previous days and only generates editable dat
   catalogService.listTurnosByLoja = async () => [];
   catalogService.listAusenciasByLojaMes = async () => [];
   escalaService.listFixosEscala = async () => [];
-  escalaService.listDiasSecaoAtual = async () => [{
-    ESCFUNC_ID: 301,
-    DT: '2026-09-01',
-    HR_ENT1: '07:30',
-    HR_SAI1: '11:30',
-    HR_ENT2: '12:40',
-    HR_SAI2: '16:28',
-    PROGRAMACAO: 'TRB'
-  }];
+  escalaService.listDiasSecaoAtual = async () => [
+    {
+      ESCFUNC_ID: 301,
+      DT: '2026-09-06',
+      HR_ENT1: '07:30',
+      HR_SAI1: '11:30',
+      HR_ENT2: '12:40',
+      HR_SAI2: '16:28',
+      PROGRAMACAO: 'TRB'
+    },
+    {
+      ESCFUNC_ID: 301,
+      DT: '2026-09-07',
+      HR_ENT1: '07:30',
+      HR_SAI1: '11:30',
+      HR_ENT2: '12:40',
+      HR_SAI2: '16:28',
+      PROGRAMACAO: 'TRB'
+    }
+  ];
   escalaService.saveEscalasBatch = async (payload) => {
     savedPayload = payload;
     return payload.funcionarios;
@@ -765,12 +830,12 @@ test('section generation preserves previous days and only generates editable dat
       lojaId: 10,
       mesRef: '2026-09-01',
       escsecaoId: 20,
-      hojeIso: '2026-09-02'
+      hojeIso: '2026-09-08'
     });
 
     const dias = savedPayload.funcionarios[0].dias;
     assert.deepEqual(dias[0], {
-      data: '2026-09-01',
+      data: '2026-09-07',
       hrEnt1: '07:30',
       hrSai1: '11:30',
       hrEnt2: '12:40',
@@ -778,8 +843,8 @@ test('section generation preserves previous days and only generates editable dat
       programacao: 'TRB',
       justificativa: null
     });
-    assert.equal(dias.some((dia) => dia.data < '2026-09-01'), false);
-    assert.equal(dias.some((dia) => dia.data === '2026-09-02'), true);
+    assert.equal(dias.some((dia) => dia.data < '2026-09-07'), false);
+    assert.equal(dias.some((dia) => dia.data === '2026-09-08'), true);
   } finally {
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
     catalogService.listTurnosByLoja = originals.listTurnosByLoja;
@@ -816,8 +881,8 @@ test('section generation reports daily coverage below sixty percent', async () =
   catalogService.listTurnosByLoja = async () => [];
   catalogService.listAusenciasByLojaMes = async () => [];
   escalaService.listFixosEscala = async () => [
-    { ESCFUNC_ID: 400, DT: '2026-09-03', PROGRAMACAO: 'FXF' },
-    { ESCFUNC_ID: 401, DT: '2026-09-03', PROGRAMACAO: 'FXF' }
+    { ESCFUNC_ID: 400, DT: '2026-09-09', PROGRAMACAO: 'FXF' },
+    { ESCFUNC_ID: 401, DT: '2026-09-09', PROGRAMACAO: 'FXF' }
   ];
   escalaService.listDiasSecaoAtual = async () => [];
   escalaService.saveEscalasBatch = async (payload) => payload.funcionarios;
@@ -830,7 +895,7 @@ test('section generation reports daily coverage below sixty percent', async () =
       hojeIso: '2026-09-01'
     });
 
-    assert.ok(result.criticas.some((critica) => critica.includes('Cobertura minima da secao abaixo de 60% em 2026-09-03')));
+    assert.ok(result.criticas.some((critica) => critica.includes('Cobertura minima da secao abaixo de 60% em 2026-09-09')));
   } finally {
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
     catalogService.listTurnosByLoja = originals.listTurnosByLoja;
@@ -886,15 +951,15 @@ test('section reset preserves previous days and restores future protected absenc
   }];
   catalogService.listTurnosByLoja = async () => [];
   catalogService.listAusenciasByLojaMes = async () => [
-    { ESCFUNC_ID: 501, DT_INIC: '2026-09-03', DT_FIM: '2026-09-03', MOTIVO: 'FERIAS' },
-    { ESCFUNC_ID: 501, DT_INIC: '2026-09-04', DT_FIM: '2026-09-04', MOTIVO: 'AFASTAMENTO' }
+    { ESCFUNC_ID: 501, DT_INIC: '2026-09-08', DT_FIM: '2026-09-08', MOTIVO: 'FERIAS' },
+    { ESCFUNC_ID: 501, DT_INIC: '2026-09-09', DT_FIM: '2026-09-09', MOTIVO: 'AFASTAMENTO' }
   ];
   escalaService.isEscalaSecaoOficializada = async () => false;
   escalaService.listFixosEscala = async () => [];
   escalaService.listDiasSecaoAtual = async () => [
     {
       ESCFUNC_ID: 501,
-      DT: '2026-09-01',
+      DT: '2026-09-07',
       HR_ENT1: '07:30',
       HR_SAI1: '11:30',
       HR_ENT2: '12:40',
@@ -903,7 +968,7 @@ test('section reset preserves previous days and restores future protected absenc
     },
     {
       ESCFUNC_ID: 501,
-      DT: '2026-09-02',
+      DT: '2026-09-06',
       HR_ENT1: '08:00',
       HR_SAI1: '12:00',
       HR_ENT2: '13:10',
@@ -921,13 +986,13 @@ test('section reset preserves previous days and restores future protected absenc
       lojaId: 10,
       mesRef: '2026-09-01',
       escsecaoId: 20,
-      hojeIso: '2026-09-02'
+      hojeIso: '2026-09-08'
     });
 
     assert.equal(result.resetada, true);
     assert.equal(savedPayload.funcionarios.length, 1);
     assert.deepEqual(savedPayload.funcionarios[0].dias, [{
-      data: '2026-09-01',
+      data: '2026-09-07',
       hrEnt1: '07:30',
       hrSai1: '11:30',
       hrEnt2: '12:40',
@@ -935,7 +1000,7 @@ test('section reset preserves previous days and restores future protected absenc
       programacao: 'TRB',
       justificativa: null
     }, {
-      data: '2026-09-03',
+      data: '2026-09-08',
       hrEnt1: 'FER',
       hrSai1: 'FER',
       hrEnt2: 'FER',
@@ -943,7 +1008,7 @@ test('section reset preserves previous days and restores future protected absenc
       programacao: 'FER',
       justificativa: 'FERIAS'
     }, {
-      data: '2026-09-04',
+      data: '2026-09-09',
       hrEnt1: 'AFA',
       hrSai1: 'AFA',
       hrEnt2: 'AFA',

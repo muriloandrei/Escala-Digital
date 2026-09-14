@@ -6565,11 +6565,14 @@
                         NOME: dia.NOME || '',
                         CHAPA: dia.CHAPA || '',
                         FUNCAO_DESCR: dia.FUNCAO_DESCR || '',
-                        dias: new Map()
+                        dias: new Map(),
+                        diasIso: new Map()
                     });
                 }
                 const numeroDia = Number(String(dia.DT || '').slice(8, 10));
+                const dataIso = String(dia.DT || '').slice(0, 10);
                 if (numeroDia) grupos.get(key).dias.set(numeroDia, dia);
+                if (dataIso) grupos.get(key).diasIso.set(dataIso, dia);
             });
             return ordenarFuncionariosBanco([...grupos.values()]);
         };
@@ -6589,6 +6592,35 @@
         const getSecaoAtualBanco = () => escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva)) || null;
         const isSecaoAtualFrenteCaixaBanco = () => isSecaoFrenteCaixa(getSecaoAtualBanco()?.nome || getSecaoAtualBanco()?.DESCR || '');
         const isSecaoAtualOficializadaBanco = () => Number(getSecaoAtualBanco()?.oficializada || getSecaoAtualBanco()?.OFICIALIZADA || 0) === 1;
+        const getPrimeiraSegundaOperacional = (ano, mes) => {
+            const data = new Date(ano, mes, 1);
+            const day = data.getDay();
+            const add = day === 1 ? 0 : (8 - day) % 7;
+            data.setDate(data.getDate() + add);
+            return data;
+        };
+        const getDatasPeriodoOperacionalBanco = (mesRef = escalaDetalheAtual.mesRef) => {
+            const ref = mesRef ? new Date(mesRef + 'T00:00:00') : new Date();
+            const inicio = getPrimeiraSegundaOperacional(ref.getFullYear(), ref.getMonth());
+            const proximoInicio = getPrimeiraSegundaOperacional(ref.getFullYear(), ref.getMonth() + 1);
+            const datas = [];
+            const cursor = new Date(inicio);
+            while (cursor < proximoInicio) {
+                datas.push(formatDateForDb(cursor.getFullYear(), cursor.getMonth(), cursor.getDate()));
+                cursor.setDate(cursor.getDate() + 1);
+            }
+            return datas;
+        };
+        const getRegistroFuncionarioDataBanco = (funcionario, dataIso) => {
+            return funcionario?.diasIso?.get(dataIso) || funcionario?.dias?.get(Number(String(dataIso || '').slice(8, 10))) || null;
+        };
+        const getDiaLabelPeriodoBanco = (dataIso, mesReferencia) => {
+            const ref = mesReferencia ? new Date(mesReferencia + 'T00:00:00') : null;
+            const data = new Date(String(dataIso || '') + 'T00:00:00');
+            const dia = String(data.getDate()).padStart(2, '0');
+            if (ref && data.getMonth() !== ref.getMonth()) return dia + '/' + String(data.getMonth() + 1).padStart(2, '0');
+            return String(data.getDate());
+        };
         const getSubsecoesRawSecaoAtualBanco = () => {
             const secao = (escalaDetalheAtual.secoesLiberadas || []).find(item => String(item.ESCSECAO_ID || '') === String(escalaDetalheAtual.secaoAtiva || ''));
             return (secao?.SUBSECOES || []).filter(item => String(item.STATUS || 'A') === 'A');
@@ -6615,9 +6647,14 @@
                 '<button type="button" class="subsection-kebab-btn scale-kebab-btn" data-scale-menu-id="' + escapeHtml(id) + '" aria-label="Mais ações"><span class="material-symbols-outlined">more_vert</span></button>' +
                 '<span class="subsection-kebab-menu ' + (String(escalaDetalheAtual.menuFuncionarioAberto || '') === String(id) ? '' : 'hidden') + '">' +
                 '<button type="button" class="subsection-menu-action scale-ver-detalhes-funcionario" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">badge</span>Ver detalhes</button>' +
+                '<button type="button" class="subsection-menu-action scale-gerar-funcionario" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">event_repeat</span>Gerar escala do funcionário</button>' +
                 '<button type="button" class="subsection-menu-action scale-editar-horarios-funcionario" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">schedule</span>Editar horários</button>' +
                 '<button type="button" class="subsection-menu-action scale-transferir-funcionario-subsecao" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">swap_horiz</span>Transferir de Subseção</button>' +
                 '</span></span>';
+        };
+
+        const isFuncionarioAprendizBanco = (funcionario = {}) => {
+            return /aprendiz/i.test(normalizarTextoFiltro(funcionario.FUNCAO_DESCR || funcionario.funcao || funcionario.FUNCAO || ''));
         };
 
         const getFixosSecaoAtualBanco = () => {
@@ -7266,7 +7303,7 @@
             const dataRef = escalaDetalheAtual.mesRef ? new Date(escalaDetalheAtual.mesRef + 'T00:00:00') : null;
             const ano = dataRef?.getFullYear() || new Date().getFullYear();
             const mes = dataRef?.getMonth() || 0;
-            const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+            const datasPeriodo = getDatasPeriodoOperacionalBanco();
             const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
             const funcionariosPendentes = getFuncionariosSecaoAtualBanco();
             const funcionarios = agruparDiasPorFuncionario(dias);
@@ -7280,7 +7317,8 @@
                     chapa: funcionario.CHAPA || '',
                     funcao: funcionario.FUNCAO_DESCR || funcionario.FUNCAO || '',
                     escfuncId,
-                    dias: new Map()
+                    dias: new Map(),
+                    diasIso: new Map()
                 });
                 funcionariosMap.add(escfuncId);
             });
@@ -7288,7 +7326,7 @@
             const criticasSecao = getCriticasFuncionariosBanco(funcionarios);
             const fixosPendentes = getFixosSecaoAtualBanco();
             const fixosMap = mapearFixosSecaoAtualBanco();
-            const getWeekClass = (dia) => dia > 1 && new Date(ano, mes, dia).getDay() === 1 ? ' week-start' : '';
+            const getWeekClass = (dataIso, index = 0) => index > 0 && new Date(dataIso + 'T00:00:00').getDay() === 1 ? ' week-start' : '';
             const getDiaTitle = (registro) => registro ? montarTooltipHorarioEscala(registro) : '';
             const calcularQualidadeDia = (total, trabalhando) => {
                 if (!total) return '-';
@@ -7306,12 +7344,11 @@
                     'Horário: ' + horario
                 ].join('\n');
             };
-            const diasEditaveis = Array.from({ length: diasNoMes }, (_, index) => index + 1)
-                .filter((dia) => !isDiaMesBloqueadoParaEdicao(ano, mes, dia));
+            const diasEditaveis = datasPeriodo.filter((dataIso) => !isDataBloqueadaParaEdicao(dataIso));
             const temDiasPendentesGeracao = funcionariosPendentes.length > 0
                 && escalaDetalheAtual.status !== 'FINALIZADA'
                 && !isSecaoAtualOficializadaBanco()
-                && diasEditaveis.some((dia) => funcionarios.some((funcionario) => !funcionario.dias.has(dia)));
+                && diasEditaveis.some((dataIso) => funcionarios.some((funcionario) => !getRegistroFuncionarioDataBanco(funcionario, dataIso)));
             const renderizarBotaoGeracaoSecao = () => canGenerateEscalaSecaoSessao() && escalaDetalheAtual.status !== 'FINALIZADA' && !isSecaoAtualOficializadaBanco()
                 ? '<div class="pending-section-actions"><button type="button" class="action-button gerar-escala-secao-banco" data-secao-key="' + escapeHtml(escalaDetalheAtual.secaoAtiva || '') + '"><span class="material-symbols-outlined">calendar_month</span>Gerar Escala da Seção</button></div>'
                 : '';
@@ -7338,10 +7375,9 @@
 
                 html += '<div class="monthly-scale-scroll pending-skeleton-scroll"><table class="monthly-scale-table pending-skeleton-table"><thead>';
                 html += '<tr class="monthly-quality-row"><th class="employee-col monthly-summary-label"><span>Qualidade do planejamento (%)</span></th>';
-                for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                datasPeriodo.forEach((dataIso, index) => {
                     let folgasFixas = 0;
                     funcionariosPendentes.forEach((funcionario) => {
-                        const dataIso = formatDateForDb(ano, mes, dia);
                         const ausencia = getAusenciaFuncionarioDiaBanco(funcionario, dataIso);
                         if (ausencia) {
                             folgasFixas += 1;
@@ -7352,14 +7388,13 @@
                         if (fixo && programacao !== 'TRB') folgasFixas += 1;
                     });
                     const trabalhando = Math.max(0, funcionariosPendentes.length - folgasFixas);
-                    html += '<th class="monthly-quality' + getWeekClass(dia) + '" title="Cobertura planejada: ' + trabalhando + '/' + funcionariosPendentes.length + '">' + escapeHtml(calcularQualidadeDia(funcionariosPendentes.length, trabalhando)) + '</th>';
-                }
+                    html += '<th class="monthly-quality' + getWeekClass(dataIso, index) + '" title="Cobertura planejada: ' + trabalhando + '/' + funcionariosPendentes.length + '">' + escapeHtml(calcularQualidadeDia(funcionariosPendentes.length, trabalhando)) + '</th>';
+                });
                 html += '</tr><tr class="monthly-totals-row"><th class="employee-col monthly-summary-label"><span>' + escapeHtml(String(funcionariosPendentes.length)) + ' funcionário(s)</span></th>';
-                for (let dia = 1; dia <= diasNoMes; dia += 1) {
+                datasPeriodo.forEach((dataIso, index) => {
                     let folgasFixas = 0;
                     let horariosFixos = 0;
                     funcionariosPendentes.forEach((funcionario) => {
-                        const dataIso = formatDateForDb(ano, mes, dia);
                         const ausencia = getAusenciaFuncionarioDiaBanco(funcionario, dataIso);
                         if (ausencia) {
                             folgasFixas += 1;
@@ -7371,27 +7406,26 @@
                         if (programacao === 'TRB') horariosFixos += 1;
                         else folgasFixas += 1;
                     });
-                    html += '<th class="monthly-quality' + getWeekClass(dia) + '" title="Folgas fixas: ' + folgasFixas + ' | Horários fixos: ' + horariosFixos + '">' +
+                    html += '<th class="monthly-quality' + getWeekClass(dataIso, index) + '" title="Folgas fixas: ' + folgasFixas + ' | Horários fixos: ' + horariosFixos + '">' +
                         '<span class="monthly-total-box folga">' + folgasFixas + ' F</span>' +
                         '<span class="monthly-total-box trabalho">' + horariosFixos + ' H</span>' +
                         '</th>';
-                }
+                });
                 html += '</tr><tr class="monthly-weekday-row"><th class="employee-col">Funcionário</th>';
-                for (let dia = 1; dia <= diasNoMes; dia += 1) {
-                    html += '<th class="' + getWeekClass(dia).trim() + '">' + diasSemana[new Date(ano, mes, dia).getDay()] + '</th>';
-                }
+                datasPeriodo.forEach((dataIso, index) => {
+                    html += '<th class="' + getWeekClass(dataIso, index).trim() + '">' + diasSemana[new Date(dataIso + 'T00:00:00').getDay()] + '</th>';
+                });
                 html += '</tr><tr class="monthly-day-row"><th class="employee-col"></th>';
-                for (let dia = 1; dia <= diasNoMes; dia += 1) {
-                    html += '<th class="' + getWeekClass(dia).trim() + '">' + dia + '</th>';
-                }
+                datasPeriodo.forEach((dataIso, index) => {
+                    html += '<th class="' + getWeekClass(dataIso, index).trim() + '">' + escapeHtml(getDiaLabelPeriodoBanco(dataIso, escalaDetalheAtual.mesRef)) + '</th>';
+                });
                 html += '</tr></thead><tbody>';
 
                 funcionariosPendentes.forEach((funcionario) => {
                     const funcionarioLabel = (funcionario.CHAPA || '') + ' - ' + (funcionario.NOME || '');
                     html += '<tr data-escfunc-id="' + escapeHtml(funcionario.ESCFUNC_ID || '') + '" data-funcao-descr="' + escapeHtml(funcionario.FUNCAO_DESCR || funcionario.FUNCAO || '') + '"><th class="employee-col" title="' + escapeHtml(funcionarioLabel) + '"><span class="scale-employee-name-row"><span><strong>' + escapeHtml(funcionarioLabel) + '</strong><small class="scale-employee-role">' + escapeHtml(funcionario.FUNCAO_DESCR || funcionario.FUNCAO || '') + '</small></span>' + renderizarMenuFuncionarioEscalaBanco(funcionario) + '</span></th>';
-                    for (let dia = 1; dia <= diasNoMes; dia += 1) {
-                        const dataIso = formatDateForDb(ano, mes, dia);
-                        const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
+                    datasPeriodo.forEach((dataIso, index) => {
+                        const bloqueado = isDataBloqueadaParaEdicao(dataIso) || escalaDetalheAtual.status === 'FINALIZADA';
                         const ausencia = getAusenciaFuncionarioDiaBanco(funcionario, dataIso);
                         const fixo = fixosMap.get(getFixoDiaKeyBanco(funcionario.ESCFUNC_ID, dataIso));
                         const programacao = String(fixo?.PROGRAMACAO || fixo?.programacao || '').toUpperCase();
@@ -7416,14 +7450,14 @@
                             ausencia ? 'pending-fixed-rest rest-cell ' + (ausenciaSigla === 'FER' ? 'rest-cell-ferias' : ausenciaSigla === 'AFA' ? 'rest-cell-afastamento' : 'rest-cell-folga') : '',
                             !ausencia && fixo ? (isHorarioFixo ? 'pending-fixed-work fixed-work-cell' : 'pending-fixed-rest rest-cell rest-cell-fixo') : '',
                             !ausencia && !fixo ? 'pending-empty-cell' : '',
-                            getWeekClass(dia).trim(),
+                            getWeekClass(dataIso, index).trim(),
                             (bloqueado || ausencia) ? 'locked-day' : ''
                         ].filter(Boolean).join(' ');
                         const attrs = !bloqueado && !ausencia
                             ? ' role="button" tabindex="0" data-pending-fixed="1" data-escfunc-id="' + escapeHtml(funcionario.ESCFUNC_ID || '') + '" data-data-iso="' + escapeHtml(dataIso) + '" data-has-fixo="' + (fixo ? '1' : '0') + '" data-programacao="' + escapeHtml(programacao || '') + '" data-hr-ent1="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_ENT1')) + '" data-hr-sai1="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_SAI1')) + '" data-hr-ent2="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_ENT2')) + '" data-hr-sai2="' + escapeHtml(getCampoFixoBanco(fixo, 'HR_SAI2')) + '"'
                             : '';
                         html += '<td class="' + cellClass + '" data-schedule-tooltip="' + escapeHtml(title) + '"' + attrs + '>' + escapeHtml(value) + '</td>';
-                    }
+                    });
                     html += '</tr>';
                 });
 
@@ -7435,54 +7469,54 @@
             let html = (temDiasPendentesGeracao ? renderizarBannerGeracaoSecao(funcionariosPendentes.length || funcionariosOrdenados.length) : '') +
                 '<div class="monthly-scale-scroll"><table class="monthly-scale-table"><thead>';
             html += '<tr class="monthly-quality-row"><th class="employee-col monthly-summary-label"><span>Qualidade do planejamento (%)</span></th>';
-            for (let dia = 1; dia <= diasNoMes; dia += 1) {
+            datasPeriodo.forEach((dataIso, index) => {
                 let trabalhando = 0;
                 funcionariosOrdenados.forEach((funcionario) => {
-                    const registro = funcionario.dias.get(dia);
+                    const registro = getRegistroFuncionarioDataBanco(funcionario, dataIso);
                     if (registro && !isProgramacaoDescanso(registro.PROGRAMACAO)) trabalhando += 1;
-                    else if (!registro && !getAusenciaFuncionarioDiaBanco(funcionario, formatDateForDb(ano, mes, dia))) trabalhando += 1;
+                    else if (!registro && !getAusenciaFuncionarioDiaBanco(funcionario, dataIso)) trabalhando += 1;
                 });
-                html += '<th class="monthly-quality' + getWeekClass(dia) + '" title="Cobertura planejada: ' + trabalhando + '/' + funcionariosOrdenados.length + '">' + escapeHtml(calcularQualidadeDia(funcionariosOrdenados.length, trabalhando)) + '</th>';
-            }
+                html += '<th class="monthly-quality' + getWeekClass(dataIso, index) + '" title="Cobertura planejada: ' + trabalhando + '/' + funcionariosOrdenados.length + '">' + escapeHtml(calcularQualidadeDia(funcionariosOrdenados.length, trabalhando)) + '</th>';
+            });
             html += '</tr><tr class="monthly-totals-row"><th class="employee-col monthly-summary-label' + (criticasSecao.length ? ' has-critical' : '') + '">' +
                 '<span>' + funcionariosOrdenados.length + ' funcionário(s)</span>' +
                 '</th>';
-            for (let dia = 1; dia <= diasNoMes; dia += 1) {
+            datasPeriodo.forEach((dataIso, index) => {
                 let folgas = 0;
                 let trabalhando = 0;
                 funcionariosOrdenados.forEach((funcionario) => {
-                    const registro = funcionario.dias.get(dia);
+                    const registro = getRegistroFuncionarioDataBanco(funcionario, dataIso);
                     if (!registro) {
-                        if (getAusenciaFuncionarioDiaBanco(funcionario, formatDateForDb(ano, mes, dia))) folgas += 1;
+                        if (getAusenciaFuncionarioDiaBanco(funcionario, dataIso)) folgas += 1;
                         else trabalhando += 1;
                         return;
                     }
                     if (isProgramacaoDescanso(registro.PROGRAMACAO)) folgas += 1;
                     else trabalhando += 1;
                 });
-                html += '<th class="monthly-quality' + getWeekClass(dia) + '" title="Trabalhando: ' + trabalhando + ' | Folgas: ' + folgas + '">' +
+                html += '<th class="monthly-quality' + getWeekClass(dataIso, index) + '" title="Trabalhando: ' + trabalhando + ' | Folgas: ' + folgas + '">' +
                     '<span class="monthly-total-box folga">' + folgas + ' F</span>' +
                     '<span class="monthly-total-box trabalho">' + trabalhando + ' T</span>' +
                     '</th>';
-            }
+            });
             html += '</tr><tr class="monthly-weekday-row"><th class="employee-col">Funcionário</th>';
-            for (let dia = 1; dia <= diasNoMes; dia += 1) {
-                html += '<th class="' + getWeekClass(dia).trim() + '">' + diasSemana[new Date(ano, mes, dia).getDay()] + '</th>';
-            }
+            datasPeriodo.forEach((dataIso, index) => {
+                html += '<th class="' + getWeekClass(dataIso, index).trim() + '">' + diasSemana[new Date(dataIso + 'T00:00:00').getDay()] + '</th>';
+            });
             html += '</tr><tr class="monthly-day-row"><th class="employee-col"></th>';
-            for (let dia = 1; dia <= diasNoMes; dia += 1) {
-                html += '<th class="' + getWeekClass(dia).trim() + '">' + dia + '</th>';
-            }
+            datasPeriodo.forEach((dataIso, index) => {
+                html += '<th class="' + getWeekClass(dataIso, index).trim() + '">' + escapeHtml(getDiaLabelPeriodoBanco(dataIso, escalaDetalheAtual.mesRef)) + '</th>';
+            });
             html += '</tr></thead><tbody>';
 
             funcionariosOrdenados.forEach((funcionario) => {
                 const criticas = getCriticasFuncionarioBanco(funcionario);
                 html += '<tr data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" data-funcao-descr="' + escapeHtml(funcionario.funcao || '') + '"><th class="employee-col" title="' + escapeHtml(getFuncionarioTitle(funcionario)) + '"><span class="scale-employee-name-row"><span><strong>' + escapeHtml((funcionario.chapa || '') + ' - ' + (funcionario.nome || '')) + '</strong><small class="scale-employee-role">' + escapeHtml(funcionario.funcao || '') + '</small></span>' + renderizarMenuFuncionarioEscalaBanco(funcionario) + '</span></th>';
-                for (let dia = 1; dia <= diasNoMes; dia += 1) {
-                    const registro = funcionario.dias.get(dia);
+                datasPeriodo.forEach((dataIso, index) => {
+                    const numeroDia = Number(String(dataIso).slice(8, 10));
+                    const registro = getRegistroFuncionarioDataBanco(funcionario, dataIso);
                     if (!registro) {
-                        const dataIso = formatDateForDb(ano, mes, dia);
-                        const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
+                        const bloqueado = isDataBloqueadaParaEdicao(dataIso) || escalaDetalheAtual.status === 'FINALIZADA';
                         const ausencia = getAusenciaFuncionarioDiaBanco(funcionario, dataIso);
                         const fixo = fixosMap.get(getFixoDiaKeyBanco(funcionario.escfuncId, dataIso));
                         const programacao = String(fixo?.PROGRAMACAO || fixo?.programacao || '').toUpperCase();
@@ -7494,7 +7528,7 @@
                             ausencia ? 'pending-fixed-rest rest-cell ' + (ausenciaSigla === 'FER' ? 'rest-cell-ferias' : ausenciaSigla === 'AFA' ? 'rest-cell-afastamento' : 'rest-cell-folga') : '',
                             !ausencia && fixo ? (isHorarioFixo ? 'pending-fixed-work fixed-work-cell' : 'pending-fixed-rest rest-cell rest-cell-fixo') : '',
                             !ausencia && !fixo ? 'pending-empty-cell' : '',
-                            getWeekClass(dia).trim(),
+                            getWeekClass(dataIso, index).trim(),
                             (bloqueado || ausencia) ? 'locked-day' : ''
                         ].filter(Boolean).join(' ');
                         const attrs = !bloqueado && !ausencia
@@ -7502,17 +7536,17 @@
                             : '';
                         const title = ausencia ? ' data-schedule-tooltip="' + escapeHtml('Ausência: ' + (ausencia.MOTIVO || ausencia.motivo || 'ausência')) + '"' : '';
                         html += '<td class="' + cellClass + '"' + title + attrs + '>' + escapeHtml(value) + '</td>';
-                        continue;
+                        return;
                     }
                     const descanso = isProgramacaoDescanso(registro.PROGRAMACAO);
-                    const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia) || escalaDetalheAtual.status === 'FINALIZADA';
-                    const critica = criticasIncluemDia(criticas, registro, dia);
+                    const bloqueado = isDataBloqueadaParaEdicao(dataIso) || escalaDetalheAtual.status === 'FINALIZADA';
+                    const critica = criticasIncluemDia(criticas, registro, numeroDia);
                     const value = descanso ? getValorDescanso(registro) : (registro.HR_ENT1 || '--');
                     const cellClass = [
                         descanso ? 'rest-cell' : 'work-cell',
                         descanso ? getClasseDescanso(registro) : '',
                         Number(registro.FIXO_ESCALA || 0) === 1 ? 'fixed-work-cell' : '',
-                        getWeekClass(dia).trim(),
+                        getWeekClass(dataIso, index).trim(),
                         critica ? 'manual-critical-day' : '',
                         bloqueado ? 'locked-day' : ''
                     ].filter(Boolean).join(' ');
@@ -7520,7 +7554,7 @@
                         ? ' role="button" tabindex="0" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" draggable="' + (descanso && !isDiaProtegidoBanco(registro) ? 'true' : 'false') + '"'
                         : '';
                     html += '<td class="' + cellClass + ' monthly-editable-day" data-schedule-tooltip="' + escapeHtml(getDiaTitle(registro)) + '"' + editAttrs + '>' + escapeHtml(value) + '</td>';
-                }
+                });
                 html += '</tr>';
             });
 
@@ -7587,14 +7621,26 @@
 
         const renderizarDetalhadaSecaoBanco = (dias) => {
             if (!escalaBancoDetalhadaContent) return;
-            const dataRef = escalaDetalheAtual.mesRef ? new Date(escalaDetalheAtual.mesRef + 'T00:00:00') : null;
-            const ano = dataRef?.getFullYear() || new Date().getFullYear();
-            const mes = dataRef?.getMonth() || 0;
-            const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+            const datasPeriodo = getDatasPeriodoOperacionalBanco();
             const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
             const somenteLeitura = escalaDetalheAtual.status === 'FINALIZADA';
-            const getWeekClass = (dia) => dia > 1 && new Date(ano, mes, dia).getDay() === 1 ? ' week-start' : '';
+            const getWeekClass = (dataIso, index = 0) => index > 0 && new Date(dataIso + 'T00:00:00').getDay() === 1 ? ' week-start' : '';
             const getDiaTitle = (registro, funcionario = {}) => registro ? montarTooltipHorarioEscala(registro, funcionario) : '';
+            const calcularTemposRegistro = (registro, funcionario = {}) => {
+                const ent1 = timeToMinutes(registro.HR_ENT1);
+                const sai1 = timeToMinutes(registro.HR_SAI1);
+                const ent2 = timeToMinutes(registro.HR_ENT2);
+                const sai2 = timeToMinutes(registro.HR_SAI2);
+                if (isFuncionarioAprendizBanco(funcionario) || ent2 === null || sai2 === null) {
+                    return {
+                        intervalo: 0,
+                        trabalhadas: Math.max(0, (sai1 ?? 0) - (ent1 ?? 0))
+                    };
+                }
+                const intervalo = Math.max(0, ent2 - (sai1 ?? ent2));
+                const trabalhadas = Math.max(0, (sai2 - (ent1 ?? sai2)) - intervalo);
+                return { intervalo, trabalhadas };
+            };
             const fields = [
                 { key: 'HR_ENT1', label: 'ENT.' },
                 { key: 'HR_SAI1', label: 'SAÍ.INT.' },
@@ -7607,40 +7653,42 @@
                 const criticas = getCriticasFuncionarioBanco(funcionario);
                 const criticaButton = criticas.length ? '<button type="button" class="critical-status-chip banco-critical-chip" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" title="Ver criticas do funcionario">CRITICA</button>' : '';
                 let table = '<article class="bank-employee-scale" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" data-funcao-descr="' + escapeHtml(funcionario.funcao || '') + '"><header><div><h3>' + escapeHtml(funcionario.nome) + '</h3><p>' + escapeHtml(funcionario.chapa) + (funcionario.funcao ? ' | ' + escapeHtml(funcionario.funcao) : '') + '</p><p class="print-aware-inline">Ciente: ___________________________________________</p></div>' + criticaButton + '</header><div class="bank-scale-scroll"><table><thead><tr><th>D.SEM</th>';
-                for (let dia = 1; dia <= diasNoMes; dia += 1) table += '<th class="' + getWeekClass(dia).trim() + '">' + diasSemana[new Date(ano, mes, dia).getDay()] + '</th>';
+                datasPeriodo.forEach((dataIso, index) => { table += '<th class="' + getWeekClass(dataIso, index).trim() + '">' + diasSemana[new Date(dataIso + 'T00:00:00').getDay()] + '</th>'; });
                 table += '</tr><tr><th>DIA</th>';
-                for (let dia = 1; dia <= diasNoMes; dia += 1) {
-                    const registro = funcionario.dias.get(dia);
-                    const bloqueado = isDiaMesBloqueadoParaEdicao(ano, mes, dia);
-                    const dayContent = !somenteLeitura && registro ? '<button type="button" class="bank-day-header-button bank-day-edit" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" title="' + (bloqueado ? 'Dia bloqueado para edicao' : 'Editar dia ' + dia) + '"' + (bloqueado ? ' disabled' : '') + '>' + dia + '</button>' : dia;
-                    table += '<th class="' + getWeekClass(dia).trim() + '">' + dayContent + '</th>';
-                }
+                datasPeriodo.forEach((dataIso, index) => {
+                    const registro = getRegistroFuncionarioDataBanco(funcionario, dataIso);
+                    const bloqueado = isDataBloqueadaParaEdicao(dataIso);
+                    const diaLabel = getDiaLabelPeriodoBanco(dataIso, escalaDetalheAtual.mesRef);
+                    const dayContent = !somenteLeitura && registro ? '<button type="button" class="bank-day-header-button bank-day-edit" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" title="' + (bloqueado ? 'Dia bloqueado para edicao' : 'Editar dia ' + diaLabel) + '"' + (bloqueado ? ' disabled' : '') + '>' + escapeHtml(diaLabel) + '</button>' : escapeHtml(diaLabel);
+                    table += '<th class="' + getWeekClass(dataIso, index).trim() + '">' + dayContent + '</th>';
+                });
                 table += '</tr></thead><tbody>';
                 fields.forEach((field) => {
                     table += '<tr class="' + [field.bold ? 'font-bold' : '', field.key === 'INTERVALO' ? 'bank-interval-row' : ''].filter(Boolean).join(' ') + '"><th>' + field.label + '</th>'; 
-                    for (let numeroDia = 1; numeroDia <= diasNoMes; numeroDia += 1) {
-                        const registro = funcionario.dias.get(numeroDia);
-                        if (!registro) { table += '<td class="empty">-</td>'; continue; }
+                    datasPeriodo.forEach((dataIso, index) => {
+                        const numeroDia = Number(String(dataIso).slice(8, 10));
+                        const registro = getRegistroFuncionarioDataBanco(funcionario, dataIso);
+                        if (!registro) { table += '<td class="empty">-</td>'; return; }
                         const folga = isProgramacaoDescanso(registro.PROGRAMACAO);
                         let value = getValorDescanso(registro);
                         if (!folga) {
-                            if (field.key === 'INTERVALO') value = minutesToTime(Math.max(0, timeToMinutes(registro.HR_ENT2) - timeToMinutes(registro.HR_SAI1)));
-                            else if (field.key === 'TRABALHADAS') value = minutesToTime(Math.max(0, (timeToMinutes(registro.HR_SAI2) - timeToMinutes(registro.HR_ENT1)) - (timeToMinutes(registro.HR_ENT2) - timeToMinutes(registro.HR_SAI1))));
+                            if (field.key === 'INTERVALO') value = minutesToTime(calcularTemposRegistro(registro, funcionario).intervalo);
+                            else if (field.key === 'TRABALHADAS') value = minutesToTime(calcularTemposRegistro(registro, funcionario).trabalhadas);
                             else value = registro[field.key] || '--';
                         }
-                        const domingo = new Date(ano, mes, numeroDia).getDay() === 0;
+                        const domingo = new Date(dataIso + 'T00:00:00').getDay() === 0;
                         const temCriticaDia = criticasIncluemDia(criticas, registro, numeroDia);
                         const cellClass = [
                             folga ? 'day-off' : '',
                             folga ? getClasseDescanso(registro) : '',
                             !folga && Number(registro.FIXO_ESCALA || 0) === 1 ? 'fixed-work-cell' : '',
                             domingo ? 'sunday' : '',
-                            getWeekClass(numeroDia).trim(),
+                            getWeekClass(dataIso, index).trim(),
                             temCriticaDia ? 'manual-critical-day' : ''
                         ].filter(Boolean).join(' ');
                         const marker = temCriticaDia && field.key === 'HR_ENT1' ? '<span class="critical-marker" title="Crítica validada">!</span>' : '';
                         table += '<td class="' + cellClass + '" data-schedule-tooltip="' + escapeHtml(getDiaTitle(registro, funcionario)) + '">' + marker + escapeHtml(value) + '</td>';
-                    }
+                    });
                     table += '</tr>';
                 });
                 return table + '</tbody></table></div></article>';
@@ -7834,11 +7882,7 @@
         };
 
         const getDiasMesImpressao = () => {
-            const dataRef = escalaDetalheAtual.mesRef ? new Date(escalaDetalheAtual.mesRef + 'T00:00:00') : new Date();
-            const ano = dataRef.getFullYear();
-            const mes = dataRef.getMonth();
-            const total = new Date(ano, mes + 1, 0).getDate();
-            return Array.from({ length: total }, (_, index) => formatDateForDb(ano, mes, index + 1));
+            return getDatasPeriodoOperacionalBanco();
         };
 
         const getSemanasImpressao = () => {
@@ -7864,10 +7908,10 @@
             const diasPorFuncionario = new Map();
             diasFiltrados.forEach((dia) => {
                 const id = String(dia.ESCFUNC_ID || '');
-                const numeroDia = Number(String(dia.DT || '').slice(8, 10));
-                if (!id || !numeroDia) return;
+                const dataIso = String(dia.DT || '').slice(0, 10);
+                if (!id || !dataIso) return;
                 if (!diasPorFuncionario.has(id)) diasPorFuncionario.set(id, new Map());
-                diasPorFuncionario.get(id).set(numeroDia, dia);
+                diasPorFuncionario.get(id).set(dataIso, dia);
             });
             getFuncionariosSecaoAtualBanco().forEach((funcionario) => {
                 const id = String(funcionario.ESCFUNC_ID || '');
@@ -8648,6 +8692,11 @@
             }
             const dia = (escalaDetalheAtual.dias || []).find(item => String(item.ESCPROGDIA_ID || '') === String(escprogdiaId));
             if (!escprogId || !escprogdiaId || !dia) return;
+            const funcionarioDia = getFuncionarioBancoPorId(dia.ESCFUNC_ID);
+            if (funcionarioDia && isFuncionarioAprendizBanco(funcionarioDia) && !isProgramacaoDescanso(dia.PROGRAMACAO)) {
+                showInfoModal('O horário do aprendiz é fixo em 05:45. Use apenas a distribuição de folgas para este funcionário.', 'info');
+                return;
+            }
             if (isDiaFixoBanco(dia)) {
                 await removerFixoDiaGeradoBanco(dia, { renderizar: false });
             }
@@ -8689,9 +8738,10 @@
             renderizarSecaoAtivaEscala();
         };
 
-        escalaBancoMensalContent?.addEventListener('click', (event) => {
+        escalaBancoMensalContent?.addEventListener('click', async (event) => {
             const scaleMenuButton = event.target.closest('.scale-kebab-btn');
             const scaleDetalhe = event.target.closest('.scale-ver-detalhes-funcionario');
+            const scaleGerarFuncionario = event.target.closest('.scale-gerar-funcionario');
             const scaleEditarHorarios = event.target.closest('.scale-editar-horarios-funcionario');
             const scaleTransferir = event.target.closest('.scale-transferir-funcionario-subsecao');
             if (scaleMenuButton) {
@@ -8706,10 +8756,10 @@
                 if (shouldOpen) menu.classList.remove('hidden');
                 return;
             }
-            if (scaleDetalhe || scaleEditarHorarios || scaleTransferir) {
+            if (scaleDetalhe || scaleGerarFuncionario || scaleEditarHorarios || scaleTransferir) {
                 event.preventDefault();
                 event.stopPropagation();
-                const escfuncId = scaleDetalhe?.dataset.id || scaleEditarHorarios?.dataset.id || scaleTransferir?.dataset.id;
+                const escfuncId = scaleDetalhe?.dataset.id || scaleGerarFuncionario?.dataset.id || scaleEditarHorarios?.dataset.id || scaleTransferir?.dataset.id;
                 const funcionario = getFuncionarioBancoPorId(escfuncId);
                 escalaDetalheAtual.menuFuncionarioAberto = null;
                 if (!funcionario) return showInfoModal('Funcionário não encontrado na escala.', 'error');
@@ -8721,6 +8771,36 @@
                         'Subseção: ' + (funcionario.SUBSECAO_DESCR || getSubsetorDetalheNome(funcionario) || 'Sem subseção')
                     ], 'info');
                     renderizarSecaoAtivaEscala();
+                    return;
+                }
+                if (scaleGerarFuncionario) {
+                    const confirmacao = await showInputModal({
+                        title: 'Gerar escala do funcionário',
+                        inputs: [{ type: 'message', text: 'A escala será regerada apenas para este funcionário, mantendo as demais escalas da seção como estão.' }],
+                        cancelText: 'Cancelar',
+                        confirmText: 'Gerar'
+                    });
+                    if (!confirmacao) return;
+                    scaleGerarFuncionario.disabled = true;
+                    try {
+                        const data = await apiRequest('/api/escalas/gerar-secao', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                lojaId: Number(escalaDetalheAtual.lojaId),
+                                mesRef: escalaDetalheAtual.mesRef,
+                                escsecaoId: Number(funcionario.ESCSECAO_ID || funcionario.escsecaoId || escalaDetalheAtual.secaoAtiva),
+                                escfuncIds: [Number(escfuncId)]
+                            }),
+                            timeoutMs: 120000
+                        });
+                        const resultado = data.resultado || {};
+                        await recarregarSecaoAtualEscalaBanco(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef, escalaDetalheAtual.secaoAtiva);
+                        showInfoModal((resultado.criticas || []).length ? ['Escala do funcionário gerada com críticas.', ...(resultado.criticas || [])] : 'Escala do funcionário gerada com sucesso.', (resultado.criticas || []).length ? 'error' : 'success');
+                    } catch (error) {
+                        showInfoModal(getApiErrorMessages(error), 'error');
+                    } finally {
+                        scaleGerarFuncionario.disabled = false;
+                    }
                     return;
                 }
                 if (scaleEditarHorarios) {

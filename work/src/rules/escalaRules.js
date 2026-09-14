@@ -96,6 +96,34 @@ function validarTurnoDia(funcionarioLabel, dia) {
   return errors;
 }
 
+function isFuncionarioAprendiz(funcionario = {}) {
+  const funcao = String(funcionario.funcao || funcionario.FUNCAO_DESCR || funcionario.funcaoDescr || funcionario.cargo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return /aprendiz/i.test(funcao) || funcionario.aprendiz === true || funcionario.APRENDIZ === true;
+}
+
+function validarTurnoAprendiz(funcionarioLabel, dia) {
+  if (isDescanso(dia)) return [];
+  const data = formatDate(dia.data || dia.DT);
+  const horario = getHorarioDia(dia);
+  const errors = [];
+  if (horario.entrada === null || horario.saidaIntervalo === null) {
+    errors.push(`${funcionarioLabel}: horario de aprendiz incompleto em ${data}.`);
+    return errors;
+  }
+  if (!(horario.entrada < horario.saidaIntervalo)) {
+    errors.push(`${funcionarioLabel}: horarios de aprendiz fora de ordem em ${data}.`);
+    return errors;
+  }
+  const jornada = horario.saidaIntervalo - horario.entrada;
+  if (jornada !== 345) {
+    errors.push(`${funcionarioLabel}: jornada de aprendiz deve ser 05:45 em ${data}. Atual: ${minutesToTime(jornada)}.`);
+  }
+  if (jornada > 360) {
+    errors.push(`${funcionarioLabel}: jornada continua maior que 06:00 em ${data}.`);
+  }
+  return errors;
+}
+
 function validarRegrasFuncionario(funcionario) {
   const label = funcionario.nome || funcionario.NOME || funcionario.chapa || funcionario.CHAPA || funcionario.escfuncId || 'Funcionario';
   const dias = [...(funcionario.dias || [])].sort((a, b) => formatDate(a.data || a.DT).localeCompare(formatDate(b.data || b.DT)));
@@ -115,7 +143,7 @@ function validarRegrasFuncionario(funcionario) {
     const weekKey = getWeekKey(dataIso);
     diasPorSemana.set(weekKey, (diasPorSemana.get(weekKey) || 0) + 1);
     if (descanso) descansosPorSemana.set(weekKey, (descansosPorSemana.get(weekKey) || 0) + 1);
-    errors.push(...validarTurnoDia(label, dia));
+    errors.push(...(isFuncionarioAprendiz(funcionario) ? validarTurnoAprendiz(label, dia) : validarTurnoDia(label, dia)));
 
     if (isFolgaSemanalAutomatica(dia)) {
       const totalFolgasSemana = (folgasPorSemana.get(weekKey) || 0) + 1;
@@ -157,7 +185,11 @@ function validarRegrasFuncionario(funcionario) {
       ultimoDomingoTrabalhado = data;
     }
 
-    ultimoTrabalho = { data, dataIso, saida: horario.saida };
+    ultimoTrabalho = {
+      data,
+      dataIso,
+      saida: isFuncionarioAprendiz(funcionario) ? horario.saidaIntervalo : horario.saida
+    };
   }
 
   diasPorSemana.forEach((totalDiasSemana, weekKey) => {

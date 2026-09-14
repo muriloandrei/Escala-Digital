@@ -36,19 +36,40 @@ function getMonthStart(date = new Date()) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
-function getMonthDays(mesRef) {
+function getFirstMonday(year, month) {
+  const date = new Date(year, month, 1);
+  const day = date.getDay();
+  const add = day === 1 ? 0 : (8 - day) % 7;
+  date.setDate(date.getDate() + add);
+  return date;
+}
+
+function getOperationalPeriod(mesRef) {
   const ref = new Date(`${formatDateValue(mesRef)}T00:00:00`);
+  const inicio = getFirstMonday(ref.getFullYear(), ref.getMonth());
+  const nextStart = getFirstMonday(ref.getFullYear(), ref.getMonth() + 1);
+  const fim = new Date(nextStart);
+  fim.setDate(fim.getDate() - 1);
+  return { inicio, fim };
+}
+
+function getMonthDays(mesRef) {
+  const { inicio, fim } = getOperationalPeriod(mesRef);
   const days = [];
-  const lastDay = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate();
-  for (let day = 1; day <= lastDay; day++) {
-    days.push(new Date(ref.getFullYear(), ref.getMonth(), day));
+  const cursor = new Date(inicio);
+  while (cursor <= fim) {
+    days.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
   }
   return days;
 }
 
+function getMonthStartIso(mesRef) {
+  return formatDateValue(getOperationalPeriod(mesRef).inicio);
+}
+
 function getMonthEndIso(mesRef) {
-  const ref = new Date(`${formatDateValue(mesRef)}T00:00:00`);
-  return formatDateValue(new Date(ref.getFullYear(), ref.getMonth() + 1, 0));
+  return formatDateValue(getOperationalPeriod(mesRef).fim);
 }
 
 function normalizeTime(value, fallback) {
@@ -68,6 +89,10 @@ function normalizarAusenciaSigla(motivo) {
 
 function getAusenciaMotivo(ausencia = {}) {
   return pick(ausencia, 'MOTIVO', 'motivo', 'SIGLA', 'sigla', 'TIPO', 'tipo', 'DESCR', 'descr', 'CLASSIFICACAO', 'classificacao') || '';
+}
+
+function isAusenciaFerias(ausencia = {}) {
+  return normalizarAusenciaSigla(getAusenciaMotivo(ausencia)) === 'FER';
 }
 
 function ausenciaCobreDia(ausencia, dataIso) {
@@ -137,6 +162,25 @@ function getHorarioSignature(source) {
     .join('|');
 }
 
+function minutesToTime(totalMinutes) {
+  const total = Math.max(0, Number(totalMinutes) || 0);
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function timeToMinutes(value) {
+  const text = String(value || '');
+  if (!/^\d{2}:\d{2}$/.test(text)) return null;
+  const [hours, minutes] = text.split(':').map(Number);
+  return (hours * 60) + minutes;
+}
+
+function isFuncionarioAprendiz(funcionario = {}) {
+  const funcao = pick(funcionario, 'FUNCAO_DESCR', 'funcao_descr', 'FUNCAO', 'funcao') || '';
+  return /aprendiz/i.test(normalizarTextoComparacao(funcao));
+}
+
 function hasMaxConsecutiveWorkCircular(folgas, maxDias = 5) {
   let consecutivos = 0;
   for (let index = 0; index < 28; index += 1) {
@@ -202,6 +246,11 @@ function isFolgaAutomatica(date, funcionarioIndex = 0) {
 }
 
 function getHorarioBaseFuncionario(funcionario, turno) {
+  if (isFuncionarioAprendiz(funcionario)) {
+    const hrEnt1 = normalizeTime(funcionario.HR_ENT1 || turno?.HR_ENT1, '08:00');
+    const inicio = timeToMinutes(hrEnt1) ?? 480;
+    return { hrEnt1, hrSai1: minutesToTime(inicio + 345), hrEnt2: null, hrSai2: null };
+  }
   const hrEnt1 = normalizeTime(turno?.HR_ENT1 || funcionario.HR_ENT1, '08:00');
   const hrSai1 = normalizeTime(turno?.HR_SAI1 || funcionario.HR_SAI1, '12:00');
   const hrEnt2 = normalizeTime(turno?.HR_ENT2 || funcionario.HR_ENT2, '13:10');
@@ -217,6 +266,7 @@ function montarFuncionarioRascunho(funcionario, turno, dias, horario) {
     nome: funcionario.NOME,
     escsecaoId: Number(funcionario.ESCSECAO_ID),
     escfuncaoId: Number(funcionario.ESCFUNCAO_ID),
+    aprendiz: isFuncionarioAprendiz(funcionario),
     escsecaoTurnoId: turno?.ESCSECAOTURNO_ID ? Number(turno.ESCSECAOTURNO_ID) : null,
     turnoOficial: {
       escsecaoTurnoId: turno?.ESCSECAOTURNO_ID ? Number(turno.ESCSECAOTURNO_ID) : null,
@@ -415,9 +465,11 @@ function completarFolgasMinimasSemanais(datasGeradas = [], folgasDatas = [], opc
   const folgas = new Set((folgasDatas || []).map(formatDateValue).filter(Boolean));
   const descansosObrigatorios = new Set((opcoes.descansosObrigatorios || []).map(formatDateValue).filter(Boolean));
   const bloqueados = new Set((opcoes.bloqueados || []).map(formatDateValue).filter(Boolean));
-  const maxFolgasSemana = Number(opcoes.maxFolgasSemana || 2);
+  const maxFolgasSemana = opcoes.maxFolgasSemana || 2;
   const considerarDescansos = (data) => folgas.has(data) || descansosObrigatorios.has(data);
   getWeekGroups(datasGeradas).forEach((semana) => {
+    const weekKey = getWeekKeyFromIso(semana[0]);
+    const limiteSemana = getMaxFolgasSemana(maxFolgasSemana, weekKey);
     const minimoSemana = Math.min(2, Math.round(semana.length * 2 / 7));
     let folgasSemana = semana.filter(considerarDescansos).length;
     if (folgasSemana >= minimoSemana) return;
@@ -432,7 +484,7 @@ function completarFolgasMinimasSemanais(datasGeradas = [], folgasDatas = [], opc
 
     for (const data of candidatos) {
       if (folgasSemana >= minimoSemana) break;
-      if (semana.filter(considerarDescansos).length >= maxFolgasSemana) break;
+      if (semana.filter(considerarDescansos).length >= limiteSemana) break;
       if (isFolgaVizinha(new Set([...folgas, ...descansosObrigatorios]), data)) continue;
       folgas.add(data);
       folgasSemana += 1;
@@ -441,12 +493,18 @@ function completarFolgasMinimasSemanais(datasGeradas = [], folgasDatas = [], opc
   return [...folgas].sort();
 }
 
+function getMaxFolgasSemana(maxFolgasSemana = 2, weekKey = '') {
+  if (maxFolgasSemana instanceof Map) return Number(maxFolgasSemana.get(weekKey) || 2);
+  if (typeof maxFolgasSemana === 'function') return Number(maxFolgasSemana(weekKey) || 2);
+  return Number(maxFolgasSemana || 2);
+}
+
 function hasMaxFolgasPorSemanaDatas(folgas = [], maxFolgasSemana = 2) {
   const counter = new Map();
   for (const data of folgas || []) {
     const weekKey = getWeekKeyFromIso(data);
     const total = (counter.get(weekKey) || 0) + 1;
-    if (total > maxFolgasSemana) return false;
+    if (total > getMaxFolgasSemana(maxFolgasSemana, weekKey)) return false;
     counter.set(weekKey, total);
   }
   return true;
@@ -477,6 +535,26 @@ function getDescansosObrigatoriosFuncionario(diasFixos, indiceAusencias, funcion
   return [...descansos].sort();
 }
 
+function getMaxFolgasSemanaFuncionario(indiceAusencias, funcionario, datasGeradas = []) {
+  const datas = (datasGeradas || []).map(formatDateValue).filter(Boolean).sort();
+  const datasSet = new Set(datas);
+  const maxPorSemana = new Map();
+  datas.forEach((data) => {
+    const ausencia = encontrarAusencia(indiceAusencias, funcionario, data);
+    if (!ausencia || !isAusenciaFerias(ausencia)) return;
+    const proximo = new Date(`${data}T00:00:00`);
+    proximo.setDate(proximo.getDate() + 1);
+    if (datasSet.has(formatDateValue(proximo)) && isAusenciaFerias(encontrarAusencia(indiceAusencias, funcionario, formatDateValue(proximo)))) return;
+    for (let offset = 1; offset <= 3; offset += 1) {
+      const dataRetorno = new Date(`${data}T00:00:00`);
+      dataRetorno.setDate(dataRetorno.getDate() + offset);
+      const dataRetornoIso = formatDateValue(dataRetorno);
+      if (datasSet.has(dataRetornoIso)) maxPorSemana.set(getWeekKeyFromIso(dataRetornoIso), 3);
+    }
+  });
+  return maxPorSemana;
+}
+
 function getDatasBloqueadasFolgaAutomatica(diasFixos, indiceAusencias, funcionario, datasGeradas = [], extras = []) {
   const escfuncId = funcionario.ESCFUNC_ID || funcionario.escfuncId;
   const bloqueados = new Set((extras || []).map(formatDateValue).filter(Boolean));
@@ -498,7 +576,7 @@ function hasMaxFolgasAutomaticasComFixos(folgasAutomaticas = [], folgasFixas = [
   for (const data of folgasAutomaticas || []) {
     const weekKey = getWeekKeyFromIso(data);
     const total = (counter.get(weekKey) || 0) + 1;
-    if (total > maxFolgasSemana) return false;
+    if (total > getMaxFolgasSemana(maxFolgasSemana, weekKey)) return false;
     counter.set(weekKey, total);
   }
   return true;
@@ -515,7 +593,7 @@ function limitarFolgasAutomaticasPorFixos(folgasAutomaticas = [], folgasFixas = 
     .filter((data) => {
       const weekKey = getWeekKeyFromIso(data);
       const totalAtual = counter.get(weekKey) || 0;
-      if (totalAtual >= maxFolgasSemana) return false;
+      if (totalAtual >= getMaxFolgasSemana(maxFolgasSemana, weekKey)) return false;
       counter.set(weekKey, totalAtual + 1);
       return true;
     });
@@ -622,6 +700,7 @@ function escolherPadraoBalanceado({
   const folgasFixasFuncionario = getFolgasFixasFuncionario(diasFixos, funcionario, datasGeradas);
   const folgasFixasSet = new Set(folgasFixasFuncionario);
   const descansosObrigatoriosFuncionario = getDescansosObrigatoriosFuncionario(diasFixos, indiceAusencias, funcionario, datasGeradas);
+  const maxFolgasSemanaFuncionario = getMaxFolgasSemanaFuncionario(indiceAusencias, funcionario, datasGeradas);
   const domingosFolgaSet = new Set((domingosFolgaAlvo || []).map(formatDateValue));
   const domingosTrabalhoSet = new Set((domingosTrabalhoAlvo || []).map(formatDateValue));
   const planosMap = new Map();
@@ -641,7 +720,7 @@ function escolherPadraoBalanceado({
   planos.forEach(({ padrao, folgas, repeticaoExata }, planoIndex) => {
     const folgasPossiveis = folgas.filter((data) => !encontrarAusencia(indiceAusencias, funcionario, data)
       && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`));
-    const folgasLimitadas = limitarFolgasAutomaticasPorFixos(folgasPossiveis, descansosObrigatoriosFuncionario, 2);
+    const folgasLimitadas = limitarFolgasAutomaticasPorFixos(folgasPossiveis, descansosObrigatoriosFuncionario, maxFolgasSemanaFuncionario);
     const folgasEfetivas = completarFolgasMinimasSemanais(datasGeradas, folgasLimitadas, {
       descansosObrigatorios: descansosObrigatoriosFuncionario,
       bloqueados: getDatasBloqueadasFolgaAutomatica(
@@ -651,10 +730,10 @@ function escolherPadraoBalanceado({
         datasGeradas,
         [...domingosTrabalhoSet]
       ),
-      maxFolgasSemana: 2
+      maxFolgasSemana: maxFolgasSemanaFuncionario
     });
-    if (!hasMaxFolgasPorSemanaDatas(folgasEfetivas, 2)) return;
-    if (!hasMaxFolgasAutomaticasComFixos(folgasEfetivas, descansosObrigatoriosFuncionario, 2)) return;
+    if (!hasMaxFolgasPorSemanaDatas(folgasEfetivas, maxFolgasSemanaFuncionario)) return;
+    if (!hasMaxFolgasAutomaticasComFixos(folgasEfetivas, descansosObrigatoriosFuncionario, maxFolgasSemanaFuncionario)) return;
     const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas, { indiceAusencias, diasFixos });
     if (!hasNoConsecutiveAutomaticRests(rascunho.dias)) return;
     const errors = validateEscalaPayload({
@@ -1002,11 +1081,13 @@ function normalizarDiaAtualParaPayload(row = {}) {
   };
 }
 
-function agruparDiasPassadosPorFuncionario(diasAtuais = [], hojeIso = formatDateValue(new Date())) {
+function agruparDiasPassadosPorFuncionario(diasAtuais = [], hojeIso = formatDateValue(new Date()), datasPermitidas = null) {
   const grupos = new Map();
+  const permitidas = datasPermitidas ? new Set([...datasPermitidas].map(formatDateValue)) : null;
   (diasAtuais || []).forEach((dia) => {
     const data = formatDateValue(pick(dia, 'DT', 'dt') || dia.data);
     if (!data || data >= hojeIso) return;
+    if (permitidas && !permitidas.has(data)) return;
     const escfuncId = pick(dia, 'ESCFUNC_ID', 'escfunc_id', 'escfuncId');
     if (!escfuncId) return;
     if (!grupos.has(String(escfuncId))) grupos.set(String(escfuncId), []);
@@ -1016,12 +1097,14 @@ function agruparDiasPassadosPorFuncionario(diasAtuais = [], hojeIso = formatDate
   return grupos;
 }
 
-function anexarDiasPassados(funcionariosPayload = [], diasAtuais = [], hojeIso = formatDateValue(new Date())) {
-  const passadosPorFuncionario = agruparDiasPassadosPorFuncionario(diasAtuais, hojeIso);
+function anexarDiasPassados(funcionariosPayload = [], diasAtuais = [], hojeIso = formatDateValue(new Date()), mesRef = null) {
+  const datasPermitidas = mesRef ? new Set(getMonthDays(mesRef).map(formatDateValue)) : null;
+  const passadosPorFuncionario = agruparDiasPassadosPorFuncionario(diasAtuais, hojeIso, datasPermitidas);
   return (funcionariosPayload || []).map((funcionario) => {
     const passados = passadosPorFuncionario.get(String(funcionario.escfuncId || funcionario.ESCFUNC_ID)) || [];
     const datasPassadas = new Set(passados.map((dia) => dia.data));
-    const diasFuturos = (funcionario.dias || []).filter((dia) => !datasPassadas.has(formatDateValue(dia.data || dia.DT)));
+    const diasFuturos = (funcionario.dias || [])
+      .filter((dia) => !datasPassadas.has(formatDateValue(dia.data || dia.DT)));
     return {
       ...funcionario,
       dias: [...passados, ...diasFuturos].sort((left, right) => left.data.localeCompare(right.data))
@@ -1077,7 +1160,7 @@ async function liberarEscalaLojaMes({
     return { lojaId, mesRef, criada: false, motivo: 'Escala mensal ja existente.' };
   }
 
-  const inicio = formatDateValue(mesRef);
+  const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
   const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, secoesLiberacao ? { secoesPermitidas: secoesLiberacao } : {}),
@@ -1119,7 +1202,7 @@ async function liberarEscalaLojaMes({
 }
 
 async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()) }) {
-  const inicio = formatDateValue(mesRef);
+  const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
   const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
@@ -1131,15 +1214,17 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
   const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
     ? new Set(escfuncIds.map(Number).filter(Boolean))
     : null;
-  const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId))
-    .filter((funcionario) => !filtroFuncionarios || filtroFuncionarios.has(Number(funcionario.ESCFUNC_ID)));
+  const funcionariosSecaoTodos = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
-  const funcionariosPayload = anexarDiasPassados(
-    buildFuncionariosRascunhoBalanceado(funcionariosSecao, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
+  const funcionariosPayloadCompleto = anexarDiasPassados(
+    buildFuncionariosRascunhoBalanceado(funcionariosSecaoTodos, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
     diasAtuaisSecao,
-    hojeIso
+    hojeIso,
+    mesRef
   )
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa && funcionario.dias.length > 0);
+  const funcionariosPayload = funcionariosPayloadCompleto
+    .filter((funcionario) => !filtroFuncionarios || filtroFuncionarios.has(Number(funcionario.escfuncId)));
 
   if (!funcionariosPayload.length) {
     return { lojaId, mesRef, escsecaoId, criada: false, motivo: 'Nenhum funcionario apto para geracao da secao.' };
@@ -1147,7 +1232,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
 
   const ruleErrors = [
     ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload }),
-    ...getCriticasCoberturaMinima(funcionariosPayload, 60, hojeIso)
+    ...getCriticasCoberturaMinima(funcionariosPayloadCompleto, 60, hojeIso)
   ];
   const saved = await escalaService.saveEscalasBatch({
     lojaId,
@@ -1173,7 +1258,7 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = format
     error.statusCode = 422;
     throw error;
   }
-  const inicio = formatDateValue(mesRef);
+  const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
   const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
@@ -1187,7 +1272,8 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = format
   const funcionariosPayload = anexarDiasPassados(
     buildFuncionariosLiberacao(funcionariosSecao, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
     diasAtuaisSecao,
-    hojeIso
+    hojeIso,
+    mesRef
   )
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa);
 

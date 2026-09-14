@@ -19,8 +19,27 @@ function formatDateValue(value) {
 }
 
 function getMonthEndIso(mesRef) {
+  return getOperationalPeriod(mesRef).fim;
+}
+
+function getFirstMonday(year, month) {
+  const date = new Date(year, month, 1);
+  const day = date.getDay();
+  const add = day === 1 ? 0 : (8 - day) % 7;
+  date.setDate(date.getDate() + add);
+  return date;
+}
+
+function getOperationalPeriod(mesRef) {
   const ref = new Date(`${formatDateValue(mesRef)}T00:00:00`);
-  return formatDateValue(new Date(ref.getFullYear(), ref.getMonth() + 1, 0));
+  const inicio = getFirstMonday(ref.getFullYear(), ref.getMonth());
+  const nextStart = getFirstMonday(ref.getFullYear(), ref.getMonth() + 1);
+  const fim = new Date(nextStart);
+  fim.setDate(fim.getDate() - 1);
+  return {
+    inicio: formatDateValue(inicio),
+    fim: formatDateValue(fim)
+  };
 }
 
 function getHojeIso() {
@@ -894,7 +913,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       row.COD_SECAO = pick(atual, 'COD_SECAO', 'cod_secao') || pick(row, 'COD_SECAO', 'cod_secao');
       row.SECAO_DESCR = pick(atual, 'SECAO_DESCR', 'secao_descr') || pick(row, 'SECAO_DESCR', 'secao_descr');
     });
-    const inicio = formatDateValue(mesRef);
+    const inicio = getOperationalPeriod(mesRef).inicio;
     const fim = getMonthEndIso(mesRef);
     let ausencias = await listAusenciasEscalaMensalComConnection(connection, { lojaId, inicio, fim });
     if (Array.isArray(secoesPermitidas)) {
