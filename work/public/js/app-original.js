@@ -8208,7 +8208,7 @@
             const totalPaginas = paginas.length;
             const html = paginas.map((pagina, index) => {
                 const conteudo = '<div class="bank-detailed-scale">' + pagina.map((artigo) => artigo.outerHTML).join('') + '</div>';
-                return '<section class="print-sheet print-collaborator-week-sheet">' +
+                return '<section class="print-sheet print-collaborator-sheet">' +
                     getCabecalhoImpressaoHtml(tituloBase) +
                     conteudo +
                     getRodapeImpressaoHtml(index + 1, totalPaginas) +
@@ -8252,14 +8252,12 @@
                         : 'Escala de Trabalho - Mensal';
             const clone = tipo === 'diario'
                 ? getCloneTimelineImpressao()
-                : tipo === 'semanal' && formato === 'colaborador'
+                : formato === 'colaborador'
                     ? getDetalhadoColaboradorPaginadoImpressao(tituloBase, 2)
-                    : formato === 'colaborador'
-                    ? getCloneDetalhadoImpressao()
                     : getGradeImpressaoBanco();
             if (!clone) return '<section class="print-sheet">' + getCabecalhoImpressaoHtml(tituloBase) + '<div class="print-preview-empty">Nenhum dado disponível para imprimir com os filtros selecionados.</div>' + getRodapeImpressaoHtml() + '</section>';
-            if (tipo === 'semanal' && formato === 'colaborador') return clone.outerHTML;
-            if (tipo === 'diario' || formato === 'colaborador') return '<section class="print-sheet">' + getCabecalhoImpressaoHtml(tituloBase) + clone.outerHTML + getRodapeImpressaoHtml() + '</section>';
+            if (formato === 'colaborador') return clone.outerHTML;
+            if (tipo === 'diario') return '<section class="print-sheet">' + getCabecalhoImpressaoHtml(tituloBase) + clone.outerHTML + getRodapeImpressaoHtml() + '</section>';
             return clone.outerHTML;
         };
 
