@@ -7931,7 +7931,7 @@
                     chapa: funcionario.chapa || atual.chapa || '',
                     nome: funcionario.nome || atual.nome || '',
                     cargo: funcionario.funcao || atual.cargo || '',
-                    dias: funcionario.dias || atual.dias || diasPorFuncionario.get(id) || new Map()
+                    dias: funcionario.diasIso || atual.dias || diasPorFuncionario.get(id) || new Map()
                 });
             });
             return ordenarFuncionariosBanco([...map.values()].filter((funcionario) => funcionario.id));
@@ -8045,19 +8045,13 @@
 
         const removerColunasForaPeriodoImpressao = (root, inicio, fim) => {
             if (!inicio || !fim) return;
-            const dataRef = escalaDetalheAtual.mesRef ? new Date(escalaDetalheAtual.mesRef + 'T00:00:00') : new Date();
-            const ano = dataRef.getFullYear();
-            const mes = dataRef.getMonth();
-            const total = new Date(ano, mes + 1, 0).getDate();
-            const remover = [];
-            for (let dia = 1; dia <= total; dia += 1) {
-                const dataIso = formatDateForDb(ano, mes, dia);
-                if (dataIso < inicio || dataIso > fim) remover.push(dia);
-            }
+            const remover = getDiasMesImpressao()
+                .map((dataIso, index) => (dataIso < inicio || dataIso > fim ? index + 1 : null))
+                .filter((index) => index !== null);
             root.querySelectorAll('tr').forEach((row) => {
                 const cells = Array.from(row.children);
-                remover.slice().reverse().forEach((dia) => {
-                    const cell = cells[dia];
+                remover.slice().reverse().forEach((cellIndex) => {
+                    const cell = cells[cellIndex];
                     if (cell) cell.remove();
                 });
             });
