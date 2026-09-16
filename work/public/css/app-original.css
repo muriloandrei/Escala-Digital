@@ -1522,6 +1522,8 @@
             #print-container .print-role-section { break-after: page; margin-bottom: 8mm; }
             #print-container .print-role-section:last-child { break-after: auto; }
             #print-container .print-role-section h4 { color: #1e3a8a; font-size: 11pt; margin: 0 0 3mm; }
+            #print-container .print-collaborator-week-sheet .bank-employee-scale { break-inside: avoid; margin-bottom: 6mm; page-break-inside: avoid; }
+            #print-container .print-collaborator-week-sheet .bank-employee-scale:last-child { margin-bottom: 0; }
             #print-container .daily-schedule { min-width: 0 !important; }
             #print-container .daily-schedule-axis,
             #print-container .daily-schedule-row { display: grid; grid-template-columns: 45mm 1fr; }
@@ -2965,6 +2967,16 @@
             font-size: 0.82rem;
             font-weight: 900;
             margin: 0 0 10px;
+        }
+
+        .print-preview-page .print-collaborator-week-sheet .bank-employee-scale {
+            break-inside: avoid;
+            margin-bottom: 18px;
+            page-break-inside: avoid;
+        }
+
+        .print-preview-page .print-collaborator-week-sheet .bank-employee-scale:last-child {
+            margin-bottom: 0;
         }
 
         .print-preview-empty {

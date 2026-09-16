@@ -8077,11 +8077,11 @@
                 '</header>';
         };
 
-        const getRodapeImpressaoHtml = () => {
+        const getRodapeImpressaoHtml = (pagina = 1, totalPaginas = 1) => {
             const usuario = usuarioSessaoCache?.nome || usuarioSessaoCache?.login || loggedUserName?.textContent || 'Sistema';
             const agora = new Date();
             const impressoEm = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            return '<footer class="print-sheet-footer"><span>1 de 1</span><span>Impresso por ' + escapeHtml(usuario) + ' em ' + escapeHtml(impressoEm) + '</span></footer>';
+            return '<footer class="print-sheet-footer"><span>' + escapeHtml(pagina) + ' de ' + escapeHtml(totalPaginas) + '</span><span>Impresso por ' + escapeHtml(usuario) + ' em ' + escapeHtml(impressoEm) + '</span></footer>';
         };
 
         const getClasseCelulaGradeImpressao = (registro, dataIso) => {
@@ -8195,6 +8195,28 @@
             return wrapper.children.length ? wrapper : null;
         };
 
+        const getDetalhadoColaboradorPaginadoImpressao = (tituloBase, limitePorPagina = 2) => {
+            const clone = getCloneDetalhadoImpressao();
+            if (!clone) return null;
+            const artigos = Array.from(clone.querySelectorAll('.bank-employee-scale'));
+            if (!artigos.length) return null;
+            const limite = Math.max(1, Number(limitePorPagina || 2));
+            const paginas = [];
+            for (let index = 0; index < artigos.length; index += limite) {
+                paginas.push(artigos.slice(index, index + limite));
+            }
+            const totalPaginas = paginas.length;
+            const html = paginas.map((pagina, index) => {
+                const conteudo = '<div class="bank-detailed-scale">' + pagina.map((artigo) => artigo.outerHTML).join('') + '</div>';
+                return '<section class="print-sheet print-collaborator-week-sheet">' +
+                    getCabecalhoImpressaoHtml(tituloBase) +
+                    conteudo +
+                    getRodapeImpressaoHtml(index + 1, totalPaginas) +
+                    '</section>';
+            }).join('');
+            return html ? { outerHTML: html } : null;
+        };
+
         const getCloneTimelineImpressao = (filtros = {}) => {
             const wrapper = document.createElement('div');
             const timeline = escalaBancoTimelineContent?.querySelector('.daily-schedule');
@@ -8230,10 +8252,13 @@
                         : 'Escala de Trabalho - Mensal';
             const clone = tipo === 'diario'
                 ? getCloneTimelineImpressao()
-                : formato === 'colaborador'
+                : tipo === 'semanal' && formato === 'colaborador'
+                    ? getDetalhadoColaboradorPaginadoImpressao(tituloBase, 2)
+                    : formato === 'colaborador'
                     ? getCloneDetalhadoImpressao()
                     : getGradeImpressaoBanco();
             if (!clone) return '<section class="print-sheet">' + getCabecalhoImpressaoHtml(tituloBase) + '<div class="print-preview-empty">Nenhum dado disponível para imprimir com os filtros selecionados.</div>' + getRodapeImpressaoHtml() + '</section>';
+            if (tipo === 'semanal' && formato === 'colaborador') return clone.outerHTML;
             if (tipo === 'diario' || formato === 'colaborador') return '<section class="print-sheet">' + getCabecalhoImpressaoHtml(tituloBase) + clone.outerHTML + getRodapeImpressaoHtml() + '</section>';
             return clone.outerHTML;
         };
