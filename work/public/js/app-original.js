@@ -8028,6 +8028,10 @@
                     node.replaceWith(span);
                     return;
                 }
+                if (node.classList?.contains('bank-day-header-button') || node.classList?.contains('detailed-day-button')) {
+                    node.replaceWith(document.createTextNode(node.textContent || ''));
+                    return;
+                }
                 node.remove();
             });
         };
