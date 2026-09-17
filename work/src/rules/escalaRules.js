@@ -43,6 +43,11 @@ function isFolgaSemanalAutomatica(dia) {
   return programacao === 'F' || programacao === 'FOLGA';
 }
 
+function isFerias(dia) {
+  const programacao = String(dia?.programacao || dia?.PROGRAMACAO || dia?.hrEnt1 || dia?.HR_ENT1 || '').trim().toUpperCase();
+  return programacao === 'FER' || programacao === 'FERIAS';
+}
+
 function getWeekKey(dataIso) {
   const date = new Date(`${formatDate(dataIso)}T00:00:00`);
   const day = date.getDay();
@@ -52,6 +57,38 @@ function getWeekKey(dataIso) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const dayOfMonth = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${dayOfMonth}`;
+}
+
+function addDaysIso(dataIso, days) {
+  const date = new Date(`${formatDate(dataIso)}T00:00:00`);
+  date.setDate(date.getDate() + Number(days || 0));
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getSemanasComFerias(dias = []) {
+  const semanas = new Set();
+  (dias || []).forEach((dia) => {
+    if (isFerias(dia)) semanas.add(getWeekKey(dia.data || dia.DT));
+  });
+  return semanas;
+}
+
+function getSemanasExcecaoPosFerias(dias = []) {
+  const datasFerias = new Set((dias || [])
+    .filter(isFerias)
+    .map((dia) => formatDate(dia.data || dia.DT))
+    .filter(Boolean));
+  const semanas = new Set();
+  datasFerias.forEach((dataIso) => {
+    if (datasFerias.has(addDaysIso(dataIso, 1))) return;
+    for (let offset = 1; offset <= 3; offset += 1) {
+      semanas.add(getWeekKey(addDaysIso(dataIso, offset)));
+    }
+  });
+  return semanas;
 }
 
 function getHorarioDia(dia) {
@@ -135,6 +172,8 @@ function validarRegrasFuncionario(funcionario) {
   const folgasPorSemana = new Map();
   const descansosPorSemana = new Map();
   const diasPorSemana = new Map();
+  const semanasComFerias = getSemanasComFerias(dias);
+  const semanasExcecaoPosFerias = getSemanasExcecaoPosFerias(dias);
 
   for (const dia of dias) {
     const dataIso = formatDate(dia.data || dia.DT);
@@ -148,8 +187,9 @@ function validarRegrasFuncionario(funcionario) {
     if (isFolgaSemanalAutomatica(dia)) {
       const totalFolgasSemana = (folgasPorSemana.get(weekKey) || 0) + 1;
       folgasPorSemana.set(weekKey, totalFolgasSemana);
-      if (totalFolgasSemana > 2) {
-        errors.push(`${label}: Dia ${Number(dataIso.slice(8, 10))}: possui ${totalFolgasSemana} folgas na semana iniciada em ${weekKey}; limite permitido: 2, contando domingo.`);
+      const limiteFolgasSemana = semanasExcecaoPosFerias.has(weekKey) ? 3 : 2;
+      if (totalFolgasSemana > limiteFolgasSemana) {
+        errors.push(`${label}: Dia ${Number(dataIso.slice(8, 10))}: possui ${totalFolgasSemana} folgas na semana iniciada em ${weekKey}; limite permitido: ${limiteFolgasSemana}, contando domingo.`);
       }
     }
 
@@ -193,6 +233,7 @@ function validarRegrasFuncionario(funcionario) {
   }
 
   diasPorSemana.forEach((totalDiasSemana, weekKey) => {
+    if (semanasComFerias.has(weekKey)) return;
     const minimoDescansosSemana = Math.min(2, Math.round((Number(totalDiasSemana) || 0) * 2 / 7));
     const totalDescansosSemana = descansosPorSemana.get(weekKey) || 0;
     if (minimoDescansosSemana > 0 && totalDescansosSemana < minimoDescansosSemana) {

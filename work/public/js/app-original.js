@@ -4365,12 +4365,39 @@
         const isDiaMesBloqueadoParaEdicao = (ano, mes, dia) => isDataBloqueadaParaEdicao(formatDateForDb(Number(ano), Number(mes), Number(dia)));
         const isFolgaSemanalApp = (dia) => ['F', 'FOLGA', 'FXF', 'FOLGA_FIXA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
         const isFolgaSemanalAutomaticaApp = (dia) => ['F', 'FOLGA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
+        const isFeriasApp = (dia) => ['FER', 'FERIAS'].includes(String(dia?.PROGRAMACAO || dia?.programacao || dia?.HR_ENT1 || dia?.hrEnt1 || '').trim().toUpperCase());
         const getWeekKeyIsoApp = (dataIso) => {
             const date = new Date(String(dataIso || '').slice(0, 10) + 'T00:00:00');
             const day = date.getDay();
             const diffToMonday = day === 0 ? -6 : 1 - day;
             date.setDate(date.getDate() + diffToMonday);
             return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+        };
+        const addDiasIsoApp = (dataIso, dias) => {
+            const date = new Date(String(dataIso || '').slice(0, 10) + 'T00:00:00');
+            date.setDate(date.getDate() + Number(dias || 0));
+            return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+        };
+        const getSemanasComFeriasApp = (dias = []) => {
+            const semanas = new Set();
+            (dias || []).forEach((dia) => {
+                if (isFeriasApp(dia)) semanas.add(getWeekKeyIsoApp(dia.DT || dia.data));
+            });
+            return semanas;
+        };
+        const getSemanasExcecaoPosFeriasApp = (dias = []) => {
+            const datasFerias = new Set((dias || [])
+                .filter(isFeriasApp)
+                .map((dia) => String(dia.DT || dia.data || '').slice(0, 10))
+                .filter(Boolean));
+            const semanas = new Set();
+            datasFerias.forEach((dataIso) => {
+                if (datasFerias.has(addDiasIsoApp(dataIso, 1))) return;
+                for (let offset = 1; offset <= 3; offset += 1) {
+                    semanas.add(getWeekKeyIsoApp(addDiasIsoApp(dataIso, offset)));
+                }
+            });
+            return semanas;
         };
         const criticasIncluemDia = (criticas = [], registro = {}, numeroDia = null) => {
             const dataIso = String(registro?.DT || registro?.data || '').slice(0, 10);
@@ -4436,7 +4463,10 @@
             const folgasPorSemana = new Map();
             const descansosPorSemana = new Map();
             const diasPorSemana = new Map();
-            [...(dias || [])].sort((a,b)=>String(a.DT || a.data).localeCompare(String(b.DT || b.data))).forEach((dia) => {
+            const diasOrdenados = [...(dias || [])].sort((a,b)=>String(a.DT || a.data).localeCompare(String(b.DT || b.data)));
+            const semanasComFerias = getSemanasComFeriasApp(diasOrdenados);
+            const semanasExcecaoPosFerias = getSemanasExcecaoPosFeriasApp(diasOrdenados);
+            diasOrdenados.forEach((dia) => {
                 const dataIso = String(dia.DT || dia.data || '').slice(0,10);
                 const data = new Date(dataIso + 'T00:00:00');
                 const weekKey = getWeekKeyIsoApp(dataIso);
@@ -4447,7 +4477,8 @@
                 if (isFolgaSemanalAutomaticaApp(dia)) {
                     const totalFolgasSemana = (folgasPorSemana.get(weekKey) || 0) + 1;
                     folgasPorSemana.set(weekKey, totalFolgasSemana);
-                    if (totalFolgasSemana > 2) errors.push(`${nome}: Dia ${Number(dataIso.slice(8, 10))}: possui ${totalFolgasSemana} folgas na semana iniciada em ${weekKey}; limite permitido: 2, contando domingo.`);
+                    const limiteFolgasSemana = semanasExcecaoPosFerias.has(weekKey) ? 3 : 2;
+                    if (totalFolgasSemana > limiteFolgasSemana) errors.push(`${nome}: Dia ${Number(dataIso.slice(8, 10))}: possui ${totalFolgasSemana} folgas na semana iniciada em ${weekKey}; limite permitido: ${limiteFolgasSemana}, contando domingo.`);
                 }
                 if (isProgramacaoDescanso(dia.PROGRAMACAO)) return;
                 errors.push(...validarTurnoSimples({inicio:dia.HR_ENT1,inicioIntervalo:dia.HR_SAI1,fimIntervalo:dia.HR_ENT2,fim:dia.HR_SAI2}).map(e=>formatarDataTabela(dia.DT)+': '+e));
@@ -4464,6 +4495,7 @@
                 ultimoTrabalho = dia;
             });
             diasPorSemana.forEach((totalDiasSemana, weekKey) => {
+                if (semanasComFerias.has(weekKey)) return;
                 const minimoDescansosSemana = Math.min(2, Math.round((Number(totalDiasSemana) || 0) * 2 / 7));
                 const totalDescansosSemana = descansosPorSemana.get(weekKey) || 0;
                 if (minimoDescansosSemana > 0 && totalDescansosSemana < minimoDescansosSemana) {

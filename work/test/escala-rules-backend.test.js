@@ -104,6 +104,20 @@ test('backend rejects more than two weekly rests counting Sunday', () => {
   assert.ok(errors.some((error) => error.includes('folgas na semana')));
 });
 
+test('backend allows up to three manual rests immediately after vacation', () => {
+  const errors = validateEscalaPayload(buildPayload([
+    descanso('2026-09-01', 'FER'),
+    descanso('2026-09-02', 'FER'),
+    descanso('2026-09-03', 'FER'),
+    descanso('2026-09-04'),
+    descanso('2026-09-05'),
+    descanso('2026-09-06'),
+    trabalho('2026-09-07')
+  ]));
+
+  assert.equal(errors.some((error) => error.includes('folgas na semana')), false);
+});
+
 test('backend does not criticize weekly rest limit for fixed manual rests', () => {
   const errors = validateEscalaPayload(buildPayload([
     trabalho('2026-09-01'),
@@ -113,6 +127,19 @@ test('backend does not criticize weekly rest limit for fixed manual rests', () =
   ]));
 
   assert.deepEqual(errors, []);
+});
+
+test('backend treats vacation in the week as enough weekly 5x2 rest', () => {
+  const errors = validateEscalaPayload(buildPayload([
+    descanso('2026-09-01', 'FER'),
+    trabalho('2026-09-02'),
+    trabalho('2026-09-03'),
+    trabalho('2026-09-04'),
+    trabalho('2026-09-05'),
+    trabalho('2026-09-06')
+  ]));
+
+  assert.equal(errors.some((error) => error.includes('minimo esperado no 5x2')), false);
 });
 
 test('backend allows Sunday rest plus one more rest in same week', () => {
