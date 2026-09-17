@@ -558,6 +558,9 @@ router.patch('/lojas/:lojaId/secoes/:escsecaoId/turno', resolveLojaParam, requir
 router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, requireLojaAccess, requirePermission('funcionarios', 'editar'), async (req, res, next) => {
   try {
     const data = funcionarioEscalaSchema.parse(req.body);
+    if (['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'].some((field) => data[field] !== undefined)) {
+      assertValidSecaoTurno(data);
+    }
     const funcionario = await catalogService.updateFuncionarioEscala({
       lojaId: Number(req.params.lojaId),
       escfuncId: Number(req.params.escfuncId),

@@ -51,6 +51,15 @@ const syncFuncionarioRmSchema = z.object({
   mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   escfuncId: z.number().int().positive()
 });
+const horarioFuncionarioSchema = z.object({
+  lojaId: z.number().int().positive(),
+  mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  escfuncId: z.number().int().positive(),
+  HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_SAI1: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_SAI2: z.string().regex(/^\d{2}:\d{2}$/)
+}).strict();
 const fixoEscalaSchema = z.object({
   lojaId: z.number().int().positive(),
   mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -66,6 +75,58 @@ const fixoEscalaSchema = z.object({
 });
 
 router.use(requireAuth);
+
+function timeToMinutes(value) {
+  const match = /^(\d{2}):(\d{2})$/.exec(String(value || ''));
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function minutesToTime(totalMinutes) {
+  const safeMinutes = Math.max(0, Number(totalMinutes) || 0);
+  const hours = String(Math.floor(safeMinutes / 60)).padStart(2, '0');
+  const minutes = String(safeMinutes % 60).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function validateHorarioFuncionario(data) {
+  const ent1 = timeToMinutes(data.HR_ENT1);
+  const sai1 = timeToMinutes(data.HR_SAI1);
+  const ent2 = timeToMinutes(data.HR_ENT2);
+  const sai2 = timeToMinutes(data.HR_SAI2);
+  if ([ent1, sai1, ent2, sai2].some((value) => value === null)) return ['Informe todos os horarios no formato HH:MM.'];
+
+  const primeiraJornada = sai1 - ent1;
+  const intervalo = ent2 - sai1;
+  const segundaJornada = sai2 - ent2;
+  const jornadaTotal = primeiraJornada + segundaJornada;
+  const errors = [];
+  if (primeiraJornada <= 0) errors.push('Saida 1 deve ser maior que Entrada 1.');
+  if (segundaJornada <= 0) errors.push('Saida 2 deve ser maior que Entrada 2.');
+  if (intervalo <= 0) errors.push('Entrada 2 deve ser maior que Saida 1.');
+  if (primeiraJornada > 360) errors.push(`Primeiro periodo nao pode passar de 06:00. Atual: ${minutesToTime(primeiraJornada)}.`);
+  if (segundaJornada > 360) errors.push(`Segundo periodo nao pode passar de 06:00. Atual: ${minutesToTime(segundaJornada)}.`);
+  if (jornadaTotal !== 528) errors.push(`Jornada total deve ser exatamente 08:48. Atual: ${minutesToTime(jornadaTotal)}.`);
+  if (intervalo < 70) errors.push(`Intervalo entre as jornadas deve ter no minimo 01:10. Atual: ${minutesToTime(intervalo)}.`);
+  return errors;
+}
+
+function formatDateValue(value) {
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  return String(value || '').slice(0, 10);
+}
+
+function isDescansoProgramacao(value) {
+  return String(value || 'TRB').trim().toUpperCase() !== 'TRB';
+}
 
 router.get('/regras', requirePermission('regras', 'visualizar'), async (req, res) => {
   res.json({ regras: REGRAS_VIGENTES });
@@ -525,6 +586,102 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
     return res.status(201).json({ saved: [saved] });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Formato da escala invalido.', details: error.errors });
+    return next(error);
+  }
+});
+
+router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = horarioFuncionarioSchema.parse(req.body);
+    const errors = validateHorarioFuncionario(payload);
+    if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
+
+    const secoesPermitidas = await getSecoesPermitidas(req, payload.lojaId);
+    const funcionarios = await catalogService.listFuncionariosByLoja(payload.lojaId, {
+      mesRef: payload.mesRef,
+      secoesPermitidas
+    });
+    const funcionario = funcionarios.find((item) => Number(item.ESCFUNC_ID) === Number(payload.escfuncId));
+    if (!funcionario) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja ou secoes permitidas.' });
+    await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [Number(funcionario.ESCSECAO_ID)]);
+
+    const horario = {
+      HR_ENT1: payload.HR_ENT1,
+      HR_SAI1: payload.HR_SAI1,
+      HR_ENT2: payload.HR_ENT2,
+      HR_SAI2: payload.HR_SAI2
+    };
+    const funcionarioAtualizado = await catalogService.updateFuncionarioEscala({
+      lojaId: payload.lojaId,
+      escfuncId: payload.escfuncId,
+      data: horario
+    });
+    if (!funcionarioAtualizado) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja.' });
+
+    let saved = null;
+    let diasAlterados = 0;
+    if (payload.mesRef) {
+      const escalaAtual = await escalaService.getEscalaFuncionarioAtual({
+        lojaId: payload.lojaId,
+        mesRef: payload.mesRef,
+        escfuncId: payload.escfuncId
+      });
+      if (escalaAtual?.dias?.length) {
+        const hojeIso = formatDateValue(new Date());
+        const dias = escalaAtual.dias.map((dia) => {
+          const data = formatDateValue(dia.DT || dia.dt);
+          const programacao = String(dia.PROGRAMACAO || dia.programacao || 'TRB').trim().toUpperCase() || 'TRB';
+          const descanso = isDescansoProgramacao(programacao);
+          const editavel = !descanso && data >= hojeIso;
+          if (editavel) diasAlterados += 1;
+          return {
+            data,
+            hrEnt1: descanso ? null : (editavel ? payload.HR_ENT1 : dia.HR_ENT1),
+            hrSai1: descanso ? null : (editavel ? payload.HR_SAI1 : dia.HR_SAI1),
+            hrEnt2: descanso ? null : (editavel ? payload.HR_ENT2 : dia.HR_ENT2),
+            hrSai2: descanso ? null : (editavel ? payload.HR_SAI2 : dia.HR_SAI2),
+            programacao: descanso ? programacao : 'TRB',
+            justificativa: editavel ? 'Atualizacao de horario do funcionario' : null
+          };
+        });
+        if (diasAlterados > 0) {
+          saved = await escalaService.saveEscalaFuncionarioRevision({
+            lojaId: payload.lojaId,
+            mesRef: payload.mesRef,
+            funcionario: {
+              escfuncId: Number(funcionarioAtualizado.ESCFUNC_ID || funcionario.ESCFUNC_ID),
+              chapa: funcionarioAtualizado.CHAPA || funcionario.CHAPA,
+              nome: funcionarioAtualizado.NOME || funcionario.NOME,
+              escsecaoId: funcionarioAtualizado.ESCSECAO_ID || funcionario.ESCSECAO_ID,
+              escfuncaoId: funcionarioAtualizado.ESCFUNCAO_ID || funcionario.ESCFUNCAO_ID,
+              dias
+            },
+            dias,
+            oficializada: 0
+          });
+        }
+      }
+    }
+
+    await auditService.registerAudit({
+      action: 'EDITAR_HORARIO_FUNCIONARIO',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef || null,
+      revisao: saved?.revisao || null,
+      referenceId: saved?.escprogId || payload.escfuncId,
+      details: {
+        escfuncId: payload.escfuncId,
+        chapa: funcionarioAtualizado.CHAPA || funcionario.CHAPA,
+        horario,
+        escalaAtualizada: Boolean(saved),
+        diasAlterados
+      }
+    });
+
+    return res.json({ funcionario: funcionarioAtualizado, escalaAtualizada: Boolean(saved), saved, diasAlterados });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados de horario invalidos.', details: error.errors });
     return next(error);
   }
 });

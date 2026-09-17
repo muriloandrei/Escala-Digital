@@ -3016,6 +3016,63 @@
             await recarregarSubsecoesPage();
         };
 
+        async function abrirModalHorarioFuncionario(funcionario, options = {}) {
+            if (!funcionario) return;
+            if (!hasPermission('escalas', 'editar') && !hasPermission('funcionarios', 'editar')) {
+                showInfoModal('Usuario sem permissao para editar horarios do funcionario.', 'error');
+                return;
+            }
+            const values = await showInputModal({
+                title: 'Editar horários - ' + (funcionario.NOME || funcionario.nome || funcionario.CHAPA || funcionario.chapa || ''),
+                inputs: [
+                    { type: 'message', text: 'Informe o horário padrão do funcionário. A jornada deve fechar exatamente 08:48.' },
+                    { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || funcionario.hrEnt1 || '08:00', required: true },
+                    { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || funcionario.hrSai1 || '12:00', required: true },
+                    { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: funcionario.HR_ENT2 || funcionario.hrEnt2 || '13:10', required: true },
+                    { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || funcionario.hrSai2 || '17:58', required: true }
+                ],
+                confirmText: 'Salvar'
+            });
+            if (!values) return;
+            const horario = {
+                HR_ENT1: values.HR_ENT1,
+                HR_SAI1: values.HR_SAI1,
+                HR_ENT2: values.HR_ENT2,
+                HR_SAI2: values.HR_SAI2
+            };
+            const erros = validarTurnoCadastroSecao(horario);
+            if (erros.length) {
+                showInfoModal(erros, 'error');
+                return;
+            }
+            const origemEscala = options.origemEscala === true;
+            const lojaId = Number(options.lojaId || escalaDetalheAtual.lojaId || subsecoesPageState.loja || funcionario.LOJA || funcionario.loja);
+            const mesRef = options.mesRef || escalaDetalheAtual.mesRef || null;
+            const escfuncId = Number(funcionario.ESCFUNC_ID || funcionario.escfuncId);
+            if (!lojaId || !escfuncId) {
+                showInfoModal('Não foi possível identificar loja ou funcionário para salvar os horários.', 'error');
+                return;
+            }
+            const response = await apiRequest('/api/escalas/funcionario/horario', {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    lojaId,
+                    mesRef: origemEscala ? mesRef : undefined,
+                    escfuncId,
+                    ...horario
+                }),
+                timeoutMs: 120000
+            });
+            if (origemEscala && escalaDetalheAtual.lojaId && escalaDetalheAtual.mesRef) {
+                await recarregarSecaoAtualEscalaBanco(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef, escalaDetalheAtual.secaoAtiva, {
+                    subsetorAtivo: escalaDetalheAtual.subsetorAtivo
+                });
+            } else {
+                await recarregarSubsecoesPage();
+            }
+            showInfoModal(response?.escalaAtualizada ? 'Horários atualizados no cadastro e na escala atual.' : 'Horários atualizados no cadastro do funcionário.', 'success');
+        }
+
         const abrirModalTransferenciaSubsecao = async (funcionario, options = {}) => {
             if (!funcionario) return;
             const origemEscala = options.origemEscala === true;
@@ -3379,29 +3436,9 @@
                     return;
                 }
                 if (editarHorarios) {
-                    if (!hasPermission('funcionarios', 'editar')) return showInfoModal('Usuario sem permissao para editar horarios do funcionario.', 'error');
-                    const values = await showInputModal({
-                        title: 'Editar horários - ' + (funcionario.NOME || funcionario.CHAPA || ''),
-                        inputs: [
-                            { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || '' },
-                            { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || '' },
-                            { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: funcionario.HR_ENT2 || '' },
-                            { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || '' }
-                        ],
-                        confirmText: 'Salvar'
+                    await abrirModalHorarioFuncionario(funcionario, {
+                        lojaId: subsecoesPageState.loja
                     });
-                    if (!values) return;
-                    await apiRequest('/api/catalog/lojas/' + encodeURIComponent(subsecoesPageState.loja) + '/funcionarios/' + encodeURIComponent(funcionario.ESCFUNC_ID), {
-                        method: 'PATCH',
-                        body: JSON.stringify({
-                            HR_ENT1: values.HR_ENT1 || null,
-                            HR_SAI1: values.HR_SAI1 || null,
-                            HR_ENT2: values.HR_ENT2 || null,
-                            HR_SAI2: values.HR_SAI2 || null
-                        })
-                    });
-                    await recarregarSubsecoesPage();
-                    showInfoModal('Horários atualizados.', 'success');
                     return;
                 }
                 if (transferir) {
@@ -8885,7 +8922,11 @@
                     return;
                 }
                 if (scaleEditarHorarios) {
-                    window.location.hash = '/escala-funcionario/' + encodeURIComponent(escfuncId) + '/' + encodeURIComponent(escalaDetalheAtual.lojaId) + '/' + encodeURIComponent(escalaDetalheAtual.mesRef);
+                    await abrirModalHorarioFuncionario(funcionario, {
+                        origemEscala: true,
+                        lojaId: escalaDetalheAtual.lojaId,
+                        mesRef: escalaDetalheAtual.mesRef
+                    });
                     return;
                 }
                 if (scaleTransferir) {
