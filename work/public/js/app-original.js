@@ -6525,9 +6525,10 @@
         const getSubsetorDetalhe = (dia) => classificarSubsecaoFuncionario(dia, getSubsecoesCatalogoSecao(dia.ESCSECAO_ID || escalaDetalheAtual.secaoAtiva));
         const getSubsetorDetalheKey = (dia) => String(getSubsetorDetalhe(dia).key);
         const getSubsetorDetalheNome = (dia) => String(getSubsetorDetalhe(dia).nome);
-        const isProgramacaoProtegidaBanco = (programacao) => ['FER', 'AFA', 'FXF', 'FIX'].includes(String(programacao || '').toUpperCase());
-        const isDiaFixoBanco = (dia) => Number(dia?.FIXO_ESCALA || 0) === 1;
-        const isDiaProtegidoBanco = (dia) => isProgramacaoProtegidaBanco(dia?.PROGRAMACAO) || dia?.AUSENCIA_OBRIGATORIA || Number(dia?.FIXO_ESCALA || 0) === 1;
+        const isProgramacaoFixoBanco = (programacao) => ['FXF', 'FIX', 'FOLGA_FIXA', 'HORARIO_FIXO'].includes(String(programacao || '').toUpperCase());
+        const isProgramacaoProtegidaBanco = (programacao) => ['FER', 'AFA'].includes(String(programacao || '').toUpperCase());
+        const isDiaFixoBanco = (dia) => Number(dia?.FIXO_ESCALA || 0) === 1 || isProgramacaoFixoBanco(dia?.PROGRAMACAO);
+        const isDiaProtegidoBanco = (dia) => isProgramacaoProtegidaBanco(dia?.PROGRAMACAO) || dia?.AUSENCIA_OBRIGATORIA;
 
         const resetarEstadoEdicaoBanco = () => {
             escalaDetalheBancoValidada = false;
@@ -7593,7 +7594,7 @@
                         bloqueado ? 'locked-day' : ''
                     ].filter(Boolean).join(' ');
                     const editAttrs = !bloqueado
-                        ? ' role="button" tabindex="0" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" draggable="' + (descanso && !isDiaProtegidoBanco(registro) ? 'true' : 'false') + '"'
+                        ? ' role="button" tabindex="0" data-escprog-id="' + escapeHtml(registro.ESCPROG_ID || '') + '" data-escprogdia-id="' + escapeHtml(registro.ESCPROGDIA_ID || '') + '" data-escfunc-id="' + escapeHtml(funcionario.escfuncId || '') + '" draggable="' + (descanso && !isDiaProtegidoBanco(registro) && !isDiaFixoBanco(registro) ? 'true' : 'false') + '"'
                         : '';
                     html += '<td class="' + cellClass + ' monthly-editable-day" data-schedule-tooltip="' + escapeHtml(getDiaTitle(registro)) + '"' + editAttrs + '>' + escapeHtml(value) + '</td>';
                 });
@@ -8719,7 +8720,7 @@
             const dia = getDiaBancoPorId(escprogdiaId);
             if (!dia) return;
             if (isDiaProtegidoBanco(dia)) {
-                showInfoModal('Este dia possui férias, afastamento ou folga fixa e não pode ser alterado automaticamente.', 'info');
+                showInfoModal('Este dia possui férias ou afastamento e não pode ser alterado automaticamente.', 'info');
                 return;
             }
             if (isProgramacaoDescanso(dia.PROGRAMACAO)) {
@@ -8736,7 +8737,11 @@
             const destino = getDiaBancoPorId(destinoId);
             if (!origem || !destino || String(origem.ESCPROGDIA_ID || '') === String(destino.ESCPROGDIA_ID || '')) return;
             if (isDiaProtegidoBanco(origem) || isDiaProtegidoBanco(destino)) {
-                showInfoModal('Férias, afastamentos e folgas fixas não podem ser movidos pela edição rápida.', 'info');
+                showInfoModal('Férias e afastamentos não podem ser movidos pela edição rápida.', 'info');
+                return;
+            }
+            if (isDiaFixoBanco(origem) || isDiaFixoBanco(destino)) {
+                showInfoModal('Remova ou edite o fixo antes de mover a folga.', 'info');
                 return;
             }
             if (String(origem.ESCFUNC_ID || '') !== String(destino.ESCFUNC_ID || '')) {
@@ -8777,7 +8782,7 @@
                 await removerFixoDiaGeradoBanco(dia, { renderizar: false });
             }
             if (isDiaProtegidoBanco(dia)) {
-                showInfoModal('Este dia possui férias, afastamento ou fixo cadastrado e não pode ser alterado.', 'info');
+                showInfoModal('Este dia possui férias ou afastamento e não pode ser alterado.', 'info');
                 return;
             }
             const descansoAtual = isProgramacaoDescanso(dia.PROGRAMACAO);
@@ -8979,7 +8984,7 @@
                 return;
             }
             if (isDiaProtegidoBanco(dia)) {
-                showInfoModal('Este dia possui férias, afastamento ou folga fixa e não pode ser alterado automaticamente.', 'info');
+                showInfoModal('Este dia possui férias ou afastamento e não pode ser alterado automaticamente.', 'info');
                 return;
             }
             clearTimeout(escalaBancoSingleClickTimer);
@@ -9019,7 +9024,7 @@
             }
             const dia = getDiaBancoPorId(cell.dataset.escprogdiaId);
             if (!isDiaFixoBanco(dia) && isDiaProtegidoBanco(dia)) {
-                showInfoModal('Este dia possui férias, afastamento ou folga fixa e não pode ser alterado.', 'info');
+                showInfoModal('Este dia possui férias ou afastamento e não pode ser alterado.', 'info');
                 return;
             }
             editarDiaEscalaPorId(cell.dataset.escprogId, cell.dataset.escprogdiaId);
@@ -9028,7 +9033,7 @@
         escalaBancoMensalContent?.addEventListener('dragstart', (event) => {
             const cell = event.target.closest('.monthly-editable-day[data-escprogdia-id]');
             const dia = getDiaBancoPorId(cell?.dataset?.escprogdiaId);
-            if (!cell || !cell.classList.contains('rest-cell') || cell.classList.contains('locked-day') || isDiaProtegidoBanco(dia)) {
+            if (!cell || !cell.classList.contains('rest-cell') || cell.classList.contains('locked-day') || isDiaProtegidoBanco(dia) || isDiaFixoBanco(dia)) {
                 event.preventDefault();
                 return;
             }
