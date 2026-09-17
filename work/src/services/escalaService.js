@@ -132,6 +132,65 @@ async function getTableColumns(connection, tableName) {
   return new Set(result.rows.map((row) => pick(row, 'COLUMN_NAME', 'column_name')));
 }
 
+async function getTableColumnDetails(connection, tableName) {
+  const result = await connection.execute(
+    `select column_name, data_type, data_precision, data_scale, nullable
+     from user_tab_columns
+     where table_name = :tableName
+     union
+     select column_name, data_type, data_precision, data_scale, nullable
+     from all_tab_columns
+     where table_name = :tableName
+       and owner in (user, sys_context('USERENV', 'CURRENT_SCHEMA'))
+     union
+     select c.column_name, c.data_type, c.data_precision, c.data_scale, c.nullable
+     from all_synonyms s
+     join all_tab_columns c
+       on c.owner = s.table_owner
+      and c.table_name = s.table_name
+     where s.synonym_name = :tableName
+       and s.owner in (user, 'PUBLIC')`,
+    { tableName },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  const details = new Map();
+  for (const row of result.rows || []) {
+    const column = pick(row, 'COLUMN_NAME', 'column_name');
+    if (!column || details.has(column)) continue;
+    details.set(column, {
+      dataType: pick(row, 'DATA_TYPE', 'data_type'),
+      dataPrecision: pick(row, 'DATA_PRECISION', 'data_precision'),
+      dataScale: pick(row, 'DATA_SCALE', 'data_scale'),
+      nullable: pick(row, 'NULLABLE', 'nullable')
+    });
+  }
+  return details;
+}
+
+function normalizeNumberForColumn(columnDetails, tableName, columnName, value) {
+  if (value === null || value === undefined || value === '') return null;
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) {
+    const error = new Error(`Valor invalido para ${tableName}.${columnName}: ${value}.`);
+    error.statusCode = 422;
+    throw error;
+  }
+  const details = columnDetails.get(columnName);
+  const precision = Number(details?.dataPrecision || 0);
+  const scale = Number(details?.dataScale || 0);
+  if (String(details?.dataType || '').toUpperCase() === 'NUMBER' && precision > 0) {
+    const integerDigits = String(Math.trunc(Math.abs(numberValue))).length;
+    const maxIntegerDigits = Math.max(1, precision - Math.max(scale, 0));
+    if (integerDigits > maxIntegerDigits) {
+      const error = new Error(`Valor ${numberValue} excede a precisao da coluna ${tableName}.${columnName}. Rode a migration 20260917_widen_prog_numeric_columns.sql no Oracle.`);
+      error.statusCode = 422;
+      error.details = [{ table: tableName, column: columnName, value: numberValue, precision, scale }];
+      throw error;
+    }
+  }
+  return numberValue;
+}
+
 async function getAuditJoinSql(connection, programAlias = 'p') {
   const columns = await getTableColumns(connection, 'SGN_ESC_AUDITORIA');
   const referenceColumn = ['REFERENCIA_ID', 'ESCPROG_ID', 'ENTIDADE_ID'].find((column) => columns.has(column));
@@ -297,12 +356,24 @@ function isUniqueConstraintError(error) {
   return error?.errorNum === 1 || error?.code === 'ORA-00001';
 }
 
+function isPrecisionConstraintError(error) {
+  return error?.errorNum === 1438 || error?.code === 'ORA-01438';
+}
+
 function normalizeOracleSaveError(error) {
-  if (!isUniqueConstraintError(error)) return error;
-  const normalized = new Error('Ja existe programacao gravada para um funcionario nesta loja, mes e revisao. Recarregue as escalas e tente salvar novamente.');
-  normalized.statusCode = 409;
-  normalized.cause = error;
-  return normalized;
+  if (isUniqueConstraintError(error)) {
+    const normalized = new Error('Ja existe programacao gravada para um funcionario nesta loja, mes e revisao. Recarregue as escalas e tente salvar novamente.');
+    normalized.statusCode = 409;
+    normalized.cause = error;
+    return normalized;
+  }
+  if (isPrecisionConstraintError(error)) {
+    const normalized = new Error('Uma coluna numerica da escala excedeu a precisao permitida no Oracle. Rode a migration 20260917_widen_prog_numeric_columns.sql e tente gerar novamente.');
+    normalized.statusCode = 422;
+    normalized.cause = error;
+    return normalized;
+  }
+  return error;
 }
 
 function isMissingObjectError(error) {
@@ -1294,7 +1365,8 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
   const escfuncaoId = funcionario.escfuncaoId || funcionario.ESCFUNCAO_ID || funcionarioDb.ESCFUNCAO_ID;
   const lojaFuncionario = Number(funcionarioDb.LOJA) || Number(lojaId);
   const chapa = funcionario.chapa || funcionario.CHAPA || funcionarioDb.CHAPA;
-  const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
+  const progColumnDetails = await getTableColumnDetails(connection, 'SGN_ESC_PROG');
+  const progColumns = new Set(progColumnDetails.keys());
   const primeiroDiaTrabalho = (dias || []).find((dia) => String(dia.programacao || dia.PROGRAMACAO || 'TRB').toUpperCase() === 'TRB');
   const horarioOficial = funcionario.turnoOficial || {
     escsecaoTurnoId: funcionario.escsecaoTurnoId || funcionario.ESCSECAOTURNO_ID || null,
@@ -1308,13 +1380,13 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
   const headerValues = ['sgn_esc_prog_seq.nextval', "to_date(:mesRef, 'YYYY-MM-DD')", ':escfuncId', ':escsecaoId', ':escfuncaoId', ':lojaId', ':chapa'];
   const headerBinds = {
     mesRef,
-    escfuncId,
-    escsecaoId,
-    escfuncaoId,
-    lojaId: lojaFuncionario,
+    escfuncId: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'ESCFUNC_ID', escfuncId),
+    escsecaoId: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'ESCSECAO_ID', escsecaoId),
+    escfuncaoId: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'ESCFUNCAO_ID', escfuncaoId),
+    lojaId: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'LOJA', lojaFuncionario),
     chapa,
-    revisao,
-    oficializada,
+    revisao: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'REVISAO', revisao),
+    oficializada: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'OFICIALIZADA', oficializada),
     escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
   };
 
@@ -1329,7 +1401,9 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
     if (!progColumns.has(column)) return;
     headerColumns.push(column.toLowerCase());
     headerValues.push(`:${bind}`);
-    headerBinds[bind] = value;
+    headerBinds[bind] = column === 'ESCSECAOTURNO_ID'
+      ? normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', column, value)
+      : value;
   });
   headerColumns.push('revisao', 'oficializada', 'dt_hr_incl');
   headerValues.push(':revisao', ':oficializada', 'sysdate');
@@ -1366,6 +1440,7 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
 async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision, nextRevision, secoesAlteradas }) {
   if (latestRevision === null || latestRevision === undefined || secoesAlteradas.length === 0) return;
   const ativaSql = await getAtivaSql(connection, 'p');
+  const progColumnDetails = await getTableColumnDetails(connection, 'SGN_ESC_PROG');
 
   const binds = {
     lojaId,
@@ -1398,13 +1473,13 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
        returning escprog_id into :escprogId`,
       {
         mesRef: pick(row, 'MES_REF', 'mes_ref'),
-        escfuncId: pick(row, 'ESCFUNC_ID', 'escfunc_id'),
-        escsecaoId: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
-        escfuncaoId: pick(row, 'ESCFUNCAO_ID', 'escfuncao_id'),
-        loja: pick(row, 'LOJA', 'loja'),
+        escfuncId: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'ESCFUNC_ID', pick(row, 'ESCFUNC_ID', 'escfunc_id')),
+        escsecaoId: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'ESCSECAO_ID', pick(row, 'ESCSECAO_ID', 'escsecao_id')),
+        escfuncaoId: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'ESCFUNCAO_ID', pick(row, 'ESCFUNCAO_ID', 'escfuncao_id')),
+        loja: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'LOJA', pick(row, 'LOJA', 'loja')),
         chapa: pick(row, 'CHAPA', 'chapa'),
-        revisao: nextRevision,
-        oficializada: 0,
+        revisao: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'REVISAO', nextRevision),
+        oficializada: normalizeNumberForColumn(progColumnDetails, 'SGN_ESC_PROG', 'OFICIALIZADA', 0),
         escprogId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
       },
       { autoCommit: false }

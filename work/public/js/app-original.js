@@ -3064,15 +3064,13 @@
                     }),
                     timeoutMs: 120000
                 });
-                await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
-                escalaDetalheAtual.secaoAtiva = String(escsecaoId);
-                escalaDetalheAtual.subsetorAtivo = String(values.ESCSUBSECAO_ID);
-                prepararSecoesDetalheEscala();
+                await recarregarSecaoAtualEscalaBanco(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef, String(escsecaoId), {
+                    subsetorAtivo: String(values.ESCSUBSECAO_ID)
+                });
             } else if (origemEscala) {
-                await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
-                escalaDetalheAtual.secaoAtiva = String(escsecaoId);
-                escalaDetalheAtual.subsetorAtivo = String(values.ESCSUBSECAO_ID);
-                prepararSecoesDetalheEscala();
+                await recarregarSecaoAtualEscalaBanco(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef, String(escsecaoId), {
+                    subsetorAtivo: String(values.ESCSUBSECAO_ID)
+                });
             } else {
                 subsecoesPageState.selecionadaId = values.ESCSUBSECAO_ID;
                 subsecoesPageState.selecionados.clear();
@@ -6743,11 +6741,23 @@
             }) || null;
         };
 
-        const recarregarSecaoAtualEscalaBanco = async (lojaId, mesRef, secaoAtiva) => {
-            await carregarDetalheEscalaMensal(lojaId, mesRef);
-            escalaDetalheAtual.secaoAtiva = secaoAtiva;
+        const recarregarSecaoAtualEscalaBanco = async (lojaId, mesRef, secaoAtiva, options = {}) => {
+            const contexto = {
+                secaoAtiva: secaoAtiva || escalaDetalheAtual.secaoAtiva,
+                subsetorAtivo: options.subsetorAtivo !== undefined ? options.subsetorAtivo : escalaDetalheAtual.subsetorAtivo,
+                visao: options.visao || escalaDetalheAtual.visao,
+                posicao: options.posicao || capturarPosicaoEscalaBanco()
+            };
+            await carregarDetalheEscalaMensal(lojaId, mesRef, {
+                secaoAtiva: contexto.secaoAtiva,
+                subsetorAtivo: contexto.subsetorAtivo,
+                visao: contexto.visao
+            });
+            escalaDetalheAtual.secaoAtiva = contexto.secaoAtiva;
+            escalaDetalheAtual.subsetorAtivo = contexto.subsetorAtivo;
+            if (contexto.visao) escalaDetalheAtual.visao = contexto.visao;
             prepararSecoesDetalheEscala();
-            renderizarSecaoAtivaEscala();
+            restaurarPosicaoEscalaBanco(contexto.posicao);
         };
 
         const salvarFixoSecaoBanco = async (payload, mensagemSucesso = 'Fixo cadastrado para a geração da seção.', options = {}) => {
@@ -7844,9 +7854,25 @@
             prepararSecoesDetalheEscala();
         };
 
-        const carregarDetalheEscalaMensal = async (lojaId, mesRef) => {
+        const carregarDetalheEscalaMensal = async (lojaId, mesRef, options = {}) => {
             resetarEstadoEdicaoBanco();
-            escalaDetalheAtual = { escprogId: null, lojaId, mesRef, modo: 'mensal', visao: 'mensal', status: null, dias: [], funcionarios: [], fixos: [], ausencias: [], secoesLiberadas: [], secoes: [], secaoAtiva: null, subsetorAtivo: null, subsetores: [] };
+            escalaDetalheAtual = {
+                escprogId: null,
+                lojaId,
+                mesRef,
+                modo: 'mensal',
+                visao: options.visao || 'mensal',
+                status: null,
+                dias: [],
+                funcionarios: [],
+                fixos: [],
+                ausencias: [],
+                secoesLiberadas: [],
+                secoes: [],
+                secaoAtiva: options.secaoAtiva || null,
+                subsetorAtivo: options.subsetorAtivo || null,
+                subsetores: []
+            };
             escalaDetalheTitulo.textContent = 'Escala Loja ' + lojaId + ' - ' + formatarMesTabela(mesRef);
             escalaDetalheResumo.textContent = 'Carregando escala mensal...';
             const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
@@ -8613,10 +8639,7 @@
                 if (oficializar) {
                     window.location.hash = '/escalas-geradas';
                 } else if (lojaAtual && mesAtual) {
-                    await carregarDetalheEscalaMensal(lojaAtual, mesAtual);
-                    escalaDetalheAtual.secaoAtiva = secaoAtual;
-                    escalaDetalheAtual.subsetorAtivo = subsetorAtual;
-                    prepararSecoesDetalheEscala();
+                    await recarregarSecaoAtualEscalaBanco(lojaAtual, mesAtual, secaoAtual, { subsetorAtivo: subsetorAtual });
                 }
             } catch (error) {
                 showInfoModal(error.details?.length ? error.details : 'Não foi possível salvar a revisão individual: ' + error.message, 'error');
@@ -8922,11 +8945,8 @@
                 }).then(async (data) => {
                     const resultado = data.resultado || {};
                     const criticas = resultado.criticas || [];
-                    await carregarDetalheEscalaMensal(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
-                    escalaDetalheAtual.secaoAtiva = secaoKey;
-                    escalaDetalheAtual.subsetorAtivo = subsetorKey;
+                    await recarregarSecaoAtualEscalaBanco(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef, secaoKey, { subsetorAtivo: subsetorKey });
                     escalaBancoDetalhadaCard?.classList.remove('hidden');
-                    prepararSecoesDetalheEscala();
                     showInfoModal(criticas.length ? ['Escala da seção gerada com críticas.', ...criticas] : 'Escala da seção gerada com sucesso.', criticas.length ? 'error' : 'success');
                 }).catch((error) => {
                     gerarSecaoButton.disabled = false;
