@@ -481,6 +481,12 @@ async function getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfun
   return value === null || value === undefined ? null : Number(value);
 }
 
+function escolherRevisaoParaUpsertSemNovaRevisao(latestActiveRevision, latestAnyRevision) {
+  if (latestActiveRevision !== null && latestActiveRevision !== undefined) return Number(latestActiveRevision);
+  if (latestAnyRevision !== null && latestAnyRevision !== undefined) return Number(latestAnyRevision) + 1;
+  return 0;
+}
+
 async function listEscalas({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef, secoesPermitidas });
@@ -1501,7 +1507,10 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
 
 async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada = 0 }) {
   const latestActiveRevision = await getLatestRevision(connection, { lojaId, mesRef });
-  const revisaoAtual = latestActiveRevision === null ? 0 : latestActiveRevision;
+  const latestAnyRevision = latestActiveRevision === null
+    ? await getLatestRevision(connection, { lojaId, mesRef, includeInactive: true })
+    : latestActiveRevision;
+  const revisaoAtual = escolherRevisaoParaUpsertSemNovaRevisao(latestActiveRevision, latestAnyRevision);
   const saved = [];
 
   for (const funcionario of funcionarios) {
@@ -1941,6 +1950,7 @@ module.exports = {
   _private: {
     getAlteracoesDiasBloqueados,
     isDiaBloqueadoParaEdicao,
+    escolherRevisaoParaUpsertSemNovaRevisao,
     filtrarFuncionariosCatalogoPorSecoesEscala,
     montarDiasReconciliadosRm
   }

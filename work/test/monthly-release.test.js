@@ -34,6 +34,13 @@ test('monthly release builds draft only from today onward', () => {
   assert.equal(rascunho.dias.some((dia) => dia.programacao === 'TRB'), true);
 });
 
+test('scale upsert after inactive month uses a revision above inactive history', () => {
+  assert.equal(_private.escolherRevisaoParaUpsertSemNovaRevisao(null, null), 0);
+  assert.equal(_private.escolherRevisaoParaUpsertSemNovaRevisao(2, 4), 2);
+  assert.equal(_private.escolherRevisaoParaUpsertSemNovaRevisao(null, 0), 1);
+  assert.equal(_private.escolherRevisaoParaUpsertSemNovaRevisao(null, 7), 8);
+});
+
 test('monthly release uses complete operational weeks from first Monday to last Sunday', () => {
   const funcionario = {
     ESCFUNC_ID: 14,
