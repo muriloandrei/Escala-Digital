@@ -1254,7 +1254,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
   };
 }
 
-async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = formatDateValue(new Date()) }) {
+async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()) }) {
   if (await escalaService.isEscalaSecaoOficializada({ lojaId, mesRef, escsecaoId })) {
     const error = new Error('Escala oficializada nao pode ser resetada.');
     error.statusCode = 422;
@@ -1269,10 +1269,15 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = format
     escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId })
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
+  const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
+    ? new Set(escfuncIds.map(Number).filter(Boolean))
+    : null;
   const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
+  const funcionariosReset = funcionariosSecao
+    .filter((funcionario) => !filtroFuncionarios || filtroFuncionarios.has(Number(funcionario.ESCFUNC_ID)));
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
   const funcionariosPayload = anexarDiasPassados(
-    buildFuncionariosLiberacao(funcionariosSecao, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
+    buildFuncionariosLiberacao(funcionariosReset, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
     diasAtuaisSecao,
     hojeIso,
     mesRef
@@ -1295,6 +1300,7 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = format
     lojaId,
     mesRef,
     escsecaoId,
+    escfuncIds: filtroFuncionarios ? [...filtroFuncionarios] : null,
     resetada: true,
     funcionarios: saved.length
   };

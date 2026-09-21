@@ -8498,12 +8498,16 @@
             if (!confirmacao) return;
             resetarEscalaSecaoBancoBtn.disabled = true;
             try {
+                const escfuncIdsReset = escalaDetalheAtual.subsetorAtivo
+                    ? getFuncionariosSecaoAtualBanco().map(funcionario => Number(funcionario.ESCFUNC_ID)).filter(Boolean)
+                    : undefined;
                 await apiRequest('/api/escalas/resetar-secao', {
                     method: 'POST',
                     body: JSON.stringify({
                         lojaId: Number(escalaDetalheAtual.lojaId),
                         mesRef: escalaDetalheAtual.mesRef,
-                        escsecaoId: Number(escalaDetalheAtual.secaoAtiva)
+                        escsecaoId: Number(escalaDetalheAtual.secaoAtiva),
+                        escfuncIds: escfuncIdsReset
                     }),
                     timeoutMs: 120000
                 });

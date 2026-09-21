@@ -939,10 +939,10 @@ test('section reset preserves previous days and restores future protected absenc
   };
   let savedPayload = null;
 
-  catalogService.listFuncionariosByLoja = async () => [{
-    ESCFUNC_ID: 501,
-    CHAPA: '050001',
-    NOME: 'Funcionario Reset',
+  catalogService.listFuncionariosByLoja = async () => [501, 502].map((id) => ({
+    ESCFUNC_ID: id,
+    CHAPA: `050${id}`,
+    NOME: `Funcionario Reset ${id}`,
     LOJA: 10,
     ESCSECAO_ID: 20,
     ESCFUNCAO_ID: 30,
@@ -950,7 +950,7 @@ test('section reset preserves previous days and restores future protected absenc
     HR_SAI1: '12:00',
     HR_ENT2: '13:10',
     HR_SAI2: '17:58'
-  }];
+  }));
   catalogService.listTurnosByLoja = async () => [];
   catalogService.listAusenciasByLojaMes = async () => [
     { ESCFUNC_ID: 501, DT_INIC: '2026-09-08', DT_FIM: '2026-09-08', MOTIVO: 'FERIAS' },
@@ -988,12 +988,15 @@ test('section reset preserves previous days and restores future protected absenc
       lojaId: 10,
       mesRef: '2026-09-01',
       escsecaoId: 20,
+      escfuncIds: [501],
       hojeIso: '2026-09-08'
     });
 
     assert.equal(result.resetada, true);
+    assert.deepEqual(result.escfuncIds, [501]);
     assert.equal(savedPayload.criarRevisao, false);
     assert.equal(savedPayload.funcionarios.length, 1);
+    assert.equal(savedPayload.funcionarios[0].escfuncId, 501);
     assert.deepEqual(savedPayload.funcionarios[0].dias, [{
       data: '2026-09-07',
       hrEnt1: '07:30',
