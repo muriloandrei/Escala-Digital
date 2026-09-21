@@ -152,8 +152,8 @@ function validarTurnoAprendiz(funcionarioLabel, dia) {
     return errors;
   }
   const jornada = horario.saidaIntervalo - horario.entrada;
-  if (jornada !== 345) {
-    errors.push(`${funcionarioLabel}: jornada de aprendiz deve ser 05:45 em ${data}. Atual: ${minutesToTime(jornada)}.`);
+  if (jornada !== 315) {
+    errors.push(`${funcionarioLabel}: jornada de aprendiz deve ser 05:15 em ${data}. Atual: ${minutesToTime(jornada)}.`);
   }
   if (jornada > 360) {
     errors.push(`${funcionarioLabel}: jornada continua maior que 06:00 em ${data}.`);

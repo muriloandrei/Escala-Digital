@@ -1163,7 +1163,14 @@
         };
 
         const getTipoDescansoOptions = () => {
-            const ativos = tiposDescansoCache.filter(tipo => tipo.STATUS !== 'I');
+            const normalizar = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+            const tiposSistema = new Set(['FER', 'FERIAS', 'AFA', 'AFASTAMENTO']);
+            const ativos = tiposDescansoCache.filter(tipo => {
+                if (tipo.STATUS === 'I') return false;
+                const sigla = normalizar(tipo.SIGLA);
+                const classificacao = normalizar(tipo.CLASSIFICACAO || tipo.TIPO || tipo.CATEGORIA);
+                return !tiposSistema.has(sigla) && !tiposSistema.has(classificacao);
+            });
             return ativos.length
                 ? ativos.map(tipo => ({ value: tipo.SIGLA, label: tipo.DESCR + ' (' + tipo.SIGLA + ')' }))
                 : [{ value: 'F', label: 'Folga (F)' }];
@@ -4491,10 +4498,11 @@
             return [...map.values()];
         };
 
-        const validarDiasEscalaFuncionario = (dias, nome) => {
+        const validarDiasEscalaFuncionario = (dias, nome, funcionario = {}) => {
             const errors = [];
             let ultimoTrabalho = null;
             let ultimoDomingo = null;
+            const aprendiz = isFuncionarioAprendizBanco(funcionario);
             const folgasPorSemana = new Map();
             const descansosPorSemana = new Map();
             const diasPorSemana = new Map();
@@ -4516,10 +4524,25 @@
                     if (totalFolgasSemana > limiteFolgasSemana) errors.push(`${nome}: Dia ${Number(dataIso.slice(8, 10))}: possui ${totalFolgasSemana} folgas na semana iniciada em ${weekKey}; limite permitido: ${limiteFolgasSemana}, contando domingo.`);
                 }
                 if (isProgramacaoDescanso(dia.PROGRAMACAO)) return;
-                errors.push(...validarTurnoSimples({inicio:dia.HR_ENT1,inicioIntervalo:dia.HR_SAI1,fimIntervalo:dia.HR_ENT2,fim:dia.HR_SAI2}).map(e=>formatarDataTabela(dia.DT)+': '+e));
+                if (aprendiz) {
+                    const entradaAprendiz = timeToMinutes(dia.HR_ENT1);
+                    const saidaAprendiz = timeToMinutes(dia.HR_SAI1);
+                    if (Number.isNaN(entradaAprendiz) || Number.isNaN(saidaAprendiz)) {
+                        errors.push(`${formatarDataTabela(dia.DT)}: horario de aprendiz incompleto.`);
+                    } else if (entradaAprendiz >= saidaAprendiz) {
+                        errors.push(`${formatarDataTabela(dia.DT)}: horarios de aprendiz fora de ordem.`);
+                    } else {
+                        const jornadaAprendiz = saidaAprendiz - entradaAprendiz;
+                        if (jornadaAprendiz !== 315) errors.push(`${formatarDataTabela(dia.DT)}: jornada de aprendiz deve ser 05:15. Atual: ${minutesToTime(jornadaAprendiz)}.`);
+                        if (jornadaAprendiz > 360) errors.push(`${formatarDataTabela(dia.DT)}: jornada continua maior que 06:00.`);
+                    }
+                } else {
+                    errors.push(...validarTurnoSimples({inicio:dia.HR_ENT1,inicioIntervalo:dia.HR_SAI1,fimIntervalo:dia.HR_ENT2,fim:dia.HR_SAI2}).map(e=>formatarDataTabela(dia.DT)+': '+e));
+                }
                 if (ultimoTrabalho) {
                     const diasDiff = Math.round((data - ultimoTrabalho.data) / 86400000);
-                    const descanso = ((diasDiff - 1) * 1440) + (1440 - timeToMinutes(ultimoTrabalho.HR_SAI2)) + timeToMinutes(dia.HR_ENT1);
+                    const ultimaSaida = aprendiz ? ultimoTrabalho.HR_SAI1 : ultimoTrabalho.HR_SAI2;
+                    const descanso = ((diasDiff - 1) * 1440) + (1440 - timeToMinutes(ultimaSaida)) + timeToMinutes(dia.HR_ENT1);
                     if (diasDiff === 1 && descanso < timeToMinutes(regraDescansoEntreTurnosInput.value)) errors.push(`${nome}: interjornada menor que ${regraDescansoEntreTurnosInput.value} entre ${formatarDataTabela(ultimoTrabalho.DT)} e ${formatarDataTabela(dia.DT)}.`);
                     if (diasDiff > 1 && descanso < hoursToMinutes(regraDescansoPosFolgaInput.value)) errors.push(`${nome}: descanso apos folga menor que ${regraDescansoPosFolgaInput.value}h entre ${formatarDataTabela(ultimoTrabalho.DT)} e ${formatarDataTabela(dia.DT)}.`);
                 }
@@ -4870,7 +4893,7 @@
         distribuirFolgasFuncionarioBtn?.addEventListener('click',distribuirFolgasFuncionario);
 
         const validarEscalaFuncionarioAtual = () => {
-            const atual=escalaFuncionarioEdicaoAtual;if(!atual)return false; const errors=validarDiasEscalaFuncionario(atual.dias, atual.nome); let consecutivos=0;
+            const atual=escalaFuncionarioEdicaoAtual;if(!atual)return false; const errors=validarDiasEscalaFuncionario(atual.dias, atual.nome, atual); let consecutivos=0;
             [...atual.dias].sort((a,b)=>String(a.DT).localeCompare(String(b.DT))).forEach(dia=>{if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;} consecutivos++; if(consecutivos>getMaxDiasConsecutivos5x2())errors.push('Mais de '+getMaxDiasConsecutivos5x2()+' dias consecutivos em '+formatarDataTabela(dia.DT)+'.');});
             atual.criticas = errors;
             escalaFuncionarioEdicaoValidada = errors.length === 0;
@@ -6936,6 +6959,8 @@
                         nome: funcionario.nome,
                         escsecaoId: base.ESCSECAO_ID || null,
                         escfuncaoId: base.ESCFUNCAO_ID || null,
+                        funcao: funcionario.funcao || funcionario.FUNCAO_DESCR || base.FUNCAO_DESCR || '',
+                        aprendiz: isFuncionarioAprendizBanco(funcionario),
                         dias: diasOrdenados.map(dia => {
                             const descanso = isProgramacaoDescanso(dia.PROGRAMACAO);
                             const sigla = getValorDescanso(dia);
@@ -7061,7 +7086,7 @@
             escalaDetalheAtual.criticasPorFuncionario = new Map();
             agruparDiasPorFuncionario(escalaDetalheAtual.dias || []).forEach((funcionario) => {
                 const dias = [...funcionario.dias.values()].sort((a, b) => String(a.DT).localeCompare(String(b.DT)));
-                const criticas = validarDiasEscalaFuncionario(dias, funcionario.nome);
+                const criticas = validarDiasEscalaFuncionario(dias, funcionario.nome, funcionario);
                 if (criticas.length) escalaDetalheAtual.criticasPorFuncionario.set(String(funcionario.escfuncId), criticas);
                 errors.push(...criticas);
             });
@@ -8812,7 +8837,7 @@
             if (!escprogId || !escprogdiaId || !dia) return;
             const funcionarioDia = getFuncionarioBancoPorId(dia.ESCFUNC_ID);
             if (funcionarioDia && isFuncionarioAprendizBanco(funcionarioDia) && !isProgramacaoDescanso(dia.PROGRAMACAO)) {
-                showInfoModal('O horário do aprendiz é fixo em 05:45. Use apenas a distribuição de folgas para este funcionário.', 'info');
+                showInfoModal('O horário do aprendiz é fixo em 05:15. Use apenas a distribuição de folgas para este funcionário.', 'info');
                 return;
             }
             if (isDiaFixoBanco(dia)) {

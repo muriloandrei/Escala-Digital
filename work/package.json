@@ -16,6 +16,7 @@
     "usuarios:corrigir-lojas": "node scripts/corrigir-usuarios-loja.js",
     "escalas:limpar-criadas": "node scripts/limpar-escalas-criadas.js",
     "escalas:corrigir-oficializacao": "node scripts/corrigir-oficializacao-escalas.js",
+    "correcao:aprendiz-descansos": "node scripts/corrigir-aprendiz-descansos.js",
     "subsecoes:aprendiz": "node scripts/sincronizar-subsecao-aprendiz.js",
     "senhas:migrar-md5": "node scripts/migrar-senhas-md5.js"
   },

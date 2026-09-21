@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateEscalaPayload } = require('../src/rules/escalaRules');
 
-function buildPayload(dias) {
+function buildPayload(dias, funcionarioOverrides = {}) {
   return {
     lojaId: 1,
     mesRef: '2026-09-01',
@@ -10,7 +10,8 @@ function buildPayload(dias) {
       escfuncId: 10,
       chapa: '000010',
       nome: 'Funcionario Teste',
-      dias
+      dias,
+      ...funcionarioOverrides
     }]
   };
 }
@@ -183,6 +184,14 @@ test('backend rejects total journey different from 08:48', () => {
   ]));
 
   assert.ok(errors.some((error) => error.includes('jornada total deve ser 08:48')));
+});
+
+test('backend validates apprentice with fixed 05:15 first period only', () => {
+  const errors = validateEscalaPayload(buildPayload([
+    trabalho('2026-09-01', { hrSai1: '13:15', hrEnt2: '00:00', hrSai2: '00:00' })
+  ], { funcao: 'JOVEM APRENDIZ', aprendiz: true }));
+
+  assert.deepEqual(errors, []);
 });
 
 test('backend rejects continuous period greater than 06:00', () => {

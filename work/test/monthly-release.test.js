@@ -86,7 +86,7 @@ test('monthly release distributes 5x2 rests without consecutive Sunday work', ()
   assert.equal(rascunho.dias.filter((dia) => dia.programacao === 'F').length >= 8, true);
 });
 
-test('monthly release fixes apprentice work schedule to 05:45', () => {
+test('monthly release fixes apprentice work schedule to 05:15', () => {
   const funcionario = {
     ESCFUNC_ID: 15,
     CHAPA: '000015',
@@ -110,7 +110,7 @@ test('monthly release fixes apprentice work schedule to 05:45', () => {
 
   assert.equal(rascunho.aprendiz, true);
   assert.equal(trabalho.hrEnt1, '08:00');
-  assert.equal(trabalho.hrSai1, '13:45');
+  assert.equal(trabalho.hrSai1, '13:15');
   assert.equal(trabalho.hrEnt2, null);
   assert.equal(trabalho.hrSai2, null);
   assert.deepEqual(errors, []);

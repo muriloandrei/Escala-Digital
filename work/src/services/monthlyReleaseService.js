@@ -249,7 +249,7 @@ function getHorarioBaseFuncionario(funcionario, turno) {
   if (isFuncionarioAprendiz(funcionario)) {
     const hrEnt1 = normalizeTime(funcionario.HR_ENT1 || turno?.HR_ENT1, '08:00');
     const inicio = timeToMinutes(hrEnt1) ?? 480;
-    return { hrEnt1, hrSai1: minutesToTime(inicio + 345), hrEnt2: null, hrSai2: null };
+    return { hrEnt1, hrSai1: minutesToTime(inicio + 315), hrEnt2: null, hrSai2: null };
   }
   const hrEnt1 = normalizeTime(turno?.HR_ENT1 || funcionario.HR_ENT1, '08:00');
   const hrSai1 = normalizeTime(turno?.HR_SAI1 || funcionario.HR_SAI1, '12:00');
