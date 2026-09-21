@@ -1187,7 +1187,8 @@ async function liberarEscalaLojaMes({
     lojaId,
     mesRef,
     funcionarios: funcionariosPayload,
-    oficializada: 0
+    oficializada: 0,
+    criarRevisao: false
   });
 
   return {
@@ -1238,7 +1239,8 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
     lojaId,
     mesRef,
     funcionarios: funcionariosPayload,
-    oficializada: 0
+    oficializada: 0,
+    criarRevisao: false
   });
 
   return {
@@ -1285,7 +1287,8 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, hojeIso = format
     lojaId,
     mesRef,
     funcionarios: funcionariosPayload,
-    oficializada: 0
+    oficializada: 0,
+    criarRevisao: false
   });
 
   return {

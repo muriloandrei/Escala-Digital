@@ -710,6 +710,7 @@ test('section generation saves draft even when automatic validation returns crit
     assert.equal(result.funcionarios, 1);
     assert.ok(result.criticas.length > 0);
     assert.equal(savedPayload.oficializada, 0);
+    assert.equal(savedPayload.criarRevisao, false);
     assert.equal(savedPayload.funcionarios.length, 1);
   } finally {
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
@@ -763,6 +764,7 @@ test('section generation can be limited to selected employees in a subsection', 
     });
 
     assert.equal(result.criada, true);
+    assert.equal(savedPayload.criarRevisao, false);
     assert.deepEqual(savedPayload.funcionarios.map((funcionario) => funcionario.escfuncId), [301, 303]);
   } finally {
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
@@ -990,6 +992,7 @@ test('section reset preserves previous days and restores future protected absenc
     });
 
     assert.equal(result.resetada, true);
+    assert.equal(savedPayload.criarRevisao, false);
     assert.equal(savedPayload.funcionarios.length, 1);
     assert.deepEqual(savedPayload.funcionarios[0].dias, [{
       data: '2026-09-07',

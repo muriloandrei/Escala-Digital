@@ -1499,7 +1499,68 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
   }
 }
 
-async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0 }) {
+async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada = 0 }) {
+  const latestActiveRevision = await getLatestRevision(connection, { lojaId, mesRef });
+  const revisaoAtual = latestActiveRevision === null ? 0 : latestActiveRevision;
+  const saved = [];
+
+  for (const funcionario of funcionarios) {
+    const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
+    const escalaAtualFuncionario = escfuncId
+      ? await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId })
+      : null;
+    if (escalaAtualFuncionario) {
+      assertSemAlteracaoEmDiasBloqueados(escalaAtualFuncionario.dias, funcionario.dias || []);
+      const header = escalaAtualFuncionario.header;
+      const escprogId = pick(header, 'ESCPROG_ID', 'escprog_id');
+      await connection.execute(
+        `update sgn_esc_prog
+            set oficializada = :oficializada
+          where escprog_id = :escprogId`,
+        { escprogId, oficializada },
+        { autoCommit: false }
+      );
+      await connection.execute(
+        `delete from sgn_esc_prog_dia
+          where escprog_id = :escprogId`,
+        { escprogId },
+        { autoCommit: false }
+      );
+      const binds = (funcionario.dias || []).map((dia) => normalizeDiaBind(escprogId, dia));
+      if (binds.length > 0) {
+        await connection.executeMany(
+          `insert into sgn_esc_prog_dia (
+              escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+           ) values (
+              sgn_esc_prog_dia_seq.nextval, :escprogId, to_date(:dt, 'YYYY-MM-DD'), :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :programacao
+           )`,
+          binds,
+          { autoCommit: false }
+        );
+      }
+      saved.push({
+        escprogId,
+        revisao: Number(pick(header, 'REVISAO', 'revisao')),
+        escsecaoId: pick(header, 'ESCSECAO_ID', 'escsecao_id')
+      });
+      continue;
+    }
+
+    assertSemDiasBloqueadosEmNovaEscala(funcionario.dias || []);
+    saved.push(await insertEscalaOracle(connection, {
+      lojaId,
+      mesRef,
+      funcionario,
+      dias: funcionario.dias || [],
+      oficializada,
+      revisao: revisaoAtual
+    }));
+  }
+
+  return saved;
+}
+
+async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0, criarRevisao = true }) {
   return withConnection(async (connection) => {
     try {
       assertUniqueFuncionarios(funcionarios);
@@ -1508,6 +1569,12 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
         const error = new Error('Escala finalizada nao pode ser editada.');
         error.statusCode = 422;
         throw error;
+      }
+
+      if (!criarRevisao) {
+        const saved = await upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada });
+        await connection.commit();
+        return saved;
       }
 
       const latestActiveRevision = await getLatestRevision(connection, { lojaId, mesRef });
