@@ -6734,17 +6734,26 @@
                 FUNCAO_DESCR: dia.FUNCAO_DESCR
             } : null;
         };
+        const fecharMenusFuncionarioEscalaBanco = () => {
+            escalaDetalheAtual.menuFuncionarioAberto = null;
+            escalaBancoMensalContent?.querySelectorAll('.scale-kebab-wrap .subsection-kebab-menu').forEach((menu) => {
+                menu.classList.add('hidden');
+                menu.classList.remove('opens-up');
+            });
+        };
+
         const renderizarMenuFuncionarioEscalaBanco = (funcionario) => {
             if (!isSecaoAtualFrenteCaixaBanco() || !canManageSubsecoesPage()) return '';
             const id = funcionario.ESCFUNC_ID || funcionario.escfuncId;
             if (!id) return '';
+            const aprendiz = isFuncionarioAprendizBanco(funcionario);
             return '<span class="subsection-kebab-wrap scale-kebab-wrap">' +
                 '<button type="button" class="subsection-kebab-btn scale-kebab-btn" data-scale-menu-id="' + escapeHtml(id) + '" aria-label="Mais ações"><span class="material-symbols-outlined">more_vert</span></button>' +
                 '<span class="subsection-kebab-menu ' + (String(escalaDetalheAtual.menuFuncionarioAberto || '') === String(id) ? '' : 'hidden') + '">' +
                 '<button type="button" class="subsection-menu-action scale-ver-detalhes-funcionario" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">badge</span>Ver detalhes</button>' +
                 '<button type="button" class="subsection-menu-action scale-gerar-funcionario" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">event_repeat</span>Gerar escala do funcionário</button>' +
-                '<button type="button" class="subsection-menu-action scale-editar-horarios-funcionario" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">schedule</span>Editar horários</button>' +
-                '<button type="button" class="subsection-menu-action scale-transferir-funcionario-subsecao" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">swap_horiz</span>Transferir de Subseção</button>' +
+                (aprendiz ? '' : '<button type="button" class="subsection-menu-action scale-editar-horarios-funcionario" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">schedule</span>Editar horários</button>') +
+                (aprendiz ? '' : '<button type="button" class="subsection-menu-action scale-transferir-funcionario-subsecao" data-id="' + escapeHtml(id) + '"><span class="material-symbols-outlined">swap_horiz</span>Transferir de Subseção</button>') +
                 '</span></span>';
         };
 
@@ -7961,7 +7970,8 @@
             });
             escalaDetalheAtual.status = escala.status || null;
             escalaDetalheAtual.oficializada = Number(escala.oficializada || escala.OFICIALIZADA || 0) === 1;
-            escalaDetalheResumo.textContent = escalaDetalheAtual.dias.length + ' dia(s), revisão ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
+            const diasEscala = getDatasPeriodoOperacionalBanco(escalaDetalheAtual.mesRef);
+            escalaDetalheResumo.textContent = diasEscala.length + ' dia(s), revisão ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
             prepararSecoesDetalheEscala();
             validarDetalheBancoSilencioso().then(() => renderizarSecaoAtivaEscala()).catch(() => atualizarAcoesValidacaoBanco());
         };
@@ -8902,9 +8912,16 @@
                 const wrap = scaleMenuButton.closest('.scale-kebab-wrap');
                 const menu = wrap?.querySelector('.subsection-kebab-menu');
                 const shouldOpen = menu?.classList.contains('hidden');
-                escalaBancoMensalContent.querySelectorAll('.scale-kebab-wrap .subsection-kebab-menu').forEach(item => item.classList.add('hidden'));
+                fecharMenusFuncionarioEscalaBanco();
                 escalaDetalheAtual.menuFuncionarioAberto = shouldOpen ? menuId : null;
-                if (shouldOpen) menu.classList.remove('hidden');
+                if (shouldOpen) {
+                    menu.classList.remove('hidden');
+                    menu.classList.remove('opens-up');
+                    const menuRect = menu.getBoundingClientRect();
+                    const scrollRect = scaleMenuButton.closest('.monthly-scale-scroll')?.getBoundingClientRect();
+                    const limiteInferior = Math.min(window.innerHeight, scrollRect?.bottom || window.innerHeight);
+                    if (menuRect.bottom > limiteInferior - 8) menu.classList.add('opens-up');
+                }
                 return;
             }
             if (scaleDetalhe || scaleGerarFuncionario || scaleEditarHorarios || scaleTransferir) {
@@ -8912,8 +8929,12 @@
                 event.stopPropagation();
                 const escfuncId = scaleDetalhe?.dataset.id || scaleGerarFuncionario?.dataset.id || scaleEditarHorarios?.dataset.id || scaleTransferir?.dataset.id;
                 const funcionario = getFuncionarioBancoPorId(escfuncId);
-                escalaDetalheAtual.menuFuncionarioAberto = null;
+                fecharMenusFuncionarioEscalaBanco();
                 if (!funcionario) return showInfoModal('Funcionário não encontrado na escala.', 'error');
+                if (isFuncionarioAprendizBanco(funcionario) && (scaleEditarHorarios || scaleTransferir)) {
+                    showInfoModal('Aprendiz possui horário fixo de 05:15 e não pode editar horário ou transferir subseção por esta tela.', 'info');
+                    return;
+                }
                 if (scaleDetalhe) {
                     showInfoModal([
                         'Nome: ' + (funcionario.NOME || ''),

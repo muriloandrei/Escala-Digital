@@ -2250,6 +2250,11 @@
             z-index: 100;
         }
 
+        .scale-kebab-wrap .subsection-kebab-menu.opens-up {
+            bottom: 0;
+            top: auto;
+        }
+
         .subsection-menu-action {
             align-items: center;
             background: transparent;
