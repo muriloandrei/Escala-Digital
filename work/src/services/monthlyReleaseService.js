@@ -27,9 +27,19 @@ function normalizarTextoComparacao(texto = '') {
     .trim();
 }
 
-function isSecaoFrenteCaixa(secao = {}) {
+function isSecaoEscopoOperacional(secao = {}) {
   const descricao = pick(secao, 'DESCR', 'descr', 'SECAO_DESCR', 'secao_descr') || '';
-  return /frente.*caixa/.test(normalizarTextoComparacao(descricao));
+  const texto = normalizarTextoComparacao(descricao);
+  return /frente.*caixa/.test(texto)
+    || /servic.*client/.test(texto)
+    || /transport/.test(texto);
+}
+
+function isSecaoFiscalRemoto(secao = {}) {
+  const descricao = pick(secao, 'DESCR', 'descr', 'SECAO_DESCR', 'secao_descr') || '';
+  const codSecao = pick(secao, 'COD_SECAO', 'cod_secao', 'CODSECAO', 'codsecao') || '';
+  const texto = normalizarTextoComparacao(`${descricao} ${codSecao}`);
+  return /fiscal.*remoto/.test(texto) || String(codSecao).trim() === '999.03.008';
 }
 
 function getMonthStart(date = new Date()) {
@@ -1131,10 +1141,11 @@ function getCriticasCoberturaMinima(funcionariosPayload = [], percentualMinimo =
     .map(([data, item]) => `Cobertura minima da secao abaixo de ${percentualMinimo}% em ${data}. Trabalhando: ${item.trabalhando}/${item.total}.`);
 }
 
-async function listSecoesFrenteCaixaIds(lojaId) {
+async function listSecoesEscopoOperacionalIds(lojaId) {
   const secoes = await catalogService.listSecoesByLoja(lojaId);
+  const incluirFiscalRemoto = Number(lojaId) === 999;
   return secoes
-    .filter(isSecaoFrenteCaixa)
+    .filter((secao) => isSecaoEscopoOperacional(secao) || (incluirFiscalRemoto && isSecaoFiscalRemoto(secao)))
     .map((secao) => Number(pick(secao, 'ESCSECAO_ID', 'escsecao_id', 'escsecaoId')))
     .filter(Boolean);
 }
@@ -1150,10 +1161,14 @@ async function liberarEscalaLojaMes({
   hojeIso = formatDateValue(new Date()),
   somenteFrenteCaixa = true
 }) {
-  const secoesLiberacao = somenteFrenteCaixa ? await listSecoesFrenteCaixaIds(lojaId) : null;
+  const secoesLiberacao = somenteFrenteCaixa ? await listSecoesEscopoOperacionalIds(lojaId) : null;
+  const incluiFiscalRemoto = Number(lojaId) === 999;
+  const escopoOperacionalTexto = incluiFiscalRemoto
+    ? 'Frente de Caixa, Servicos a Clientes, Transportes e Fiscal Remoto'
+    : 'Frente de Caixa, Servicos a Clientes e Transportes';
 
   if (somenteFrenteCaixa && !secoesLiberacao.length) {
-    return { lojaId, mesRef, criada: false, motivo: 'Nenhuma secao ativa de Frente de Caixa encontrada para liberacao.' };
+    return { lojaId, mesRef, criada: false, motivo: `Nenhuma secao ativa de ${escopoOperacionalTexto} encontrada para liberacao.` };
   }
 
   if (await escalaMensalJaExiste(lojaId, mesRef, secoesLiberacao)) {
@@ -1178,7 +1193,7 @@ async function liberarEscalaLojaMes({
       mesRef,
       criada: false,
       motivo: somenteFrenteCaixa
-        ? 'Nenhum funcionario de Frente de Caixa apto para liberacao.'
+        ? `Nenhum funcionario de ${escopoOperacionalTexto} apto para liberacao.`
         : 'Nenhum funcionario apto para liberacao.'
     };
   }
@@ -1196,7 +1211,7 @@ async function liberarEscalaLojaMes({
     mesRef,
     criada: true,
     funcionarios: saved.length,
-    escopo: somenteFrenteCaixa ? 'Frente de Caixa' : 'Todos os setores',
+    escopo: somenteFrenteCaixa ? escopoOperacionalTexto : 'Todos os setores',
     pendenteGeracao: true,
     criticas: []
   };

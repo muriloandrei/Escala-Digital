@@ -176,6 +176,20 @@ function isFrenteCaixaLeaderUser(requestUser) {
   return texto.includes('FRENTE') || texto.includes('CAIXA');
 }
 
+function isFiscalRemotoLeaderUser(requestUser) {
+  if (!isLeaderUser(requestUser)) return false;
+  const texto = normalizeAccessText(`${requestUser?.login || ''} ${requestUser?.nome || ''}`);
+  return texto.includes('ESPECIALISTA') && texto.includes('REMOT');
+}
+
+function getEscopoOperacionalSecaoPredicate(alias = 's') {
+  return `(
+    regexp_like(upper(nvl(${alias}.descr, '')), 'FRENTE.*CAIXA')
+    or regexp_like(upper(nvl(${alias}.descr, '')), 'SERVI[CÇ]OS?.*CLIENT')
+    or regexp_like(upper(nvl(${alias}.descr, '')), 'TRANSPORT')
+  )`;
+}
+
 function canCreateEscala(requestUser) {
   return !isLeaderUser(requestUser);
 }
@@ -265,9 +279,15 @@ async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
 
   return withConnection(async (connection) => {
     const columns = await getUsuarioSecaoColumns(connection);
-    if (!columns) return isFrenteCaixaLeaderUser(requestUser)
-      ? listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId)
-      : [];
+    if (!columns) {
+      if (isFrenteCaixaLeaderUser(requestUser)) {
+        return listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId);
+      }
+      if (isFiscalRemotoLeaderUser(requestUser)) {
+        return listSecoesFiscalRemotoPermitidasInConnection(connection, requestUser, lojaId);
+      }
+      return [];
+    }
 
     const lojaColumn = await getSecaoLojaColumn(connection);
     const binds = { usuarioId };
@@ -288,8 +308,14 @@ async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
     );
 
     const explicitas = result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
-    if (explicitas.length || !isFrenteCaixaLeaderUser(requestUser)) return explicitas;
-    return listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId);
+    if (explicitas.length) return explicitas;
+    if (isFrenteCaixaLeaderUser(requestUser)) {
+      return listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId);
+    }
+    if (isFiscalRemotoLeaderUser(requestUser)) {
+      return listSecoesFiscalRemotoPermitidasInConnection(connection, requestUser, lojaId);
+    }
+    return explicitas;
   });
 }
 
@@ -304,7 +330,7 @@ async function listSecoesFrenteCaixaPermitidasInConnection(connection, requestUs
   const binds = {};
   const filters = [
     buildInClause(`s.${lojaColumn.toLowerCase()}`, lojas, binds, 'lojaFrente'),
-    "regexp_like(upper(nvl(s.descr, '')), 'FRENTE.*CAIXA')"
+    getEscopoOperacionalSecaoPredicate('s')
   ];
   if (secaoColumns.has('STATUS')) filters.push("nvl(s.status, 'A') = 'A'");
 
@@ -314,6 +340,32 @@ async function listSecoesFrenteCaixaPermitidasInConnection(connection, requestUs
       where ${filters.join(' and ')}
       order by s.escsecao_id`,
     binds,
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+
+  return result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
+}
+
+async function listSecoesFiscalRemotoPermitidasInConnection(connection, requestUser, lojaId = null) {
+  const lojas = lojaId
+    ? [Number(lojaId)]
+    : [...new Set((requestUser?.lojas || []).map(Number).filter(Boolean))];
+  if (!lojas.includes(999)) return [];
+
+  const lojaColumn = await getSecaoLojaColumn(connection);
+  const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
+  const filters = [
+    `s.${lojaColumn.toLowerCase()} = 999`,
+    "(regexp_like(upper(nvl(s.descr, '')), 'FISCAL.*REMOT') or s.cod_secao = '999.03.008')"
+  ];
+  if (secaoColumns.has('STATUS')) filters.push("nvl(s.status, 'A') = 'A'");
+
+  const result = await connection.execute(
+    `select s.escsecao_id
+       from sgn_esc_secao s
+      where ${filters.join(' and ')}
+      order by s.escsecao_id`,
+    {},
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
 

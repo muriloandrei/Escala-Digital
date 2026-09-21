@@ -1033,7 +1033,7 @@ test('section reset preserves previous days and restores future protected absenc
   }
 });
 
-test('monthly release defaults to active Frente de Caixa sections only', async () => {
+test('monthly release defaults to operational sections led by Frente de Caixa', async () => {
   const originals = {
     listSecoesByLoja: catalogService.listSecoesByLoja,
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
@@ -1050,6 +1050,8 @@ test('monthly release defaults to active Frente de Caixa sections only', async (
 
   catalogService.listSecoesByLoja = async () => [
     { ESCSECAO_ID: 20, DESCR: '010.02.002 - Frente de Caixa' },
+    { ESCSECAO_ID: 23, DESCR: '010.03.001 - Servicos a Clientes' },
+    { ESCSECAO_ID: 24, DESCR: '010.03.002 - Transportes' },
     { ESCSECAO_ID: 21, DESCR: '010.02.001 - Deposito Lideranca' },
     { ESCSECAO_ID: 22, DESCR: '010.02.006 - Mercearia Lideranca' }
   ];
@@ -1098,12 +1100,77 @@ test('monthly release defaults to active Frente de Caixa sections only', async (
     });
 
     assert.equal(result.criada, true);
-    assert.equal(result.escopo, 'Frente de Caixa');
-    assert.deepEqual(resumoOptions.secoesPermitidas, [20]);
-    assert.deepEqual(funcionariosOptions.secoesPermitidas, [20]);
-    assert.deepEqual(turnosOptions.secoesPermitidas, [20]);
+    assert.equal(result.escopo, 'Frente de Caixa, Servicos a Clientes e Transportes');
+    assert.deepEqual(resumoOptions.secoesPermitidas, [20, 23, 24]);
+    assert.deepEqual(funcionariosOptions.secoesPermitidas, [20, 23, 24]);
+    assert.deepEqual(turnosOptions.secoesPermitidas, [20, 23, 24]);
     assert.equal(savedPayload.funcionarios.length, 1);
     assert.equal(savedPayload.funcionarios[0].escsecaoId, 20);
+  } finally {
+    catalogService.listSecoesByLoja = originals.listSecoesByLoja;
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
+    escalaService.listEscalasResumo = originals.listEscalasResumo;
+    escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+  }
+});
+
+test('monthly release includes Fiscal Remoto only for loja 999', async () => {
+  const originals = {
+    listSecoesByLoja: catalogService.listSecoesByLoja,
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listEscalasResumo: escalaService.listEscalasResumo,
+    listFixosEscala: escalaService.listFixosEscala,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  let funcionariosOptions = null;
+
+  catalogService.listSecoesByLoja = async () => [
+    { ESCSECAO_ID: 90, COD_SECAO: '999.03.008', DESCR: 'Fiscal Remoto' },
+    { ESCSECAO_ID: 91, DESCR: '999.02.002 - Frente de Caixa' }
+  ];
+  escalaService.listEscalasResumo = async () => [];
+  catalogService.listFuncionariosByLoja = async (_lojaId, options) => {
+    funcionariosOptions = options;
+    return [{
+      ESCFUNC_ID: 990,
+      CHAPA: '099990',
+      NOME: 'Funcionario Remoto',
+      LOJA: 999,
+      ESCSECAO_ID: 90,
+      ESCFUNCAO_ID: 930,
+      HR_ENT1: '08:00',
+      HR_SAI1: '12:00',
+      HR_ENT2: '13:10',
+      HR_SAI2: '17:58'
+    }];
+  };
+  catalogService.listTurnosByLoja = async () => [{
+    ESCSECAOTURNO_ID: 940,
+    ESCSECAO_ID: 90,
+    HR_ENT1: '08:00',
+    HR_SAI1: '12:00',
+    HR_ENT2: '13:10',
+    HR_SAI2: '17:58'
+  }];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.saveEscalasBatch = async (payload) => payload.funcionarios;
+
+  try {
+    const result = await monthlyReleaseService.liberarEscalaLojaMes({
+      lojaId: 999,
+      mesRef: '2026-09-01',
+      hojeIso: '2026-09-01'
+    });
+
+    assert.equal(result.criada, true);
+    assert.equal(result.escopo, 'Frente de Caixa, Servicos a Clientes, Transportes e Fiscal Remoto');
+    assert.deepEqual(funcionariosOptions.secoesPermitidas, [90, 91]);
   } finally {
     catalogService.listSecoesByLoja = originals.listSecoesByLoja;
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
