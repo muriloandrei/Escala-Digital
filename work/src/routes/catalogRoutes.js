@@ -123,7 +123,7 @@ async function getLojasPermitidas(req, requestedLojaId = 'all') {
   if (requestedLojaId && requestedLojaId !== 'all') {
     const lojaCodigo = await catalogService.resolveLojaCodigo(Number(requestedLojaId));
     const lojasUsuario = req.user?.lojas || [];
-    if (req.user?.perfil !== 'ADMIN' && !lojasUsuario.includes(lojaCodigo)) {
+    if (req.user?.perfil !== 'ADMIN' && !accessService.isGlobalStoreAccessUser(req.user) && !lojasUsuario.includes(lojaCodigo)) {
       const error = new Error('Usuario sem permissao para esta loja.');
       error.statusCode = 403;
       throw error;
@@ -131,7 +131,7 @@ async function getLojasPermitidas(req, requestedLojaId = 'all') {
     return [lojaCodigo];
   }
 
-  if (req.user?.perfil === 'ADMIN' && (!req.user.lojas || req.user.lojas.length === 0)) {
+  if (accessService.isGlobalStoreAccessUser(req.user)) {
     const lojas = await catalogService.listLojas();
     return lojas.map((loja) => Number(loja.LOJA)).filter(Boolean);
   }
@@ -230,7 +230,7 @@ router.get('/lojas', async (req, res, next) => {
   try {
     const lojas = await catalogService.listLojas();
     const lojasUsuario = new Set((req.user.lojas || []).map(Number));
-    const allowed = lojasUsuario.size === 0 && req.user.perfil === 'ADMIN'
+    const allowed = accessService.isGlobalStoreAccessUser(req.user)
       ? lojas
       : lojas.filter((loja) => {
         return lojasUsuario.has(Number(loja.LOJA)) || lojasUsuario.has(Number(loja.ESCLOJA_ID));

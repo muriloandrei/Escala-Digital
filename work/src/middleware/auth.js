@@ -33,7 +33,7 @@ function requireLojaAccess(req, res, next) {
   const lojaId = Number(req.params.lojaId || req.query.lojaId || req.body.lojaId);
   const lojasPermitidas = req.user?.lojas || [];
 
-  if (!lojaId || lojasPermitidas.includes(lojaId) || req.user?.perfil === 'ADMIN') {
+  if (!lojaId || lojasPermitidas.includes(lojaId) || req.user?.perfil === 'ADMIN' || accessService.isGlobalStoreAccessUser(req.user)) {
     return next();
   }
 

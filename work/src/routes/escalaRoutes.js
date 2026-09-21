@@ -295,11 +295,11 @@ async function resolveLojaRequest(req, res, next) {
 
 function canAccessLoja(req, loja) {
   const lojas = req.user?.lojas || [];
-  return lojas.includes(Number(loja)) || (req.user?.perfil === 'ADMIN' && lojas.length === 0);
+  return lojas.includes(Number(loja)) || accessService.isGlobalStoreAccessUser(req.user);
 }
 
 function getLojasPermitidasParaConsulta(req) {
-  if (req.user?.perfil === 'ADMIN' && (!req.user.lojas || req.user.lojas.length === 0)) return null;
+  if (accessService.isGlobalStoreAccessUser(req.user)) return null;
   return req.user?.lojas || [];
 }
 
@@ -319,7 +319,7 @@ async function getLojasPermitidas(req, requestedLojaId = 'all') {
     return [lojaCodigo];
   }
 
-  if (req.user?.perfil === 'ADMIN' && (!req.user.lojas || req.user.lojas.length === 0)) {
+  if (accessService.isGlobalStoreAccessUser(req.user)) {
     const lojas = await catalogService.listLojas();
     return lojas.map((loja) => Number(loja.LOJA)).filter(Boolean);
   }

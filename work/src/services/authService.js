@@ -133,6 +133,20 @@ async function findUserStores(usuarioId) {
   });
 }
 
+async function findAllStores() {
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select loja
+       from sgn_esc_loja
+       order by loja`,
+      {},
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return result.rows.map((row) => Number(pick(row, 'LOJA', 'loja'))).filter(Boolean);
+  });
+}
+
 function resolveLojaPrincipal(user, lojas) {
   const permitidas = (lojas || []).map(Number).filter(Boolean);
   const inferida = inferLojaPrincipalUsuario(user);
@@ -143,6 +157,9 @@ function resolveLojaPrincipal(user, lojas) {
 }
 
 function resolveLojasSessao(user, lojas, lojaPrincipal) {
+  if (normalizeText(pick(user, 'PERFIL', 'perfil')) === 'CONTROLADORIA') {
+    return [...new Set((lojas || []).map(Number).filter(Boolean))];
+  }
   const permitidas = [...new Set((lojas || []).map(Number).filter(Boolean))];
   const inferida = inferLojaPrincipalUsuario(user);
   if (inferida && permitidas.includes(inferida)) return [inferida];
@@ -208,7 +225,8 @@ async function getSessionUserById(usuarioId) {
   if (!user || !isActiveStatus(pick(user, 'STATUS', 'status'))) return null;
 
   const currentUsuarioId = pick(user, 'USUARIO_ID', 'usuario_id');
-  const lojas = await findUserStores(currentUsuarioId);
+  const perfil = normalizeText(pick(user, 'PERFIL', 'perfil'));
+  const lojas = perfil === 'CONTROLADORIA' ? await findAllStores() : await findUserStores(currentUsuarioId);
   const lojaPrincipalAtual = pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || null;
   const lojaPrincipal = resolveLojaPrincipal(user, lojas);
   await syncLojaPrincipal(currentUsuarioId, lojaPrincipalAtual, lojaPrincipal);
@@ -247,7 +265,8 @@ async function login({ login, password }) {
     await upgradeLegacyMd5Password(usuarioId, password, senhaHash);
   }
 
-  const lojas = await findUserStores(usuarioId);
+  const perfil = normalizeText(pick(user, 'PERFIL', 'perfil'));
+  const lojas = perfil === 'CONTROLADORIA' ? await findAllStores() : await findUserStores(usuarioId);
   const lojaPrincipalAtual = pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || null;
   const lojaPrincipal = resolveLojaPrincipal(user, lojas);
   await syncLojaPrincipal(usuarioId, lojaPrincipalAtual, lojaPrincipal);
@@ -310,6 +329,7 @@ module.exports = {
     getTableColumns,
     upgradeLegacyMd5Password,
     inferLojaPrincipalUsuario,
+    findAllStores,
     resolveLojasSessao,
     resolveLojaPrincipal
   }

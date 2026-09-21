@@ -86,7 +86,7 @@ function getOperationalPermissionDefaults(perfilNome = '', pagina = '') {
     return Object.fromEntries(Object.keys(empty).map((field) => [field, 1]));
   }
 
-  if (perfil === 'GERENTE' || perfil === 'RH') {
+  if (perfil === 'GERENTE' || perfil === 'RH' || perfil === 'CONTROLADORIA') {
     if (page === 'escalas') return { ...empty, PODE_VISUALIZAR: 1, PODE_CRIAR: 1, PODE_EDITAR: 1, PODE_OFICIALIZAR: 1 };
     if (page === 'escalas-funcionarios') return { ...empty, PODE_VISUALIZAR: 1, PODE_EDITAR: 1 };
     if (page === 'secoes') return { ...empty, PODE_VISUALIZAR: 1 };
@@ -134,13 +134,13 @@ function normalizePermission(rawPermission = {}, perfilNome = '') {
 }
 
 function canSeeUser(requestUser, lojas) {
-  if (requestUser?.perfil === 'ADMIN') return true;
+  if (isAdminUser(requestUser) || isControladoriaUser(requestUser)) return true;
   const permitidas = new Set((requestUser?.lojas || []).map(Number));
   return lojas.some((loja) => permitidas.has(Number(loja)));
 }
 
 function assertLojaAcesso(requestUser, lojaId) {
-  if (requestUser?.perfil === 'ADMIN') return;
+  if (isAdminUser(requestUser) || isControladoriaUser(requestUser)) return;
   const permitidas = new Set((requestUser?.lojas || []).map(Number));
   if (!permitidas.has(Number(lojaId))) {
     const error = new Error('Usuario sem acesso a loja informada.');
@@ -156,6 +156,15 @@ function normalizePerfilName(userOrPerfil) {
 
 function isAdminUser(requestUser) {
   return normalizePerfilName(requestUser) === 'ADMIN';
+}
+
+function isControladoriaUser(requestUser) {
+  return normalizePerfilName(requestUser) === 'CONTROLADORIA';
+}
+
+function isGlobalStoreAccessUser(requestUser) {
+  const perfil = normalizePerfilName(requestUser);
+  return perfil === 'CONTROLADORIA' || (perfil === 'ADMIN' && (!requestUser?.lojas || requestUser.lojas.length === 0));
 }
 
 function isLeaderUser(requestUser) {
@@ -374,7 +383,7 @@ async function listSecoesFiscalRemotoPermitidasInConnection(connection, requestU
 
 async function assertSecoesPermitidas(requestUser, lojaId, secaoIds = []) {
   const perfil = normalizePerfilName(requestUser);
-  if (perfil === 'ADMIN' || perfil === 'GERENTE' || perfil === 'RH' || !isLeaderUser(requestUser)) return;
+  if (perfil === 'ADMIN' || perfil === 'GERENTE' || perfil === 'RH' || perfil === 'CONTROLADORIA' || !isLeaderUser(requestUser)) return;
 
   const permitidas = await getSecoesPermitidasUsuario(requestUser, lojaId);
   const permitidasSet = new Set((permitidas || []).map(Number));
@@ -849,6 +858,8 @@ module.exports = {
   PERFIL_PAGES,
   normalizePerfilName,
   isAdminUser,
+  isControladoriaUser,
+  isGlobalStoreAccessUser,
   isLeaderUser,
   canCreateEscala,
   buildInClause,

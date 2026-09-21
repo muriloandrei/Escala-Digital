@@ -26,3 +26,8 @@ test('auth prefers store inferred from operational user login when it is allowed
   assert.deepEqual(_private.resolveLojasSessao({ PERFIL: 'GERENTE', LOGIN: 'gerente35', LOJA_PRINCIPAL: 24 }, [24, 35], 35), [35]);
   assert.equal(_private.resolveLojaPrincipal({ PERFIL: 'GERENTE', LOGIN: 'gerente35', LOJA_PRINCIPAL: 24 }, [24]), 24);
 });
+
+test('auth keeps all stores in session for controladoria', () => {
+  assert.equal(_private.inferLojaPrincipalUsuario({ PERFIL: 'CONTROLADORIA', LOGIN: 'controladoria35' }), null);
+  assert.deepEqual(_private.resolveLojasSessao({ PERFIL: 'CONTROLADORIA', LOGIN: 'controladoria35', LOJA_PRINCIPAL: 24 }, [2, 24, 35], 2), [2, 24, 35]);
+});
