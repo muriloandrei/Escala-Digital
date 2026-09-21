@@ -41,6 +41,17 @@ test('scale upsert after inactive month uses a revision above inactive history',
   assert.equal(_private.escolherRevisaoParaUpsertSemNovaRevisao(null, 7), 8);
 });
 
+test('history query adapts to legacy audit columns', () => {
+  const columns = new Set(['ESCAUDITORIA_ID', 'USUARIO', 'TIPO_ACAO', 'OBJETO', 'ESCPROG_ID', 'DESCRICAO', 'CRIADO_EM']);
+  const query = _private.buildHistoricoAuditoriaQuery(columns, { lojaId: 2, mesRef: '2026-10-01', lojasPermitidas: [2] });
+
+  assert.match(query.sql, /a\.escauditoria_id as auditoria_id/);
+  assert.match(query.sql, /a\.usuario as login/);
+  assert.match(query.sql, /a\.descricao as detalhe/);
+  assert.doesNotMatch(query.sql, /a\.loja|a\.mes_ref|a\.auditoria_id|a\.dt_hr_incl/);
+  assert.deepEqual(query.binds, {});
+});
+
 test('monthly release uses complete operational weeks from first Monday to last Sunday', () => {
   const funcionario = {
     ESCFUNC_ID: 14,
