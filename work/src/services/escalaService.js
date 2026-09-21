@@ -240,7 +240,68 @@ function getAuditSelectExpr(columns, names = [], alias, fallback = 'cast(null as
   return `${column ? `a.${column.toLowerCase()}` : fallback} as ${alias}`;
 }
 
-function buildHistoricoAuditoriaQuery(columns, { lojaId = null, mesRef = null, lojasPermitidas = [] } = {}) {
+function getAuditColumnDataType(columnDetails, column) {
+  return String(columnDetails?.get?.(column)?.dataType || '').toUpperCase();
+}
+
+function isAuditDateColumn(columnDetails, column) {
+  const dataType = getAuditColumnDataType(columnDetails, column);
+  return dataType.includes('DATE') || dataType.includes('TIMESTAMP');
+}
+
+function isAuditNumberColumn(columnDetails, column) {
+  return getAuditColumnDataType(columnDetails, column).includes('NUMBER');
+}
+
+function addHistoricoLojaFilter({ filters, binds, columnDetails, lojaColumn, lojaId, lojasPermitidas }) {
+  if (!lojaColumn) return;
+  const columnSql = `a.${lojaColumn.toLowerCase()}`;
+  const numericColumn = isAuditNumberColumn(columnDetails, lojaColumn);
+
+  if (lojaId) {
+    if (numericColumn) {
+      binds.lojaId = Number(lojaId);
+      filters.push(`${columnSql} = :lojaId`);
+    } else {
+      binds.lojaIdText = String(lojaId);
+      filters.push(`to_char(${columnSql}) = :lojaIdText`);
+    }
+    return;
+  }
+
+  if (!Array.isArray(lojasPermitidas)) return;
+  const lojasUnicas = [...new Set(lojasPermitidas.map(Number).filter(Boolean))];
+  if (lojasUnicas.length === 0) {
+    filters.push('1 = 0');
+    return;
+  }
+
+  lojasUnicas.forEach((loja, index) => {
+    binds['loja' + index] = numericColumn ? loja : String(loja);
+  });
+  const bindList = lojasUnicas.map((_, index) => ':loja' + index).join(', ');
+  filters.push(`${numericColumn ? columnSql : `to_char(${columnSql})`} in (${bindList})`);
+}
+
+function addHistoricoMesRefFilter({ filters, binds, columnDetails, mesRefColumn, mesRef }) {
+  if (!mesRef || !mesRefColumn) return;
+  const columnSql = `a.${mesRefColumn.toLowerCase()}`;
+  binds.mesRef = mesRef;
+  if (isAuditDateColumn(columnDetails, mesRefColumn)) {
+    filters.push(`trunc(${columnSql}) = to_date(:mesRef, 'YYYY-MM-DD')`);
+  } else {
+    filters.push(`substr(to_char(${columnSql}), 1, 10) = :mesRef`);
+  }
+}
+
+function isRecoverableHistoricoError(error) {
+  const errorNum = Number(error?.errorNum);
+  const recoverableErrorNums = new Set([904, 932, 942, 1722, 1843, 1858, 1861]);
+  const recoverableCodes = new Set(['ORA-00904', 'ORA-00932', 'ORA-00942', 'ORA-01722', 'ORA-01843', 'ORA-01858', 'ORA-01861']);
+  return recoverableErrorNums.has(errorNum) || recoverableCodes.has(error?.code);
+}
+
+function buildHistoricoAuditoriaQuery(columns, { lojaId = null, mesRef = null, lojasPermitidas = [] } = {}, columnDetails = new Map()) {
   const binds = {};
   const filters = [];
   const auditoriaIdColumn = getFirstAuditColumn(columns, ['AUDITORIA_ID', 'ESCAUDITORIA_ID', 'ID']);
@@ -248,23 +309,8 @@ function buildHistoricoAuditoriaQuery(columns, { lojaId = null, mesRef = null, l
   const mesRefColumn = getFirstAuditColumn(columns, ['MES_REF']);
   const dtColumn = getFirstAuditColumn(columns, ['DT_HR_INCL', 'CRIADO_EM', 'DATA_HORA']);
 
-  if (lojaId && lojaColumn) {
-    binds.lojaId = lojaId;
-    filters.push(`a.${lojaColumn.toLowerCase()} = :lojaId`);
-  } else if (Array.isArray(lojasPermitidas) && lojaColumn) {
-    const lojasUnicas = [...new Set(lojasPermitidas.map(Number).filter(Boolean))];
-    if (lojasUnicas.length > 0) {
-      lojasUnicas.forEach((loja, index) => { binds['loja' + index] = loja; });
-      filters.push(`a.${lojaColumn.toLowerCase()} in (${lojasUnicas.map((_, index) => ':loja' + index).join(', ')})`);
-    } else {
-      filters.push('1 = 0');
-    }
-  }
-
-  if (mesRef && mesRefColumn) {
-    binds.mesRef = mesRef;
-    filters.push(`a.${mesRefColumn.toLowerCase()} = to_date(:mesRef, 'YYYY-MM-DD')`);
-  }
+  addHistoricoLojaFilter({ filters, binds, columnDetails, lojaColumn, lojaId, lojasPermitidas });
+  addHistoricoMesRefFilter({ filters, binds, columnDetails, mesRefColumn, mesRef });
 
   const whereSql = filters.length ? `where ${filters.join(' and ')}` : '';
   const orderSql = [
@@ -723,11 +769,15 @@ async function listHistoricoEscala({ lojaId, mesRef, lojasPermitidas = [] }) {
     try {
       const columns = await getTableColumns(connection, 'SGN_ESC_AUDITORIA');
       if (!columns.size) return [];
-      const query = buildHistoricoAuditoriaQuery(columns, { lojaId, mesRef, lojasPermitidas });
+      const columnDetails = await getTableColumnDetails(connection, 'SGN_ESC_AUDITORIA');
+      const query = buildHistoricoAuditoriaQuery(columns, { lojaId, mesRef, lojasPermitidas }, columnDetails);
       const result = await connection.execute(query.sql, query.binds, { outFormat: oracledb.OUT_FORMAT_OBJECT });
       return result.rows;
     } catch (error) {
-      if (error?.errorNum === 942 || error?.code === "ORA-00942" || error?.errorNum === 904 || error?.code === 'ORA-00904') return [];
+      if (isRecoverableHistoricoError(error)) {
+        console.warn('Historico de auditoria indisponivel para este schema:', error?.message || error);
+        return [];
+      }
       throw error;
     }
   });

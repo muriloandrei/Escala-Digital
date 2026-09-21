@@ -52,6 +52,24 @@ test('history query adapts to legacy audit columns', () => {
   assert.deepEqual(query.binds, {});
 });
 
+test('history query adapts loja and month filters to text audit columns', () => {
+  const columns = new Set(['AUDITORIA_ID', 'LOJA', 'MES_REF', 'DT_HR_INCL']);
+  const columnDetails = new Map([
+    ['LOJA', { dataType: 'VARCHAR2' }],
+    ['MES_REF', { dataType: 'VARCHAR2' }],
+    ['DT_HR_INCL', { dataType: 'DATE' }]
+  ]);
+  const query = _private.buildHistoricoAuditoriaQuery(
+    columns,
+    { lojaId: 2, mesRef: '2026-10-01', lojasPermitidas: [2] },
+    columnDetails
+  );
+
+  assert.match(query.sql, /to_char\(a\.loja\) = :lojaIdText/);
+  assert.match(query.sql, /substr\(to_char\(a\.mes_ref\), 1, 10\) = :mesRef/);
+  assert.deepEqual(query.binds, { lojaIdText: '2', mesRef: '2026-10-01' });
+});
+
 test('monthly release uses complete operational weeks from first Monday to last Sunday', () => {
   const funcionario = {
     ESCFUNC_ID: 14,
