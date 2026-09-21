@@ -4963,6 +4963,10 @@
             const funcionario = {
                 escfuncId: atual.escfuncId,
                 chapa: atual.chapa,
+                nome: atual.nome,
+                funcao: atual.funcao || '',
+                FUNCAO_DESCR: atual.funcao || '',
+                aprendiz: isFuncionarioAprendizBanco(atual),
                 escsecaoId: atual.escsecaoId,
                 escfuncaoId: atual.escfuncaoId,
                 dias: atual.dias.map((dia) => {
