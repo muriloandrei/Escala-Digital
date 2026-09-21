@@ -373,7 +373,8 @@ router.get('/historico', requireAdmin, requirePermission('historico', 'visualiza
     const historico = await escalaService.listHistoricoEscala({ lojaId, mesRef, lojasPermitidas });
     return res.json({ historico });
   } catch (error) {
-    return next(error);
+    console.warn('Falha ao consultar historico de escala:', error?.message || error);
+    return res.json({ historico: [], indisponivel: true });
   }
 });
 

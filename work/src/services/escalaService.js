@@ -240,6 +240,15 @@ function getAuditSelectExpr(columns, names = [], alias, fallback = 'cast(null as
   return `${column ? `a.${column.toLowerCase()}` : fallback} as ${alias}`;
 }
 
+function getAuditTextSelectExpr(columns, columnDetails, names = [], alias, fallback = 'cast(null as varchar2(100))') {
+  const column = getFirstAuditColumn(columns, names);
+  if (!column) return `${fallback} as ${alias}`;
+  const columnSql = `a.${column.toLowerCase()}`;
+  const dataType = getAuditColumnDataType(columnDetails, column);
+  if (dataType.includes('CLOB')) return `dbms_lob.substr(${columnSql}, 1000, 1) as ${alias}`;
+  return `${columnSql} as ${alias}`;
+}
+
 function getAuditColumnDataType(columnDetails, column) {
   return String(columnDetails?.get?.(column)?.dataType || '').toUpperCase();
 }
@@ -296,9 +305,24 @@ function addHistoricoMesRefFilter({ filters, binds, columnDetails, mesRefColumn,
 
 function isRecoverableHistoricoError(error) {
   const errorNum = Number(error?.errorNum);
-  const recoverableErrorNums = new Set([904, 932, 942, 1722, 1843, 1858, 1861]);
-  const recoverableCodes = new Set(['ORA-00904', 'ORA-00932', 'ORA-00942', 'ORA-01722', 'ORA-01843', 'ORA-01858', 'ORA-01861']);
+  const recoverableErrorNums = new Set([904, 932, 942, 1008, 1722, 1843, 1858, 1861, 22835]);
+  const recoverableCodes = new Set(['ORA-00904', 'ORA-00932', 'ORA-00942', 'ORA-01008', 'ORA-01722', 'ORA-01843', 'ORA-01858', 'ORA-01861', 'ORA-22835']);
   return recoverableErrorNums.has(errorNum) || recoverableCodes.has(error?.code);
+}
+
+function normalizeHistoricoValue(value) {
+  if (value === null || value === undefined) return value;
+  if (value instanceof Date) return value.toISOString();
+  if (Buffer.isBuffer(value)) return value.toString('utf8');
+  if (typeof value === 'bigint') return Number(value);
+  if (typeof value === 'object') return String(value);
+  return value;
+}
+
+function normalizeHistoricoRows(rows = []) {
+  return rows.map((row) => Object.fromEntries(
+    Object.entries(row || {}).map(([key, value]) => [key, normalizeHistoricoValue(value)])
+  ));
 }
 
 function buildHistoricoAuditoriaQuery(columns, { lojaId = null, mesRef = null, lojasPermitidas = [] } = {}, columnDetails = new Map()) {
@@ -332,7 +356,7 @@ function buildHistoricoAuditoriaQuery(columns, { lojaId = null, mesRef = null, l
             ${getAuditSelectExpr(columns, ['LOJA'], 'loja', 'cast(null as number)')},
             ${getAuditSelectExpr(columns, ['MES_REF'], 'mes_ref', 'cast(null as date)')},
             ${getAuditSelectExpr(columns, ['REVISAO'], 'revisao', 'cast(null as number)')},
-            ${getAuditSelectExpr(columns, ['DETALHE', 'DESCRICAO', 'OBSERVACAO'], 'detalhe', "cast(null as varchar2(1000))")},
+            ${getAuditTextSelectExpr(columns, columnDetails, ['DETALHE', 'DESCRICAO', 'OBSERVACAO'], 'detalhe', "cast(null as varchar2(1000))")},
             ${getAuditSelectExpr(columns, ['DT_HR_INCL', 'CRIADO_EM', 'DATA_HORA'], 'dt_hr_incl', 'cast(null as date)')}
           from sgn_esc_auditoria a
           ${whereSql}
@@ -772,7 +796,7 @@ async function listHistoricoEscala({ lojaId, mesRef, lojasPermitidas = [] }) {
       const columnDetails = await getTableColumnDetails(connection, 'SGN_ESC_AUDITORIA');
       const query = buildHistoricoAuditoriaQuery(columns, { lojaId, mesRef, lojasPermitidas }, columnDetails);
       const result = await connection.execute(query.sql, query.binds, { outFormat: oracledb.OUT_FORMAT_OBJECT });
-      return result.rows;
+      return normalizeHistoricoRows(result.rows || []);
     } catch (error) {
       if (isRecoverableHistoricoError(error)) {
         console.warn('Historico de auditoria indisponivel para este schema:', error?.message || error);

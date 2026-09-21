@@ -70,6 +70,16 @@ test('history query adapts loja and month filters to text audit columns', () => 
   assert.deepEqual(query.binds, { lojaIdText: '2', mesRef: '2026-10-01' });
 });
 
+test('history query converts clob audit details before JSON response', () => {
+  const columns = new Set(['AUDITORIA_ID', 'DETALHE']);
+  const columnDetails = new Map([
+    ['DETALHE', { dataType: 'CLOB' }]
+  ]);
+  const query = _private.buildHistoricoAuditoriaQuery(columns, {}, columnDetails);
+
+  assert.match(query.sql, /dbms_lob\.substr\(a\.detalhe, 1000, 1\) as detalhe/);
+});
+
 test('monthly release uses complete operational weeks from first Monday to last Sunday', () => {
   const funcionario = {
     ESCFUNC_ID: 14,
