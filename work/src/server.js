@@ -35,16 +35,14 @@ function getLatestMtime(pathsToInspect) {
   return latest;
 }
 
-const appVersion = crypto
+const appVersion = process.env.APP_VERSION || crypto
   .createHash('sha1')
-  .update([
-    process.env.APP_VERSION || '',
-    String(getLatestMtime([
-      path.join(__dirname, '..', 'public', 'js'),
-      path.join(__dirname, '..', 'public', 'css'),
-      path.join(__dirname, '..', 'views')
-    ]))
-  ].join('|'))
+  .update(String(getLatestMtime([
+    path.join(__dirname, '..', 'src'),
+    path.join(__dirname, '..', 'public', 'js'),
+    path.join(__dirname, '..', 'public', 'css'),
+    path.join(__dirname, '..', 'views')
+  ])))
   .digest('hex')
   .slice(0, 12);
 

@@ -87,7 +87,7 @@ function getOperationalPermissionDefaults(perfilNome = '', pagina = '') {
   }
 
   if (perfil === 'GERENTE' || perfil === 'RH' || perfil === 'CONTROLADORIA') {
-    if (page === 'escalas') return { ...empty, PODE_VISUALIZAR: 1, PODE_CRIAR: 1, PODE_EDITAR: 1, PODE_OFICIALIZAR: 1 };
+    if (page === 'escalas') return { ...empty, PODE_VISUALIZAR: 1, PODE_CRIAR: 1, PODE_EDITAR: 1 };
     if (page === 'escalas-funcionarios') return { ...empty, PODE_VISUALIZAR: 1, PODE_EDITAR: 1 };
     if (page === 'secoes') return { ...empty, PODE_VISUALIZAR: 1 };
   }
@@ -116,20 +116,10 @@ function normalizePermission(rawPermission = {}, perfilNome = '') {
     };
   }
   const defaults = getOperationalPermissionDefaults(perfilNome, rawPermission.PAGINA);
-  const rawEditar = Number(rawPermission.PODE_EDITAR ?? defaults.PODE_EDITAR);
-  const editar = Math.max(rawEditar, defaults.PODE_EDITAR);
-  const visualizar = Math.max(Number(rawPermission.PODE_VISUALIZAR ?? 1), defaults.PODE_VISUALIZAR);
-  const excluir = Math.max(Number(rawPermission.PODE_EXCLUIR ?? defaults.PODE_EXCLUIR), defaults.PODE_EXCLUIR);
-
   return {
     PAGINA: rawPermission.PAGINA,
-    PODE_VISUALIZAR: visualizar,
-    PODE_CRIAR: Math.max(Number(rawPermission.PODE_CRIAR ?? rawEditar), defaults.PODE_CRIAR),
-    PODE_EDITAR: editar,
-    PODE_OFICIALIZAR: Math.max(Number(rawPermission.PODE_OFICIALIZAR ?? rawEditar), defaults.PODE_OFICIALIZAR),
-    PODE_REPROCESSAR: Math.max(Number(rawPermission.PODE_REPROCESSAR ?? rawEditar), defaults.PODE_REPROCESSAR),
-    PODE_EXCLUIR: excluir,
-    PODE_ADMINISTRAR: Math.max(Number(rawPermission.PODE_ADMINISTRAR ?? 0), defaults.PODE_ADMINISTRAR)
+    ...Object.fromEntries(ALL_PERMISSION_FIELDS.map((field) => [field, Number(rawPermission[field] ?? defaults[field])])),
+    PODE_OFICIALIZAR: 0
   };
 }
 
@@ -744,18 +734,12 @@ async function listPerfisAcesso() {
 
 function completarPermissoesPerfil(perfil) {
   const existentes = new Map((perfil.PERMISSOES || []).map((permissao) => [String(permissao.PAGINA), permissao]));
-  const isAdmin = String(perfil.NOME || '').toUpperCase() === 'ADMIN';
   return {
     ...perfil,
     PERMISSOES: PERFIL_PAGES.map((pagina) => {
       const atual = existentes.get(pagina.key);
       if (atual) return normalizePermission(atual, perfil.NOME);
-      return normalizePermission({
-        PAGINA: pagina.key,
-        PODE_VISUALIZAR: isAdmin ? 1 : 0,
-        PODE_EDITAR: isAdmin ? 1 : 0,
-        PODE_EXCLUIR: isAdmin ? 1 : 0
-      }, perfil.NOME);
+      return normalizePermission({ PAGINA: pagina.key }, perfil.NOME);
     })
   };
 }
@@ -824,11 +808,11 @@ async function getPermissaoPerfil(perfilNome, pagina) {
   const { perfis } = await listPerfisAcesso();
   const perfil = perfis.find((item) => String(item.NOME || '').trim().toUpperCase() === normalizedPerfil);
   if (!perfil) {
-    return normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 0, PODE_EDITAR: 0, PODE_EXCLUIR: 0 }, normalizedPerfil);
+    return { PAGINA: pagina, ...Object.fromEntries(ALL_PERMISSION_FIELDS.map((field) => [field, 0])) };
   }
 
   return (perfil.PERMISSOES || []).find((permissao) => String(permissao.PAGINA) === String(pagina))
-    || normalizePermission({ PAGINA: pagina, PODE_VISUALIZAR: 0, PODE_EDITAR: 0, PODE_EXCLUIR: 0 }, normalizedPerfil);
+    || { PAGINA: pagina, ...Object.fromEntries(ALL_PERMISSION_FIELDS.map((field) => [field, 0])) };
 }
 
 async function getPermissoesPerfil(perfilNome) {
@@ -845,13 +829,11 @@ async function getPermissoesPerfil(perfilNome) {
 
   const { perfis } = await listPerfisAcesso();
   const perfil = perfis.find((item) => String(item.NOME || '').trim().toUpperCase() === normalizedPerfil);
-  return perfil?.PERMISSOES || PERFIL_PAGES.map((pagina) => normalizePermission({
+  return perfil?.PERMISSOES || PERFIL_PAGES.map((pagina) => ({
     PAGINA: pagina.key,
     LABEL: pagina.label,
-    PODE_VISUALIZAR: 0,
-    PODE_EDITAR: 0,
-    PODE_EXCLUIR: 0
-  }, normalizedPerfil));
+    ...Object.fromEntries(ALL_PERMISSION_FIELDS.map((field) => [field, 0]))
+  }));
 }
 
 module.exports = {
@@ -876,5 +858,6 @@ module.exports = {
   listLiberacaoSecoes,
   saveLiberacaoSecoes,
   getPermissaoPerfil,
-  getPermissoesPerfil
+  getPermissoesPerfil,
+  _private: { normalizePermission, completarPermissoesPerfil }
 };

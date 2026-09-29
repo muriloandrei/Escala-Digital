@@ -9,7 +9,7 @@ async function getState() {
 
 async function saveEscalas() {
   return {
-    ok: true,
+    ok: false,
     persisted: false,
     mode: 'oracle',
     message: 'Estado local ignorado. Use /api/escalas para persistencia oficial.'
@@ -18,7 +18,7 @@ async function saveEscalas() {
 
 async function saveConfig() {
   return {
-    ok: true,
+    ok: false,
     persisted: false,
     mode: 'oracle',
     message: 'Configuracao de tela nao persistida no Oracle nesta versao.'

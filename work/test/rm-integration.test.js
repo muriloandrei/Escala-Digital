@@ -76,3 +76,12 @@ test('seleciona cadastro ativo do funcionario retornado pelo RM', () => {
   assert.equal(funcionario.CHAPA, '999.8537');
   assert.equal(funcionario.CODTABFOLGA, '999.8537');
 });
+
+test('rejeita resposta RM incompleta ou com datas fora do periodo', () => {
+  const periodo = { inicio: '2026-10-05', fim: '2026-11-01' };
+  assert.throws(() => _private.validarFolgasConsultadasRm({ hasMore: true }, [], periodo));
+  assert.throws(() => _private.validarFolgasConsultadasRm({}, [{}], periodo));
+  assert.throws(() => _private.validarFolgasConsultadasRm({}, [{ DATA: '2026-11-02' }], periodo));
+  assert.doesNotThrow(() => _private.validarFolgasConsultadasRm({ items: [] }, [], periodo));
+  assert.doesNotThrow(() => _private.validarFolgasConsultadasRm({}, [{ DATA: '2026-11-01' }], periodo));
+});

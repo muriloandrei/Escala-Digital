@@ -1,5 +1,6 @@
 require('./rules-core.test');
 require('./modal-service.test');
+require('./operational-period.test');
 require('./escala-rules-backend.test');
 
 require('./escala-status.test');
@@ -10,5 +11,7 @@ require('./monthly-release.test');
 require('./error-handler.test');
 require('./csrf.test');
 require('./auth-md5-password.test');
+require('./access-permissions.test');
+require('./absence-validation.test');
 require('./rm-integration.test');
 require('./escala-sync-rm.test');

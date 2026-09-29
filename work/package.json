@@ -8,6 +8,8 @@
     "start": "node src/server.js",
     "dev": "node src/server.js",
     "check": "node --check src/server.js",
+    "migrations:check": "node scripts/check-migrations.js",
+    "db:check-schema": "node scripts/check-schema.js",
     "test": "node test/run-tests.js",
     "smoke:api": "node scripts/smoke-api-flow.js",
     "smoke:perfis": "node scripts/smoke-perfis-flow.js",

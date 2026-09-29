@@ -154,6 +154,9 @@ Mais detalhes em docs/docker-local.md.
 
 Antes de subir a versao Linux em um banco ja existente, execute as migrations em `docker/oracle/migrations`, especialmente:
 
+Rode `npm run migrations:check` no checkout antes de implantar. O comando compara nomes e SHA-256 das duas pastas versionadas; ele nao consulta o Oracle nem confirma quais migrations ja foram aplicadas naquele banco.
+Depois de aplicar as migrations, execute `npm run db:check-schema` com as mesmas variaveis de conexao da aplicacao. O diagnostico apenas consulta metadados e falha se faltar parte do contrato Oracle essencial.
+
 ```txt
 20260630_add_prog_ativa.sql
 20260701_add_tipo_descanso_classificacao.sql

@@ -15,4 +15,8 @@ test('draft save rejects a stale employee revision', () => {
     () => _private.assertRevisaoBase({ chapa: '001', revisaoBase: 4 }, 5),
     (error) => error.statusCode === 409 && /001/.test(error.message)
   );
+  assert.throws(
+    () => _private.assertRevisaoBase({ chapa: '001' }, 5),
+    (error) => error.statusCode === 409 && /001/.test(error.message)
+  );
 });

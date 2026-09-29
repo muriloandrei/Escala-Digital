@@ -1,5 +1,6 @@
 const { getEnv } = require('../config/env');
 const { withConnection, oracledb } = require('../db/oracle');
+const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -88,13 +89,6 @@ function formatRmDate(value, options = {}) {
   const date = formatDate(value);
   const time = options.endOfDay ? '23:59:59' : '00:00:00';
   return `${date}T${time}${options.offset || ''}`;
-}
-
-function getMonthEnd(value) {
-  const inicio = formatDate(value);
-  const fimDate = new Date(`${inicio}T00:00:00`);
-  fimDate.setMonth(fimDate.getMonth() + 1, 0);
-  return formatDate(fimDate);
 }
 
 function getFuncionarioRmData(body) {
@@ -283,7 +277,23 @@ async function getFolgasExistentes({ codTabFolga, inicio, fim }) {
     formatRmDate(inicio),
     formatRmDate(fim, { endOfDay: true })
   ]);
-  return toArrayResult(await requestRm(`${rmConfig.folgasPath}?filter=${encodeURIComponent(filter)}`));
+  const resposta = await requestRm(`${rmConfig.folgasPath}?filter=${encodeURIComponent(filter)}`);
+  const folgas = toArrayResult(resposta);
+  validarFolgasConsultadasRm(resposta, folgas, { inicio, fim });
+  return folgas;
+}
+
+function validarFolgasConsultadasRm(resposta, folgas, { inicio, fim }) {
+  const incompleta = resposta?.hasMore === true || Boolean(resposta?.nextPage || resposta?.nextToken);
+  const foraDoPeriodo = folgas.some((folga) => {
+    const data = formatDate(getFolgaDateValue(folga));
+    return !/^\d{4}-\d{2}-\d{2}$/.test(data) || data < inicio || data > fim;
+  });
+  if (incompleta || foraDoPeriodo) {
+    const error = new Error('Resposta de folgas do RM incompleta ou fora do periodo consultado. Nenhuma escala foi reconciliada.');
+    error.statusCode = 502;
+    throw error;
+  }
 }
 
 async function consultarFolgasFuncionarioMes({ cpf, inicio, fim, codColigadaFallback }) {
@@ -507,8 +517,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
           throw new Error(`RM nao retornou CODTABFOLGA para o CPF ${mask(cpf)}.`);
         }
 
-        const inicio = formatDate(mesRef);
-        const fim = getMonthEnd(mesRef);
+        const { inicio, fim } = getOperationalPeriodIso(mesRef);
         const existentesRows = await getFolgasExistentes({ codTabFolga, inicio, fim });
         const desejadas = new Set(funcionario.eventos.map((evento) => `${evento.data}|${rmConfig.folgaHoraInicio}`));
         let removidas = 0;
@@ -604,6 +613,7 @@ module.exports = {
     buildDeleteFolgaPath,
     getFuncionarioRmData,
     getFolgaKey,
+    validarFolgasConsultadasRm,
     pick
   }
 };

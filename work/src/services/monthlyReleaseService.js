@@ -2,6 +2,7 @@ const catalogService = require('./catalogService');
 const escalaService = require('./escalaService');
 const pendenciaFuncionarioService = require('./pendenciaFuncionarioService');
 const { validateEscalaPayload } = require('../rules/escalaRules');
+const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 
 function formatDateValue(value) {
   if (value instanceof Date) {
@@ -47,21 +48,9 @@ function getMonthStart(date = new Date()) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
-function getFirstMonday(year, month) {
-  const date = new Date(year, month, 1);
-  const day = date.getDay();
-  const add = day === 1 ? 0 : (8 - day) % 7;
-  date.setDate(date.getDate() + add);
-  return date;
-}
-
 function getOperationalPeriod(mesRef) {
-  const ref = new Date(`${formatDateValue(mesRef)}T00:00:00`);
-  const inicio = getFirstMonday(ref.getFullYear(), ref.getMonth());
-  const nextStart = getFirstMonday(ref.getFullYear(), ref.getMonth() + 1);
-  const fim = new Date(nextStart);
-  fim.setDate(fim.getDate() - 1);
-  return { inicio, fim };
+  const { inicio, fim } = getOperationalPeriodIso(mesRef);
+  return { inicio: new Date(`${inicio}T00:00:00`), fim: new Date(`${fim}T00:00:00`) };
 }
 
 function getMonthDays(mesRef) {

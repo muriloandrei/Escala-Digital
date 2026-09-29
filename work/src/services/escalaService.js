@@ -1,5 +1,6 @@
 const { withConnection, oracledb } = require('../db/oracle');
 const catalogService = require('./catalogService');
+const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -19,27 +20,11 @@ function formatDateValue(value) {
 }
 
 function getMonthEndIso(mesRef) {
-  return getOperationalPeriod(mesRef).fim;
-}
-
-function getFirstMonday(year, month) {
-  const date = new Date(year, month, 1);
-  const day = date.getDay();
-  const add = day === 1 ? 0 : (8 - day) % 7;
-  date.setDate(date.getDate() + add);
-  return date;
+  return getOperationalPeriodIso(mesRef).fim;
 }
 
 function getOperationalPeriod(mesRef) {
-  const ref = new Date(`${formatDateValue(mesRef)}T00:00:00`);
-  const inicio = getFirstMonday(ref.getFullYear(), ref.getMonth());
-  const nextStart = getFirstMonday(ref.getFullYear(), ref.getMonth() + 1);
-  const fim = new Date(nextStart);
-  fim.setDate(fim.getDate() - 1);
-  return {
-    inicio: formatDateValue(inicio),
-    fim: formatDateValue(fim)
-  };
+  return getOperationalPeriodIso(mesRef);
 }
 
 function getHojeIso() {
@@ -531,7 +516,12 @@ function assertUniqueFuncionarios(funcionarios = []) {
 }
 
 function assertRevisaoBase(funcionario, revisaoAtual) {
-  if (funcionario.revisaoBase === undefined || Number(funcionario.revisaoBase) === revisaoAtual) return;
+  if (funcionario.revisaoBase === undefined) {
+    const error = new Error(`Revisao base do funcionario ${funcionario.chapa || funcionario.escfuncId} nao informada. Recarregue a escala antes de salvar.`);
+    error.statusCode = 409;
+    throw error;
+  }
+  if (Number(funcionario.revisaoBase) === revisaoAtual) return;
   const error = new Error(`A escala do funcionario ${funcionario.chapa || funcionario.escfuncId} mudou em outra sessao. Recarregue antes de salvar.`);
   error.statusCode = 409;
   throw error;
@@ -799,7 +789,7 @@ async function listHistoricoEscala({ lojaId, mesRef, lojasPermitidas = [] }) {
   return withConnection(async (connection) => {
     try {
       const columns = await getTableColumns(connection, 'SGN_ESC_AUDITORIA');
-      if (!columns.size) return [];
+      if (!columns.size) throw new Error('Tabela de auditoria indisponivel.');
       const columnDetails = await getTableColumnDetails(connection, 'SGN_ESC_AUDITORIA');
       const query = buildHistoricoAuditoriaQuery(columns, { lojaId, mesRef, lojasPermitidas }, columnDetails);
       const result = await connection.execute(query.sql, query.binds, { outFormat: oracledb.OUT_FORMAT_OBJECT });
@@ -807,7 +797,7 @@ async function listHistoricoEscala({ lojaId, mesRef, lojasPermitidas = [] }) {
     } catch (error) {
       if (isRecoverableHistoricoError(error)) {
         console.warn('Historico de auditoria indisponivel para este schema:', error?.message || error);
-        return [];
+        throw new Error('Historico de auditoria indisponivel para este schema.', { cause: error });
       }
       throw error;
     }
@@ -1764,13 +1754,19 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, { lojaId
   }
   const ids = funcionarios.map((funcionario) => Number(funcionario.escfuncId || funcionario.ESCFUNC_ID));
   const lockBinds = Object.fromEntries(ids.map((id, index) => [`func${index}`, id]));
-  await connection.execute(
-    `select escprog_id from sgn_esc_prog
-     where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-       and escfunc_id in (${ids.map((_, index) => `:func${index}`).join(', ')})
+  const locked = await connection.execute(
+    `select escfunc_id from sgn_esc_funcionario
+     where loja = :lojaId and escfunc_id in (${ids.map((_, index) => `:func${index}`).join(', ')})
+     order by escfunc_id
      for update wait 5`,
-    { lojaId, mesRef, ...lockBinds }
+    { lojaId, ...lockBinds },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
+  if (locked.rows.length !== ids.length) {
+    const error = new Error('Um ou mais funcionarios nao foram encontrados para a loja.');
+    error.statusCode = 404;
+    throw error;
+  }
   const saved = [];
   for (const funcionario of funcionarios) {
     const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
@@ -1887,19 +1883,31 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
         throw error;
       }
 
+      const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
+      const locked = await connection.execute(
+        `select escfunc_id from sgn_esc_funcionario
+         where escfunc_id = :escfuncId and loja = :lojaId for update wait 5`,
+        { escfuncId, lojaId },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      if (!locked.rows.length) {
+        const error = new Error('Funcionario nao encontrado para a loja.');
+        error.statusCode = 404;
+        throw error;
+      }
       const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
       if (latestRevision === null) {
         const error = new Error('Escala mensal nao encontrada.');
         error.statusCode = 404;
         throw error;
       }
-      const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
       const latestFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId });
       if (latestFuncionarioRevision === null) {
         const error = new Error('Escala do funcionario nao encontrada no mes informado.');
         error.statusCode = 404;
         throw error;
       }
+      assertRevisaoBase(funcionario, latestFuncionarioRevision);
       const escalaAtualFuncionario = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
       assertSemAlteracaoEmDiasBloqueados(escalaAtualFuncionario?.dias || [], dias || []);
       const latestAnyFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
@@ -1959,23 +1967,9 @@ function isDescansoProgramacao(value) {
   return String(value || 'TRB').trim().toUpperCase() !== 'TRB';
 }
 
-function getHorarioTrabalhoBase(dias = []) {
-  const diaTrabalho = [...dias]
-    .sort((a, b) => formatDateValue(pick(a, 'DT', 'dt') || a.data).localeCompare(formatDateValue(pick(b, 'DT', 'dt') || b.data)))
-    .find((dia) => !isDescansoProgramacao(pick(dia, 'PROGRAMACAO', 'programacao'))
-      && /^\d{2}:\d{2}$/.test(String(pick(dia, 'HR_ENT1', 'hrEnt1') || '')));
-
-  return {
-    hrEnt1: pick(diaTrabalho, 'HR_ENT1', 'hrEnt1') || '08:00',
-    hrSai1: pick(diaTrabalho, 'HR_SAI1', 'hrSai1') || '12:00',
-    hrEnt2: pick(diaTrabalho, 'HR_ENT2', 'hrEnt2') || '13:10',
-    hrSai2: pick(diaTrabalho, 'HR_SAI2', 'hrSai2') || '17:58'
-  };
-}
-
-function montarDiasReconciliadosRm(diasAtuais = [], rmFolgaDatas = []) {
-  const folgasRm = new Set((rmFolgaDatas || []).map(formatDateValue).filter(Boolean));
-  const horarioBase = getHorarioTrabalhoBase(diasAtuais);
+function montarDiasReconciliadosRm(diasAtuais = [], rmFolgaDatas = [], periodo = {}) {
+  const dentroDoPeriodo = (data) => (!periodo.inicio || data >= periodo.inicio) && (!periodo.fim || data <= periodo.fim);
+  const folgasRm = new Set((rmFolgaDatas || []).map(formatDateValue).filter((data) => data && dentroDoPeriodo(data)));
   const alteracoes = [];
 
   const dias = (diasAtuais || []).map((diaAtual) => {
@@ -1985,7 +1979,7 @@ function montarDiasReconciliadosRm(diasAtuais = [], rmFolgaDatas = []) {
     const rmTemFolga = folgasRm.has(data);
     let novo;
 
-    if (rmTemFolga) {
+    if (dentroDoPeriodo(data) && rmTemFolga && !descansoAtual) {
       novo = {
         data,
         hrEnt1: null,
@@ -1993,16 +1987,6 @@ function montarDiasReconciliadosRm(diasAtuais = [], rmFolgaDatas = []) {
         hrEnt2: null,
         hrSai2: null,
         programacao: 'F',
-        justificativa: 'Sincronizacao RM'
-      };
-    } else if (programacaoAtual === 'F') {
-      novo = {
-        data,
-        hrEnt1: horarioBase.hrEnt1,
-        hrSai1: horarioBase.hrSai1,
-        hrEnt2: horarioBase.hrEnt2,
-        hrSai2: horarioBase.hrSai2,
-        programacao: 'TRB',
         justificativa: 'Sincronizacao RM'
       };
     } else {
@@ -2048,7 +2032,7 @@ async function sincronizarEscalaFuncionarioComRm({ lojaId, mesRef, escfuncId, rm
         throw error;
       }
 
-      const { dias, alteracoes } = montarDiasReconciliadosRm(escalaAtual.dias, rmFolgaDatas);
+      const { dias, alteracoes } = montarDiasReconciliadosRm(escalaAtual.dias, rmFolgaDatas, getOperationalPeriod(mesRef));
       if (!alteracoes.length) {
         return {
           alterado: false,
@@ -2142,31 +2126,49 @@ async function inativarEscala({ lojaId, mesRef }) {
 
 async function validateAusencias({ funcionarios }) {
   return withConnection(async (connection) => {
-    const errors = [];
+    const trabalho = funcionarios.flatMap((funcionario) => (funcionario.dias || [])
+      .filter((dia) => String(dia.programacao || 'TRB').toUpperCase() === 'TRB')
+      .map((dia) => ({ funcionario, data: dia.data })));
+    if (!trabalho.length) return [];
 
-    for (const funcionario of funcionarios) {
-      for (const dia of funcionario.dias || []) {
-        const trabalha = String(dia.programacao || 'TRB').toUpperCase() === 'TRB';
-        if (!trabalha) continue;
-
-        const result = await connection.execute(
-          `select motivo
-           from sgn_esc_ausencia
-           where escfunc_id = :escfuncId
-             and dt_inic <= to_date(:data, 'YYYY-MM-DD')
-             and nvl(dt_fim, dt_inic) >= to_date(:data, 'YYYY-MM-DD')
-             and rownum = 1`,
-          { escfuncId: funcionario.escfuncId || funcionario.ESCFUNC_ID, data: dia.data },
-          { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-
-        if (result.rows[0]) {
-          errors.push(`Funcionario ${funcionario.chapa || funcionario.CHAPA} possui ausencia em ${dia.data}: ${result.rows[0].MOTIVO || 'ausencia'}.`);
-        }
-      }
+    const ids = [...new Set(trabalho.map(({ funcionario }) => Number(funcionario.escfuncId || funcionario.ESCFUNC_ID)).filter(Boolean))];
+    if (!ids.length) return [];
+    const datas = trabalho.map(({ data }) => data).sort();
+    const inicio = datas[0];
+    const fim = datas.at(-1);
+    const ausencias = [];
+    for (let offset = 0; offset < ids.length; offset += 500) {
+      const lote = ids.slice(offset, offset + 500);
+      const binds = { inicio, fim };
+      const placeholders = lote.map((id, index) => {
+        binds[`func${index}`] = id;
+        return `:func${index}`;
+      });
+      const result = await connection.execute(
+        `select escfunc_id, dt_inic, dt_fim, motivo
+         from sgn_esc_ausencia
+         where escfunc_id in (${placeholders.join(', ')})
+           and dt_inic <= to_date(:fim, 'YYYY-MM-DD')
+           and nvl(dt_fim, dt_inic) >= to_date(:inicio, 'YYYY-MM-DD')`,
+        binds,
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      ausencias.push(...(result.rows || []));
     }
+    return encontrarErrosAusencias(trabalho, ausencias);
+  });
+}
 
-    return errors;
+function encontrarErrosAusencias(trabalho, ausencias) {
+  const indice = criarIndiceAusencias(ausencias);
+  return trabalho.flatMap(({ funcionario, data }) => {
+    const ausencia = encontrarAusenciaFuncionario(indice, {
+      ESCFUNC_ID: funcionario.escfuncId || funcionario.ESCFUNC_ID,
+      CHAPA: funcionario.chapa || funcionario.CHAPA
+    }, data);
+    return ausencia
+      ? [`Funcionario ${funcionario.chapa || funcionario.CHAPA} possui ausencia em ${data}: ${pick(ausencia, 'MOTIVO', 'motivo') || 'ausencia'}.`]
+      : [];
   });
 }
 
@@ -2202,6 +2204,7 @@ module.exports = {
     buildHistoricoAuditoriaQuery,
     filtrarFuncionariosCatalogoPorSecoesEscala,
     montarDiasReconciliadosRm,
-    assertRevisaoBase
+    assertRevisaoBase,
+    encontrarErrosAusencias
   }
 };

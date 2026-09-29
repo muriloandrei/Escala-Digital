@@ -2428,6 +2428,7 @@
             return [error?.message || 'Erro na comunicação com o servidor.'];
         };
         let appVersionAtual = null;
+        let avisoNovaVersaoPendente = false;
         const verificarVersaoApp = async () => {
             try {
                 const data = await apiRequest('/api/app-version', { timeoutMs: 8000 });
@@ -2438,6 +2439,14 @@
                     return;
                 }
                 if (appVersionAtual !== version) {
+                    const edicaoPendente = escalaFuncionarioEdicaoAlterada || escalaDetalheBancoAlterados.size > 0 || escalaRascunhoAtivo;
+                    if (edicaoPendente) {
+                        if (!avisoNovaVersaoPendente) {
+                            avisoNovaVersaoPendente = true;
+                            showInfoModal('Nova versão disponível. Salve as alterações pendentes antes de atualizar a página.', 'info');
+                        }
+                        return;
+                    }
                     window.location.reload();
                 }
             } catch (error) {
@@ -4375,14 +4384,23 @@
 
         const carregarHistoricoTela = async () => {
             if (!historicoLojaSelect || !historicoMesSelect || !historicoAnoSelect) return;
+            if (historicoResumo) historicoResumo.textContent = 'Carregando histórico...';
             const loja = historicoLojaSelect.value && historicoLojaSelect.value !== "all" ? historicoLojaSelect.value : "";
             const mesRef = historicoMesSelect.value !== "all" && historicoAnoSelect.value !== "all" ? formatDateForDb(Number(historicoAnoSelect.value), Number(historicoMesSelect.value), 1) : "";
             const params = new URLSearchParams();
             if (loja) params.set("lojaId", loja);
             if (mesRef) params.set("mesRef", mesRef);
-            const data = await apiRequest("/api/escalas/historico" + (params.toString() ? "?" + params.toString() : ""));
-            historicoCache = data.historico || [];
-            aplicarFiltroHistoricoTela();
+            try {
+                const data = await apiRequest("/api/escalas/historico" + (params.toString() ? "?" + params.toString() : ""));
+                if (data.indisponivel) throw new Error('Histórico indisponível. Tente novamente.');
+                historicoCache = data.historico || [];
+                aplicarFiltroHistoricoTela();
+            } catch (error) {
+                historicoCache = [];
+                if (historicoResumo) historicoResumo.textContent = 'Histórico indisponível. Tente novamente.';
+                if (tabelaHistoricoBody) tabelaHistoricoBody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-8">Não foi possível carregar o histórico.</td></tr>';
+                throw error;
+            }
         };
         const prepararFiltrosEscalaFuncionarios = () => {
             if (!escalaFuncionarioMes || !escalaFuncionarioAno) return;
@@ -4469,7 +4487,6 @@
         };
         const isDataBloqueadaParaEdicao = (dataIso) => String(dataIso || '').slice(0, 10) < getHojeIsoApp();
         const isDiaMesBloqueadoParaEdicao = (ano, mes, dia) => isDataBloqueadaParaEdicao(formatDateForDb(Number(ano), Number(mes), Number(dia)));
-        const isFolgaSemanalApp = (dia) => ['F', 'FOLGA', 'FXF', 'FOLGA_FIXA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
         const isFolgaSemanalAutomaticaApp = (dia) => ['F', 'FOLGA'].includes(String(dia?.PROGRAMACAO || dia?.programacao || 'TRB').trim().toUpperCase());
         const isFeriasApp = (dia) => ['FER', 'FERIAS'].includes(String(dia?.PROGRAMACAO || dia?.programacao || dia?.HR_ENT1 || dia?.hrEnt1 || '').trim().toUpperCase());
         const getWeekKeyIsoApp = (dataIso) => {
@@ -4765,7 +4782,7 @@
             escalaFuncionarioEdicaoTitulo.textContent='Escala - '+escalaFuncionarioEdicaoAtual.nome;
             escalaFuncionarioEdicaoResumo.textContent='Loja '+lojaId+' | '+getNomeMesTabela(mesRef)+' '+mesRef.slice(0,4)+' | Revisão '+escala.revisao+' | '+escala.status;
             const finalizada=escala.status==='FINALIZADA';
-            if (distribuirFolgasFuncionarioBtn) distribuirFolgasFuncionarioBtn.disabled = finalizada;
+            if (distribuirFolgasFuncionarioBtn) distribuirFolgasFuncionarioBtn.disabled = finalizada || !hasPermission('escalas', 'editar');
             if (atualizarFuncionarioRmBtn) atualizarFuncionarioRmBtn.disabled = finalizada;
             atualizarBotaoSalvarEscalaFuncionario();
             await carregarTiposDescansoCache(false);
@@ -4897,64 +4914,46 @@
             aplicarEdicaoDiasFuncionario(numeroDia, values);
         });
 
-        const distribuirFolgasFuncionario = () => {
-            if (!hasPermission('escalas-funcionarios', 'editar')) {
-                showInfoModal('Usuario sem permissao para editar escala do funcionario.', 'error');
+        const distribuirFolgasFuncionario = async () => {
+            if (!hasPermission('escalas', 'editar')) {
+                showInfoModal('Usuario sem permissao para gerar escala do funcionario.', 'error');
                 return;
             }
             const atual = escalaFuncionarioEdicaoAtual;
             if (!atual) return;
-            const dias = [...atual.dias].sort((a,b) => String(a.DT).localeCompare(String(b.DT)));
-            const horarioBase = dias.find(d => !isProgramacaoDescanso(d.PROGRAMACAO) && d.HR_ENT1 !== 'F') || { HR_ENT1:'08:00', HR_SAI1:'12:00', HR_ENT2:'13:00', HR_SAI2:'16:20' };
-            const diasEditaveis = dias.filter(d => !isDataBloqueadaParaEdicao(String(d.DT).slice(0, 10)));
-            if (!diasEditaveis.length) {
-                showInfoModal('Nao ha dias futuros disponiveis para redistribuir neste mes.', 'info');
+            if (escalaFuncionarioEdicaoAlterada) {
+                showInfoModal('Salve ou descarte as alterações pendentes antes de gerar outra escala.', 'info');
                 return;
             }
-            diasEditaveis.forEach(d => { d.PROGRAMACAO='TRB'; d.HR_ENT1=horarioBase.HR_ENT1; d.HR_SAI1=horarioBase.HR_SAI1; d.HR_ENT2=horarioBase.HR_ENT2; d.HR_SAI2=horarioBase.HR_SAI2; });
-            const semanas = new Map();
-            diasEditaveis.forEach(dia => {
-                const data = new Date(String(dia.DT).slice(0,10) + 'T00:00:00');
-                const segunda = new Date(data); segunda.setDate(data.getDate() - ((data.getDay()+6)%7));
-                const key = segunda.toISOString().slice(0,10);
-                if (!semanas.has(key)) semanas.set(key, []);
-                semanas.get(key).push({dia,data});
+            const datas = atual.dias.map(dia => String(dia.DT || '').slice(0, 10)).sort();
+            const confirmacao = await showInputModal({
+                title: 'Gerar escala - ' + atual.nome,
+                inputs: [{ type: 'message', text: `Loja ${atual.lojaId} | ${datas[0]} a ${datas.at(-1)}. Apenas este funcionário será regerado; dias passados, férias, afastamentos e fixos serão preservados.` }],
+                confirmText: 'Gerar escala'
             });
-            [...semanas.values()].forEach((semana,index) => {
-                const disponiveis = semana.sort((a,b)=>a.data-b.data);
-                if (!disponiveis.length) return;
-                const domingo = disponiveis.find(item => item.data.getDay()===0);
-                const folgas = [];
-                if (domingo && index % 2 === Number(atual.escfuncId) % 2) folgas.push(domingo);
-                const weekdays = disponiveis.filter(item => item.data.getDay()!==0);
-                const candidatos = [Number(atual.escfuncId)+index, Number(atual.escfuncId)+index+3, Number(atual.escfuncId)+index+1];
-                candidatos.forEach(seed => { if (folgas.length>=2 || !weekdays.length) return; const item=weekdays[seed%weekdays.length]; if (!folgas.includes(item)) folgas.push(item); });
-                if (folgas.length<2) disponiveis.forEach(item=>{if(folgas.length<2&&!folgas.includes(item))folgas.push(item);});
-                folgas.forEach(({dia}) => { dia.PROGRAMACAO='F'; dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F'; });
-            });
-            const folgasSemana = new Map();
-            dias.forEach(dia => {
-                if (isFolgaSemanalApp(dia)) {
-                    const weekKey = getWeekKeyIsoApp(String(dia.DT).slice(0, 10));
-                    folgasSemana.set(weekKey, (folgasSemana.get(weekKey) || 0) + 1);
-                }
-            });
-            let consecutivos=0;
-            dias.forEach(dia => {
-                if(isProgramacaoDescanso(dia.PROGRAMACAO)){consecutivos=0;return;}
-                consecutivos++;
-                const weekKey = getWeekKeyIsoApp(String(dia.DT).slice(0,10));
-                if(consecutivos>5 && !isDataBloqueadaParaEdicao(String(dia.DT).slice(0,10)) && (folgasSemana.get(weekKey) || 0) < 2){
-                    dia.PROGRAMACAO='F';dia.HR_ENT1=dia.HR_SAI1=dia.HR_ENT2=dia.HR_SAI2='F';
-                    folgasSemana.set(weekKey, (folgasSemana.get(weekKey) || 0) + 1);
-                    consecutivos=0;
-                }
-            });
-            invalidarValidacaoEscalaFuncionario('Distribuição de folgas pendente de validação.');
-            renderizarEscalaFuncionarioEdicao();
-            showInfoModal('Folgas 5x2 distribuídas. Revise e valide antes de salvar.','success');
+            if (!confirmacao) return;
+            distribuirFolgasFuncionarioBtn.disabled = true;
+            try {
+                const data = await apiRequest('/api/escalas/gerar-secao', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        lojaId: atual.lojaId,
+                        mesRef: atual.mesRef,
+                        escsecaoId: Number(atual.escsecaoId),
+                        escfuncIds: [atual.escfuncId]
+                    }),
+                    timeoutMs: 120000
+                });
+                await carregarEscalaFuncionarioEdicao(atual.escfuncId, atual.lojaId, atual.mesRef);
+                const criticas = data.resultado?.criticas || [];
+                showInfoModal(criticas.length ? ['Escala gerada com críticas.', ...criticas] : 'Escala do funcionário gerada.', criticas.length ? 'error' : 'success');
+            } catch (error) {
+                showInfoModal(getApiErrorMessages(error), 'error');
+            } finally {
+                distribuirFolgasFuncionarioBtn.disabled = isEscalaFuncionarioFinalizada() || !hasPermission('escalas', 'editar');
+            }
         };
-        distribuirFolgasFuncionarioBtn?.addEventListener('click',distribuirFolgasFuncionario);
+        distribuirFolgasFuncionarioBtn?.addEventListener('click', () => distribuirFolgasFuncionario().catch(error => showInfoModal(getApiErrorMessages(error), 'error')));
 
         const validarEscalaFuncionarioAtual = () => {
             const atual=escalaFuncionarioEdicaoAtual;if(!atual)return false; const errors=validarDiasEscalaFuncionario(atual.dias, atual.nome, atual); let consecutivos=0;
@@ -5033,6 +5032,7 @@
                 aprendiz: isFuncionarioAprendizBanco(atual),
                 escsecaoId: atual.escsecaoId,
                 escfuncaoId: atual.escfuncaoId,
+                revisaoBase: Number(atual.dias[0]?.REVISAO ?? atual.revisao),
                 dias: atual.dias.map((dia) => {
                     const descanso = isProgramacaoDescanso(dia.PROGRAMACAO);
                     const sigla = getValorDescanso(dia);
@@ -5572,10 +5572,9 @@
         };
 
         const salvarEscalasNoStorage = async (escalas) => {
-            escalasSalvasCache = Array.isArray(escalas) ? escalas : [];
             await apiRequest('/api/state/escalas', {
                 method: 'PUT',
-                body: JSON.stringify({ escalasSalvas: escalasSalvasCache })
+                body: JSON.stringify({ escalasSalvas: Array.isArray(escalas) ? escalas : [] })
             });
         };
 
@@ -8789,6 +8788,14 @@
                     window.location.hash = '/escalas-geradas';
                 } else if (lojaAtual && mesAtual) {
                     await recarregarSecaoAtualEscalaBanco(lojaAtual, mesAtual, secaoAtual, { subsetorAtivo: subsetorAtual });
+                    const revisoesRecarregadas = new Map((escalaDetalheAtual.dias || []).map((dia) => [
+                        String(dia.ESCFUNC_ID), Number(dia.REVISAO)
+                    ]));
+                    const leituraConfirmada = funcionariosAlterados.every((funcionario, index) =>
+                        revisoesRecarregadas.get(String(funcionario.escfuncId)) === Number(result.saved[index].revisao));
+                    if (!leituraConfirmada) {
+                        throw new Error('A leitura de volta nao confirmou a revisao gravada de todos os funcionarios. Consulte o historico e recarregue antes de editar novamente.');
+                    }
                 }
                 escalaDetalheBancoAlterados = new Map();
                 showInfoModal(oficializar ? 'Alterações salvas, oficializadas e enviadas para o RM.' : 'Rascunho salvo e recarregado do banco.', 'success');
@@ -9677,9 +9684,13 @@
 
                 if (values && values['escala-senha'] === escalaAlvo.senha) {
                     const novasEscalas = escalas.filter(e => e.id != escalaId);
-                    await salvarEscalasNoStorage(novasEscalas);
-                    renderizarTabelaRegistros();
-                    showInfoModal("Escala excluída com sucesso.", "success");
+                    try {
+                        await salvarEscalasNoStorage(novasEscalas);
+                        renderizarTabelaRegistros();
+                        showInfoModal("Escala excluída com sucesso.", "success");
+                    } catch (error) {
+                        showInfoModal(error.message, 'error');
+                    }
                 } else if (values) {
                     showInfoModal("Senha incorreta. A exclusão foi cancelada.", "error");
                 }

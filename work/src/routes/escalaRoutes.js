@@ -6,6 +6,7 @@ const catalogService = require('../services/catalogService');
 const accessService = require('../services/accessService');
 const auditService = require('../services/auditService');
 const rmIntegrationService = require('../services/rmIntegrationService');
+const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const monthlyReleaseService = require('../services/monthlyReleaseService');
 const { REGRAS_VIGENTES, validateEscalaPayload } = require('../rules/escalaRules');
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
@@ -290,11 +291,6 @@ function getLojasPermitidasParaConsulta(req) {
   return req.user?.lojas || [];
 }
 
-function getMonthEndIso(mesRef) {
-  const ref = new Date(`${String(mesRef).slice(0, 10)}T00:00:00`);
-  return new Date(ref.getFullYear(), ref.getMonth() + 1, 0).toISOString().slice(0, 10);
-}
-
 async function getLojasPermitidas(req, requestedLojaId = 'all') {
   if (requestedLojaId && requestedLojaId !== 'all') {
     const lojaCodigo = await catalogService.resolveLojaCodigo(Number(requestedLojaId));
@@ -361,7 +357,7 @@ router.get('/historico', requireAdmin, requirePermission('historico', 'visualiza
     return res.json({ historico });
   } catch (error) {
     console.warn('Falha ao consultar historico de escala:', error?.message || error);
-    return res.json({ historico: [], indisponivel: true });
+    return res.status(503).json({ error: 'Historico de auditoria indisponivel. Tente novamente mais tarde.' });
   }
 });
 
@@ -690,10 +686,11 @@ router.post('/funcionario/sincronizar-rm', requirePermission('escalas-funcionari
       return res.status(422).json({ error: `CPF nao cadastrado para o funcionario ${funcionario.CHAPA}. Atualize SGN_ESC_FUNCIONARIO.CPF antes de sincronizar com o RM.` });
     }
 
+    const periodo = getOperationalPeriodIso(payload.mesRef);
     const consultaRm = await rmIntegrationService.consultarFolgasFuncionarioMes({
       cpf: funcionario.CPF,
-      inicio: payload.mesRef,
-      fim: getMonthEndIso(payload.mesRef),
+      inicio: periodo.inicio,
+      fim: periodo.fim,
       codColigadaFallback: funcionario.CODCOLIGADA
     });
 
@@ -715,6 +712,7 @@ router.post('/funcionario/sincronizar-rm', requirePermission('escalas-funcionari
         escfuncId: payload.escfuncId,
         chapa: funcionario.CHAPA,
         codTabFolga: consultaRm.codTabFolga,
+        periodo,
         folgasRm: consultaRm.datas.length,
         alterado: saved.alterado,
         alteracoes: saved.alteracoes?.length || 0,
@@ -726,7 +724,7 @@ router.post('/funcionario/sincronizar-rm', requirePermission('escalas-funcionari
     return res.json({
       ok: true,
       funcionario: { escfuncId: payload.escfuncId, chapa: funcionario.CHAPA, nome: funcionario.NOME },
-      rm: { codTabFolga: consultaRm.codTabFolga, folgas: consultaRm.datas },
+      rm: { codTabFolga: consultaRm.codTabFolga, folgas: consultaRm.datas, periodo },
       saved
     });
   } catch (error) {
