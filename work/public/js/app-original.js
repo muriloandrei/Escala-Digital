@@ -8735,9 +8735,19 @@
             }
         });
 
+        const mensagemOficializacaoRm = (rm) => !rm?.enabled
+            ? { texto: 'Escala oficializada. Integração com o RM desabilitada.', tipo: 'success' }
+            : rm.falhas
+                ? { texto: `Escala oficializada, mas ${rm.falhas} colaborador(es) falharam no envio ao RM. Consulte a integração RM.`, tipo: 'error' }
+                : { texto: 'Escala oficializada e enviada ao RM.', tipo: 'success' };
+
         const salvarAlteracoesDetalheBanco = async ({ oficializar = false } = {}) => {
             if (!hasPermission('escalas', 'editar')) {
                 showInfoModal('Usuario sem permissao para salvar escalas.', 'error');
+                return;
+            }
+            if (oficializar && !hasPermission('escalas', 'oficializar')) {
+                showInfoModal('Usuario sem permissao para oficializar escalas.', 'error');
                 return;
             }
             if (!escalaDetalheBancoAlterados.size) {
@@ -8747,7 +8757,8 @@
                         body: JSON.stringify({ lojaId: Number(escalaDetalheAtual.lojaId), mesRef: escalaDetalheAtual.mesRef }),
                         timeoutMs: 120000
                     });
-                    showInfoModal('Escala oficializada. ' + (result.rm?.message || ''), result.rm?.ok === false ? 'error' : 'success');
+                    const feedback = mensagemOficializacaoRm(result.rm);
+                    showInfoModal(feedback.texto, feedback.tipo);
                     window.location.hash = '/escalas-geradas';
                     return;
                 }
@@ -8764,6 +8775,7 @@
             const secaoAtual = escalaDetalheAtual.secaoAtiva;
             const subsetorAtual = escalaDetalheAtual.subsetorAtivo;
             let gravado = false;
+            let resultadoRm = null;
             try {
                 const funcionariosAlterados = [...escalaDetalheBancoAlterados.values()].map(funcionario => {
                     const dias = (escalaDetalheAtual.dias || [])
@@ -8797,11 +8809,12 @@
                 }
                 gravado = true;
                 if (oficializar && hasPermission('escalas', 'oficializar')) {
-                    await apiRequest('/api/escalas/oficializar', {
+                    const oficializacao = await apiRequest('/api/escalas/oficializar', {
                         method: 'POST',
                         body: JSON.stringify({ lojaId: Number(escalaDetalheAtual.lojaId), mesRef: escalaDetalheAtual.mesRef }),
                         timeoutMs: 120000
                     });
+                    resultadoRm = oficializacao.rm || null;
                 }
                 if (oficializar) {
                     window.location.hash = '/escalas-geradas';
@@ -8817,7 +8830,9 @@
                     }
                 }
                 escalaDetalheBancoAlterados = new Map();
-                showInfoModal(oficializar ? 'Alterações salvas, oficializadas e enviadas para o RM.' : 'Rascunho salvo e recarregado do banco.', 'success');
+                const feedback = oficializar ? mensagemOficializacaoRm(resultadoRm)
+                    : { texto: 'Rascunho salvo e recarregado do banco.', tipo: 'success' };
+                showInfoModal(feedback.texto, feedback.tipo);
             } catch (error) {
                 const mensagem = gravado
                     ? 'Alterações gravadas no banco, mas a etapa seguinte falhou. Recarregue a escala antes de editar novamente: ' + error.message

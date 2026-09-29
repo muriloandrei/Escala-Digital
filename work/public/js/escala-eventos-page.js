@@ -30,6 +30,22 @@
     const dataHora = (value) => value ? new Date(value).toLocaleString('pt-BR') : '-';
     const escfuncId = (evento) => Number(evento.ESCFUNC_ID || 0);
     const detalhe = (evento) => evento.DETALHE || {};
+    const rotulosAcao = {
+      GERAR_ESCALA_SECAO: 'Gerou escala', RESETAR_ESCALA_SECAO: 'Resetou escala',
+      EDITAR_ESCALA_FUNCIONARIO: 'Editou escala do colaborador',
+      EDITAR_DIA_ESCALA: 'Editou dia da escala', EDITAR_HORARIO_ESCALA: 'Editou horários da escala',
+      EDITAR_HORARIO_BASE: 'Alterou horário do colaborador',
+      SALVAR_FIXO_ESCALA: 'Definiu folga ou horário fixo', REMOVER_FIXO_ESCALA: 'Removeu fixo',
+      TRANSFERIR_SUBSECAO: 'Transferiu subseção',
+      CRIAR_PENDENCIA_FUNCIONARIO: 'Suspendeu da escala',
+      ENCERRAR_PENDENCIA_FUNCIONARIO: 'Encerrou suspensão',
+      OFICIALIZAR_ESCALA: 'Oficializou escala', INATIVAR_ESCALA: 'Inativou escala'
+    };
+    const rotulosSituacao = {
+      CRIACAO: 'Criação', RASCUNHO: 'Antes da oficialização',
+      POS_OFICIALIZACAO: 'Após oficialização', OFICIALIZADA: 'Oficializada',
+      CADASTRO: 'Cadastro'
+    };
 
     function filtrados() {
       const termo = String(busca?.value || '').trim().toLocaleLowerCase('pt-BR');
@@ -37,7 +53,7 @@
         if (acao?.value && evento.ACAO !== acao.value) return false;
         const info = detalhe(evento);
         const alvo = [info.chapa, evento.FUNCIONARIO_CHAPA, evento.FUNCIONARIO_NOME,
-          evento.SECAO_NOME, evento.LOGIN, evento.ACAO, evento.ESCFUNC_ID, info.justificativa]
+          evento.SECAO_NOME, evento.LOGIN, evento.ACAO, rotulosAcao[evento.ACAO], evento.ESCFUNC_ID, info.justificativa]
           .join(' ').toLocaleLowerCase('pt-BR');
         return !termo || alvo.includes(termo);
       });
@@ -62,8 +78,8 @@
             ).join('')}</div></details>`
           : `<div class="alteracoes-detalhe">${texto(JSON.stringify(info))}</div>`;
         return `<article class="alteracoes-item">
-          <div class="alteracoes-item-cabecalho"><strong>${texto([info.chapa || evento.FUNCIONARIO_CHAPA, evento.FUNCIONARIO_NOME].filter(Boolean).join(' | ') || 'Escala')}</strong><span>${texto(evento.ACAO)}</span><time>${texto(dataHora(evento.DT_HR_INCL))}</time></div>
-          <div class="alteracoes-item-meta">Loja ${texto(evento.LOJA)} &middot; ${texto(evento.SECAO_NOME || 'Todas as seções')} &middot; ${texto(evento.LOGIN || 'Sistema')} &middot; ${texto(evento.SITUACAO)} &middot; revisão ${texto(evento.REVISAO_ANTERIOR ?? '-')} &rarr; ${texto(evento.REVISAO_NOVA ?? '-')} ${link}</div>
+          <div class="alteracoes-item-cabecalho"><strong>${texto([info.chapa || evento.FUNCIONARIO_CHAPA, evento.FUNCIONARIO_NOME].filter(Boolean).join(' | ') || 'Escala')}</strong><span>${texto(rotulosAcao[evento.ACAO] || evento.ACAO)}</span><time>${texto(dataHora(evento.DT_HR_INCL))}</time></div>
+          <div class="alteracoes-item-meta">Loja ${texto(evento.LOJA)} &middot; ${texto(evento.SECAO_NOME || 'Todas as seções')} &middot; ${texto(evento.LOGIN || 'Sistema')} &middot; ${texto(rotulosSituacao[evento.SITUACAO] || evento.SITUACAO)} &middot; revisão ${texto(evento.REVISAO_ANTERIOR ?? '-')} &rarr; ${texto(evento.REVISAO_NOVA ?? '-')} ${link}</div>
           ${alteracoesHtml}
         </article>`;
       }).join('') : '<p class="alteracoes-vazio">Nenhuma alteração encontrada para os filtros.</p>';
@@ -91,7 +107,7 @@
         fim = recebidos.length < 100;
         const selecionada = acao?.value || '';
         const acoes = [...new Set(eventos.map((item) => item.ACAO).filter(Boolean))].sort();
-        acao.innerHTML = '<option value="">Todas as ações</option>' + acoes.map((item) => `<option value="${texto(item)}">${texto(item)}</option>`).join('');
+        acao.innerHTML = '<option value="">Todas as ações</option>' + acoes.map((item) => `<option value="${texto(item)}">${texto(rotulosAcao[item] || item)}</option>`).join('');
         acao.value = selecionada;
       } catch (error) {
         if (atual === consulta) {
