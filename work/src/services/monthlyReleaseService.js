@@ -1,5 +1,6 @@
 const catalogService = require('./catalogService');
 const escalaService = require('./escalaService');
+const pendenciaFuncionarioService = require('./pendenciaFuncionarioService');
 const { validateEscalaPayload } = require('../rules/escalaRules');
 
 function formatDateValue(value) {
@@ -1177,17 +1178,19 @@ async function liberarEscalaLojaMes({
 
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
-  const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
+  const [funcionarios, turnos, ausencias, fixos, suspensos] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, secoesLiberacao ? { secoesPermitidas: secoesLiberacao } : {}),
     catalogService.listTurnosByLoja(lojaId, secoesLiberacao ? { secoesPermitidas: secoesLiberacao } : {}),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
-    escalaService.listFixosEscala({ lojaId, mesRef })
+    escalaService.listFixosEscala({ lojaId, mesRef }),
+    pendenciaFuncionarioService.listarIdsSuspensos({ lojaId, inicio, fim })
   ]);
 
-  const funcionariosPayload = buildFuncionariosLiberacao(funcionarios, turnos, mesRef, hojeIso, { ausencias, fixos })
+  const elegiveis = funcionarios.filter((funcionario) => !suspensos.has(Number(funcionario.ESCFUNC_ID)));
+  const funcionariosPayload = buildFuncionariosLiberacao(elegiveis, turnos, mesRef, hojeIso, { ausencias, fixos })
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa);
 
-  if (!funcionariosPayload.length && funcionarios.length === 0) {
+  if (!funcionariosPayload.length && elegiveis.length === 0) {
     return {
       lojaId,
       mesRef,
@@ -1220,17 +1223,19 @@ async function liberarEscalaLojaMes({
 async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()) }) {
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
-  const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
+  const [funcionarios, turnos, ausencias, fixos, suspensos] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
     catalogService.listTurnosByLoja(lojaId),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
-    escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId })
+    escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId }),
+    pendenciaFuncionarioService.listarIdsSuspensos({ lojaId, inicio, fim })
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
   const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
     ? new Set(escfuncIds.map(Number).filter(Boolean))
     : null;
-  const funcionariosSecaoTodos = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
+  const funcionariosSecaoTodos = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId)
+    && !suspensos.has(Number(funcionario.ESCFUNC_ID)));
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
   const funcionariosPayloadCompleto = anexarDiasPassados(
     buildFuncionariosRascunhoBalanceado(funcionariosSecaoTodos, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
@@ -1277,17 +1282,19 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = nul
   }
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
-  const [funcionarios, turnos, ausencias, fixos] = await Promise.all([
+  const [funcionarios, turnos, ausencias, fixos, suspensos] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
     catalogService.listTurnosByLoja(lojaId),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
-    escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId })
+    escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId }),
+    pendenciaFuncionarioService.listarIdsSuspensos({ lojaId, inicio, fim })
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
   const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
     ? new Set(escfuncIds.map(Number).filter(Boolean))
     : null;
-  const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
+  const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId)
+    && !suspensos.has(Number(funcionario.ESCFUNC_ID)));
   const funcionariosReset = funcionariosSecao
     .filter((funcionario) => !filtroFuncionarios || filtroFuncionarios.has(Number(funcionario.ESCFUNC_ID)));
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));

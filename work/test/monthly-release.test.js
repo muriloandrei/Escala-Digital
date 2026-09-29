@@ -6,6 +6,8 @@ const { _private } = require('../src/services/escalaService');
 const { validateEscalaPayload } = require('../src/rules/escalaRules');
 const catalogService = require('../src/services/catalogService');
 const escalaService = require('../src/services/escalaService');
+const pendenciaFuncionarioService = require('../src/services/pendenciaFuncionarioService');
+pendenciaFuncionarioService.listarIdsSuspensos = async () => new Set();
 
 test('monthly release builds draft only from today onward', () => {
   const funcionario = {
@@ -782,6 +784,45 @@ test('section generation saves draft even when automatic validation returns crit
     escalaService.listFixosEscala = originals.listFixosEscala;
     escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
     escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+  }
+});
+
+test('section generation leaves suspended employees out of a new draft', async () => {
+  const originals = {
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listFixosEscala: escalaService.listFixosEscala,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    saveEscalasBatch: escalaService.saveEscalasBatch,
+    listarIdsSuspensos: pendenciaFuncionarioService.listarIdsSuspensos
+  };
+  let savedPayload;
+  catalogService.listFuncionariosByLoja = async () => [301, 302].map((id) => ({
+    ESCFUNC_ID: id, CHAPA: String(id), NOME: `Funcionario ${id}`,
+    LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  }));
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.listDiasSecaoAtual = async () => [];
+  escalaService.saveEscalasBatch = async (payload) => { savedPayload = payload; return payload.funcionarios; };
+  pendenciaFuncionarioService.listarIdsSuspensos = async () => new Set([302]);
+  try {
+    const result = await monthlyReleaseService.gerarEscalaSecao({
+      lojaId: 10, mesRef: '2026-10-01', escsecaoId: 20, hojeIso: '2026-10-05'
+    });
+    assert.equal(result.criada, true);
+    assert.deepEqual(savedPayload.funcionarios.map((item) => item.escfuncId), [301]);
+  } finally {
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
+    escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
+    escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+    pendenciaFuncionarioService.listarIdsSuspensos = originals.listarIdsSuspensos;
   }
 });
 

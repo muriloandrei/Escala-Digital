@@ -3,6 +3,8 @@ const { z } = require('zod');
 const { requireAuth, requireLojaAccess, requirePermission } = require('../middleware/auth');
 const catalogService = require('../services/catalogService');
 const accessService = require('../services/accessService');
+const pendenciaFuncionarioService = require('../services/pendenciaFuncionarioService');
+const auditService = require('../services/auditService');
 
 const router = express.Router();
 
@@ -16,6 +18,24 @@ const funcionarioEscalaSchema = z.object({
   HR_SAI2: z.string().max(5).nullable().optional(),
   DT_DEMISS: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
 }).strict();
+
+const dataIsoSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}, 'Data invalida.');
+
+const suspensaoFuncionarioSchema = z.object({
+  tipo: z.enum(['AFASTAMENTO', 'TRANSFERENCIA', 'DESLIGAMENTO', 'OUTRO']),
+  inicio: dataIsoSchema,
+  fim: dataIsoSchema.nullable().optional(),
+  justificativa: z.string().trim().min(10).max(500)
+}).strict().refine((value) => !value.fim || value.fim >= value.inicio, {
+  message: 'A data final deve ser igual ou posterior a inicial.', path: ['fim']
+});
+
+function podeGerirPendencias(req) {
+  return ['ADMIN', 'RH'].includes(String(req.user?.perfil || '').toUpperCase());
+}
 
 const secaoTurnoSchema = z.object({
   HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
@@ -252,6 +272,65 @@ router.get('/funcionarios', async (req, res, next) => {
       secoesPermitidas
     });
     return res.json({ funcionarios });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/suspensoes-funcionarios', async (req, res, next) => {
+  try {
+    const lojas = await getLojasPermitidas(req, req.query.lojaId || 'all');
+    const suspensoes = [];
+    for (const lojaId of lojas) {
+      const registros = await pendenciaFuncionarioService.listar({
+        lojaId, incluirEncerradas: req.query.historico === '1'
+      });
+      suspensoes.push(...(podeGerirPendencias(req) ? registros : registros.map((registro) => ({
+        ESCFUNC_ID: registro.ESCFUNC_ID,
+        DT_INICIO: registro.DT_INICIO,
+        DT_FIM: registro.DT_FIM,
+        STATUS: registro.STATUS
+      }))));
+    }
+    return res.json({ suspensoes });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/lojas/:lojaId/funcionarios/:escfuncId/suspensoes', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+  try {
+    if (!podeGerirPendencias(req)) return res.status(403).json({ error: 'Somente Admin e RH podem suspender funcionarios da escala.' });
+    const data = suspensaoFuncionarioSchema.parse(req.body);
+    const lojaId = Number(req.params.lojaId);
+    const escfuncId = Number(req.params.escfuncId);
+    if (!Number.isInteger(escfuncId) || escfuncId <= 0) return res.status(400).json({ error: 'Funcionario invalido.' });
+    const resultado = await pendenciaFuncionarioService.criar({ lojaId, escfuncId, ...data, usuario: req.user });
+    await auditService.registerAudit({
+      action: 'SUSPENDER_FUNCIONARIO_ESCALA', entity: 'FUNCIONARIO', user: req.user,
+      lojaId, referenceId: escfuncId,
+      details: { pendenciaId: resultado.id, tipo: data.tipo, inicio: data.inicio, fim: data.fim, justificativa: data.justificativa, impacto: resultado.impacto }
+    });
+    return res.status(201).json(resultado);
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados da suspensao invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
+router.post('/lojas/:lojaId/suspensoes/:pendenciaId/encerrar', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+  try {
+    if (!podeGerirPendencias(req)) return res.status(403).json({ error: 'Somente Admin e RH podem encerrar suspensoes.' });
+    const lojaId = Number(req.params.lojaId);
+    const pendenciaId = Number(req.params.pendenciaId);
+    if (!Number.isInteger(pendenciaId) || pendenciaId <= 0) return res.status(400).json({ error: 'Pendencia invalida.' });
+    const encerrada = await pendenciaFuncionarioService.encerrar({ lojaId, pendenciaId, usuario: req.user });
+    if (!encerrada) return res.status(404).json({ error: 'Pendencia aberta nao encontrada nesta loja.' });
+    await auditService.registerAudit({
+      action: 'ENCERRAR_SUSPENSAO_FUNCIONARIO', entity: 'FUNCIONARIO', user: req.user,
+      lojaId, referenceId: pendenciaId, details: { pendenciaId }
+    });
+    return res.json({ ok: true });
   } catch (error) {
     return next(error);
   }
@@ -560,6 +639,9 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, require
     const data = funcionarioEscalaSchema.parse(req.body);
     if (['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'].some((field) => data[field] !== undefined)) {
       return res.status(422).json({ error: 'Atualize o horario pela operacao de horario do funcionario para refletir na escala.' });
+    }
+    if (data.DT_DEMISS !== undefined) {
+      return res.status(422).json({ error: 'Demissao e reativacao devem vir do RM. Use a suspensao operacional para uma pendencia temporaria.' });
     }
     const funcionario = await catalogService.updateFuncionarioEscala({
       lojaId: Number(req.params.lojaId),

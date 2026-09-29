@@ -900,6 +900,7 @@
         let turnosTelaCache = [];
         let turnosFuncionariosTelaCache = [];
         let funcionariosTelaCache = [];
+        let suspensoesFuncionariosCache = new Map();
         let homeDashboardState = { resumo: [], escala: null };
         let homeDashboardSetorAtivo = 'all';
         let escalasFuncionariosCache = [];
@@ -3891,13 +3892,20 @@
             funcionariosTitulo.textContent = filtrados.length + ' funcionário(s) encontrado(s)';
             tabelaFuncionariosBody.innerHTML = filtrados.length ? filtrados.map(f => {
                 const ativo = isFuncionarioAtivoCatalogo(f);
+                const suspensao = suspensoesFuncionariosCache.get(String(f.ESCFUNC_ID));
+                const podeGerirSuspensao = ['ADMIN', 'RH'].includes(String(usuarioSessaoCache?.perfil || '').toUpperCase());
+                const hoje = new Date();
+                const hojeIso = formatDateForDb(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+                const suspensaoFutura = suspensao && String(suspensao.DT_INICIO || '').slice(0, 10) > hojeIso;
+                const statusLabel = !ativo ? 'Desligado' : suspensaoFutura ? 'Suspensão agendada' : suspensao ? 'Suspenso da escala' : 'Ativo';
+                const statusClass = !ativo ? 'status-inactive' : suspensao ? 'pending-chip' : 'status-active';
+                const statusTitle = suspensao ? 'Suspensão operacional a partir de ' + String(suspensao.DT_INICIO || '').slice(0, 10) : '';
                 return '<tr data-escfunc-id="' + escapeHtml(f.ESCFUNC_ID || '') + '">' +
-                    '<td data-label="Chapa">' + escapeHtml(f.CHAPA || '') + '</td><td data-label="Nome">' + escapeHtml(f.NOME || '') + '</td><td data-label="Loja">' + escapeHtml(f.LOJA || '') + '</td><td data-label="Seção">' + escapeHtml(f.SECAO_DESCR || f.ESCSECAO_ID || '') + '</td><td data-label="Função">' + escapeHtml(f.FUNCAO_DESCR || f.ESCFUNCAO_ID || '') + '</td><td data-label="Status"><span class="status-chip ' + (ativo ? 'status-active' : 'status-inactive') + '">' + (ativo ? 'Ativo' : 'Desligado') + '</span></td><td data-label="Brigadista">' + escapeHtml(f.BRIGADISTA || '') + '</td><td data-label="Entrada 1">' + escapeHtml(f.HR_ENT1 || '') + '</td><td data-label="Saída 1">' + escapeHtml(f.HR_SAI1 || '') + '</td><td data-label="Entrada 2">' + escapeHtml(f.HR_ENT2 || '') + '</td><td data-label="Saída 2">' + escapeHtml(f.HR_SAI2 || '') + '</td>' +
-                    '<td data-label="Ações" class="actions-cell"><button class="action-btn-table banco-action edit-funcionario" data-id="' + escapeHtml(f.ESCFUNC_ID || '') + '" data-loja="' + escapeHtml(f.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button><button class="action-btn-table banco-action toggle-funcionario-status" data-id="' + escapeHtml(f.ESCFUNC_ID || '') + '" data-loja="' + escapeHtml(f.LOJA || '') + '" data-ativo="' + (ativo ? '1' : '0') + '"><span class="material-symbols-outlined">' + (ativo ? 'person_off' : 'person_check') + '</span>' + (ativo ? 'Inativar' : 'Reativar') + '</button></td></tr>';
+                    '<td data-label="Chapa">' + escapeHtml(f.CHAPA || '') + '</td><td data-label="Nome">' + escapeHtml(f.NOME || '') + '</td><td data-label="Loja">' + escapeHtml(f.LOJA || '') + '</td><td data-label="Seção">' + escapeHtml(f.SECAO_DESCR || f.ESCSECAO_ID || '') + '</td><td data-label="Função">' + escapeHtml(f.FUNCAO_DESCR || f.ESCFUNCAO_ID || '') + '</td><td data-label="Status"><span class="status-chip ' + statusClass + '" title="' + escapeHtml(statusTitle) + '">' + statusLabel + '</span></td><td data-label="Brigadista">' + escapeHtml(f.BRIGADISTA || '') + '</td><td data-label="Entrada 1">' + escapeHtml(f.HR_ENT1 || '') + '</td><td data-label="Saída 1">' + escapeHtml(f.HR_SAI1 || '') + '</td><td data-label="Entrada 2">' + escapeHtml(f.HR_ENT2 || '') + '</td><td data-label="Saída 2">' + escapeHtml(f.HR_SAI2 || '') + '</td>' +
+                    '<td data-label="Ações" class="actions-cell"><button class="action-btn-table banco-action edit-funcionario" data-id="' + escapeHtml(f.ESCFUNC_ID || '') + '" data-loja="' + escapeHtml(f.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button>' + (podeGerirSuspensao && ativo ? '<button class="action-btn-table banco-action ' + (suspensao ? 'close-suspension' : 'suspend-funcionario') + '" data-id="' + escapeHtml(f.ESCFUNC_ID || '') + '"><span class="material-symbols-outlined">' + (suspensao ? 'person_check' : 'person_off') + '</span>' + (suspensao ? 'Encerrar suspensão' : 'Suspender da escala') + '</button>' : '') + '</td></tr>';
             }).join('') : '<tr><td colspan="12" class="text-center text-gray-500 py-8">Nenhum funcionário encontrado.</td></tr>';
             if (!hasPermission('funcionarios', 'editar')) {
                 tabelaFuncionariosBody.querySelectorAll('.edit-funcionario').forEach(button => button.remove());
-                tabelaFuncionariosBody.querySelectorAll('.toggle-funcionario-status').forEach(button => button.remove());
             }
             tabelaFuncionariosBody.querySelectorAll('.actions-cell').forEach(cell => {
                 if (!cell.textContent.trim()) cell.textContent = '-';
@@ -3910,8 +3918,12 @@
             const params = new URLSearchParams({ lojaId: loja });
             if (mesRef) params.set('mesRef', mesRef);
             if ((funcionariosStatusFiltro?.value || 'ativos') !== 'ativos') params.set('includeInactive', '1');
-            const data = await apiRequest('/api/catalog/funcionarios?' + params.toString());
+            const [data, suspensoesData] = await Promise.all([
+                apiRequest('/api/catalog/funcionarios?' + params.toString()),
+                apiRequest('/api/catalog/suspensoes-funcionarios?lojaId=' + encodeURIComponent(loja))
+            ]);
             funcionariosTelaCache = data.funcionarios || [];
+            suspensoesFuncionariosCache = new Map((suspensoesData.suspensoes || []).map(item => [String(item.ESCFUNC_ID), item]));
             funcionariosLojaCache = funcionariosTelaCache;
             popularFiltrosFuncionarios();
             aplicarFiltrosFuncionariosTela();
@@ -3925,30 +3937,50 @@
         funcionariosLojaSelect?.addEventListener('change', () => carregarFuncionariosTela().catch(error => showInfoModal(error.message, 'error')));
 
         tabelaFuncionariosBody.addEventListener('click', async (event) => {
-            const statusButton = event.target.closest('.toggle-funcionario-status');
-            if (statusButton) {
-                if (!hasPermission('funcionarios', 'editar')) return showInfoModal('Usuario sem permissao para editar funcionarios.', 'error');
-                const funcionario = funcionariosTelaCache.find(item => Number(item.ESCFUNC_ID) === Number(statusButton.dataset.id));
-                const loja = funcionario?.LOJA || statusButton.dataset.loja;
-                if (!loja || !funcionario) return showInfoModal('Funcionário não encontrado.', 'error');
-                const ativo = statusButton.dataset.ativo === '1';
-                const confirmou = await showInputModal({
-                    title: (ativo ? 'Inativar ' : 'Reativar ') + (funcionario.NOME || 'funcionário'),
-                    inputs: [{ type: 'message', text: ativo ? 'O colaborador deixará de aparecer nas novas cargas da escala.' : 'O colaborador voltará a aparecer nas novas cargas da escala.' }],
-                    confirmText: ativo ? 'Inativar' : 'Reativar'
-                });
-                if (!confirmou) return;
-                const hoje = new Date();
-                const dtDemiss = ativo ? formatDateForDb(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()) : null;
+            const suspenderButton = event.target.closest('.suspend-funcionario, .close-suspension');
+            if (suspenderButton) {
+                if (!['ADMIN', 'RH'].includes(String(usuarioSessaoCache?.perfil || '').toUpperCase())) return;
+                const funcionario = funcionariosTelaCache.find(item => Number(item.ESCFUNC_ID) === Number(suspenderButton.dataset.id));
+                if (!funcionario) return showInfoModal('Funcionário não encontrado.', 'error');
+                const suspensao = suspensoesFuncionariosCache.get(String(funcionario.ESCFUNC_ID));
                 try {
-                    await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios/${encodeURIComponent(funcionario.ESCFUNC_ID)}`, {
-                        method: 'PATCH',
-                        body: JSON.stringify({ DT_DEMISS: dtDemiss })
-                    });
-                    await carregarFuncionariosTela(false);
-                    showInfoModal(ativo ? 'Funcionário inativado.' : 'Funcionário reativado.', 'success');
+                    if (suspensao) {
+                        const confirmou = await showInputModal({
+                            title: 'Encerrar suspensão - ' + funcionario.NOME,
+                            inputs: [{ type: 'message', text: 'A escala já gravada não será restaurada automaticamente.' }],
+                            confirmText: 'Encerrar suspensão'
+                        });
+                        if (!confirmou) return;
+                        await apiRequest(`/api/catalog/lojas/${encodeURIComponent(funcionario.LOJA)}/suspensoes/${encodeURIComponent(suspensao.ESCPEND_ID)}/encerrar`, { method: 'POST' });
+                        showInfoModal('Suspensão encerrada.', 'success');
+                    } else {
+                        const hoje = new Date();
+                        const values = await showInputModal({
+                            title: 'Suspender da escala - ' + funcionario.NOME,
+                            inputs: [
+                                { label: 'Motivo', type: 'select', id: 'TIPO', value: 'AFASTAMENTO', options: [
+                                    { value: 'AFASTAMENTO', label: 'Afastamento pendente no RM' },
+                                    { value: 'TRANSFERENCIA', label: 'Transferência pendente no RM' },
+                                    { value: 'DESLIGAMENTO', label: 'Desligamento pendente no RM' },
+                                    { value: 'OUTRO', label: 'Outra pendência' }
+                                ], required: true },
+                                { label: 'Início', type: 'date', id: 'INICIO', value: formatDateForDb(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()), required: true },
+                                { label: 'Fim (opcional)', type: 'date', id: 'FIM', value: '' },
+                                { label: 'Justificativa', type: 'text', id: 'JUSTIFICATIVA', value: '', required: true }
+                            ],
+                            confirmText: 'Suspender'
+                        });
+                        if (!values) return;
+                        const result = await apiRequest(`/api/catalog/lojas/${encodeURIComponent(funcionario.LOJA)}/funcionarios/${encodeURIComponent(funcionario.ESCFUNC_ID)}/suspensoes`, {
+                            method: 'POST',
+                            body: JSON.stringify({ tipo: values.TIPO, inicio: values.INICIO, fim: values.FIM || null, justificativa: values.JUSTIFICATIVA })
+                        });
+                        const dias = result.impacto?.diasProgramados || 0;
+                        showInfoModal(dias ? `Suspensão registrada. Existem ${dias} dia(s) de trabalho já gravados que precisam de revisão manual.` : 'Suspensão registrada para novas gerações.', 'success');
+                    }
+                    await carregarFuncionariosTela();
                 } catch (error) {
-                    showInfoModal(error.message, 'error');
+                    showInfoModal(formatApiError(error), 'error');
                 }
                 return;
             }
