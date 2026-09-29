@@ -263,7 +263,7 @@ A tela atual inativa um funcionário preenchendo `DT_DEMISS` com a data de hoje.
 
 O bloqueio local retira o colaborador de novas gerações e sinaliza o impacto em escalas já existentes. Quando o RM confirmar a mudança, a pendência é conciliada automaticamente. Ações manuais ficam restritas aos perfis definidos e sempre auditadas.
 
-**Implementação em homologação:** a pendência operacional já pode ser criada e encerrada por Admin/RH, com data, motivo, justificativa e autoria em tabela própria. A geração consulta pendências abertas e a tela informa os dias de trabalho já gravados que exigem revisão. O período que cruza a pendência exclui o funcionário da nova geração por inteiro; a distribuição parcial a partir de uma data intermediária e o tratamento automático dos dias já salvos continuam pendentes. A conciliação usa os dados locais após a carga do RM; não aciona nem acelera o job externo.
+**Implementação em homologação:** a pendência operacional já pode ser criada e encerrada por Admin/RH, com data, motivo, justificativa e autoria em tabela própria. Liberação, geração e reset respeitam o início e fim da pendência, omitindo apenas os dias suspensos; ausências oficiais do RM prevalecem. A tela informa os dias de trabalho já gravados que exigem revisão, mas o tratamento automático desses dias continua pendente. A conciliação usa os dados locais após a carga do RM; não aciona nem acelera o job externo.
 
 Diminuir o job para poucos minutos não é a primeira escolha: aumenta carga e ainda não resolve indisponibilidade ou atraso na origem. A melhor combinação é manter carga periódica, permitir sincronização sob demanda e usar a pendência local com prazo. A frequência final deve ser definida após medir custo e tempo do job.
 

@@ -83,6 +83,22 @@ function getMonthEndIso(mesRef) {
   return formatDateValue(getOperationalPeriod(mesRef).fim);
 }
 
+function dataSuspensa(intervalo, data) {
+  return Boolean(intervalo && data >= intervalo.inicio && (!intervalo.fim || data <= intervalo.fim));
+}
+
+function dataIndisponivel(intervalo, funcionario, indiceAusencias, data) {
+  return dataSuspensa(intervalo, data) && !encontrarAusencia(indiceAusencias, funcionario, data);
+}
+
+function temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes = new Map(), indiceAusencias = new Map()) {
+  const intervalo = suspensoes.get(Number(funcionario.ESCFUNC_ID));
+  return getMonthDays(mesRef).some((dia) => {
+    const data = formatDateValue(dia);
+    return data >= hojeIso && !dataIndisponivel(intervalo, funcionario, indiceAusencias, data);
+  });
+}
+
 function normalizeTime(value, fallback) {
   const text = String(value || '').trim();
   return /^\d{2}:\d{2}$/.test(text) ? text : fallback;
@@ -295,9 +311,11 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
   const folgas = new Set((folgasDatas || []).map(formatDateValue).filter(Boolean));
   const indiceAusencias = opcoes.indiceAusencias || criarIndiceAusencias(opcoes.ausencias || []);
   const diasFixos = opcoes.diasFixos || criarIndiceFixos(opcoes.fixos || []);
+  const intervaloSuspensao = opcoes.intervaloSuspensao;
 
   const dias = getMonthDays(mesRef)
-    .filter((date) => formatDateValue(date) >= hojeIso)
+    .filter((date) => formatDateValue(date) >= hojeIso
+      && !dataIndisponivel(intervaloSuspensao, funcionario, indiceAusencias, formatDateValue(date)))
     .map((date) => {
       const data = formatDateValue(date);
       const ausencia = encontrarAusencia(indiceAusencias, funcionario, data);
@@ -404,7 +422,7 @@ function getDatasGeradas(diasMes, hojeIso) {
     .filter((data) => data >= hojeIso);
 }
 
-function contarBloqueiosPorData(secao, diasMes, indiceAusencias, diasFixos) {
+function contarBloqueiosPorData(secao, diasMes, indiceAusencias, diasFixos, suspensoes = new Map()) {
   const contagemSecao = new Map(diasMes.map((date) => [formatDateValue(date), 0]));
   const contagensTurno = new Map();
   secao.forEach(({ funcionario, turnoKey }) => {
@@ -415,7 +433,8 @@ function contarBloqueiosPorData(secao, diasMes, indiceAusencias, diasFixos) {
       const data = formatDateValue(date);
       const fixo = diasFixos.get(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`);
       const folgaFixa = fixo && String(fixo.PROGRAMACAO || fixo.programacao || '').toUpperCase() !== 'TRB';
-      if (!encontrarAusencia(indiceAusencias, funcionario, data) && !folgaFixa) return;
+      const suspenso = dataSuspensa(suspensoes.get(Number(funcionario.ESCFUNC_ID)), data);
+      if (!encontrarAusencia(indiceAusencias, funcionario, data) && !folgaFixa && !suspenso) return;
       contagemSecao.set(data, (contagemSecao.get(data) || 0) + 1);
       const turnoCounter = contagensTurno.get(turnoKey);
       turnoCounter.set(data, (turnoCounter.get(data) || 0) + 1);
@@ -703,11 +722,13 @@ function escolherPadraoBalanceado({
   domingosFolgaAlvo = [],
   domingosTrabalhoAlvo = [],
   indiceAusencias = null,
-  diasFixos = new Map()
+  diasFixos = new Map(),
+  intervaloSuspensao = null
 }) {
-  const datasGeradas = getDatasGeradas(diasMes, hojeIso);
+  const datasGeradas = getDatasGeradas(diasMes, hojeIso)
+    .filter((data) => !dataIndisponivel(intervaloSuspensao, funcionario, indiceAusencias, data));
   const primeiraJanela = datasGeradas.slice(0, Math.min(7, datasGeradas.length));
-  const folgasEsperadas = Math.max(1, Math.round(datasGeradas.length * 2 / 7));
+  const folgasEsperadas = Math.round(datasGeradas.length * 2 / 7);
   const folgasFixasFuncionario = getFolgasFixasFuncionario(diasFixos, funcionario, datasGeradas);
   const folgasFixasSet = new Set(folgasFixasFuncionario);
   const descansosObrigatoriosFuncionario = getDescansosObrigatoriosFuncionario(diasFixos, indiceAusencias, funcionario, datasGeradas);
@@ -729,7 +750,7 @@ function escolherPadraoBalanceado({
   let melhorIdeal = null;
   let melhorComCobertura = null;
   planos.forEach(({ padrao, folgas, repeticaoExata }, planoIndex) => {
-    const folgasPossiveis = folgas.filter((data) => !encontrarAusencia(indiceAusencias, funcionario, data)
+    const folgasPossiveis = folgas.filter((data) => datasGeradas.includes(data) && !encontrarAusencia(indiceAusencias, funcionario, data)
       && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`));
     const folgasLimitadas = limitarFolgasAutomaticasPorFixos(folgasPossiveis, descansosObrigatoriosFuncionario, maxFolgasSemanaFuncionario);
     const folgasEfetivas = completarFolgasMinimasSemanais(datasGeradas, folgasLimitadas, {
@@ -745,7 +766,7 @@ function escolherPadraoBalanceado({
     });
     if (!hasMaxFolgasPorSemanaDatas(folgasEfetivas, maxFolgasSemanaFuncionario)) return;
     if (!hasMaxFolgasAutomaticasComFixos(folgasEfetivas, descansosObrigatoriosFuncionario, maxFolgasSemanaFuncionario)) return;
-    const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas, { indiceAusencias, diasFixos });
+    const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas, { indiceAusencias, diasFixos, intervaloSuspensao });
     if (!hasNoConsecutiveAutomaticRests(rascunho.dias)) return;
     const errors = validateEscalaPayload({
       lojaId: Number(funcionario.LOJA || 0) || 1,
@@ -944,8 +965,10 @@ function rebalancearFolgasDiasComunsSecao(funcionariosPayload = [], secaoSize = 
 function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeIso = formatDateValue(new Date()), opcoes = {}) {
   const indiceAusencias = opcoes.indiceAusencias || criarIndiceAusencias(opcoes.ausencias || []);
   const diasFixos = opcoes.diasFixos || criarIndiceFixos(opcoes.fixos || []);
+  const suspensoes = opcoes.suspensoes || new Map();
   const secoes = new Map();
   (funcionarios || []).forEach((funcionario) => {
+    if (!temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes, indiceAusencias)) return;
     const turno = findTurnoParaFuncionario(funcionario, turnos);
     const secaoKey = getSecaoKey(funcionario);
     if (!secoes.has(secaoKey)) secoes.set(secaoKey, []);
@@ -960,7 +983,7 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
   const domingosGerados = getDatasGeradas(diasMes, hojeIso).filter(isDomingoIso);
   const payload = [];
   [...secoes.values()].forEach((secao) => {
-    const contagemAusencias = contarBloqueiosPorData(secao, diasMes, indiceAusencias, diasFixos);
+    const contagemAusencias = contarBloqueiosPorData(secao, diasMes, indiceAusencias, diasFixos, suspensoes);
     const contagemFolgasSecao = new Map(contagemAusencias.contagemSecao);
     const contagemFolgasSemanaSecao = new Map(diasMes.map((date) => [getWeekKeyFromIso(formatDateValue(date)), 0]));
     const contagensTurno = new Map(contagemAusencias.contagensTurno);
@@ -994,11 +1017,14 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
     const payloadSecao = [];
     secaoOrdenada
       .forEach(({ funcionario, turno, turnoKey }, indiceSecao) => {
+        const intervaloSuspensao = suspensoes.get(Number(funcionario.ESCFUNC_ID));
         const contagemFolgasTurno = contagensTurno.get(turnoKey);
         const turnoIndex = posicaoNoTurno.get(String(funcionario.ESCFUNC_ID)) || 0;
         const paridadeDomingo = turnoIndex % 2;
-        const domingosFolgaAlvo = domingosGerados.filter((_, index) => index % 2 === paridadeDomingo);
-        const domingosTrabalhoAlvo = domingosGerados.filter((_, index) => index % 2 !== paridadeDomingo);
+        const domingosFolgaAlvo = domingosGerados.filter((data, index) => index % 2 === paridadeDomingo
+          && !dataIndisponivel(intervaloSuspensao, funcionario, indiceAusencias, data));
+        const domingosTrabalhoAlvo = domingosGerados.filter((data, index) => index % 2 !== paridadeDomingo
+          && !dataIndisponivel(intervaloSuspensao, funcionario, indiceAusencias, data));
         const escolhido = escolherPadraoBalanceado({
           funcionario,
           turno,
@@ -1014,7 +1040,8 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
           domingosFolgaAlvo,
           domingosTrabalhoAlvo,
           indiceAusencias,
-          diasFixos
+          diasFixos,
+          intervaloSuspensao
         });
         escolhido.folgas.forEach((data) => {
           contagemFolgasSecao.set(data, (contagemFolgasSecao.get(data) || 0) + 1);
@@ -1022,7 +1049,7 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
           const weekKey = getWeekKeyFromIso(data);
           contagemFolgasSemanaSecao.set(weekKey, (contagemFolgasSemanaSecao.get(weekKey) || 0) + 1);
         });
-        payloadSecao.push(buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, escolhido.folgas, { indiceAusencias, diasFixos }));
+        payloadSecao.push(buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, escolhido.folgas, { indiceAusencias, diasFixos, intervaloSuspensao }));
       });
     payload.push(...rebalancearFolgasDiasComunsSecao(payloadSecao, secao.length));
   });
@@ -1033,9 +1060,10 @@ function montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, op
   if (!mesRef) return [];
   const indiceAusencias = opcoes.indiceAusencias || criarIndiceAusencias(opcoes.ausencias || []);
   const diasFixos = opcoes.diasFixos || criarIndiceFixos(opcoes.fixos || []);
+  const intervaloSuspensao = opcoes.suspensoes?.get(Number(funcionario.ESCFUNC_ID));
   return getMonthDays(mesRef)
     .map(formatDateValue)
-    .filter((data) => data >= hojeIso)
+    .filter((data) => data >= hojeIso && !dataIndisponivel(intervaloSuspensao, funcionario, indiceAusencias, data))
     .map((data) => {
       const ausencia = encontrarAusencia(indiceAusencias, funcionario, data);
       if (ausencia) {
@@ -1178,16 +1206,17 @@ async function liberarEscalaLojaMes({
 
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
-  const [funcionarios, turnos, ausencias, fixos, suspensos] = await Promise.all([
+  const [funcionarios, turnos, ausencias, fixos, suspensoes] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, secoesLiberacao ? { secoesPermitidas: secoesLiberacao } : {}),
     catalogService.listTurnosByLoja(lojaId, secoesLiberacao ? { secoesPermitidas: secoesLiberacao } : {}),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef }),
-    pendenciaFuncionarioService.listarIdsSuspensos({ lojaId, inicio, fim })
+    pendenciaFuncionarioService.listarIntervalosSuspensos({ lojaId, inicio, fim })
   ]);
 
-  const elegiveis = funcionarios.filter((funcionario) => !suspensos.has(Number(funcionario.ESCFUNC_ID)));
-  const funcionariosPayload = buildFuncionariosLiberacao(elegiveis, turnos, mesRef, hojeIso, { ausencias, fixos })
+  const indiceAusencias = criarIndiceAusencias(ausencias);
+  const elegiveis = funcionarios.filter((funcionario) => temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes, indiceAusencias));
+  const funcionariosPayload = buildFuncionariosLiberacao(elegiveis, turnos, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes })
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa);
 
   if (!funcionariosPayload.length && elegiveis.length === 0) {
@@ -1223,27 +1252,37 @@ async function liberarEscalaLojaMes({
 async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()) }) {
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
-  const [funcionarios, turnos, ausencias, fixos, suspensos] = await Promise.all([
+  const [funcionarios, turnos, ausencias, fixos, suspensoes] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
     catalogService.listTurnosByLoja(lojaId),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId }),
-    pendenciaFuncionarioService.listarIdsSuspensos({ lojaId, inicio, fim })
+    pendenciaFuncionarioService.listarIntervalosSuspensos({ lojaId, inicio, fim })
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
+  const idsComDiasAtuais = new Set(diasAtuaisSecao.map((dia) => Number(pick(dia, 'ESCFUNC_ID', 'escfunc_id'))));
   const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
     ? new Set(escfuncIds.map(Number).filter(Boolean))
     : null;
-  const funcionariosSecaoTodos = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId)
-    && !suspensos.has(Number(funcionario.ESCFUNC_ID)));
+  const indiceAusencias = criarIndiceAusencias(ausencias);
+  const funcionariosSecaoTodos = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
+  const funcionariosGeraveis = funcionariosSecaoTodos.filter((funcionario) =>
+    temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes, indiceAusencias));
+  const funcionariosParaLimpar = funcionariosSecaoTodos.filter((funcionario) =>
+    !temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes, indiceAusencias)
+    && idsComDiasAtuais.has(Number(funcionario.ESCFUNC_ID)));
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
   const funcionariosPayloadCompleto = anexarDiasPassados(
-    buildFuncionariosRascunhoBalanceado(funcionariosSecaoTodos, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
+    [
+      ...buildFuncionariosRascunhoBalanceado(funcionariosGeraveis, turnosSecao, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes }),
+      ...buildFuncionariosLiberacao(funcionariosParaLimpar, turnosSecao, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes })
+    ],
     diasAtuaisSecao,
     hojeIso,
     mesRef
   )
-    .filter((funcionario) => funcionario.escfuncId && funcionario.chapa && funcionario.dias.length > 0);
+    .filter((funcionario) => funcionario.escfuncId && funcionario.chapa
+      && (funcionario.dias.length > 0 || idsComDiasAtuais.has(Number(funcionario.escfuncId))));
   const funcionariosPayload = funcionariosPayloadCompleto
     .filter((funcionario) => !filtroFuncionarios || filtroFuncionarios.has(Number(funcionario.escfuncId)));
 
@@ -1282,24 +1321,27 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = nul
   }
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
-  const [funcionarios, turnos, ausencias, fixos, suspensos] = await Promise.all([
+  const [funcionarios, turnos, ausencias, fixos, suspensoes] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
     catalogService.listTurnosByLoja(lojaId),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId }),
-    pendenciaFuncionarioService.listarIdsSuspensos({ lojaId, inicio, fim })
+    pendenciaFuncionarioService.listarIntervalosSuspensos({ lojaId, inicio, fim })
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
+  const idsComDiasAtuais = new Set(diasAtuaisSecao.map((dia) => Number(pick(dia, 'ESCFUNC_ID', 'escfunc_id'))));
   const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
     ? new Set(escfuncIds.map(Number).filter(Boolean))
     : null;
+  const indiceAusencias = criarIndiceAusencias(ausencias);
   const funcionariosSecao = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId)
-    && !suspensos.has(Number(funcionario.ESCFUNC_ID)));
+    && (temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes, indiceAusencias)
+      || idsComDiasAtuais.has(Number(funcionario.ESCFUNC_ID))));
   const funcionariosReset = funcionariosSecao
     .filter((funcionario) => !filtroFuncionarios || filtroFuncionarios.has(Number(funcionario.ESCFUNC_ID)));
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
   const funcionariosPayload = anexarDiasPassados(
-    buildFuncionariosLiberacao(funcionariosReset, turnosSecao, mesRef, hojeIso, { ausencias, fixos }),
+    buildFuncionariosLiberacao(funcionariosReset, turnosSecao, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes }),
     diasAtuaisSecao,
     hojeIso,
     mesRef

@@ -7,7 +7,7 @@ const { validateEscalaPayload } = require('../src/rules/escalaRules');
 const catalogService = require('../src/services/catalogService');
 const escalaService = require('../src/services/escalaService');
 const pendenciaFuncionarioService = require('../src/services/pendenciaFuncionarioService');
-pendenciaFuncionarioService.listarIdsSuspensos = async () => new Set();
+pendenciaFuncionarioService.listarIntervalosSuspensos = async () => new Map();
 
 test('monthly release builds draft only from today onward', () => {
   const funcionario = {
@@ -795,7 +795,7 @@ test('section generation leaves suspended employees out of a new draft', async (
     listFixosEscala: escalaService.listFixosEscala,
     listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
     saveEscalasBatch: escalaService.saveEscalasBatch,
-    listarIdsSuspensos: pendenciaFuncionarioService.listarIdsSuspensos
+    listarIntervalosSuspensos: pendenciaFuncionarioService.listarIntervalosSuspensos
   };
   let savedPayload;
   catalogService.listFuncionariosByLoja = async () => [301, 302].map((id) => ({
@@ -808,13 +808,34 @@ test('section generation leaves suspended employees out of a new draft', async (
   escalaService.listFixosEscala = async () => [];
   escalaService.listDiasSecaoAtual = async () => [];
   escalaService.saveEscalasBatch = async (payload) => { savedPayload = payload; return payload.funcionarios; };
-  pendenciaFuncionarioService.listarIdsSuspensos = async () => new Set([302]);
+  pendenciaFuncionarioService.listarIntervalosSuspensos = async () => new Map([[302, {
+    inicio: '2026-10-05', fim: '2026-11-01'
+  }]]);
   try {
     const result = await monthlyReleaseService.gerarEscalaSecao({
       lojaId: 10, mesRef: '2026-10-01', escsecaoId: 20, hojeIso: '2026-10-05'
     });
     assert.equal(result.criada, true);
     assert.deepEqual(savedPayload.funcionarios.map((item) => item.escfuncId), [301]);
+
+    escalaService.listDiasSecaoAtual = async () => [{
+      ESCFUNC_ID: 302, DT: '2026-10-14', PROGRAMACAO: 'TRB',
+      HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+    }];
+    await monthlyReleaseService.gerarEscalaSecao({
+      lojaId: 10, mesRef: '2026-10-01', escsecaoId: 20, hojeIso: '2026-10-05'
+    });
+    assert.deepEqual(savedPayload.funcionarios.map((item) => item.escfuncId), [301, 302]);
+    assert.deepEqual(savedPayload.funcionarios.find((item) => item.escfuncId === 302).dias, []);
+
+    escalaService.listDiasSecaoAtual = async () => ['2026-10-13', '2026-10-16'].map((data) => ({
+      ESCFUNC_ID: 302, DT: data, PROGRAMACAO: 'TRB',
+      HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+    }));
+    await monthlyReleaseService.gerarEscalaSecao({
+      lojaId: 10, mesRef: '2026-10-01', escsecaoId: 20, hojeIso: '2026-10-15'
+    });
+    assert.deepEqual(savedPayload.funcionarios.find((item) => item.escfuncId === 302).dias.map((dia) => dia.data), ['2026-10-13']);
   } finally {
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
     catalogService.listTurnosByLoja = originals.listTurnosByLoja;
@@ -822,8 +843,84 @@ test('section generation leaves suspended employees out of a new draft', async (
     escalaService.listFixosEscala = originals.listFixosEscala;
     escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
     escalaService.saveEscalasBatch = originals.saveEscalasBatch;
-    pendenciaFuncionarioService.listarIdsSuspensos = originals.listarIdsSuspensos;
+    pendenciaFuncionarioService.listarIntervalosSuspensos = originals.listarIntervalosSuspensos;
   }
+});
+
+test('partial suspension keeps generation before and after its effective dates', async () => {
+  const funcionarios = [301, 302, 303].map((id) => ({
+    ESCFUNC_ID: id, CHAPA: String(id), NOME: `Funcionario ${id}`,
+    LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  }));
+  const suspensoes = new Map([[302, { inicio: '2026-10-14', fim: '2026-10-20' }]]);
+  const payload = monthlyReleaseService.buildFuncionariosRascunhoBalanceado(
+    funcionarios, [], '2026-10-01', '2026-10-05', { suspensoes }
+  );
+  const diasSuspenso = payload.find((item) => item.escfuncId === 302).dias;
+  const diasOutro = payload.find((item) => item.escfuncId === 301).dias;
+
+  assert.ok(diasSuspenso.some((dia) => dia.data === '2026-10-13'));
+  assert.ok(diasSuspenso.some((dia) => dia.data === '2026-10-21'));
+  assert.equal(diasSuspenso.some((dia) => dia.data >= '2026-10-14' && dia.data <= '2026-10-20'), false);
+  assert.equal(diasOutro.some((dia) => dia.data === '2026-10-14'), true);
+  assert.deepEqual(validateEscalaPayload({ lojaId: 10, mesRef: '2026-10-01', funcionarios: payload }), []);
+});
+
+test('a single eligible day does not force an automatic rest', () => {
+  const funcionario = {
+    ESCFUNC_ID: 302, CHAPA: '302', NOME: 'Funcionario 302',
+    LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  };
+  const payload = monthlyReleaseService.buildFuncionariosRascunhoBalanceado(
+    [funcionario], [], '2026-10-01', '2026-10-05', {
+      suspensoes: new Map([[302, { inicio: '2026-10-06', fim: '2026-11-01' }]])
+    }
+  );
+  assert.deepEqual(payload[0].dias.map((dia) => [dia.data, dia.programacao]), [['2026-10-05', 'TRB']]);
+  assert.deepEqual(validateEscalaPayload({ lojaId: 10, mesRef: '2026-10-01', funcionarios: payload }), []);
+});
+
+test('monthly liberation does not copy protected days inside a partial suspension', () => {
+  const funcionario = {
+    ESCFUNC_ID: 302, CHAPA: '302', NOME: 'Funcionario 302',
+    LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  };
+  const payload = monthlyReleaseService.buildFuncionariosLiberacao(
+    [funcionario], [], '2026-10-01', '2026-10-05', {
+      suspensoes: new Map([[302, { inicio: '2026-10-14', fim: '2026-10-20' }]]),
+      fixos: [
+        { ESCFUNC_ID: 302, DT: '2026-10-13', PROGRAMACAO: 'FXF' },
+        { ESCFUNC_ID: 302, DT: '2026-10-15', PROGRAMACAO: 'FXF' },
+        { ESCFUNC_ID: 302, DT: '2026-10-21', PROGRAMACAO: 'FXF' }
+      ]
+    }
+  );
+  assert.deepEqual(payload[0].dias.map((dia) => dia.data), ['2026-10-13', '2026-10-21']);
+});
+
+test('RM absence remains visible even while a local suspension is open', () => {
+  const funcionario = {
+    ESCFUNC_ID: 302, CHAPA: '302', NOME: 'Funcionario 302',
+    LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  };
+  const opcoes = {
+    suspensoes: new Map([[302, { inicio: '2026-10-14', fim: '2026-10-20' }]]),
+    ausencias: [{ ESCFUNC_ID: 302, DT_INIC: '2026-10-16', DT_FIM: '2026-10-17', MOTIVO: 'FERIAS' }]
+  };
+  const protegidos = monthlyReleaseService.buildFuncionariosLiberacao(
+    [funcionario], [], '2026-10-01', '2026-10-05', opcoes
+  )[0].dias;
+  const gerados = monthlyReleaseService.buildFuncionariosRascunhoBalanceado(
+    [funcionario], [], '2026-10-01', '2026-10-05', opcoes
+  )[0].dias;
+  assert.deepEqual(protegidos.map((dia) => dia.data), ['2026-10-16', '2026-10-17']);
+  assert.ok(gerados.filter((dia) => ['2026-10-16', '2026-10-17'].includes(dia.data))
+    .every((dia) => dia.programacao === 'FER'));
+  assert.equal(gerados.some((dia) => dia.data === '2026-10-15'), false);
 });
 
 test('section generation can be limited to selected employees in a subsection', async () => {
@@ -1039,7 +1136,8 @@ test('section reset preserves previous days and restores future protected absenc
     isEscalaSecaoOficializada: escalaService.isEscalaSecaoOficializada,
     listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
     listFixosEscala: escalaService.listFixosEscala,
-    saveEscalasBatch: escalaService.saveEscalasBatch
+    saveEscalasBatch: escalaService.saveEscalasBatch,
+    listarIntervalosSuspensos: pendenciaFuncionarioService.listarIntervalosSuspensos
   };
   let savedPayload = null;
 
@@ -1061,7 +1159,12 @@ test('section reset preserves previous days and restores future protected absenc
     { ESCFUNC_ID: 501, DT_INIC: '2026-09-09', DT_FIM: '2026-09-09', MOTIVO: 'AFASTAMENTO' }
   ];
   escalaService.isEscalaSecaoOficializada = async () => false;
-  escalaService.listFixosEscala = async () => [];
+  escalaService.listFixosEscala = async () => [
+    { ESCFUNC_ID: 501, DT: '2026-09-10', PROGRAMACAO: 'FXF' }
+  ];
+  pendenciaFuncionarioService.listarIntervalosSuspensos = async () => new Map([[501, {
+    inicio: '2026-09-09', fim: '2026-09-10'
+  }]]);
   escalaService.listDiasSecaoAtual = async () => [
     {
       ESCFUNC_ID: 501,
@@ -1126,6 +1229,19 @@ test('section reset preserves previous days and restores future protected absenc
       programacao: 'AFA',
       justificativa: 'AFASTAMENTO'
     }]);
+
+    pendenciaFuncionarioService.listarIntervalosSuspensos = async () => new Map([[502, {
+      inicio: '2026-09-07', fim: '2026-10-04'
+    }]]);
+    escalaService.listDiasSecaoAtual = async () => [{
+      ESCFUNC_ID: 502, DT: '2026-09-09', PROGRAMACAO: 'TRB',
+      HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+    }];
+    await monthlyReleaseService.resetarEscalaSecao({
+      lojaId: 10, mesRef: '2026-09-01', escsecaoId: 20, escfuncIds: [502], hojeIso: '2026-09-08'
+    });
+    assert.deepEqual(savedPayload.funcionarios.map((item) => item.escfuncId), [502]);
+    assert.deepEqual(savedPayload.funcionarios[0].dias, []);
   } finally {
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
     catalogService.listTurnosByLoja = originals.listTurnosByLoja;
@@ -1134,6 +1250,7 @@ test('section reset preserves previous days and restores future protected absenc
     escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
     escalaService.listFixosEscala = originals.listFixosEscala;
     escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+    pendenciaFuncionarioService.listarIntervalosSuspensos = originals.listarIntervalosSuspensos;
   }
 });
 

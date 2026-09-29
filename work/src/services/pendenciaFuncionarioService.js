@@ -49,18 +49,23 @@ async function listar({ lojaId, incluirEncerradas = false }) {
   });
 }
 
-async function listarIdsSuspensos({ lojaId, inicio, fim }) {
+async function listarIntervalosSuspensos({ lojaId, inicio, fim }) {
   return withConnection(async (connection) => {
     await assertSchema(connection);
     await reconciliarComCadastro(connection, lojaId);
     const result = await connection.execute(
-      `select escfunc_id from sgn_esc_pendencia_func
+      `select escfunc_id, to_char(dt_inicio, 'YYYY-MM-DD') as inicio,
+              to_char(dt_fim, 'YYYY-MM-DD') as fim
+         from sgn_esc_pendencia_func
         where loja = :lojaId and status = 'P'
           and dt_inicio <= to_date(:fim, 'YYYY-MM-DD')
           and (dt_fim is null or dt_fim >= to_date(:inicio, 'YYYY-MM-DD'))`,
       { lojaId, inicio, fim }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-    return new Set((result.rows || []).map((row) => Number(row.ESCFUNC_ID)));
+    return new Map((result.rows || []).map((row) => [Number(row.ESCFUNC_ID), {
+      inicio: row.INICIO,
+      fim: row.FIM || null
+    }]));
   });
 }
 
@@ -162,4 +167,4 @@ async function encerrar({ lojaId, pendenciaId, usuario }) {
   });
 }
 
-module.exports = { listar, listarIdsSuspensos, criar, encerrar };
+module.exports = { listar, listarIntervalosSuspensos, criar, encerrar };
