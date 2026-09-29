@@ -217,10 +217,11 @@ async function requestRm(path, options = {}) {
   const baseUrl = rmConfig.baseUrl.replace(/\/$/, '');
   const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
   const method = options.method || 'GET';
+  const maxRetries = ['GET', 'HEAD'].includes(String(method).toUpperCase()) ? rmConfig.retries : 0;
   const logPath = maskRmPath(path);
   let lastError;
 
-  for (let attempt = 0; attempt <= rmConfig.retries; attempt += 1) {
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), rmConfig.timeoutMs);
     try {
@@ -254,7 +255,7 @@ async function requestRm(path, options = {}) {
       const detail = describeNetworkError(error, rmConfig.timeoutMs);
       lastError = new Error(`Falha ao chamar RM em ${method} ${logPath}: ${error.message}${detail ? ` (${detail})` : ''}`);
       lastError.cause = error;
-      if (attempt >= rmConfig.retries) break;
+      if (attempt >= maxRetries) break;
     } finally {
       clearTimeout(timeout);
     }
@@ -610,6 +611,7 @@ module.exports = {
   listRmLogs,
   validarPreRequisitosRm,
   _private: {
+    requestRm,
     buildDeleteFolgaPath,
     getFuncionarioRmData,
     getFolgaKey,

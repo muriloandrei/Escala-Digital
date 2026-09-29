@@ -1,0 +1,54 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { appendEvent, createOperationId } = require('../src/services/escalaEventService');
+const { buildEscalaSnapshots, _private: { assertEscalaSnapshot } } = require('../src/services/escalaService');
+
+test('schedule event is part of the caller transaction and keeps complete details', async () => {
+  let captured;
+  const connection = {
+    async execute(sql, binds, options) {
+      captured = { sql, binds, options };
+      return { rowsAffected: 1 };
+    }
+  };
+  const detail = 'A'.repeat(3000);
+  await appendEvent(connection, {
+    operacaoId: createOperationId(), lojaId: 35, mesRef: '2026-10-01',
+    escsecaoId: 20, escfuncId: 100, actor: { sub: 42, login: 'lider35' },
+    acao: 'EDITAR_DIA_ESCALA', origem: 'USUARIO',
+    detalhe: { alteracoes: [{ antes: null, depois: detail }] }
+  });
+  assert.equal(captured.options.autoCommit, false);
+  assert.match(captured.sql, /insert into sgn_esc_evento/i);
+  assert.equal(JSON.parse(captured.binds.detalhe.val).alteracoes[0].depois, detail);
+  assert.equal(captured.binds.usuarioId, 42);
+  assert.equal(captured.binds.login, 'lider35');
+});
+
+test('schedule event insert failure reaches the caller for rollback', async () => {
+  const connection = { async execute() { throw new Error('audit unavailable'); } };
+  await assert.rejects(
+    appendEvent(connection, { operacaoId: createOperationId(), lojaId: 35, mesRef: '2026-10-01', acao: 'TESTE' }),
+    /audit unavailable/
+  );
+});
+
+test('generation detects a concurrent day edit even without a revision change', () => {
+  const base = buildEscalaSnapshots([{
+    ESCFUNC_ID: 100, REVISAO: 3, DT: new Date(2026, 9, 12),
+    PROGRAMACAO: 'TRB', HR_ENT1: '08:00', HR_SAI1: '12:00',
+    HR_ENT2: '13:10', HR_SAI2: '17:58'
+  }])[100];
+  const current = { revisao: 3, dias: [{
+    DT: new Date(2026, 9, 12), PROGRAMACAO: 'TRB',
+    HR_ENT1: '09:00', HR_SAI1: '13:00', HR_ENT2: '14:10', HR_SAI2: '18:58'
+  }] };
+  assert.throws(() => assertEscalaSnapshot(base, current, { escfuncId: 100 }),
+    (error) => error.statusCode === 409);
+});
+
+test('generation accepts an unchanged employee snapshot and detects a new competing schedule', () => {
+  assert.doesNotThrow(() => assertEscalaSnapshot(null, null, { escfuncId: 100 }));
+  assert.throws(() => assertEscalaSnapshot(null, { revisao: 0, dias: [] }, { escfuncId: 100 }),
+    (error) => error.statusCode === 409);
+});

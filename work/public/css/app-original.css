@@ -13,6 +13,37 @@
             --sombra-card: 0 1px 3px rgba(15, 23, 42, 0.06);
         }
 
+#alteracoes-page .table-card { overflow: visible; }
+#alteracoes-page .catalog-filter-bar { grid-template-columns: repeat(2, minmax(150px, 1fr)) minmax(160px, 1fr) minmax(230px, 1.5fr); }
+.alteracoes-indicadores { display: flex; gap: 32px; padding: 0 0 16px; border-bottom: 1px solid #dfe5ed; }
+.alteracoes-indicadores div { display: flex; flex-direction: column; min-width: 120px; }
+.alteracoes-indicadores span { color: #586a80; font-size: 12px; }
+.alteracoes-indicadores strong { color: #152744; font-size: 22px; }
+.alteracoes-lista { min-height: 100px; }
+.alteracoes-item { padding: 16px 0; border-bottom: 1px solid #e2e8ef; }
+.alteracoes-item-cabecalho { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; }
+.alteracoes-item-cabecalho strong { color: #152744; }
+.alteracoes-item-cabecalho span { color: #2255a5; font-weight: 600; }
+.alteracoes-item-cabecalho time { margin-left: auto; color: #5e6c7e; font-size: 12px; }
+.alteracoes-item-meta { margin: 5px 0 8px; color: #536377; font-size: 12px; overflow-wrap: anywhere; }
+.alteracoes-item-meta a { color: #1d4ed8; font-weight: 600; }
+.alteracoes-item details summary { cursor: pointer; color: #1b3e70; font-size: 13px; }
+.alteracoes-dias { margin-top: 8px; border-top: 1px solid #e2e8ef; }
+.alteracoes-dias > div { display: grid; grid-template-columns: 95px minmax(110px, 1fr) 22px minmax(110px, 1fr); gap: 8px; padding: 7px 2px; border-bottom: 1px solid #edf1f5; font-size: 12px; }
+.alteracoes-dias small { grid-column: 2 / -1; color: #536377; }
+.alteracoes-vazio, .alteracoes-detalhe { padding: 20px 0; color: #536377; overflow-wrap: anywhere; }
+#alteracoesMaisBtn { margin-top: 18px; }
+@media (max-width: 850px) {
+  #alteracoes-page .catalog-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .alteracoes-indicadores { gap: 12px; justify-content: space-between; }
+  .alteracoes-indicadores div { min-width: 0; }
+  .alteracoes-dias > div { grid-template-columns: 70px minmax(0, 1fr) 18px minmax(0, 1fr); overflow-wrap: anywhere; }
+}
+@media (max-width: 540px) {
+  #alteracoes-page .catalog-filter-bar { grid-template-columns: minmax(0, 1fr); }
+  .alteracoes-item-cabecalho time { margin-left: 0; width: 100%; }
+}
+
         * {
             margin: 0;
             padding: 0;

@@ -5,6 +5,7 @@ const escalaService = require('../services/escalaService');
 const catalogService = require('../services/catalogService');
 const accessService = require('../services/accessService');
 const auditService = require('../services/auditService');
+const escalaEventService = require('../services/escalaEventService');
 const rmIntegrationService = require('../services/rmIntegrationService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const monthlyReleaseService = require('../services/monthlyReleaseService');
@@ -165,7 +166,7 @@ router.post('/gerar-secao', requirePermission('escalas', 'editar'), resolveLojaR
       hojeIso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
     }).parse(req.body);
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
-    const resultado = await monthlyReleaseService.gerarEscalaSecao(payload);
+    const resultado = await monthlyReleaseService.gerarEscalaSecao({ ...payload, actor: req.user });
     await auditService.registerAudit({
       action: 'GERAR_ESCALA_SECAO',
       user: req.user,
@@ -189,7 +190,7 @@ router.post('/resetar-secao', requirePermission('escalas', 'editar'), resolveLoj
       escfuncIds: z.array(z.number().int().positive()).optional()
     }).parse(req.body);
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
-    const resultado = await monthlyReleaseService.resetarEscalaSecao(payload);
+    const resultado = await monthlyReleaseService.resetarEscalaSecao({ ...payload, actor: req.user });
     await auditService.registerAudit({
       action: 'RESETAR_ESCALA_SECAO',
       user: req.user,
@@ -213,7 +214,8 @@ router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest
       mesRef: payload.mesRef,
       escfuncId: payload.escfuncId,
       escsecaoId: payload.escsecaoId,
-      data: payload
+      data: payload,
+      actor: req.user
     });
     await auditService.registerAudit({
       action: 'CADASTRAR_FIXO_ESCALA',
@@ -250,7 +252,8 @@ router.post('/fixos/remover', requirePermission('escalas', 'editar'), resolveLoj
       mesRef: payload.mesRef,
       escfuncId: payload.escfuncId,
       escsecaoId: payload.escsecaoId,
-      dt: payload.DT
+      dt: payload.DT,
+      actor: req.user
     });
     await auditService.registerAudit({
       action: 'REMOVER_FIXO_ESCALA',
@@ -361,6 +364,27 @@ router.get('/historico', requireAdmin, requirePermission('historico', 'visualiza
   }
 });
 
+router.get('/eventos', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const query = z.object({
+      lojaId: z.coerce.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      escfuncId: z.coerce.number().int().positive().optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+      offset: z.coerce.number().int().min(0).optional()
+    }).parse(req.query);
+    const eventos = await escalaEventService.listEvents({
+      ...query,
+      lojasPermitidas: [query.lojaId],
+      secoesPermitidas: await getSecoesPermitidas(req, query.lojaId)
+    });
+    return res.json({ eventos });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Filtros de eventos invalidos.' });
+    return next(error);
+  }
+});
+
 router.get('/mensal', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = Number(req.query.lojaId);
@@ -450,7 +474,7 @@ router.post('/oficializar', requireAdmin, requirePermission('escalas', 'oficiali
       });
     }
 
-    const result = await escalaService.oficializarEscala(payload);
+    const result = await escalaService.oficializarEscala({ ...payload, actor: req.user });
     if (!result.affectedRows) return res.status(404).json({ error: 'Escala ativa nao encontrada.' });
     const rm = await rmIntegrationService.oficializarNoRm({ ...payload, revisao: result.revisao });
     await auditService.registerAudit({
@@ -475,7 +499,7 @@ router.post('/inativar', requireAdmin, requirePermission('escalas', 'inativar'),
       mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
     }).parse(req.body);
 
-    const result = await escalaService.inativarEscala(payload);
+    const result = await escalaService.inativarEscala({ ...payload, actor: req.user });
     if (!result.affectedRows) return res.status(404).json({ error: 'Escala ativa nao encontrada.' });
     await auditService.registerAudit({
       action: 'INATIVAR_ESCALA',
@@ -545,7 +569,7 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
         lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: funcionario.escfuncId
       })
     ));
-    const saved = await escalaService.saveEscalasFuncionariosRevision(payload);
+    const saved = await escalaService.saveEscalasFuncionariosRevision({ ...payload, actor: req.user });
     await Promise.all(saved.map((item, index) => auditService.registerAudit({
       action: 'EDITAR_ESCALA_FUNCIONARIO',
       user: req.user,
@@ -592,7 +616,8 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
       mesRef: payload.mesRef,
       funcionario: funcionarioPayload,
       dias: funcionarioPayload.dias,
-      oficializada: payload.oficializada || 0
+      oficializada: payload.oficializada || 0,
+      actor: req.user
     });
     await auditService.registerAudit({
       action: 'EDITAR_ESCALA_FUNCIONARIO',
@@ -648,7 +673,8 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
       lojaId: payload.lojaId,
       mesRef: payload.mesRef,
       funcionario,
-      horario
+      horario,
+      actor: req.user
     });
     const { funcionario: funcionarioAtualizado, saved, diasAlterados } = atualizacao;
 
@@ -698,7 +724,8 @@ router.post('/funcionario/sincronizar-rm', requirePermission('escalas-funcionari
       lojaId: payload.lojaId,
       mesRef: payload.mesRef,
       escfuncId: payload.escfuncId,
-      rmFolgaDatas: consultaRm.datas
+      rmFolgaDatas: consultaRm.datas,
+      actor: req.user
     });
 
     await auditService.registerAudit({
@@ -772,7 +799,8 @@ router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'edi
     const dia = await escalaService.updateEscalaDia({
       escprogId: Number(req.params.escprogId),
       escprogdiaId: Number(req.params.escprogdiaId),
-      data
+      data,
+      actor: req.user
     });
 
     if (!dia) {
@@ -831,7 +859,8 @@ router.post('/', requirePermission('escalas', 'criar'), resolveLojaRequest, requ
       mesRef: payload.mesRef,
       escalaOrigemId: payload.escalaOrigemId,
       funcionarios: payload.funcionarios,
-      oficializada: payload.oficializada || 0
+      oficializada: payload.oficializada || 0,
+      actor: req.user
     });
 
     await auditService.registerAudit({

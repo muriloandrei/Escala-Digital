@@ -33,6 +33,7 @@
                         <div class="nav-children">
                             <a href="#/escalas-geradas" id="nav-registros"><span class="nav-child-dot"></span><span class="nav-label">Escalas Liberadas</span></a>
                             <a href="#/escalas-funcionarios" id="nav-escalas-funcionarios"><span class="nav-child-dot"></span><span class="nav-label">Escalas por Funcionário</span></a>
+                            <a href="#/alteracoes" id="nav-alteracoes"><span class="nav-child-dot"></span><span class="nav-label">Alterações da Escala</span></a>
                             <a href="#/secoes" id="nav-secoes"><span class="nav-child-dot"></span><span class="nav-label">Seções</span></a>
                             <a href="#/turnos-secao" id="nav-turnos-secao"><span class="nav-child-dot"></span><span class="nav-label">Turnos por Seção</span></a>
 
@@ -705,6 +706,29 @@
                 </div>
             </div>
 
+            <div id="alteracoes-page" class="hidden">
+                <header class="main-header">
+                    <div><h1>Alterações da Escala</h1><p class="table-card-subtitle">Movimentações registradas por colaborador e período.</p></div>
+                    <button id="alteracoesExportarBtn" type="button" class="action-button secondary"><span class="material-symbols-outlined">download</span>Exportar CSV</button>
+                </header>
+                <div class="table-card">
+                    <div class="catalog-filter-bar employee-scale-filters">
+                        <select id="alteracoesLojaSelect" class="escala-filter-select" aria-label="Loja"></select>
+                        <input id="alteracoesMesInput" type="month" class="escala-filter-select" aria-label="Mês da escala">
+                        <select id="alteracoesAcaoSelect" class="escala-filter-select" aria-label="Ação"><option value="">Todas as ações</option></select>
+                        <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="alteracoesBuscaInput" type="search" placeholder="Colaborador, chapa ou usuário"></label>
+                    </div>
+                    <div class="table-card-header"><h2>Movimentações</h2><p id="alteracoesResumo" class="table-card-subtitle">Selecione loja e período.</p></div>
+                    <div class="alteracoes-indicadores" aria-label="Resumo de alterações">
+                        <div><span>Colaboradores</span><strong id="alteracoesColaboradores">0</strong></div>
+                        <div><span>Eventos exibidos</span><strong id="alteracoesTotal">0</strong></div>
+                        <div><span>Ações de usuários</span><strong id="alteracoesManuais">0</strong></div>
+                    </div>
+                    <div id="alteracoesLista" class="alteracoes-lista" aria-live="polite"></div>
+                    <button id="alteracoesMaisBtn" type="button" class="action-button secondary hidden">Carregar mais</button>
+                </div>
+            </div>
+
             <div id="escalas-funcionarios-page" class="hidden">
                 <header class="main-header"><h1>Escalas por Funcionário</h1></header>
                 <div class="table-card">
@@ -1073,6 +1097,7 @@
     <script src="/js/catalogos-page.js"></script>
     <script src="/js/access-page.js"></script>
     <script src="/js/rm-page.js"></script>
+    <script src="/js/escala-eventos-page.js"></script>
     <script src="/js/app-original.js?v=20260907-subsecoes-geracao"></script>
 <script src="/js/license-lock.js"></script>
 </body>

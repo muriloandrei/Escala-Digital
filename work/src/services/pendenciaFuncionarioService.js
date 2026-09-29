@@ -1,4 +1,5 @@
 const { withConnection, oracledb } = require('../db/oracle');
+const escalaEventService = require('./escalaEventService');
 
 async function assertSchema(connection) {
   const result = await connection.execute(
@@ -103,7 +104,7 @@ async function criar({ lojaId, escfuncId, tipo, inicio, fim = null, justificativ
       await assertSchema(connection);
       await reconciliarComCadastro(connection, lojaId);
       const funcionario = await connection.execute(
-        `select escfunc_id, loja, dt_demiss from sgn_esc_funcionario
+        `select escfunc_id, escsecao_id, loja, dt_demiss from sgn_esc_funcionario
           where escfunc_id = :escfuncId and loja = :lojaId for update wait 5`,
         { lojaId, escfuncId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
@@ -138,6 +139,13 @@ async function criar({ lojaId, escfuncId, tipo, inicio, fim = null, justificativ
           id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
         }, { autoCommit: false }
       );
+      await escalaEventService.appendEvent(connection, {
+        operacaoId: escalaEventService.createOperationId(), lojaId,
+        mesRef: `${inicio.slice(0, 7)}-01`, escfuncId,
+        escsecaoId: funcionario.rows[0].ESCSECAO_ID, actor: usuario,
+        acao: 'CRIAR_PENDENCIA_FUNCIONARIO', origem: 'USUARIO', situacao: 'RASCUNHO',
+        detalhe: { pendenciaId: insert.outBinds.id[0], tipo, inicio, fim, justificativa, impacto }
+      });
       await connection.commit();
       return { id: insert.outBinds.id[0], impacto };
     } catch (error) {
@@ -154,16 +162,40 @@ async function criar({ lojaId, escfuncId, tipo, inicio, fim = null, justificativ
 
 async function encerrar({ lojaId, pendenciaId, usuario }) {
   return withConnection(async (connection) => {
-    await assertSchema(connection);
-    const result = await connection.execute(
+    try {
+      await assertSchema(connection);
+      const anterior = await connection.execute(
+        `select p.escfunc_id, p.tipo, p.dt_inicio, p.dt_fim, f.escsecao_id
+           from sgn_esc_pendencia_func p
+           left join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
+          where p.escpend_id = :pendenciaId and p.loja = :lojaId and p.status = 'P'
+          for update of p.status wait 5`,
+        { lojaId, pendenciaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const result = await connection.execute(
       `update sgn_esc_pendencia_func
           set status = 'X', dt_hr_encerr = sysdate,
               usuario_encerramento = :usuarioLogin, origem_conciliacao = 'MANUAL'
         where escpend_id = :pendenciaId and loja = :lojaId and status = 'P'`,
       { lojaId, pendenciaId, usuarioLogin: String(usuario?.login || '').slice(0, 100) || null },
-      { autoCommit: true }
-    );
-    return Number(result.rowsAffected || 0) > 0;
+        { autoCommit: false }
+      );
+      if (result.rowsAffected) {
+        const row = anterior.rows[0];
+        await escalaEventService.appendEvent(connection, {
+          operacaoId: escalaEventService.createOperationId(), lojaId,
+          mesRef: `${row.DT_INICIO.getFullYear()}-${String(row.DT_INICIO.getMonth() + 1).padStart(2, '0')}-01`,
+          escfuncId: row.ESCFUNC_ID, escsecaoId: row.ESCSECAO_ID, actor: usuario,
+          acao: 'ENCERRAR_PENDENCIA_FUNCIONARIO', origem: 'USUARIO', situacao: 'RASCUNHO',
+          detalhe: { pendenciaId, tipo: row.TIPO, inicio: row.DT_INICIO, fim: row.DT_FIM }
+        });
+      }
+      await connection.commit();
+      return Number(result.rowsAffected || 0) > 0;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    }
   });
 }
 

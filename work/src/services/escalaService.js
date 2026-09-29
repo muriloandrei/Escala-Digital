@@ -1,6 +1,8 @@
 const { withConnection, oracledb } = require('../db/oracle');
 const catalogService = require('./catalogService');
+const escalaEventService = require('./escalaEventService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
+const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -527,6 +529,67 @@ function assertRevisaoBase(funcionario, revisaoAtual) {
   throw error;
 }
 
+function buildEscalaSnapshots(rows = []) {
+  const snapshots = {};
+  for (const row of rows) {
+    const id = Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'));
+    if (!snapshots[id]) snapshots[id] = { revisao: Number(pick(row, 'REVISAO', 'revisao')), dias: [] };
+    if (pick(row, 'DT', 'dt')) snapshots[id].dias.push(normalizeDiaComparavel(row));
+  }
+  return snapshots;
+}
+
+async function lockFuncionariosEscala(connection, lojaId, funcionarios) {
+  const ids = [...new Set(funcionarios.map((funcionario) => Number(funcionario.escfuncId || funcionario.ESCFUNC_ID)).filter(Boolean))].sort((a, b) => a - b);
+  for (let offset = 0; offset < ids.length; offset += 500) {
+    const lote = ids.slice(offset, offset + 500);
+    const binds = { lojaId };
+    const placeholders = lote.map((id, index) => {
+      binds[`id${index}`] = id;
+      return `:id${index}`;
+    });
+    const result = await connection.execute(
+      `select escfunc_id from sgn_esc_funcionario
+        where loja = :lojaId and escfunc_id in (${placeholders.join(', ')})
+        order by escfunc_id for update wait 5`,
+      binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    if (result.rows.length !== lote.length) {
+      const error = new Error('Um ou mais funcionarios nao foram encontrados para a loja. Recarregue a escala.');
+      error.statusCode = 409;
+      throw error;
+    }
+  }
+}
+
+function assertEscalaSnapshot(snapshot, atual, funcionario) {
+  if (snapshot === undefined) return;
+  const atualComparavel = atual ? {
+    revisao: Number(atual.revisao),
+    dias: atual.dias.map(normalizeDiaComparavel)
+  } : null;
+  const esperado = snapshot || null;
+  if (JSON.stringify(esperado) === JSON.stringify(atualComparavel)) return;
+  const error = new Error(`A escala do funcionario ${funcionario.chapa || funcionario.escfuncId} mudou durante a geracao. Recarregue e tente novamente.`);
+  error.statusCode = 409;
+  throw error;
+}
+
+async function appendMudancaEscala(connection, {
+  lojaId, mesRef, funcionario, anteriores = [], novos = [], revisaoAnterior = null,
+  revisaoNova, actor, operacaoId, acao, origem = 'MANUAL', situacao = 'RASCUNHO'
+}) {
+  const alteracoes = buildDiaAlteracoes(anteriores, novos);
+  if (!alteracoes.length) return;
+  await escalaEventService.appendEvent(connection, {
+    operacaoId, lojaId, mesRef,
+    escsecaoId: Number(funcionario.escsecaoId || funcionario.ESCSECAO_ID) || null,
+    escfuncId: Number(funcionario.escfuncId || funcionario.ESCFUNC_ID) || null,
+    actor, acao, origem, situacao, revisaoAnterior, revisaoNova,
+    detalhe: { chapa: funcionario.chapa || funcionario.CHAPA, alteracoes }
+  });
+}
+
 async function hasProgAtivaColumn(connection) {
   const columns = await getTableColumns(connection, 'SGN_ESC_PROG');
   return columns.has('ATIVA');
@@ -836,7 +899,7 @@ async function listFixosEscala({ lojaId, mesRef, escsecaoId = null }) {
   return withConnection((connection) => listFixosEscalaComConnection(connection, { lojaId, mesRef, escsecaoId }));
 }
 
-async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data }) {
+async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, actor }) {
   return withConnection(async (connection) => {
     try {
       if (isDiaBloqueadoParaEdicao(data.DT || data.dt)) {
@@ -868,6 +931,16 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data }) {
         justificativa: data.JUSTIFICATIVA || data.justificativa || null
       };
 
+      const anterior = await connection.execute(
+        `select programacao, hr_ent1, hr_sai1, hr_ent2, hr_sai2, justificativa, status
+           from sgn_esc_fixo_escala
+          where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and escfunc_id = :escfuncId and dt = to_date(:dt, 'YYYY-MM-DD')
+          for update wait 5`,
+        { lojaId: binds.lojaId, mesRef, escfuncId: binds.escfuncId, dt: binds.dt },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+
       await connection.execute(
         `merge into sgn_esc_fixo_escala t
          using (
@@ -898,6 +971,13 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data }) {
         binds,
         { autoCommit: false }
       );
+      await escalaEventService.appendEvent(connection, {
+        operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, escsecaoId, escfuncId,
+        actor, acao: 'SALVAR_FIXO_ESCALA', origem: 'USUARIO', situacao: 'RASCUNHO',
+        detalhe: { data: binds.dt, anterior: anterior.rows[0] || null,
+          novo: { programacao, hrEnt1: binds.hrEnt1, hrSai1: binds.hrSai1,
+            hrEnt2: binds.hrEnt2, hrSai2: binds.hrSai2, justificativa: binds.justificativa, status: 'A' } }
+      });
       await connection.commit();
       const fixos = await listFixosEscalaComConnection(connection, { lojaId, mesRef, escsecaoId });
       return fixos.find((fixo) => Number(pick(fixo, 'ESCFUNC_ID', 'escfunc_id')) === Number(escfuncId)
@@ -909,7 +989,7 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data }) {
   });
 }
 
-async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt }) {
+async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, actor }) {
   return withConnection(async (connection) => {
     try {
       if (isDiaBloqueadoParaEdicao(dt)) {
@@ -923,6 +1003,16 @@ async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt }) {
         error.statusCode = 404;
         throw error;
       }
+      const anterior = await connection.execute(
+        `select programacao, hr_ent1, hr_sai1, hr_ent2, hr_sai2, justificativa, status
+           from sgn_esc_fixo_escala
+          where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and escfunc_id = :escfuncId and escsecao_id = :escsecaoId
+            and dt = to_date(:dt, 'YYYY-MM-DD') and nvl(status, 'A') = 'A'
+          for update wait 5`,
+        { lojaId, mesRef, escfuncId, escsecaoId, dt },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
       const result = await connection.execute(
         `update sgn_esc_fixo_escala
             set status = 'I',
@@ -934,10 +1024,19 @@ async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt }) {
             and dt = to_date(:dt, 'YYYY-MM-DD')
             and nvl(status, 'A') = 'A'`,
         { lojaId: Number(lojaId), mesRef, escfuncId: Number(escfuncId), escsecaoId: Number(escsecaoId), dt },
-        { autoCommit: true }
+        { autoCommit: false }
       );
+      if (result.rowsAffected) {
+        await escalaEventService.appendEvent(connection, {
+          operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, escsecaoId, escfuncId,
+          actor, acao: 'REMOVER_FIXO_ESCALA', origem: 'USUARIO', situacao: 'RASCUNHO',
+          detalhe: { data: dt, anterior: anterior.rows[0] || null, novo: null }
+        });
+      }
+      await connection.commit();
       return { removed: (result.rowsAffected || 0) > 0, rowsAffected: result.rowsAffected || 0 };
     } catch (error) {
+      await connection.rollback();
       throw normalizeOracleSaveError(error);
     }
   });
@@ -993,7 +1092,7 @@ async function listDiasSecaoAtual({ lojaId, mesRef, escsecaoId }) {
           d.hr_sai2,
           d.programacao
        from sgn_esc_prog p
-       join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
+       left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
          and p.escsecao_id = :escsecaoId
@@ -1346,7 +1445,7 @@ async function getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesR
   };
 }
 
-async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
+async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
   return withConnection(async (connection) => {
     try {
       const headerResult = await connection.execute(
@@ -1370,6 +1469,17 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
         throw error;
       }
 
+      const locked = await connection.execute(
+        `select escfunc_id from sgn_esc_funcionario
+         where escfunc_id = :escfuncId and loja = :loja for update wait 5`,
+        { escfuncId, loja }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      if (!locked.rows.length) {
+        const error = new Error('Funcionario nao encontrado para a loja.');
+        error.statusCode = 404;
+        throw error;
+      }
+
       const latestFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId: loja, mesRef: mesRefKey, escfuncId });
       if (latestFuncionarioRevision === null || revisaoAtual !== latestFuncionarioRevision) {
         const error = new Error('Apenas a revisao mais recente do funcionario pode ser editada.');
@@ -1378,7 +1488,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
       }
 
       const targetDayResult = await connection.execute(
-        `select dt
+        `select dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
          from sgn_esc_prog_dia
          where escprogdia_id = :escprogdiaId
            and escprog_id = :escprogId`,
@@ -1443,6 +1553,20 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data }) {
         },
         { autoCommit: false }
       );
+      await appendMudancaEscala(connection, {
+        lojaId: loja, mesRef: mesRefKey, funcionario: header,
+        anteriores: [targetDay],
+        novos: [{
+          data: formatDateValue(targetDate),
+          hrEnt1: data.HR_ENT1, hrSai1: data.HR_SAI1,
+          hrEnt2: data.HR_ENT2, hrSai2: data.HR_SAI2,
+          programacao: data.PROGRAMACAO
+        }],
+        revisaoAnterior: revisaoAtual, revisaoNova: nextRevision,
+        actor, operacaoId: escalaEventService.createOperationId(),
+        acao: 'EDITAR_DIA_ESCALA',
+        situacao: Number(pick(header, 'OFICIALIZADA', 'oficializada')) === 1 ? 'POS_OFICIALIZACAO' : 'RASCUNHO'
+      });
       await connection.commit();
 
       const updated = await connection.execute(
@@ -1618,7 +1742,8 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
   }
 }
 
-async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada = 0 }) {
+async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada = 0, actor, acao, operacaoId, expectedSnapshots }) {
+  await lockFuncionariosEscala(connection, lojaId, funcionarios);
   const latestActiveRevision = await getLatestRevision(connection, { lojaId, mesRef });
   const latestAnyRevision = latestActiveRevision === null
     ? await getLatestRevision(connection, { lojaId, mesRef, includeInactive: true })
@@ -1631,6 +1756,14 @@ async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcion
     const escalaAtualFuncionario = escfuncId
       ? await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId })
       : null;
+    if (expectedSnapshots) {
+      assertEscalaSnapshot(expectedSnapshots[escfuncId] ?? null, escalaAtualFuncionario, funcionario);
+      if (Number(pick(escalaAtualFuncionario?.header, 'OFICIALIZADA', 'oficializada') || 0) === 1) {
+        const error = new Error('Escala oficializada nao pode ser gerada ou resetada.');
+        error.statusCode = 422;
+        throw error;
+      }
+    }
     if (escalaAtualFuncionario) {
       assertSemAlteracaoEmDiasBloqueados(escalaAtualFuncionario.dias, funcionario.dias || []);
       const header = escalaAtualFuncionario.header;
@@ -1665,27 +1798,38 @@ async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcion
         revisao: Number(pick(header, 'REVISAO', 'revisao')),
         escsecaoId: pick(header, 'ESCSECAO_ID', 'escsecao_id')
       });
+      await appendMudancaEscala(connection, {
+        lojaId, mesRef, funcionario, anteriores: escalaAtualFuncionario.dias, novos: funcionario.dias || [],
+        revisaoAnterior: escalaAtualFuncionario.revisao, revisaoNova: escalaAtualFuncionario.revisao,
+        actor, operacaoId, acao: acao || 'ATUALIZAR_ESCALA', origem: actor ? 'USUARIO' : 'SISTEMA'
+      });
       continue;
     }
 
     assertSemDiasBloqueadosEmNovaEscala(funcionario.dias || []);
-    saved.push(await insertEscalaOracle(connection, {
+    const novo = await insertEscalaOracle(connection, {
       lojaId,
       mesRef,
       funcionario,
       dias: funcionario.dias || [],
       oficializada,
       revisao: revisaoAtual
-    }));
+    });
+    saved.push(novo);
+    await appendMudancaEscala(connection, {
+      lojaId, mesRef, funcionario, novos: funcionario.dias || [], revisaoNova: novo.revisao,
+      actor, operacaoId, acao: acao || 'CRIAR_ESCALA', origem: actor ? 'USUARIO' : 'SISTEMA'
+    });
   }
 
   return saved;
 }
 
-async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0, criarRevisao = true }) {
+async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0, criarRevisao = true, actor, acao, expectedSnapshots }) {
   return withConnection(async (connection) => {
     try {
       assertUniqueFuncionarios(funcionarios);
+      const operacaoId = escalaEventService.createOperationId();
 
       if (isMesFinalizado(mesRef)) {
         const error = new Error('Escala finalizada nao pode ser editada.');
@@ -1694,7 +1838,7 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
       }
 
       if (!criarRevisao) {
-        const saved = await upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada });
+        const saved = await upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada, actor, acao, operacaoId, expectedSnapshots });
         await connection.commit();
         return saved;
       }
@@ -1726,14 +1870,21 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
         } else {
           assertSemDiasBloqueadosEmNovaEscala(funcionario.dias || []);
         }
-        saved.push(await insertEscalaOracle(connection, {
+        const novo = await insertEscalaOracle(connection, {
           lojaId,
           mesRef,
           funcionario,
           dias: funcionario.dias || [],
           oficializada,
           revisao: nextRevision
-        }));
+        });
+        saved.push(novo);
+        await appendMudancaEscala(connection, {
+          lojaId, mesRef, funcionario, anteriores: escalaAtualFuncionario?.dias || [],
+          novos: funcionario.dias || [], revisaoAnterior: escalaAtualFuncionario?.revisao ?? null,
+          revisaoNova: novo.revisao, actor, operacaoId, acao: acao || 'SALVAR_ESCALA',
+          origem: actor ? 'USUARIO' : 'SISTEMA', situacao: oficializada ? 'OFICIALIZADA' : 'RASCUNHO'
+        });
       }
 
       await connection.commit();
@@ -1745,7 +1896,10 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
   });
 }
 
-async function saveEscalasFuncionariosRevisionComConnection(connection, { lojaId, mesRef, funcionarios, oficializada = 0 }) {
+async function saveEscalasFuncionariosRevisionComConnection(connection, {
+  lojaId, mesRef, funcionarios, oficializada = 0, actor,
+  acao = 'EDITAR_ESCALA_FUNCIONARIO', operacaoId = escalaEventService.createOperationId()
+}) {
   assertUniqueFuncionarios(funcionarios);
   if (isMesFinalizado(mesRef)) {
     const error = new Error('Escala finalizada nao pode ser editada.');
@@ -1780,10 +1934,17 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, { lojaId
     const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
     assertSemAlteracaoEmDiasBloqueados(atual?.dias || [], funcionario.dias || []);
     const revisaoQualquer = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
-    saved.push(await insertEscalaOracle(connection, {
+    const novo = await insertEscalaOracle(connection, {
       lojaId, mesRef, funcionario, dias: funcionario.dias || [], oficializada,
       revisao: Math.max(revisaoAtual, revisaoQualquer ?? revisaoAtual) + 1
-    }));
+    });
+    saved.push(novo);
+    await appendMudancaEscala(connection, {
+      lojaId, mesRef, funcionario, anteriores: atual?.dias || [], novos: funcionario.dias || [],
+      revisaoAnterior: revisaoAtual, revisaoNova: novo.revisao,
+      actor, operacaoId, acao, origem: actor ? 'USUARIO' : 'SISTEMA',
+      situacao: oficializada ? 'OFICIALIZADA' : 'RASCUNHO'
+    });
   }
   return saved;
 }
@@ -1801,9 +1962,10 @@ async function saveEscalasFuncionariosRevision(payload) {
   });
 }
 
-async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, horario }) {
+async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, horario, actor }) {
   return withConnection(async (connection) => {
     try {
+      const operacaoId = escalaEventService.createOperationId();
       const escfuncId = Number(pick(funcionario, 'ESCFUNC_ID', 'escfuncId'));
       const locked = await connection.execute(
         `select escfunc_id from sgn_esc_funcionario
@@ -1843,7 +2005,7 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
           });
           if (diasAlterados) {
             const [revisao] = await saveEscalasFuncionariosRevisionComConnection(connection, {
-              lojaId, mesRef, funcionarios: [{
+              lojaId, mesRef, actor, operacaoId, acao: 'EDITAR_HORARIO_ESCALA', funcionarios: [{
                 escfuncId,
                 chapa: pick(funcionario, 'CHAPA', 'chapa'),
                 escsecaoId: pick(funcionario, 'ESCSECAO_ID', 'escsecaoId'),
@@ -1865,6 +2027,19 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
         { ...horario, escfuncId, lojaId },
         { autoCommit: false }
       );
+      const mesRefEvento = mesRef || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
+      await escalaEventService.appendEvent(connection, {
+          operacaoId, lojaId, mesRef: mesRefEvento, escfuncId,
+          escsecaoId: pick(funcionario, 'ESCSECAO_ID', 'escsecaoId'), actor,
+          acao: 'EDITAR_HORARIO_BASE', origem: 'USUARIO', situacao: 'RASCUNHO',
+          revisaoAnterior: saved?.revisao ? saved.revisao - 1 : null,
+          revisaoNova: saved?.revisao ?? null,
+          detalhe: {
+            chapa: pick(funcionario, 'CHAPA', 'chapa'),
+            anterior: Object.fromEntries(['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'].map((field) => [field, pick(funcionario, field, field.toLowerCase())])),
+            novo: horario, diasAlterados
+          }
+      });
       await connection.commit();
       return { funcionario: { ...funcionario, ...horario }, saved, diasAlterados };
     } catch (error) {
@@ -1874,7 +2049,7 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
   });
 }
 
-async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias, oficializada = 0 }) {
+async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias, oficializada = 0, actor }) {
   return withConnection(async (connection) => {
     try {
       if (isMesFinalizado(mesRef)) {
@@ -1954,6 +2129,13 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
       const saved = await insertEscalaOracle(connection, {
         lojaId, mesRef, funcionario, dias, oficializada, revisao: nextRevision
       });
+      await appendMudancaEscala(connection, {
+        lojaId, mesRef, funcionario, anteriores: escalaAtualFuncionario?.dias || [], novos: dias || [],
+        revisaoAnterior: latestFuncionarioRevision, revisaoNova: saved.revisao,
+        actor, operacaoId: escalaEventService.createOperationId(),
+        acao: 'EDITAR_ESCALA_FUNCIONARIO', origem: actor ? 'USUARIO' : 'SISTEMA',
+        situacao: oficializada ? 'OFICIALIZADA' : 'RASCUNHO'
+      });
       await connection.commit();
       return saved;
     } catch (error) {
@@ -2016,12 +2198,23 @@ function montarDiasReconciliadosRm(diasAtuais = [], rmFolgaDatas = [], periodo =
   return { dias, alteracoes };
 }
 
-async function sincronizarEscalaFuncionarioComRm({ lojaId, mesRef, escfuncId, rmFolgaDatas = [] }) {
+async function sincronizarEscalaFuncionarioComRm({ lojaId, mesRef, escfuncId, rmFolgaDatas = [], actor }) {
   return withConnection(async (connection) => {
     try {
       if (isMesFinalizado(mesRef)) {
         const error = new Error('Escala finalizada nao pode ser sincronizada.');
         error.statusCode = 422;
+        throw error;
+      }
+
+      const locked = await connection.execute(
+        `select escfunc_id from sgn_esc_funcionario
+         where escfunc_id = :escfuncId and loja = :lojaId for update wait 5`,
+        { escfuncId, lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      if (!locked.rows.length) {
+        const error = new Error('Funcionario nao encontrado para a loja.');
+        error.statusCode = 404;
         throw error;
       }
 
@@ -2058,6 +2251,19 @@ async function sincronizarEscalaFuncionarioComRm({ lojaId, mesRef, escfuncId, rm
         revisao: nextRevision
       });
 
+      await appendMudancaEscala(connection, {
+        lojaId, mesRef,
+        funcionario: escalaAtual.header,
+        anteriores: escalaAtual.dias,
+        novos: dias,
+        revisaoAnterior: escalaAtual.revisao,
+        revisaoNova: saved.revisao,
+        actor,
+        operacaoId: escalaEventService.createOperationId(),
+        acao: 'SINCRONIZAR_FUNCIONARIO_RM',
+        origem: 'RM'
+      });
+
       await connection.commit();
       return {
         ...saved,
@@ -2073,14 +2279,15 @@ async function sincronizarEscalaFuncionarioComRm({ lojaId, mesRef, escfuncId, rm
   });
 }
 
-async function oficializarEscala({ lojaId, mesRef }) {
+async function oficializarEscala({ lojaId, mesRef, actor }) {
   return withConnection(async (connection) => {
-    const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
-    if (latestRevision === null) return { affectedRows: 0, revisao: null };
-    const ativaSql = await getAtivaSql(connection, 'p');
-    const ativaSubSql = await getAtivaSql(connection, 'px');
-    const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
-    const result = await connection.execute(
+    try {
+      const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
+      if (latestRevision === null) return { affectedRows: 0, revisao: null };
+      const ativaSql = await getAtivaSql(connection, 'p');
+      const ativaSubSql = await getAtivaSql(connection, 'px');
+      const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
+      const result = await connection.execute(
       `update sgn_esc_prog p
        set p.oficializada = 1
        where p.loja = :lojaId
@@ -2096,31 +2303,58 @@ async function oficializarEscala({ lojaId, mesRef }) {
          and ${ativaSql}
          and ${secaoAtivaSql}`,
       { lojaId, mesRef },
-      { autoCommit: true }
-    );
-    return { affectedRows: result.rowsAffected || 0, revisao: latestRevision };
+        { autoCommit: false }
+      );
+      if (result.rowsAffected) {
+        await escalaEventService.appendEvent(connection, {
+          operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, actor,
+          acao: 'OFICIALIZAR_ESCALA', origem: 'USUARIO', situacao: 'OFICIALIZADA',
+          revisaoAnterior: latestRevision, revisaoNova: latestRevision,
+          detalhe: { totalProgramacoes: result.rowsAffected }
+        });
+      }
+      await connection.commit();
+      return { affectedRows: result.rowsAffected || 0, revisao: latestRevision };
+    } catch (error) {
+      await connection.rollback();
+      throw normalizeOracleSaveError(error);
+    }
   });
 }
 
-async function inativarEscala({ lojaId, mesRef }) {
+async function inativarEscala({ lojaId, mesRef, actor }) {
   return withConnection(async (connection) => {
-    const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
-    if (latestRevision === null) return { affectedRows: 0, revisao: null };
-    if (!(await hasProgAtivaColumn(connection))) {
-      const error = new Error('Coluna ATIVA nao encontrada em SGN_ESC_PROG. Execute a migration 20260630_add_prog_ativa.sql antes de inativar escalas.');
-      error.statusCode = 500;
-      throw error;
-    }
-    const result = await connection.execute(
+    try {
+      const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
+      if (latestRevision === null) return { affectedRows: 0, revisao: null };
+      if (!(await hasProgAtivaColumn(connection))) {
+        const error = new Error('Coluna ATIVA nao encontrada em SGN_ESC_PROG. Execute a migration 20260630_add_prog_ativa.sql antes de inativar escalas.');
+        error.statusCode = 500;
+        throw error;
+      }
+      const result = await connection.execute(
       `update sgn_esc_prog
        set ativa = 0, oficializada = 0
        where loja = :lojaId
          and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
          and nvl(ativa, 1) = 1`,
       { lojaId, mesRef },
-      { autoCommit: true }
-    );
-    return { affectedRows: result.rowsAffected || 0, revisao: latestRevision };
+        { autoCommit: false }
+      );
+      if (result.rowsAffected) {
+        await escalaEventService.appendEvent(connection, {
+          operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, actor,
+          acao: 'INATIVAR_ESCALA', origem: 'USUARIO', situacao: 'RASCUNHO',
+          revisaoAnterior: latestRevision, revisaoNova: latestRevision,
+          detalhe: { totalProgramacoes: result.rowsAffected }
+        });
+      }
+      await connection.commit();
+      return { affectedRows: result.rowsAffected || 0, revisao: latestRevision };
+    } catch (error) {
+      await connection.rollback();
+      throw normalizeOracleSaveError(error);
+    }
   });
 }
 
@@ -2183,6 +2417,7 @@ module.exports = {
   deleteFixoEscala,
   isEscalaSecaoOficializada,
   listDiasSecaoAtual,
+  buildEscalaSnapshots,
   getEscalaMensal,
   getEscalaHeader,
   getEscalaDias,
@@ -2205,6 +2440,7 @@ module.exports = {
     filtrarFuncionariosCatalogoPorSecoesEscala,
     montarDiasReconciliadosRm,
     assertRevisaoBase,
+    assertEscalaSnapshot,
     encontrarErrosAusencias
   }
 };

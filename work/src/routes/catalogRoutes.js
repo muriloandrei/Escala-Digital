@@ -62,7 +62,9 @@ const subsecaoSchema = z.object({
 
 const funcionarioSubsecaoSchema = z.object({
   ESCSECAO_ID: z.number().int().positive().optional(),
-  ESCSUBSECAO_ID: z.number().int().positive().nullable()
+  ESCSUBSECAO_ID: z.number().int().positive().nullable(),
+  MES_REF: dataIsoSchema.optional(),
+  VIGENCIA: z.enum(['IMEDIATO', 'PROXIMA_SEMANA', 'PROXIMO_MES']).optional()
 }).strict();
 
 const turnoSecaoSchema = secaoTurnoSchema.extend({
@@ -505,7 +507,8 @@ router.patch('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/funcionarios/:escfuncI
     const funcionario = await catalogService.updateFuncionarioEscala({
       lojaId,
       escfuncId,
-      data
+      data: { ESCSUBSECAO_ID: data.ESCSUBSECAO_ID },
+      actor: req.user
     });
     return res.json({ funcionario });
   } catch (error) {
@@ -534,7 +537,10 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId/subsecao', resolveLojaParam
     const funcionario = await catalogService.updateFuncionarioEscala({
       lojaId,
       escfuncId,
-      data: { ESCSUBSECAO_ID: data.ESCSUBSECAO_ID }
+      data: { ESCSUBSECAO_ID: data.ESCSUBSECAO_ID },
+      actor: req.user,
+      mesRef: data.MES_REF,
+      vigencia: data.VIGENCIA
     });
     if (!funcionario) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja.' });
     return res.json({ funcionario });
@@ -646,7 +652,8 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, require
     const funcionario = await catalogService.updateFuncionarioEscala({
       lojaId: Number(req.params.lojaId),
       escfuncId: Number(req.params.escfuncId),
-      data
+      data,
+      actor: req.user
     });
 
     if (!funcionario) {

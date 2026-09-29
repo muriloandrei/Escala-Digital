@@ -1,4 +1,5 @@
 const { withConnection, oracledb } = require('../db/oracle');
+const escalaEventService = require('./escalaEventService');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -1067,7 +1068,7 @@ async function updateTipoDescanso(id, data) {
   });
 }
 
-async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
+async function updateFuncionarioEscala({ lojaId, escfuncId, data, actor, mesRef, vigencia }) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   const allowedFields = ['BRIGADISTA', 'ESCSECAO_ID', 'ESCSUBSECAO_ID', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2', 'DT_DEMISS'];
   const updates = Object.fromEntries(
@@ -1079,6 +1080,7 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
   }
 
   return withConnection(async (connection) => {
+    try {
     const funcionarioColumns = await requireTableColumns(connection, 'SGN_ESC_FUNCIONARIO', ['ESCSUBSECAO_ID']);
     if (updates.DT_DEMISS !== undefined && !funcionarioColumns.has('DT_DEMISS')) {
       delete updates.DT_DEMISS;
@@ -1086,7 +1088,16 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
     if (Object.keys(updates).length === 0) {
       throw new Error('Nenhum campo permitido informado para atualizacao.');
     }
-    let secaoAtualId = null;
+    const anteriorResult = await connection.execute(
+      `select escfunc_id, escsecao_id, escsubsecao_id, chapa, brigadista
+         from sgn_esc_funcionario
+        where escfunc_id = :escfuncId and loja = :lojaId
+        for update wait 5`,
+      { escfuncId, lojaId: lojaCodigo }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const anterior = anteriorResult.rows[0];
+    if (!anterior) return null;
+    let secaoAtualId = anterior.ESCSECAO_ID;
     if (updates.ESCSUBSECAO_ID !== undefined) {
       if (!funcionarioColumns.has('ESCSUBSECAO_ID')) {
         const error = new Error('Vinculo de funcionario com subsecao nao encontrado. Rode a migracao de subsecoes de funcionarios.');
@@ -1094,15 +1105,6 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
         throw error;
       }
 
-      const funcionarioResult = await connection.execute(
-        `select escsecao_id
-         from sgn_esc_funcionario
-         where escfunc_id = :escfuncId
-           and loja = :lojaId`,
-        { escfuncId, lojaId: lojaCodigo },
-        { outFormat: oracledb.OUT_FORMAT_OBJECT }
-      );
-      secaoAtualId = pick(funcionarioResult.rows[0], 'ESCSECAO_ID', 'escsecao_id');
       if (!secaoAtualId) return null;
     }
 
@@ -1142,13 +1144,32 @@ async function updateFuncionarioEscala({ lojaId, escfuncId, data }) {
        where escfunc_id = :escfuncId
          and loja = :lojaId`,
       updateBinds,
-      { autoCommit: true }
+      { autoCommit: false }
     );
 
     if (result.rowsAffected === 0) return null;
 
+    const dataEvento = mesRef || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
+    await escalaEventService.appendEvent(connection, {
+      operacaoId: escalaEventService.createOperationId(), lojaId: lojaCodigo,
+      mesRef: dataEvento, escfuncId,
+      escsecaoId: Number(updates.ESCSECAO_ID || anterior.ESCSECAO_ID),
+      actor, acao: updates.ESCSUBSECAO_ID !== undefined ? 'TRANSFERIR_SUBSECAO' : 'ATUALIZAR_FUNCIONARIO',
+      origem: actor ? 'USUARIO' : 'SISTEMA', situacao: 'CADASTRO',
+      detalhe: {
+        chapa: anterior.CHAPA, vigencia: vigencia || null,
+        anterior: { escsecaoId: anterior.ESCSECAO_ID, escsubsecaoId: anterior.ESCSUBSECAO_ID, brigadista: anterior.BRIGADISTA },
+        novo: updates
+      }
+    });
+    await connection.commit();
+
     const funcionarios = await listFuncionariosByLoja(lojaCodigo, { includeInactive: true });
     return funcionarios.find((funcionario) => Number(funcionario.ESCFUNC_ID) === Number(escfuncId)) || null;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    }
   });
 }
 

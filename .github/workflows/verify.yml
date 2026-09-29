@@ -1,0 +1,29 @@
+name: Verify
+
+on:
+  push:
+    branches: [main, homologacao]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: work/package-lock.json
+      - name: Install dependencies
+        working-directory: work
+        run: npm ci
+      - name: Check migration parity
+        working-directory: work
+        run: npm run migrations:check
+      - name: Validate JavaScript
+        working-directory: work
+        run: npm run check
+      - name: Run unit tests
+        working-directory: work
+        run: npm test

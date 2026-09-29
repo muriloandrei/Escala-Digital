@@ -11,6 +11,7 @@
         const escalasFuncionariosPage = document.getElementById('escalas-funcionarios-page');
         const escalaFuncionarioEdicaoPage = document.getElementById('escala-funcionario-edicao-page');
         const historicoPage = document.getElementById('historico-page');
+        const alteracoesPage = document.getElementById('alteracoes-page');
         const tiposDescansoPage = document.getElementById('tipos-descanso-page');
         const regrasPage = document.getElementById('regras-page');
         const horariosPadraoPage = document.getElementById('horarios-padrao-page');
@@ -28,6 +29,7 @@
         const navSecoes = document.getElementById('nav-secoes');
         const navTurnosSecao = document.getElementById('nav-turnos-secao');
         const navHistorico = document.getElementById('nav-historico');
+        const navAlteracoes = document.getElementById('nav-alteracoes');
         const navTiposDescanso = document.getElementById('nav-tipos-descanso');
         const navRegras = document.getElementById('nav-regras');
         const navAcessos = document.getElementById('nav-acessos');
@@ -313,6 +315,7 @@
             escalasFuncionariosPage?.classList.add('hidden');
             escalaFuncionarioEdicaoPage?.classList.add('hidden');
             historicoPage?.classList.add('hidden');
+            alteracoesPage?.classList.add('hidden');
             tiposDescansoPage?.classList.add('hidden');
             regrasPage?.classList.add('hidden');
             horariosPadraoPage?.classList.add('hidden');
@@ -539,6 +542,15 @@
             carregarHistoricoTela().catch(error => showInfoModal(error.message, 'error'));
         }
 
+        function showAlteracoesPage() {
+            hideAllPages();
+            alteracoesPage?.classList.remove('hidden');
+            navAlteracoes?.classList.add('active');
+            expandActiveNavGroup(navAlteracoes);
+            setCurrentPageTitle('alteracoes');
+            eventosPageController.open(lojaEscalaSelect, getLojaPrincipal());
+        }
+
         function showTiposDescansoPage() {
             hideAllPages();
             tiposDescansoPage?.classList.remove('hidden');
@@ -682,6 +694,7 @@
                 secoes: showSecoesPage,
                 'turnos-secao': showTurnosSecaoPage,
                 historico: showHistoricoPage,
+                alteracoes: showAlteracoesPage,
                 'tipos-descanso': showTiposDescansoPage,
                 regras: showRegrasPage,
                 'horarios-padrao': showHorariosPadraoPage,
@@ -727,6 +740,7 @@
         navEscalasCriadas?.addEventListener('click', () => { window.location.hash = '/escalas-geradas'; });
         navRegistros.addEventListener('click', () => { window.location.hash = '/escalas-geradas'; });
         navEscalasFuncionarios?.addEventListener('click', () => { window.location.hash = '/escalas-funcionarios'; });
+        navAlteracoes?.addEventListener('click', () => { window.location.hash = '/alteracoes'; });
         navFuncionarios.addEventListener('click', () => { window.location.hash = '/funcionarios'; });
         navSecoes.addEventListener('click', () => { window.location.hash = '/secoes'; });
         navTurnosSecao.addEventListener('click', () => { window.location.hash = '/turnos-secao'; });
@@ -2417,6 +2431,7 @@
         const getLojaContextoEscala = () => String(escalaRascunhoContexto?.loja || lojaEscalaSelect?.value || '');
 
         const apiRequest = window.EscalaApi.request.bind(window.EscalaApi);
+        const eventosPageController = window.EscalaEventosPage.create({ apiRequest, escapeHtml, showInfoModal });
         const formatApiError = (error) => {
             if (Array.isArray(error?.details)) return error.details.join(' ');
             if (Array.isArray(error?.details?.errors)) return error.details.errors.join(' ');
@@ -3026,7 +3041,7 @@
             await recarregarSubsecoesPage();
         };
 
-        const atualizarFuncionarioSubsecaoApi = async ({ loja, escsecaoId, escfuncId, escsubsecaoId }) => {
+        const atualizarFuncionarioSubsecaoApi = async ({ loja, escsecaoId, escfuncId, escsubsecaoId, mesRef, vigencia }) => {
             if (!loja || !escfuncId) {
                 throw new Error('Não foi possível identificar loja ou funcionário para transferir.');
             }
@@ -3034,6 +3049,8 @@
                 ESCSUBSECAO_ID: escsubsecaoId ? Number(escsubsecaoId) : null
             };
             if (escsecaoId) payload.ESCSECAO_ID = Number(escsecaoId);
+            if (mesRef) payload.MES_REF = mesRef;
+            if (vigencia) payload.VIGENCIA = vigencia;
             return apiRequest('/api/catalog/lojas/' + encodeURIComponent(loja) + '/funcionarios/' + encodeURIComponent(escfuncId) + '/subsecao', {
                 method: 'PATCH',
                 body: JSON.stringify(payload)
@@ -3150,7 +3167,9 @@
                 loja,
                 escsecaoId,
                 escfuncId: funcionario.ESCFUNC_ID || funcionario.escfuncId,
-                escsubsecaoId: values.ESCSUBSECAO_ID
+                escsubsecaoId: values.ESCSUBSECAO_ID,
+                mesRef: origemEscala ? escalaDetalheAtual.mesRef : null,
+                vigencia: values.VIGENCIA
             });
             if (origemEscala && values.VIGENCIA !== 'PROXIMO_MES' && escalaDetalheAtual.mesRef) {
                 const inicio = values.VIGENCIA === 'PROXIMA_SEMANA' ? getProximaSegundaIsoBanco() : getHojeIsoBanco();

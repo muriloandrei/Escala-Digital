@@ -1238,7 +1238,7 @@ async function liberarEscalaLojaMes({
   };
 }
 
-async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()) }) {
+async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()), actor }) {
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
   const [funcionarios, turnos, ausencias, fixos, suspensoes] = await Promise.all([
@@ -1249,6 +1249,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
     pendenciaFuncionarioService.listarIntervalosSuspensos({ lojaId, inicio, fim })
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
+  const expectedSnapshots = escalaService.buildEscalaSnapshots(diasAtuaisSecao);
   const idsComDiasAtuais = new Set(diasAtuaisSecao.map((dia) => Number(pick(dia, 'ESCFUNC_ID', 'escfunc_id'))));
   const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
     ? new Set(escfuncIds.map(Number).filter(Boolean))
@@ -1288,7 +1289,10 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
     mesRef,
     funcionarios: funcionariosPayload,
     oficializada: 0,
-    criarRevisao: false
+    criarRevisao: false,
+    actor,
+    acao: 'GERAR_ESCALA_SECAO',
+    expectedSnapshots
   });
 
   return {
@@ -1302,7 +1306,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
   };
 }
 
-async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()) }) {
+async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()), actor }) {
   if (await escalaService.isEscalaSecaoOficializada({ lojaId, mesRef, escsecaoId })) {
     const error = new Error('Escala oficializada nao pode ser resetada.');
     error.statusCode = 422;
@@ -1318,6 +1322,7 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = nul
     pendenciaFuncionarioService.listarIntervalosSuspensos({ lojaId, inicio, fim })
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
+  const expectedSnapshots = escalaService.buildEscalaSnapshots(diasAtuaisSecao);
   const idsComDiasAtuais = new Set(diasAtuaisSecao.map((dia) => Number(pick(dia, 'ESCFUNC_ID', 'escfunc_id'))));
   const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
     ? new Set(escfuncIds.map(Number).filter(Boolean))
@@ -1346,7 +1351,10 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = nul
     mesRef,
     funcionarios: funcionariosPayload,
     oficializada: 0,
-    criarRevisao: false
+    criarRevisao: false,
+    actor,
+    acao: 'RESETAR_ESCALA_SECAO',
+    expectedSnapshots
   });
 
   return {
