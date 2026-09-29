@@ -376,20 +376,34 @@ async function postFolgas(payload) {
   });
 }
 
-async function getEscalaParaRm(connection, { lojaId, mesRef, revisao }) {
+async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId = null, escfuncIds = null, apenasOficializada = false }) {
   const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
   const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
   const cpfSelect = funcionarioColumns.has('CPF') ? 'f.cpf' : funcionarioColumns.has('CPF_FUNCIONARIO') ? 'f.cpf_funcionario as cpf' : 'cast(null as varchar2(20)) as cpf';
   const ativaSql = progColumns.has('ATIVA') ? 'and nvl(p.ativa, 1) = 1' : '';
   const ativaSubSql = progColumns.has('ATIVA') ? 'and nvl(px.ativa, 1) = 1' : '';
+  const binds = { lojaId, mesRef, revisao };
+  const filtroSecao = escsecaoId ? 'and p.escsecao_id = :escsecaoId' : '';
+  if (escsecaoId) binds.escsecaoId = escsecaoId;
+  const ids = Array.isArray(escfuncIds) ? [...new Set(escfuncIds.map(Number).filter(Boolean))] : null;
+  if (ids && !ids.length) return [];
+  const filtroIds = ids ? `and p.escfunc_id in (${ids.map((id, index) => {
+    binds[`escfuncId${index}`] = id;
+    return `:escfuncId${index}`;
+  }).join(', ')})` : '';
+  const filtroOficializada = apenasOficializada ? 'and nvl(p.oficializada, 0) = 1' : '';
   const result = await connection.execute(
     `select p.loja, p.mes_ref, p.revisao, p.escfunc_id, p.chapa, f.nome, f.codcoligada, ${cpfSelect},
             d.dt, d.programacao
      from sgn_esc_prog p
-     join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
+     left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
      join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
      where p.loja = :lojaId
        and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+       ${filtroSecao}
+       ${filtroIds}
+       ${filtroOficializada}
+       and exists (select 1 from sgn_esc_prog_dia ativo_d where ativo_d.escprog_id = p.escprog_id)
        and p.revisao = (
          select max(px.revisao)
          from sgn_esc_prog px
@@ -400,9 +414,8 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao }) {
            ${ativaSubSql}
        )
        ${ativaSql}
-       and nvl(d.programacao, 'TRB') <> 'TRB'
      order by p.chapa, d.dt`,
-    { lojaId, mesRef, revisao },
+    binds,
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
   return result.rows;
@@ -435,18 +448,26 @@ function agruparPorFuncionario(rows) {
         cpf: pick(row, 'CPF', 'cpf'),
         codcoligada: pick(row, 'CODCOLIGADA', 'codcoligada'),
         revisao: pick(row, 'REVISAO', 'revisao'),
+        diasCobertos: [],
         eventos: []
       });
     }
-    map.get(key).eventos.push({
-      data: formatDate(pick(row, 'DT', 'dt')),
-      programacao: String(pick(row, 'PROGRAMACAO', 'programacao') || '').toUpperCase()
-    });
+    const data = pick(row, 'DT', 'dt');
+    if (data) {
+      const dataIso = formatDate(data);
+      const programacao = String(pick(row, 'PROGRAMACAO', 'programacao') || '').toUpperCase();
+      if (!['FER', 'FERIAS', 'AFA', 'AFASTAMENTO'].includes(programacao)) {
+        map.get(key).diasCobertos.push(dataIso);
+      }
+      if (['F', 'FOLGA', 'FXF', 'FOLGA_FIXA'].includes(programacao)) {
+        map.get(key).eventos.push({ data: dataIso, programacao });
+      }
+    }
   });
   return [...map.values()];
 }
 
-async function validarPreRequisitosRm({ lojaId, mesRef, revisao }) {
+async function validarPreRequisitosRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds }) {
   const rmConfig = getEnv().rm;
   if (!rmConfig.enabled) {
     return { enabled: false, revisao: revisao ?? null, errors: [] };
@@ -458,7 +479,7 @@ async function validarPreRequisitosRm({ lojaId, mesRef, revisao }) {
       return { enabled: true, revisao: null, errors: ['Escala ativa nao encontrada para oficializacao.'] };
     }
 
-    const funcionarios = agruparPorFuncionario(await getEscalaParaRm(connection, { lojaId, mesRef, revisao: revisaoAlvo }));
+    const funcionarios = agruparPorFuncionario(await getEscalaParaRm(connection, { lojaId, mesRef, revisao: revisaoAlvo, escsecaoId, escfuncIds }));
     const errors = [];
     for (const funcionario of funcionarios) {
       const cpf = sanitizeCpf(funcionario.cpf);
@@ -485,10 +506,10 @@ async function validarPreRequisitosRm({ lojaId, mesRef, revisao }) {
   });
 }
 
-async function oficializarNoRm({ lojaId, mesRef, revisao }) {
+async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds }) {
   const rmConfig = getEnv().rm;
   return withConnection(async (connection) => {
-    const rows = await getEscalaParaRm(connection, { lojaId, mesRef, revisao });
+    const rows = await getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId, escfuncIds, apenasOficializada: true });
     if (!rmConfig.enabled) {
       await registrarRmLog(connection, {
         loja: lojaId,
@@ -521,6 +542,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
 
         const { inicio, fim } = getOperationalPeriodIso(mesRef);
         const existentesRows = await getFolgasExistentes({ codTabFolga, inicio, fim });
+        const diasCobertos = new Set(funcionario.diasCobertos);
         const desejadas = new Set(funcionario.eventos.map((evento) => `${evento.data}|${rmConfig.folgaHoraInicio}`));
         let removidas = 0;
         let ignoradas = 0;
@@ -531,6 +553,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao }) {
             ignoradas += 1;
             continue;
           }
+          if (!diasCobertos.has(folgaKey.split('|')[0])) continue;
           if (!desejadas.has(folgaKey)) {
             const deletePath = buildDeleteFolgaPath(folga, { codColigada: codColigadaRm, codTabFolga });
             if (!deletePath) {
@@ -614,6 +637,7 @@ module.exports = {
   _private: {
     requestRm,
     getEscalaParaRm,
+    agruparPorFuncionario,
     buildDeleteFolgaPath,
     getFuncionarioRmData,
     getFolgaKey,

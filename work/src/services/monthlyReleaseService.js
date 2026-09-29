@@ -1309,7 +1309,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
 }
 
 async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()), actor }) {
-  if (await escalaService.isEscalaSecaoOficializada({ lojaId, mesRef, escsecaoId })) {
+  if (await escalaService.isEscalaSecaoOficializada({ lojaId, mesRef, escsecaoId, escfuncIds })) {
     const error = new Error('Escala oficializada nao pode ser resetada.');
     error.statusCode = 422;
     throw error;

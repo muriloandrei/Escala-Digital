@@ -4206,7 +4206,7 @@
                         <td data-label="Acao">${escapeHtml(log.ACAO || '-')}</td>
                         <td data-label="Status"><span class="escala-status-chip ${falha ? 'danger-chip' : 'official-chip'}">${escapeHtml(log.STATUS || '-')}</span></td>
                         <td data-label="Mensagem">${escapeHtml(log.MENSAGEM || '-')}</td>
-                        <td data-label="Acoes" class="actions-cell">${falha && hasPermission('integracao-rm', 'reprocessar') ? `<button class="action-btn-table banco-action rm-reprocessar" data-loja="${escapeHtml(log.LOJA || '')}" data-mes-ref="${escapeHtml(mesRef)}" data-revisao="${escapeHtml(log.REVISAO ?? 0)}"><span class="material-symbols-outlined">sync</span>Reprocessar</button>` : '-'}</td>
+                        <td data-label="Acoes" class="actions-cell">${falha && log.ESCFUNC_ID && hasPermission('integracao-rm', 'reprocessar') ? `<button class="action-btn-table banco-action rm-reprocessar" data-loja="${escapeHtml(log.LOJA || '')}" data-mes-ref="${escapeHtml(mesRef)}" data-revisao="${escapeHtml(log.REVISAO ?? 0)}" data-escfunc-id="${escapeHtml(log.ESCFUNC_ID)}"><span class="material-symbols-outlined">sync</span>Reprocessar</button>` : '-'}</td>
                     </tr>`;
             }).join('') : '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhum log encontrado.</td></tr>';
         };
@@ -4303,7 +4303,7 @@
             try {
                 await apiRequest('/api/escalas/rm/reprocessar', {
                     method: 'POST',
-                    body: JSON.stringify({ lojaId: Number(button.dataset.loja), mesRef: button.dataset.mesRef, revisao: Number(button.dataset.revisao || 0) })
+                    body: JSON.stringify({ lojaId: Number(button.dataset.loja), mesRef: button.dataset.mesRef, revisao: Number(button.dataset.revisao || 0), escfuncId: Number(button.dataset.escfuncId) })
                 });
                 await carregarRmLogsTela();
                 showInfoModal('Reprocessamento enviado para o RM.', 'success');
@@ -6459,15 +6459,8 @@
                 const finalizada = status === 'FINALIZADA';
                 const oficializada = Number(escala.OFICIALIZADA || 0) === 1;
                 const canManageEscalaAdmin = isPerfilAdminSessao();
-                const canOfficializeEscalas = canManageEscalaAdmin && hasPermission('escalas', 'oficializar');
                 const canInactivateEscalas = canManageEscalaAdmin && hasPermission('escalas', 'inativar');
-                const oficializarAction = !canOfficializeEscalas
-                    ? ''
-                    : finalizada
-                    ? '<button class="action-btn-table banco-action" disabled title="Escala finalizada"><span class="material-symbols-outlined">lock</span>Finalizada</button>'
-                    : oficializada
-                        ? '<button class="action-btn-table banco-action officialize-action" disabled title="Escala oficializada"><span class="material-symbols-outlined">verified</span>Oficializada</button>'
-                        : '<button class="action-btn-table banco-action officialize-action banco-oficializar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Oficializar escala"><span class="material-symbols-outlined">verified</span>Oficializar</button>';
+                const oficializacaoParcial = !oficializada && Number(escala.OFICIALIZADA_ALGUMA || 0) === 1;
                 const inativarAction = !canInactivateEscalas || finalizada
                     ? ''
                     : '<button class="action-btn-table banco-action danger-action banco-inativar" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Inativar escala"><span class="material-symbols-outlined">delete</span>Inativar</button>';
@@ -6477,14 +6470,13 @@
                     '<td data-label="Mês">' + getNomeMesTabela(escala.MES_REF) + '</td>',
                     '<td data-label="Loja">Loja ' + escapeHtml(loja) + '</td>',
                     '<td data-label="Status"><span class="escala-status-chip ' + getStatusClassEscala(status) + '">' + escapeHtml(status || '-') + '</span></td>',
-                    '<td data-label="Oficializada"><span class="escala-status-chip ' + (oficializada ? 'official-chip' : 'pending-chip') + '">' + (oficializada ? 'Sim' : 'Não') + '</span></td>',
+                    '<td data-label="Oficializada"><span class="escala-status-chip ' + (oficializada ? 'official-chip' : 'pending-chip') + '">' + (oficializada ? 'Sim' : oficializacaoParcial ? 'Parcial' : 'Não') + '</span></td>',
                     '<td data-label="Secoes">' + escapeHtml(escala.SECOES || 0) + '</td>',
                     '<td data-label="Funcionarios">' + escapeHtml(escala.FUNCIONARIOS || 0) + '</td>',
                     '<td data-label="Modificada em">' + formatarDataTabela(escala.MODIFICADA_EM) + '</td>',
                     '<td data-label="Modificada por">' + escapeHtml(escala.MODIFICADO_POR || 'Sistema') + '</td>',
                     '<td data-label="Acoes" class="actions-cell">',
                     '<button class="action-btn-table banco-action banco-abrir" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Abrir escala mais recente"><span class="material-symbols-outlined">open_in_new</span>Abrir Escala</button>',
-                    oficializarAction,
                     inativarAction,
                     canManageEscalaAdmin ? '<button class="action-btn-table banco-action banco-historico" data-loja="' + escapeHtml(loja) + '" data-mes-ref="' + escapeHtml(mesRef) + '" title="Ver relatório de alterações"><span class="material-symbols-outlined">history</span>Histórico</button>' : '',
                     '</td>',
@@ -6769,7 +6761,20 @@
 
         const getSecaoAtualBanco = () => escalaDetalheAtual.secoes.find(item => String(item.key) === String(escalaDetalheAtual.secaoAtiva)) || null;
         const isSecaoAtualFrenteCaixaBanco = () => isSecaoFrenteCaixa(getSecaoAtualBanco()?.nome || getSecaoAtualBanco()?.DESCR || '');
-        const isSecaoAtualOficializadaBanco = () => Number(getSecaoAtualBanco()?.oficializada || getSecaoAtualBanco()?.OFICIALIZADA || 0) === 1;
+        const isSecaoAtualOficializadaBanco = () => getDiasEscopoAtualBanco()
+            .some(dia => Number(dia.OFICIALIZADA || dia.oficializada || 0) === 1);
+        const isEscopoAtualTodoOficializadoBanco = () => {
+            const dias = getDiasEscopoAtualBanco();
+            return dias.length > 0 && dias.every(dia => Number(dia.OFICIALIZADA || dia.oficializada || 0) === 1);
+        };
+        const getEscopoOficializacaoBanco = () => ({
+            lojaId: Number(escalaDetalheAtual.lojaId),
+            mesRef: escalaDetalheAtual.mesRef,
+            escsecaoId: Number(escalaDetalheAtual.secaoAtiva),
+            ...(escalaDetalheAtual.subsetorAtivo ? {
+                escfuncIds: getFuncionariosSecaoAtualBanco().map(funcionario => Number(funcionario.ESCFUNC_ID)).filter(Boolean)
+            } : {})
+        });
         const getPrimeiraSegundaOperacional = (ano, mes) => {
             const data = new Date(ano, mes, 1);
             const day = data.getDay();
@@ -7165,7 +7170,6 @@
 
         const atualizarAcoesValidacaoBanco = () => {
             const criticasEscopo = getCriticasEscopoAtualBanco();
-            const criticasGlobais = getTodasCriticasBanco();
             const temDiasGerados = getDiasEscopoAtualBanco().length > 0;
             criticasDetalheBancoBtn?.classList.toggle('hidden', criticasEscopo.length === 0);
             gerarDetalhadaBancoBtn?.classList.toggle('hidden', criticasEscopo.length > 0 || !temDiasGerados);
@@ -7173,7 +7177,7 @@
             if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = !temDiasGerados || criticasEscopo.length > 0;
             if (oficializarBancoBtn) {
                 oficializarBancoBtn.classList.toggle('hidden', !isPerfilAdminSessao());
-                oficializarBancoBtn.disabled = !temDiasGerados || criticasGlobais.length > 0 || escalaDetalheAtual.status === 'FINALIZADA';
+                oficializarBancoBtn.disabled = !temDiasGerados || criticasEscopo.length > 0 || isEscopoAtualTodoOficializadoBanco() || escalaDetalheAtual.status === 'FINALIZADA';
             }
         };
 
@@ -8742,6 +8746,7 @@
                 : { texto: 'Escala oficializada e enviada ao RM.', tipo: 'success' };
 
         const salvarAlteracoesDetalheBanco = async ({ oficializar = false } = {}) => {
+            const escopoOficializacao = oficializar ? getEscopoOficializacaoBanco() : null;
             if (!hasPermission('escalas', 'editar')) {
                 showInfoModal('Usuario sem permissao para salvar escalas.', 'error');
                 return;
@@ -8754,7 +8759,7 @@
                 if (oficializar && hasPermission('escalas', 'oficializar')) {
                     const result = await apiRequest('/api/escalas/oficializar', {
                         method: 'POST',
-                        body: JSON.stringify({ lojaId: Number(escalaDetalheAtual.lojaId), mesRef: escalaDetalheAtual.mesRef }),
+                        body: JSON.stringify(escopoOficializacao),
                         timeoutMs: 120000
                     });
                     const feedback = mensagemOficializacaoRm(result.rm);
@@ -8765,7 +8770,7 @@
                 showInfoModal('Nenhuma alteração pendente para salvar.', 'info');
                 return;
             }
-            if (!(await validarDetalheBancoAtual({ global: oficializar }))) return;
+            if (!(await validarDetalheBancoAtual())) return;
 
             if (salvarDetalheBancoBtn) salvarDetalheBancoBtn.disabled = true;
             if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = true;
@@ -8801,7 +8806,7 @@
                         lojaId: Number(escalaDetalheAtual.lojaId),
                         mesRef: escalaDetalheAtual.mesRef,
                         funcionarios: funcionariosAlterados,
-                        oficializada: oficializar ? 1 : 0
+                        oficializada: 0
                     })
                 });
                 if (result.saved?.length !== funcionariosAlterados.length) {
@@ -8811,7 +8816,7 @@
                 if (oficializar && hasPermission('escalas', 'oficializar')) {
                     const oficializacao = await apiRequest('/api/escalas/oficializar', {
                         method: 'POST',
-                        body: JSON.stringify({ lojaId: Number(escalaDetalheAtual.lojaId), mesRef: escalaDetalheAtual.mesRef }),
+                        body: JSON.stringify(escopoOficializacao),
                         timeoutMs: 120000
                     });
                     resultadoRm = oficializacao.rm || null;
@@ -9735,16 +9740,15 @@
             const abrirButton = e.target.closest('.banco-abrir');
             const criarButton = e.target.closest('.banco-criar');
             const criarVazioButton = e.target.closest('.banco-criar-vazio');
-            const oficializarButton = e.target.closest('.banco-oficializar');
             const inativarButton = e.target.closest('.banco-inativar');
             const historicoButton = e.target.closest('.banco-historico');
             if (criarVazioButton) {
                 iniciarNovaEscalaRascunho().catch(error => showInfoModal(error.message, 'error'));
                 return;
             }
-            if (!abrirButton && !criarButton && !oficializarButton && !inativarButton && !historicoButton) return;
+            if (!abrirButton && !criarButton && !inativarButton && !historicoButton) return;
 
-            const button = abrirButton || criarButton || oficializarButton || inativarButton || historicoButton;
+            const button = abrirButton || criarButton || inativarButton || historicoButton;
             const loja = button.dataset.loja;
             const mesRef = button.dataset.mesRef;
             if (loja) {
@@ -9765,29 +9769,6 @@
                     return;
                 }
                 window.location.hash = '/escalas/nova/' + loja + '/' + mesRef;
-                return;
-            }
-
-            if (oficializarButton) {
-                if (!hasPermission('escalas', 'oficializar')) {
-                    showInfoModal('Usuario sem permissao para oficializar escalas.', 'error');
-                    return;
-                }
-                const confirmacao = await showInputModal({
-                    title: 'Oficializar escala',
-                    inputs: [{ type: 'message', text: 'A escala sera marcada como oficial. Qualquer alteracao futura criara uma nova revisao nao oficializada.' }],
-                    confirmText: 'Oficializar'
-                });
-                if (!confirmacao) return;
-                try {
-                    const result = await apiRequest('/api/escalas/oficializar', { method: 'POST', body: JSON.stringify({ lojaId: Number(loja), mesRef }) });
-                    const rm = result.rm || {};
-                    const mensagemRm = rm.enabled ? `RM: ${rm.enviados || 0} evento(s) enviado(s), ${rm.falhas || 0} falha(s).` : 'RM: integracao desabilitada no .env.';
-                    showInfoModal(['Escala oficializada com sucesso.', mensagemRm], rm.falhas ? 'error' : 'success');
-                    await consultarEscalasBancoLocal();
-                } catch (error) {
-                    showInfoModal(error.details?.length ? error.details : error.message, 'error');
-                }
                 return;
             }
 

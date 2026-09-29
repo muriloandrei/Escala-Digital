@@ -440,9 +440,10 @@ router.post('/rm/reprocessar', requirePermission('integracao-rm', 'reprocessar')
     const payload = z.object({
       lojaId: z.number().int().positive(),
       mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      revisao: z.number().int().min(0)
+      revisao: z.number().int().min(0),
+      escfuncId: z.number().int().positive()
     }).parse(req.body);
-    const rm = await rmIntegrationService.oficializarNoRm(payload);
+    const rm = await rmIntegrationService.oficializarNoRm({ ...payload, escfuncIds: [payload.escfuncId] });
     await auditService.registerAudit({
       action: 'REPROCESSAR_RM',
       user: req.user,
@@ -462,7 +463,9 @@ router.post('/oficializar', requireAdmin, requirePermission('escalas', 'oficiali
   try {
     const payload = z.object({
       lojaId: z.number().int().positive(),
-      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      escsecaoId: z.number().int().positive(),
+      escfuncIds: z.array(z.number().int().positive()).min(1).optional()
     }).parse(req.body);
 
     const preRequisitosRm = await rmIntegrationService.validarPreRequisitosRm(payload);

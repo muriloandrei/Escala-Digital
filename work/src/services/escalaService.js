@@ -819,6 +819,7 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesP
           max(p.dt_hr_incl) as modificada_em,
           max(p.revisao) as revisao,
           min(nvl(p.oficializada, 0)) as oficializada,
+          max(nvl(p.oficializada, 0)) as oficializada_alguma,
           count(distinct p.escsecao_id) as secoes,
           count(distinct p.escfunc_id) as funcionarios,
           ${auditJoin.selectSql}
@@ -1079,16 +1080,24 @@ async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, act
   });
 }
 
-async function isEscalaSecaoOficializada({ lojaId, mesRef, escsecaoId }) {
+async function isEscalaSecaoOficializada({ lojaId, mesRef, escsecaoId, escfuncIds = null }) {
   return withConnection(async (connection) => {
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
+    const ids = Array.isArray(escfuncIds) ? [...new Set(escfuncIds.map(Number).filter(Boolean))] : null;
+    const binds = { lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId) };
+    if (ids && !ids.length) return false;
+    const filtroIds = ids ? `and p.escfunc_id in (${ids.map((id, index) => {
+      binds[`escfuncId${index}`] = id;
+      return `:escfuncId${index}`;
+    }).join(', ')})` : '';
     const result = await connection.execute(
       `select count(*) as total
          from sgn_esc_prog p
         where p.loja = :lojaId
           and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
           and p.escsecao_id = :escsecaoId
+          ${filtroIds}
           and nvl(p.oficializada, 0) = 1
           and p.revisao = (
             select max(px.revisao)
@@ -1099,7 +1108,7 @@ async function isEscalaSecaoOficializada({ lojaId, mesRef, escsecaoId }) {
                and ${ativaSubSql}
           )
           and ${ativaSql}`,
-      { lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId) },
+      binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return Number(pick(result.rows[0], 'TOTAL', 'total') || 0) > 0;
@@ -2326,11 +2335,18 @@ async function sincronizarEscalaFuncionarioComRm({ lojaId, mesRef, escfuncId, rm
   });
 }
 
-async function oficializarEscala({ lojaId, mesRef, actor }) {
+async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null, actor }) {
   return withConnection(async (connection) => {
     try {
-      const latestRevision = await getLatestRevision(connection, { lojaId, mesRef });
+      const latestRevision = await getLatestRevision(connection, { lojaId, mesRef, secoesPermitidas: [escsecaoId] });
       if (latestRevision === null) return { affectedRows: 0, revisao: null };
+      const ids = Array.isArray(escfuncIds) ? [...new Set(escfuncIds.map(Number).filter(Boolean))] : null;
+      if (ids && !ids.length) return { affectedRows: 0, revisao: latestRevision };
+      const binds = { lojaId, mesRef, escsecaoId };
+      const filtroIds = ids ? `and p.escfunc_id in (${ids.map((id, index) => {
+        binds[`escfuncId${index}`] = id;
+        return `:escfuncId${index}`;
+      }).join(', ')})` : '';
       const ativaSql = await getAtivaSql(connection, 'p');
       const ativaSubSql = await getAtivaSql(connection, 'px');
       const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
@@ -2339,6 +2355,9 @@ async function oficializarEscala({ lojaId, mesRef, actor }) {
        set p.oficializada = 1
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+         and p.escsecao_id = :escsecaoId
+         ${filtroIds}
+         and exists (select 1 from sgn_esc_prog_dia d where d.escprog_id = p.escprog_id)
          and p.revisao = (
            select max(px.revisao)
            from sgn_esc_prog px
@@ -2349,15 +2368,15 @@ async function oficializarEscala({ lojaId, mesRef, actor }) {
          )
          and ${ativaSql}
          and ${secaoAtivaSql}`,
-      { lojaId, mesRef },
+      binds,
         { autoCommit: false }
       );
       if (result.rowsAffected) {
         await escalaEventService.appendEvent(connection, {
-          operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, actor,
+          operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, escsecaoId, actor,
           acao: 'OFICIALIZAR_ESCALA', origem: 'USUARIO', situacao: 'OFICIALIZADA',
           revisaoAnterior: latestRevision, revisaoNova: latestRevision,
-          detalhe: { totalProgramacoes: result.rowsAffected }
+          detalhe: { totalProgramacoes: result.rowsAffected, escfuncIds: ids }
         });
       }
       await connection.commit();

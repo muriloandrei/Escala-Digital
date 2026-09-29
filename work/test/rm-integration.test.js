@@ -119,5 +119,45 @@ test('RM reads only revisions up to the approved revision', async () => {
   };
   await _private.getEscalaParaRm(connection, { lojaId: 35, mesRef: '2026-10-01', revisao: 12 });
   assert.match(query.sql, /px\.revisao <= :revisao/);
+  assert.match(query.sql, /left join sgn_esc_prog_dia d/i);
+  assert.doesNotMatch(query.sql, /nvl\(d\.programacao, 'TRB'\) <> 'TRB'/i);
   assert.equal(query.binds.revisao, 12);
+});
+
+test('RM separa dias cobertos de folgas e ignora ferias e afastamentos', () => {
+  const funcionarios = _private.agruparPorFuncionario([
+    { ESCFUNC_ID: 1, CHAPA: '001', DT: new Date('2026-10-05T12:00:00Z'), PROGRAMACAO: 'TRB' },
+    { ESCFUNC_ID: 1, CHAPA: '001', DT: new Date('2026-10-06T12:00:00Z'), PROGRAMACAO: 'FER' },
+    { ESCFUNC_ID: 2, CHAPA: '002', DT: new Date('2026-10-05T12:00:00Z'), PROGRAMACAO: 'F' }
+  ]);
+  assert.equal(funcionarios.length, 2);
+  assert.deepEqual(funcionarios[0].eventos, []);
+  assert.deepEqual(funcionarios[0].diasCobertos, ['2026-10-05']);
+  assert.deepEqual(funcionarios[1].eventos, [{ data: '2026-10-05', programacao: 'F' }]);
+});
+
+test('RM seleciona somente o escopo oficializado solicitado', async () => {
+  let query;
+  const connection = {
+    async execute(sql, binds) {
+      if (/user_tab_columns/i.test(sql)) return { rows: [{ COLUMN_NAME: 'CPF' }, { COLUMN_NAME: 'ATIVA' }] };
+      query = { sql, binds };
+      return { rows: [] };
+    }
+  };
+  await _private.getEscalaParaRm(connection, {
+    lojaId: 35, mesRef: '2026-10-01', revisao: 12,
+    escsecaoId: 2003, escfuncIds: [10, 11], apenasOficializada: true
+  });
+  assert.match(query.sql, /p\.escsecao_id = :escsecaoId/);
+  assert.match(query.sql, /p\.escfunc_id in \(:escfuncId0, :escfuncId1\)/);
+  assert.match(query.sql, /nvl\(p\.oficializada, 0\) = 1/);
+  assert.equal(query.binds.escsecaoId, 2003);
+  assert.equal(query.binds.escfuncId0, 10);
+  assert.equal(query.binds.escfuncId1, 11);
+  query = null;
+  assert.deepEqual(await _private.getEscalaParaRm(connection, {
+    lojaId: 35, mesRef: '2026-10-01', revisao: 12, escfuncIds: []
+  }), []);
+  assert.equal(query, null);
 });
