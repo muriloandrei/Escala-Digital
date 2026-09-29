@@ -1,4 +1,5 @@
 (function () {
+  let previousInfoFocus = null;
   const getElements = () => ({
     infoModal: document.getElementById('infoModal'),
     infoModalHeader: document.getElementById('infoModalHeader'),
@@ -39,11 +40,15 @@
       infoMessagesList.appendChild(li);
     });
 
+    previousInfoFocus = document.activeElement;
     infoModal.classList.remove('hidden');
+    getElements().closeInfoModalBtn?.focus?.();
   };
 
   const hideInfoModal = () => {
     getElements().infoModal?.classList.add('hidden');
+    previousInfoFocus?.focus?.();
+    previousInfoFocus = null;
   };
 
   const setInputBaseProps = (field, input) => {
@@ -70,6 +75,7 @@
     }
 
     return new Promise((resolve) => {
+      const previousInputFocus = document.activeElement;
       const inputs = config.inputs || [];
       const secondaryActions = config.secondaryActions || [];
       const basePanelClass = 'bg-white rounded-lg shadow-xl w-11/12 max-w-sm flex flex-col';
@@ -245,6 +251,7 @@
         inputModalCancelBtn.onclick = null;
         actionsContainer?.querySelectorAll('[data-extra-modal-action]').forEach((button) => button.remove());
         if (inputModalPanel) inputModalPanel.className = basePanelClass;
+        previousInputFocus?.focus?.();
       };
 
       const collectValues = () => {
@@ -321,14 +328,45 @@
       };
 
       inputModal.classList.remove('hidden');
+      (inputModalBody.querySelector?.('input:not([disabled]), select:not([disabled]), textarea:not([disabled])')
+        || inputModalConfirmBtn)?.focus?.();
     });
   };
+
+  const getFocusable = (modal) => Array.from(modal.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]'
+  )).filter((element) => !element.classList.contains('hidden') && !element.closest?.('.hidden'));
 
   const init = () => {
     const { infoModal, closeInfoModalBtn } = getElements();
     closeInfoModalBtn?.addEventListener('click', hideInfoModal);
     infoModal?.addEventListener('click', (event) => {
       if (event.target === infoModal) hideInfoModal();
+    });
+    document.addEventListener?.('keydown', (event) => {
+      const { infoModal, inputModal, inputModalCancelBtn } = getElements();
+      const infoOpen = infoModal && !infoModal.classList.contains('hidden');
+      const inputOpen = inputModal && !inputModal.classList.contains('hidden');
+      const topModal = infoOpen ? infoModal : inputOpen ? inputModal : null;
+      if (!topModal) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (infoOpen) hideInfoModal();
+        else if (!inputModalCancelBtn?.classList.contains('hidden')) inputModalCancelBtn?.click();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusable(topModal);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !topModal.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !topModal.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
     });
   };
 

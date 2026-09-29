@@ -6,6 +6,8 @@ const vm = require('node:vm');
 
 test('invalid modal values keep the editor open until corrected', async () => {
   const elements = new Map();
+  let activeElement = null;
+  let onKeyDown = null;
   const createElement = () => {
     const classes = new Set();
     const element = {
@@ -18,6 +20,8 @@ test('invalid modal values keep the editor open until corrected', async () => {
       },
       appendChild(child) { child.parentElement = this; this.children.push(child); },
       querySelectorAll() { return []; },
+      focus() { activeElement = this; },
+      click() { this.onclick?.(); },
       addEventListener() {},
       setAttribute(name, value) { this[name] = value; }
     };
@@ -44,7 +48,9 @@ test('invalid modal values keep the editor open until corrected', async () => {
   const window = {};
   const document = {
     getElementById: (id) => elements.get(id) || null,
-    createElement
+    createElement,
+    get activeElement() { return activeElement; },
+    addEventListener(type, handler) { if (type === 'keydown') onKeyDown = handler; }
   };
   const source = fs.readFileSync(path.join(__dirname, '../public/js/modal-service.js'), 'utf8');
   vm.runInNewContext(source, { window, document });
@@ -64,4 +70,12 @@ test('invalid modal values keep the editor open until corrected', async () => {
   confirm.onclick();
   assert.equal(modal.classList.contains('hidden'), true);
   assert.deepEqual({ ...await pending }, { HR_ENT1: '09:00' });
+
+  const trigger = createElement();
+  trigger.focus();
+  const cancelled = window.EscalaModal.showInputModal({ title: 'Outro', inputs: [] });
+  assert.equal(activeElement, confirm);
+  onKeyDown({ key: 'Escape', preventDefault() {} });
+  assert.equal(await cancelled, null);
+  assert.equal(activeElement, trigger);
 });

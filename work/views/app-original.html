@@ -1050,11 +1050,11 @@
         </div>
     </div>
 
-    <div id="infoModal" class="modal-overlay hidden no-print" style="z-index: 1090;">
+    <div id="infoModal" class="modal-overlay hidden no-print" style="z-index: 1090;" role="dialog" aria-modal="true" aria-labelledby="infoModalTitle">
         <div class="bg-white rounded-lg shadow-xl w-11/12 max-w-md flex flex-col modal-content">
             <div id="infoModalHeader" class="flex justify-between items-center p-4 text-white rounded-t-lg">
                 <h3 id="infoModalTitle" class="text-lg font-bold">Atenção</h3>
-                <button id="closeInfoModalBtn" class="text-white hover:text-gray-200 text-2xl font-bold">&times;</button>
+                <button id="closeInfoModalBtn" type="button" aria-label="Fechar" class="text-white hover:text-gray-200 text-2xl font-bold">&times;</button>
             </div>
             <div id="infoModalBody" class="p-6">
                 <ul id="infoMessagesList" class="list-disc list-inside space-y-2 text-gray-700"></ul>
@@ -1062,7 +1062,7 @@
         </div>
     </div>
 
-    <div id="inputModal" class="modal-overlay hidden no-print" style="z-index: 1080;">
+    <div id="inputModal" class="modal-overlay hidden no-print" style="z-index: 1080;" role="dialog" aria-modal="true" aria-labelledby="inputModalTitle">
         <div id="inputModalPanel" class="bg-white rounded-lg shadow-xl w-11/12 max-w-sm flex flex-col">
             <h3 id="inputModalTitle" class="text-lg font-bold p-4 border-b text-gray-800">Título do Modal</h3>
             <div id="inputModalBody" class="p-6 space-y-4">
