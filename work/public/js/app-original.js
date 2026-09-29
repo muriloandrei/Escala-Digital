@@ -1154,13 +1154,47 @@
 
         const calcularHorarioCompletoPorEntrada = (entrada1) => {
             const inicio = timeToMinutes(entrada1);
-            if (Number.isNaN(inicio)) return null;
+            if (!/^\d{2}:\d{2}$/.test(String(entrada1 || '')) || inicio + 598 >= 1440) return null;
             return {
                 HR_ENT1: minutesToTime(inicio),
                 HR_SAI1: minutesToTime(inicio + 240),
                 HR_ENT2: minutesToTime(inicio + 310),
                 HR_SAI2: minutesToTime(inicio + 598)
             };
+        };
+
+        const configurarEditorHorario = (body, ids, tipoDiaId = null) => {
+            const campos = Object.fromEntries(Object.entries(ids).map(([key, id]) => [key, body.querySelector('#' + id)]));
+            const resumo = document.createElement('div');
+            resumo.className = 'employee-modal-span-4 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700';
+            resumo.setAttribute('aria-live', 'polite');
+            body.appendChild(resumo);
+            const atualizarResumo = () => {
+                const tipoDia = tipoDiaId ? body.querySelector('#' + tipoDiaId)?.value : 'TRABALHO';
+                resumo.classList.toggle('hidden', tipoDia !== 'TRABALHO');
+                if (tipoDia !== 'TRABALHO') return;
+                const valores = Object.fromEntries(Object.entries(campos).map(([key, campo]) => [key, campo?.value || '']));
+                if (Object.values(valores).some(value => !value)) {
+                    resumo.textContent = 'Jornada: --:-- | Intervalo: --:--';
+                    return;
+                }
+                const primeira = timeToMinutes(valores.HR_SAI1) - timeToMinutes(valores.HR_ENT1);
+                const segunda = timeToMinutes(valores.HR_SAI2) - timeToMinutes(valores.HR_ENT2);
+                const intervalo = timeToMinutes(valores.HR_ENT2) - timeToMinutes(valores.HR_SAI1);
+                resumo.textContent = `Jornada: ${minutesToTime(primeira + segunda)} | Intervalo: ${minutesToTime(intervalo)}`;
+            };
+            campos.HR_ENT1?.addEventListener('input', () => {
+                const calculado = calcularHorarioCompletoPorEntrada(campos.HR_ENT1.value);
+                if (calculado) {
+                    campos.HR_SAI1.value = calculado.HR_SAI1;
+                    campos.HR_ENT2.value = calculado.HR_ENT2;
+                    campos.HR_SAI2.value = calculado.HR_SAI2;
+                }
+                atualizarResumo();
+            });
+            Object.values(campos).slice(1).forEach(campo => campo?.addEventListener('input', atualizarResumo));
+            if (tipoDiaId) body.querySelector('#' + tipoDiaId)?.addEventListener('change', atualizarResumo);
+            atualizarResumo();
         };
 
         const getTipoDescansoOptions = () => {
@@ -1204,31 +1238,16 @@
                     label: 'Replicar para o Mês',
                     className: 'input-modal-secondary-action px-4 py-2 rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 font-semibold transition'
                 }],
-                onRender: (body) => {
-                    const ent1 = body.querySelector('#' + ids.hrEnt1);
-                    const preencher = () => {
-                        const calculado = calcularHorarioCompletoPorEntrada(ent1?.value);
-                        if (!calculado) return;
-                        body.querySelector('#' + ids.hrSai1).value = calculado.HR_SAI1;
-                        body.querySelector('#' + ids.hrEnt2).value = calculado.HR_ENT2;
-                        body.querySelector('#' + ids.hrSai2).value = calculado.HR_SAI2;
-                    };
-                    ent1?.addEventListener('input', preencher);
-                }
+                onRender: (body) => configurarEditorHorario(body, {
+                    HR_ENT1: ids.hrEnt1, HR_SAI1: ids.hrSai1,
+                    HR_ENT2: ids.hrEnt2, HR_SAI2: ids.hrSai2
+                }, ids.tipoDia),
+                validate: (values) => values[ids.tipoDia] === 'TRABALHO' ? validarTurnoCadastroSecao({
+                    HR_ENT1: values[ids.hrEnt1], HR_SAI1: values[ids.hrSai1],
+                    HR_ENT2: values[ids.hrEnt2], HR_SAI2: values[ids.hrSai2]
+                }) : []
             });
             if (!values) return null;
-            if (values[ids.tipoDia] === 'TRABALHO') {
-                const erros = validarTurnoCadastroSecao({
-                    HR_ENT1: values[ids.hrEnt1],
-                    HR_SAI1: values[ids.hrSai1],
-                    HR_ENT2: values[ids.hrEnt2],
-                    HR_SAI2: values[ids.hrSai2]
-                });
-                if (erros.length) {
-                    showInfoModal(erros, 'error');
-                    return null;
-                }
-            }
             if (values._modalAction === 'replicar-mes') {
                 const confirmacao = await showInputModal({
                     title: 'Replicar alteração para o mês',
@@ -3030,19 +3049,22 @@
                 showInfoModal('O horário do aprendiz é fixo e não pode ser alterado.', 'info');
                 return;
             }
-            if (!hasPermission('escalas', 'editar') && !hasPermission('funcionarios', 'editar')) {
+            if (!hasPermission('escalas', 'editar')) {
                 showInfoModal('Usuario sem permissao para editar horarios do funcionario.', 'error');
                 return;
             }
             const values = await showInputModal({
                 title: 'Editar horários - ' + (funcionario.NOME || funcionario.nome || funcionario.CHAPA || funcionario.chapa || ''),
                 inputs: [
-                    { type: 'message', text: 'Informe o horário padrão do funcionário. A jornada deve fechar exatamente 08:48.' },
                     { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || funcionario.hrEnt1 || '08:00', required: true },
                     { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || funcionario.hrSai1 || '12:00', required: true },
                     { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: funcionario.HR_ENT2 || funcionario.hrEnt2 || '13:10', required: true },
                     { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || funcionario.hrSai2 || '17:58', required: true }
                 ],
+                onRender: (body) => configurarEditorHorario(body, {
+                    HR_ENT1: 'HR_ENT1', HR_SAI1: 'HR_SAI1', HR_ENT2: 'HR_ENT2', HR_SAI2: 'HR_SAI2'
+                }),
+                validate: validarTurnoCadastroSecao,
                 confirmText: 'Salvar'
             });
             if (!values) return;
@@ -3052,17 +3074,12 @@
                 HR_ENT2: values.HR_ENT2,
                 HR_SAI2: values.HR_SAI2
             };
-            const erros = validarTurnoCadastroSecao(horario);
-            if (erros.length) {
-                showInfoModal(erros, 'error');
-                return;
-            }
             const origemEscala = options.origemEscala === true;
             const lojaId = Number(options.lojaId || escalaDetalheAtual.lojaId || subsecoesPageState.loja || funcionario.LOJA || funcionario.loja);
             const hoje = new Date();
-            const mesRef = origemEscala
-                ? (options.mesRef || escalaDetalheAtual.mesRef)
-                : formatDateForDb(hoje.getFullYear(), hoje.getMonth(), 1);
+            const mesRef = options.mesRef || (origemEscala
+                ? escalaDetalheAtual.mesRef
+                : formatDateForDb(hoje.getFullYear(), hoje.getMonth(), 1));
             const escfuncId = Number(funcionario.ESCFUNC_ID || funcionario.escfuncId);
             if (!lojaId || !escfuncId) {
                 showInfoModal('Não foi possível identificar loja ou funcionário para salvar os horários.', 'error');
@@ -3082,6 +3099,8 @@
                 await recarregarSecaoAtualEscalaBanco(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef, escalaDetalheAtual.secaoAtiva, {
                     subsetorAtivo: escalaDetalheAtual.subsetorAtivo
                 });
+            } else if (options.origemFuncionarios) {
+                await carregarFuncionariosTela();
             } else {
                 await recarregarSubsecoesPage();
             }
@@ -3902,7 +3921,7 @@
                 const statusTitle = suspensao ? 'Suspensão operacional a partir de ' + String(suspensao.DT_INICIO || '').slice(0, 10) : '';
                 return '<tr data-escfunc-id="' + escapeHtml(f.ESCFUNC_ID || '') + '">' +
                     '<td data-label="Chapa">' + escapeHtml(f.CHAPA || '') + '</td><td data-label="Nome">' + escapeHtml(f.NOME || '') + '</td><td data-label="Loja">' + escapeHtml(f.LOJA || '') + '</td><td data-label="Seção">' + escapeHtml(f.SECAO_DESCR || f.ESCSECAO_ID || '') + '</td><td data-label="Função">' + escapeHtml(f.FUNCAO_DESCR || f.ESCFUNCAO_ID || '') + '</td><td data-label="Status"><span class="status-chip ' + statusClass + '" title="' + escapeHtml(statusTitle) + '">' + statusLabel + '</span></td><td data-label="Brigadista">' + escapeHtml(f.BRIGADISTA || '') + '</td><td data-label="Entrada 1">' + escapeHtml(f.HR_ENT1 || '') + '</td><td data-label="Saída 1">' + escapeHtml(f.HR_SAI1 || '') + '</td><td data-label="Entrada 2">' + escapeHtml(f.HR_ENT2 || '') + '</td><td data-label="Saída 2">' + escapeHtml(f.HR_SAI2 || '') + '</td>' +
-                    '<td data-label="Ações" class="actions-cell"><button class="action-btn-table banco-action edit-funcionario" data-id="' + escapeHtml(f.ESCFUNC_ID || '') + '" data-loja="' + escapeHtml(f.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button>' + (podeGerirSuspensao && ativo ? '<button class="action-btn-table banco-action ' + (suspensao ? 'close-suspension' : 'suspend-funcionario') + '" data-id="' + escapeHtml(f.ESCFUNC_ID || '') + '"><span class="material-symbols-outlined">' + (suspensao ? 'person_check' : 'person_off') + '</span>' + (suspensao ? 'Encerrar suspensão' : 'Suspender da escala') + '</button>' : '') + '</td></tr>';
+                    '<td data-label="Ações" class="actions-cell"><button class="action-btn-table banco-action edit-funcionario" data-id="' + escapeHtml(f.ESCFUNC_ID || '') + '" data-loja="' + escapeHtml(f.LOJA || '') + '"><span class="material-symbols-outlined">edit</span>Editar</button>' + (hasPermission('escalas', 'editar') && !/APRENDIZ/i.test(String(f.FUNCAO_DESCR || '')) ? '<button class="action-btn-table banco-action edit-horario-funcionario" data-id="' + escapeHtml(f.ESCFUNC_ID || '') + '" title="Editar horários"><span class="material-symbols-outlined">schedule</span>Horários</button>' : '') + (podeGerirSuspensao && ativo ? '<button class="action-btn-table banco-action ' + (suspensao ? 'close-suspension' : 'suspend-funcionario') + '" data-id="' + escapeHtml(f.ESCFUNC_ID || '') + '"><span class="material-symbols-outlined">' + (suspensao ? 'person_check' : 'person_off') + '</span>' + (suspensao ? 'Encerrar suspensão' : 'Suspender da escala') + '</button>' : '') + '</td></tr>';
             }).join('') : '<tr><td colspan="12" class="text-center text-gray-500 py-8">Nenhum funcionário encontrado.</td></tr>';
             if (!hasPermission('funcionarios', 'editar')) {
                 tabelaFuncionariosBody.querySelectorAll('.edit-funcionario').forEach(button => button.remove());
@@ -3937,6 +3956,21 @@
         funcionariosLojaSelect?.addEventListener('change', () => carregarFuncionariosTela().catch(error => showInfoModal(error.message, 'error')));
 
         tabelaFuncionariosBody.addEventListener('click', async (event) => {
+            const horarioButton = event.target.closest('.edit-horario-funcionario');
+            if (horarioButton) {
+                const funcionario = funcionariosTelaCache.find(item => Number(item.ESCFUNC_ID) === Number(horarioButton.dataset.id));
+                if (!funcionario) return showInfoModal('Funcionário não encontrado para edição.', 'error');
+                const hoje = new Date();
+                const mesRef = funcionariosMesFiltro
+                    ? formatDateForDb(hoje.getFullYear(), Number(funcionariosMesFiltro.value), 1)
+                    : formatDateForDb(hoje.getFullYear(), hoje.getMonth(), 1);
+                try {
+                    await abrirModalHorarioFuncionario(funcionario, { origemFuncionarios: true, lojaId: funcionario.LOJA, mesRef });
+                } catch (error) {
+                    showInfoModal(formatApiError(error), 'error');
+                }
+                return;
+            }
             const suspenderButton = event.target.closest('.suspend-funcionario, .close-suspension');
             if (suspenderButton) {
                 if (!['ADMIN', 'RH'].includes(String(usuarioSessaoCache?.perfil || '').toUpperCase())) return;
@@ -3997,19 +4031,11 @@
             if (secoesLojaCache.length === 0 || String(secoesLojaCache[0]?.LOJA || secoesLojaCache[0]?.CODFILIAL || '') !== String(loja)) {
                 await carregarSecoesDaLoja(true, loja);
             }
-            const aprendiz = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''));
-
             const values = await showInputModal({
-                title: `Editar escala - ${funcionario.NOME}`,
+                title: `Editar funcionário - ${funcionario.NOME}`,
                 inputs: [
                     { label: 'Seção', type: 'select', id: 'ESCSECAO_ID', value: String(funcionario.ESCSECAO_ID || ''), options: secoesLojaCache.map(secao => ({ value: String(secao.ESCSECAO_ID || ''), label: (secao.COD_SECAO ? secao.COD_SECAO + ' - ' : '') + (secao.DESCR || '') })), required: true },
-                    { label: 'Brigadista (S/N)', type: 'text', id: 'BRIGADISTA', value: funcionario.BRIGADISTA || '' },
-                    ...(!aprendiz ? [
-                        { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || '' },
-                        { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || '' },
-                        { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: funcionario.HR_ENT2 || '' },
-                        { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || '' }
-                    ] : [])
+                    { label: 'Brigadista (S/N)', type: 'text', id: 'BRIGADISTA', value: funcionario.BRIGADISTA || '' }
                 ],
                 confirmText: 'Salvar'
             });
@@ -4017,22 +4043,6 @@
             if (!values) return;
 
             try {
-                const horario = {
-                    HR_ENT1: values.HR_ENT1 || null,
-                    HR_SAI1: values.HR_SAI1 || null,
-                    HR_ENT2: values.HR_ENT2 || null,
-                    HR_SAI2: values.HR_SAI2 || null
-                };
-                const horarioAlterado = !aprendiz && Object.keys(horario).some(campo => horario[campo] !== (funcionario[campo] || null));
-                if (horarioAlterado) {
-                    const mesRef = funcionariosMesFiltro
-                        ? formatDateForDb(new Date().getFullYear(), Number(funcionariosMesFiltro.value), 1)
-                        : formatDateForDb(new Date().getFullYear(), new Date().getMonth(), 1);
-                    await apiRequest('/api/escalas/funcionario/horario', {
-                        method: 'PATCH',
-                        body: JSON.stringify({ lojaId: Number(loja), escfuncId: Number(funcionario.ESCFUNC_ID), mesRef, ...horario })
-                    });
-                }
                 const payload = {
                     BRIGADISTA: String(values.BRIGADISTA || '').trim().toUpperCase().slice(0, 1),
                     ESCSECAO_ID: Number(values.ESCSECAO_ID)

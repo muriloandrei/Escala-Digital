@@ -232,6 +232,13 @@
       applyConditionalFields();
       if (typeof config.onRender === 'function') config.onRender(inputModalBody);
 
+      const validationMessage = document.createElement('div');
+      validationMessage.className = 'employee-modal-span-4 hidden rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700';
+      validationMessage.setAttribute('role', 'alert');
+      inputModalBody.appendChild(validationMessage);
+      inputModalBody.oninput = () => validationMessage.classList.add('hidden');
+      inputModalBody.onchange = () => validationMessage.classList.add('hidden');
+
       const hideModal = () => {
         inputModal.classList.add('hidden');
         inputModalConfirmBtn.onclick = null;
@@ -269,6 +276,15 @@
         return { values, allValid };
       };
 
+      const validateValues = (values) => {
+        if (typeof config.validate !== 'function') return true;
+        const errors = config.validate(values) || [];
+        if (!errors.length) return true;
+        validationMessage.textContent = errors.join(' ');
+        validationMessage.classList.remove('hidden');
+        return false;
+      };
+
       secondaryActions.forEach((action) => {
         const button = document.createElement('button');
         button.type = 'button';
@@ -281,6 +297,7 @@
             showInfoModal('Por favor, preencha todos os campos obrigatorios.', 'error');
             return;
           }
+          if (!validateValues(values)) return;
           hideModal();
           resolve({ ...values, _modalAction: button.dataset.extraModalAction });
         };
@@ -290,6 +307,7 @@
       inputModalConfirmBtn.onclick = () => {
         const { values, allValid } = collectValues();
         if (allValid) {
+          if (!validateValues(values)) return;
           hideModal();
           resolve(secondaryActions.length ? { ...values, _modalAction: 'confirm' } : values);
         } else {
