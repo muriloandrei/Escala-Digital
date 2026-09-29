@@ -3025,6 +3025,10 @@
 
         async function abrirModalHorarioFuncionario(funcionario, options = {}) {
             if (!funcionario) return;
+            if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || funcionario.funcao || ''))) {
+                showInfoModal('O horário do aprendiz é fixo e não pode ser alterado.', 'info');
+                return;
+            }
             if (!hasPermission('escalas', 'editar') && !hasPermission('funcionarios', 'editar')) {
                 showInfoModal('Usuario sem permissao para editar horarios do funcionario.', 'error');
                 return;
@@ -3054,7 +3058,10 @@
             }
             const origemEscala = options.origemEscala === true;
             const lojaId = Number(options.lojaId || escalaDetalheAtual.lojaId || subsecoesPageState.loja || funcionario.LOJA || funcionario.loja);
-            const mesRef = options.mesRef || escalaDetalheAtual.mesRef || null;
+            const hoje = new Date();
+            const mesRef = origemEscala
+                ? (options.mesRef || escalaDetalheAtual.mesRef)
+                : formatDateForDb(hoje.getFullYear(), hoje.getMonth(), 1);
             const escfuncId = Number(funcionario.ESCFUNC_ID || funcionario.escfuncId);
             if (!lojaId || !escfuncId) {
                 showInfoModal('Não foi possível identificar loja ou funcionário para salvar os horários.', 'error');
@@ -3064,7 +3071,7 @@
                 method: 'PATCH',
                 body: JSON.stringify({
                     lojaId,
-                    mesRef: origemEscala ? mesRef : undefined,
+                    mesRef,
                     escfuncId,
                     ...horario
                 }),
@@ -3958,16 +3965,19 @@
             if (secoesLojaCache.length === 0 || String(secoesLojaCache[0]?.LOJA || secoesLojaCache[0]?.CODFILIAL || '') !== String(loja)) {
                 await carregarSecoesDaLoja(true, loja);
             }
+            const aprendiz = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''));
 
             const values = await showInputModal({
                 title: `Editar escala - ${funcionario.NOME}`,
                 inputs: [
                     { label: 'Seção', type: 'select', id: 'ESCSECAO_ID', value: String(funcionario.ESCSECAO_ID || ''), options: secoesLojaCache.map(secao => ({ value: String(secao.ESCSECAO_ID || ''), label: (secao.COD_SECAO ? secao.COD_SECAO + ' - ' : '') + (secao.DESCR || '') })), required: true },
                     { label: 'Brigadista (S/N)', type: 'text', id: 'BRIGADISTA', value: funcionario.BRIGADISTA || '' },
-                    { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || '' },
-                    { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || '' },
-                    { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: funcionario.HR_ENT2 || '' },
-                    { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || '' }
+                    ...(!aprendiz ? [
+                        { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || '' },
+                        { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || '' },
+                        { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: funcionario.HR_ENT2 || '' },
+                        { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || '' }
+                    ] : [])
                 ],
                 confirmText: 'Salvar'
             });
@@ -3975,13 +3985,25 @@
             if (!values) return;
 
             try {
-                const payload = {
-                    BRIGADISTA: String(values.BRIGADISTA || '').trim().toUpperCase().slice(0, 1),
-                    ESCSECAO_ID: Number(values.ESCSECAO_ID),
+                const horario = {
                     HR_ENT1: values.HR_ENT1 || null,
                     HR_SAI1: values.HR_SAI1 || null,
                     HR_ENT2: values.HR_ENT2 || null,
                     HR_SAI2: values.HR_SAI2 || null
+                };
+                const horarioAlterado = !aprendiz && Object.keys(horario).some(campo => horario[campo] !== (funcionario[campo] || null));
+                if (horarioAlterado) {
+                    const mesRef = funcionariosMesFiltro
+                        ? formatDateForDb(new Date().getFullYear(), Number(funcionariosMesFiltro.value), 1)
+                        : formatDateForDb(new Date().getFullYear(), new Date().getMonth(), 1);
+                    await apiRequest('/api/escalas/funcionario/horario', {
+                        method: 'PATCH',
+                        body: JSON.stringify({ lojaId: Number(loja), escfuncId: Number(funcionario.ESCFUNC_ID), mesRef, ...horario })
+                    });
+                }
+                const payload = {
+                    BRIGADISTA: String(values.BRIGADISTA || '').trim().toUpperCase().slice(0, 1),
+                    ESCSECAO_ID: Number(values.ESCSECAO_ID)
                 };
                 await apiRequest(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios/${encodeURIComponent(funcionario.ESCFUNC_ID)}`, {
                     method: 'PATCH',
@@ -6611,7 +6633,8 @@
                 escfuncId: Number(dia.ESCFUNC_ID),
                 chapa: dia.CHAPA,
                 escsecaoId: dia.ESCSECAO_ID,
-                escfuncaoId: dia.ESCFUNCAO_ID
+                escfuncaoId: dia.ESCFUNCAO_ID,
+                revisaoBase: Number(dia.REVISAO || 0)
             });
             escalaDetalheBancoValidada = false;
             salvarDetalheBancoBtn?.classList.add('hidden');
@@ -8680,8 +8703,9 @@
             const mesAtual = escalaDetalheAtual.mesRef;
             const secaoAtual = escalaDetalheAtual.secaoAtiva;
             const subsetorAtual = escalaDetalheAtual.subsetorAtivo;
+            let gravado = false;
             try {
-                for (const funcionario of escalaDetalheBancoAlterados.values()) {
+                const funcionariosAlterados = [...escalaDetalheBancoAlterados.values()].map(funcionario => {
                     const dias = (escalaDetalheAtual.dias || [])
                         .filter(dia => String(dia.ESCFUNC_ID) === String(funcionario.escfuncId))
                         .map(dia => {
@@ -8697,17 +8721,21 @@
                                 justificativa: dia.JUSTIFICATIVA_ALTERACAO || null
                             };
                         });
-                    await apiRequest('/api/escalas/funcionario/revisao', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            lojaId: Number(escalaDetalheAtual.lojaId),
-                            mesRef: escalaDetalheAtual.mesRef,
-                            funcionarios: [{ ...funcionario, dias }],
-                            oficializada: oficializar ? 1 : 0,
-                            justificativa: dias.find(dia => dia.justificativa)?.justificativa || null
-                        })
-                    });
+                    return { ...funcionario, dias };
+                });
+                const result = await apiRequest('/api/escalas/funcionarios/revisao', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        lojaId: Number(escalaDetalheAtual.lojaId),
+                        mesRef: escalaDetalheAtual.mesRef,
+                        funcionarios: funcionariosAlterados,
+                        oficializada: oficializar ? 1 : 0
+                    })
+                });
+                if (result.saved?.length !== funcionariosAlterados.length) {
+                    throw new Error('O banco nao confirmou todos os funcionarios alterados. Recarregue a escala.');
                 }
+                gravado = true;
                 if (oficializar && hasPermission('escalas', 'oficializar')) {
                     await apiRequest('/api/escalas/oficializar', {
                         method: 'POST',
@@ -8715,15 +8743,18 @@
                         timeoutMs: 120000
                     });
                 }
-                showInfoModal(oficializar ? 'Alterações salvas, oficializadas e enviadas para o RM.' : 'Rascunho salvo em nova revisão.', 'success');
-                escalaDetalheBancoAlterados = new Map();
                 if (oficializar) {
                     window.location.hash = '/escalas-geradas';
                 } else if (lojaAtual && mesAtual) {
                     await recarregarSecaoAtualEscalaBanco(lojaAtual, mesAtual, secaoAtual, { subsetorAtivo: subsetorAtual });
                 }
+                escalaDetalheBancoAlterados = new Map();
+                showInfoModal(oficializar ? 'Alterações salvas, oficializadas e enviadas para o RM.' : 'Rascunho salvo e recarregado do banco.', 'success');
             } catch (error) {
-                showInfoModal(error.details?.length ? error.details : 'Não foi possível salvar a revisão individual: ' + error.message, 'error');
+                const mensagem = gravado
+                    ? 'Alterações gravadas no banco, mas a etapa seguinte falhou. Recarregue a escala antes de editar novamente: ' + error.message
+                    : 'Nenhuma alteração foi gravada. ' + error.message;
+                showInfoModal(error.details?.length && !gravado ? error.details : mensagem, 'error');
             } finally {
                 if (salvarDetalheBancoBtn) salvarDetalheBancoBtn.disabled = false;
                 if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = false;

@@ -18,6 +18,7 @@ const saveSchema = z.object({
   escalaOrigemId: z.number().int().positive().optional(),
   funcionarios: z.array(z.object({
     escfuncId: z.number().int().positive(),
+    revisaoBase: z.number().int().min(0).optional(),
     chapa: z.string().min(1).max(8),
     nome: z.string().max(100).optional(),
     funcao: z.string().max(100).nullable().optional(),
@@ -118,20 +119,6 @@ function validateHorarioFuncionario(data) {
   if (jornadaTotal !== 528) errors.push(`Jornada total deve ser exatamente 08:48. Atual: ${minutesToTime(jornadaTotal)}.`);
   if (intervalo < 70) errors.push(`Intervalo entre as jornadas deve ter no minimo 01:10. Atual: ${minutesToTime(intervalo)}.`);
   return errors;
-}
-
-function formatDateValue(value) {
-  if (value instanceof Date) {
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, '0');
-    const day = String(value.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-  return String(value || '').slice(0, 10);
-}
-
-function isDescansoProgramacao(value) {
-  return String(value || 'TRB').trim().toUpperCase() !== 'TRB';
 }
 
 router.get('/regras', requirePermission('regras', 'visualizar'), async (req, res) => {
@@ -546,6 +533,45 @@ router.post('/validar', requirePermission('escalas', 'editar'), resolveLojaReque
   }
 });
 
+router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = saveSchema.parse(req.body);
+    if (!payload.funcionarios.length || payload.funcionarios.length > 500) {
+      return res.status(400).json({ error: 'Informe de 1 a 500 funcionarios alterados.' });
+    }
+    await assertPayloadDentroDoEscopo(req, payload);
+    const errors = validateEscalaPayload(payload);
+    const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
+    if (errors.length || ausenciaErrors.length) return res.status(422).json({ errors: [...errors, ...ausenciaErrors] });
+
+    const anteriores = await Promise.all(payload.funcionarios.map((funcionario) =>
+      escalaService.getEscalaFuncionarioAtual({
+        lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: funcionario.escfuncId
+      })
+    ));
+    const saved = await escalaService.saveEscalasFuncionariosRevision(payload);
+    await Promise.all(saved.map((item, index) => auditService.registerAudit({
+      action: 'EDITAR_ESCALA_FUNCIONARIO',
+      user: req.user,
+      lojaId: payload.lojaId,
+      mesRef: payload.mesRef,
+      revisao: item.revisao,
+      referenceId: item.escprogId,
+      details: {
+        escfuncId: payload.funcionarios[index].escfuncId,
+        chapa: payload.funcionarios[index].chapa,
+        revisaoAnterior: anteriores[index]?.revisao ?? null,
+        revisaoNova: item.revisao,
+        alteracoes: buildDiaAlteracoes(anteriores[index]?.dias || [], payload.funcionarios[index].dias)
+      }
+    })));
+    return res.status(201).json({ saved });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Formato da escala invalido.', details: error.errors });
+    return next(error);
+  }
+});
+
 router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = saveSchema.parse(req.body);
@@ -612,6 +638,9 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
     const funcionario = funcionarios.find((item) => Number(item.ESCFUNC_ID) === Number(payload.escfuncId));
     if (!funcionario) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja ou secoes permitidas.' });
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [Number(funcionario.ESCSECAO_ID)]);
+    if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) {
+      return res.status(422).json({ error: 'O horario do aprendiz e fixo e nao pode ser alterado.' });
+    }
 
     const horario = {
       HR_ENT1: payload.HR_ENT1,
@@ -619,57 +648,13 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
       HR_ENT2: payload.HR_ENT2,
       HR_SAI2: payload.HR_SAI2
     };
-    const funcionarioAtualizado = await catalogService.updateFuncionarioEscala({
+    const atualizacao = await escalaService.updateHorarioFuncionarioEscala({
       lojaId: payload.lojaId,
-      escfuncId: payload.escfuncId,
-      data: horario
+      mesRef: payload.mesRef,
+      funcionario,
+      horario
     });
-    if (!funcionarioAtualizado) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja.' });
-
-    let saved = null;
-    let diasAlterados = 0;
-    if (payload.mesRef) {
-      const escalaAtual = await escalaService.getEscalaFuncionarioAtual({
-        lojaId: payload.lojaId,
-        mesRef: payload.mesRef,
-        escfuncId: payload.escfuncId
-      });
-      if (escalaAtual?.dias?.length) {
-        const hojeIso = formatDateValue(new Date());
-        const dias = escalaAtual.dias.map((dia) => {
-          const data = formatDateValue(dia.DT || dia.dt);
-          const programacao = String(dia.PROGRAMACAO || dia.programacao || 'TRB').trim().toUpperCase() || 'TRB';
-          const descanso = isDescansoProgramacao(programacao);
-          const editavel = !descanso && data >= hojeIso;
-          if (editavel) diasAlterados += 1;
-          return {
-            data,
-            hrEnt1: descanso ? null : (editavel ? payload.HR_ENT1 : dia.HR_ENT1),
-            hrSai1: descanso ? null : (editavel ? payload.HR_SAI1 : dia.HR_SAI1),
-            hrEnt2: descanso ? null : (editavel ? payload.HR_ENT2 : dia.HR_ENT2),
-            hrSai2: descanso ? null : (editavel ? payload.HR_SAI2 : dia.HR_SAI2),
-            programacao: descanso ? programacao : 'TRB',
-            justificativa: editavel ? 'Atualizacao de horario do funcionario' : null
-          };
-        });
-        if (diasAlterados > 0) {
-          saved = await escalaService.saveEscalaFuncionarioRevision({
-            lojaId: payload.lojaId,
-            mesRef: payload.mesRef,
-            funcionario: {
-              escfuncId: Number(funcionarioAtualizado.ESCFUNC_ID || funcionario.ESCFUNC_ID),
-              chapa: funcionarioAtualizado.CHAPA || funcionario.CHAPA,
-              nome: funcionarioAtualizado.NOME || funcionario.NOME,
-              escsecaoId: funcionarioAtualizado.ESCSECAO_ID || funcionario.ESCSECAO_ID,
-              escfuncaoId: funcionarioAtualizado.ESCFUNCAO_ID || funcionario.ESCFUNCAO_ID,
-              dias
-            },
-            dias,
-            oficializada: 0
-          });
-        }
-      }
-    }
+    const { funcionario: funcionarioAtualizado, saved, diasAlterados } = atualizacao;
 
     await auditService.registerAudit({
       action: 'EDITAR_HORARIO_FUNCIONARIO',

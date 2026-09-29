@@ -559,7 +559,7 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, require
   try {
     const data = funcionarioEscalaSchema.parse(req.body);
     if (['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'].some((field) => data[field] !== undefined)) {
-      assertValidSecaoTurno(data);
+      return res.status(422).json({ error: 'Atualize o horario pela operacao de horario do funcionario para refletir na escala.' });
     }
     const funcionario = await catalogService.updateFuncionarioEscala({
       lojaId: Number(req.params.lojaId),

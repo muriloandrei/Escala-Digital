@@ -34,6 +34,23 @@ test('monthly release builds draft only from today onward', () => {
   assert.equal(rascunho.dias.some((dia) => dia.programacao === 'TRB'), true);
 });
 
+test('monthly release uses the employee schedule before the section shift', () => {
+  const funcionario = {
+    ESCFUNC_ID: 10, CHAPA: '000010', NOME: 'Funcionario Teste',
+    ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '09:00', HR_SAI1: '13:00', HR_ENT2: '14:10', HR_SAI2: '18:58'
+  };
+  const turno = {
+    ESCSECAOTURNO_ID: 40, ESCSECAO_ID: 20,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  };
+  const rascunho = buildFuncionarioRascunho(funcionario, turno, '2026-10-05', '2026-10-05');
+  const trabalho = rascunho.dias.find((dia) => dia.programacao === 'TRB');
+  assert.ok(trabalho);
+  assert.equal(trabalho.hrEnt1, '09:00');
+  assert.equal(trabalho.hrSai2, '18:58');
+});
+
 test('scale upsert after inactive month uses a revision above inactive history', () => {
   assert.equal(_private.escolherRevisaoParaUpsertSemNovaRevisao(null, null), 0);
   assert.equal(_private.escolherRevisaoParaUpsertSemNovaRevisao(2, 4), 2);

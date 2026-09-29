@@ -261,10 +261,10 @@ function getHorarioBaseFuncionario(funcionario, turno) {
     const inicio = timeToMinutes(hrEnt1) ?? 480;
     return { hrEnt1, hrSai1: minutesToTime(inicio + 315), hrEnt2: null, hrSai2: null };
   }
-  const hrEnt1 = normalizeTime(turno?.HR_ENT1 || funcionario.HR_ENT1, '08:00');
-  const hrSai1 = normalizeTime(turno?.HR_SAI1 || funcionario.HR_SAI1, '12:00');
-  const hrEnt2 = normalizeTime(turno?.HR_ENT2 || funcionario.HR_ENT2, '13:10');
-  const hrSai2 = normalizeTime(turno?.HR_SAI2 || funcionario.HR_SAI2, '17:58');
+  const hrEnt1 = normalizeTime(funcionario.HR_ENT1 || turno?.HR_ENT1, '08:00');
+  const hrSai1 = normalizeTime(funcionario.HR_SAI1 || turno?.HR_SAI1, '12:00');
+  const hrEnt2 = normalizeTime(funcionario.HR_ENT2 || turno?.HR_ENT2, '13:10');
+  const hrSai2 = normalizeTime(funcionario.HR_SAI2 || turno?.HR_SAI2, '17:58');
   return { hrEnt1, hrSai1, hrEnt2, hrSai2 };
 }
 
