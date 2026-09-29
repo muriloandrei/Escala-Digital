@@ -123,6 +123,8 @@ Para validar conectividade basica com o RM sem expor credenciais:
 /api/diagnostics/rm
 ```
 
+`/health` confirma somente que o processo HTTP responde; `/ready` confirma uma consulta simples ao Oracle e retorna 503 quando o banco nao esta disponivel.
+
 ## Roteiros do projeto
 
 - [Escopo restante](docs/alteracoes-restantes.md)

@@ -60,8 +60,12 @@ async function listEvents({ lojasPermitidas, secoesPermitidas = null, lojaId = n
     const result = await connection.execute(
       `select e.evento_id, e.operacao_id, e.loja, e.mes_ref, e.escsecao_id,
               e.escfunc_id, e.usuario_id, e.login, e.acao, e.origem,
-              e.situacao, e.revisao_anterior, e.revisao_nova, e.detalhe, e.dt_hr_incl
+              e.situacao, e.revisao_anterior, e.revisao_nova, e.detalhe, e.dt_hr_incl,
+              f.nome as funcionario_nome, f.chapa as funcionario_chapa,
+              s.descr as secao_nome
          from sgn_esc_evento e
+         left join sgn_esc_funcionario f on f.escfunc_id = e.escfunc_id
+         left join sgn_esc_secao s on s.escsecao_id = e.escsecao_id
         where ${filters.join(' and ')}
         order by e.dt_hr_incl desc, e.evento_id desc
         offset :offset rows fetch next :limit rows only`,

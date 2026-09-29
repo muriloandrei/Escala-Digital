@@ -28,7 +28,7 @@ services:
       NODE_ENV: development
       PORT: 3000
       JWT_SECRET: dev-docker-secret-change-me
-      JWT_EXPIRES_IN: 8h
+      SESSION_MAX_AGE_HOURS: 4
       COOKIE_SECURE: "false"
       TRUST_PROXY: "false"
       ORACLE_USER: ESCALA

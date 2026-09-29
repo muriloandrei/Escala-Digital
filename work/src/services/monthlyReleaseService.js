@@ -1250,6 +1250,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
   const expectedSnapshots = escalaService.buildEscalaSnapshots(diasAtuaisSecao);
+  const expectedFixoSnapshots = escalaService.buildFixoSnapshots(fixos);
   const idsComDiasAtuais = new Set(diasAtuaisSecao.map((dia) => Number(pick(dia, 'ESCFUNC_ID', 'escfunc_id'))));
   const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
     ? new Set(escfuncIds.map(Number).filter(Boolean))
@@ -1292,7 +1293,8 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
     criarRevisao: false,
     actor,
     acao: 'GERAR_ESCALA_SECAO',
-    expectedSnapshots
+    expectedSnapshots,
+    expectedFixoSnapshots
   });
 
   return {
@@ -1323,6 +1325,7 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = nul
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
   const expectedSnapshots = escalaService.buildEscalaSnapshots(diasAtuaisSecao);
+  const expectedFixoSnapshots = escalaService.buildFixoSnapshots(fixos);
   const idsComDiasAtuais = new Set(diasAtuaisSecao.map((dia) => Number(pick(dia, 'ESCFUNC_ID', 'escfunc_id'))));
   const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
     ? new Set(escfuncIds.map(Number).filter(Boolean))
@@ -1354,7 +1357,8 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = nul
     criarRevisao: false,
     actor,
     acao: 'RESETAR_ESCALA_SECAO',
-    expectedSnapshots
+    expectedSnapshots,
+    expectedFixoSnapshots
   });
 
   return {

@@ -6,7 +6,7 @@ const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { getEnv } = require('./config/env');
-const { initOraclePool, closeOraclePool } = require('./db/oracle');
+const { initOraclePool, closeOraclePool, withConnection } = require('./db/oracle');
 const { csrfSameOriginGuard } = require('./middleware/csrf');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { requireAuth } = require('./middleware/auth');
@@ -103,7 +103,16 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', database: 'oracle' });
+  res.json({ status: 'ok' });
+});
+
+app.get('/ready', async (req, res) => {
+  try {
+    await withConnection((connection) => connection.execute('select 1 from dual'));
+    res.json({ status: 'ready', database: 'oracle' });
+  } catch (error) {
+    res.status(503).json({ status: 'unavailable', database: 'oracle' });
+  }
 });
 
 app.get('/api/app-version', (req, res) => {

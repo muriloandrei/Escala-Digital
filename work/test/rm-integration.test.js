@@ -107,3 +107,17 @@ test('RM does not repeat uncertain writes but can retry read requests', async ()
     else process.env.RM_API_RETRIES = previousRetries;
   }
 });
+
+test('RM reads only revisions up to the approved revision', async () => {
+  let query;
+  const connection = {
+    async execute(sql, binds) {
+      if (/user_tab_columns/i.test(sql)) return { rows: [{ COLUMN_NAME: 'CPF' }, { COLUMN_NAME: 'ATIVA' }] };
+      query = { sql, binds };
+      return { rows: [] };
+    }
+  };
+  await _private.getEscalaParaRm(connection, { lojaId: 35, mesRef: '2026-10-01', revisao: 12 });
+  assert.match(query.sql, /px\.revisao <= :revisao/);
+  assert.equal(query.binds.revisao, 12);
+});

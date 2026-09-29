@@ -36,7 +36,9 @@
       return eventos.filter((evento) => {
         if (acao?.value && evento.ACAO !== acao.value) return false;
         const info = detalhe(evento);
-        const alvo = [info.chapa, evento.LOGIN, evento.ACAO, evento.ESCFUNC_ID, info.justificativa].join(' ').toLocaleLowerCase('pt-BR');
+        const alvo = [info.chapa, evento.FUNCIONARIO_CHAPA, evento.FUNCIONARIO_NOME,
+          evento.SECAO_NOME, evento.LOGIN, evento.ACAO, evento.ESCFUNC_ID, info.justificativa]
+          .join(' ').toLocaleLowerCase('pt-BR');
         return !termo || alvo.includes(termo);
       });
     }
@@ -60,8 +62,8 @@
             ).join('')}</div></details>`
           : `<div class="alteracoes-detalhe">${texto(JSON.stringify(info))}</div>`;
         return `<article class="alteracoes-item">
-          <div class="alteracoes-item-cabecalho"><strong>${texto(info.chapa || evento.ESCFUNC_ID || 'Escala')}</strong><span>${texto(evento.ACAO)}</span><time>${texto(dataHora(evento.DT_HR_INCL))}</time></div>
-          <div class="alteracoes-item-meta">Loja ${texto(evento.LOJA)} &middot; ${texto(evento.LOGIN || 'Sistema')} &middot; ${texto(evento.SITUACAO)} &middot; revisao ${texto(evento.REVISAO_ANTERIOR ?? '-')} &rarr; ${texto(evento.REVISAO_NOVA ?? '-')} ${link}</div>
+          <div class="alteracoes-item-cabecalho"><strong>${texto([info.chapa || evento.FUNCIONARIO_CHAPA, evento.FUNCIONARIO_NOME].filter(Boolean).join(' | ') || 'Escala')}</strong><span>${texto(evento.ACAO)}</span><time>${texto(dataHora(evento.DT_HR_INCL))}</time></div>
+          <div class="alteracoes-item-meta">Loja ${texto(evento.LOJA)} &middot; ${texto(evento.SECAO_NOME || 'Todas as seções')} &middot; ${texto(evento.LOGIN || 'Sistema')} &middot; ${texto(evento.SITUACAO)} &middot; revisão ${texto(evento.REVISAO_ANTERIOR ?? '-')} &rarr; ${texto(evento.REVISAO_NOVA ?? '-')} ${link}</div>
           ${alteracoesHtml}
         </article>`;
       }).join('') : '<p class="alteracoes-vazio">Nenhuma alteração encontrada para os filtros.</p>';
@@ -125,7 +127,8 @@
       const lines = [['Data', 'Loja', 'Colaborador', 'Ação', 'Origem', 'Situação', 'Usuário', 'Revisão anterior', 'Revisão nova', 'Alterações']
         .map(csvCell).join(';')];
       for (const evento of rows) lines.push([
-        dataHora(evento.DT_HR_INCL), evento.LOJA, detalhe(evento).chapa || evento.ESCFUNC_ID,
+        dataHora(evento.DT_HR_INCL), evento.LOJA,
+        [detalhe(evento).chapa || evento.FUNCIONARIO_CHAPA, evento.FUNCIONARIO_NOME].filter(Boolean).join(' | ') || evento.ESCFUNC_ID,
         evento.ACAO, evento.ORIGEM, evento.SITUACAO, evento.LOGIN,
         evento.REVISAO_ANTERIOR, evento.REVISAO_NOVA, JSON.stringify(detalhe(evento).alteracoes || detalhe(evento))
       ].map(csvCell).join(';'));

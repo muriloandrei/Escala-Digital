@@ -1,7 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { appendEvent, createOperationId } = require('../src/services/escalaEventService');
-const { buildEscalaSnapshots, _private: { assertEscalaSnapshot } } = require('../src/services/escalaService');
+const { buildEscalaSnapshots, buildFixoSnapshots,
+  _private: { assertEscalaSnapshot, assertFixoSnapshot, situacaoDaAlteracao } } = require('../src/services/escalaService');
 
 test('schedule event is part of the caller transaction and keeps complete details', async () => {
   let captured;
@@ -51,4 +52,23 @@ test('generation accepts an unchanged employee snapshot and detects a new compet
   assert.doesNotThrow(() => assertEscalaSnapshot(null, null, { escfuncId: 100 }));
   assert.throws(() => assertEscalaSnapshot(null, { revisao: 0, dias: [] }, { escfuncId: 100 }),
     (error) => error.statusCode === 409);
+});
+
+test('generation rejects a fixed rest changed after its source snapshot', () => {
+  const original = buildFixoSnapshots([{
+    ESCFUNC_ID: 100, DT: new Date(2026, 9, 12), PROGRAMACAO: 'FXF'
+  }])[100];
+  const changed = buildFixoSnapshots([{
+    ESCFUNC_ID: 100, DT: new Date(2026, 9, 13), PROGRAMACAO: 'FXF'
+  }])[100];
+  assert.doesNotThrow(() => assertFixoSnapshot(original, original, { escfuncId: 100 }));
+  assert.throws(() => assertFixoSnapshot(original, changed, { escfuncId: 100 }),
+    (error) => error.statusCode === 409);
+});
+
+test('event situation distinguishes creation, draft and post-officialization edits', () => {
+  assert.equal(situacaoDaAlteracao(null), 'CRIACAO');
+  assert.equal(situacaoDaAlteracao({ header: { OFICIALIZADA: 0 } }), 'RASCUNHO');
+  assert.equal(situacaoDaAlteracao({ header: { OFICIALIZADA: 1 } }), 'POS_OFICIALIZACAO');
+  assert.equal(situacaoDaAlteracao({ header: { OFICIALIZADA: 0 } }, 1), 'OFICIALIZADA');
 });

@@ -396,12 +396,13 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao }) {
          where px.loja = p.loja
            and px.mes_ref = p.mes_ref
            and px.escfunc_id = p.escfunc_id
+           and px.revisao <= :revisao
            ${ativaSubSql}
        )
        ${ativaSql}
        and nvl(d.programacao, 'TRB') <> 'TRB'
      order by p.chapa, d.dt`,
-    { lojaId, mesRef },
+    { lojaId, mesRef, revisao },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
   return result.rows;
@@ -612,6 +613,7 @@ module.exports = {
   validarPreRequisitosRm,
   _private: {
     requestRm,
+    getEscalaParaRm,
     buildDeleteFolgaPath,
     getFuncionarioRmData,
     getFolgaKey,

@@ -539,6 +539,39 @@ function buildEscalaSnapshots(rows = []) {
   return snapshots;
 }
 
+function buildFixoSnapshots(rows = []) {
+  const snapshots = {};
+  for (const row of rows) {
+    const id = Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'));
+    if (!snapshots[id]) snapshots[id] = [];
+    snapshots[id].push({
+      data: formatDateValue(pick(row, 'DT', 'dt')),
+      programacao: pick(row, 'PROGRAMACAO', 'programacao'),
+      hrEnt1: pick(row, 'HR_ENT1', 'hr_ent1'),
+      hrSai1: pick(row, 'HR_SAI1', 'hr_sai1'),
+      hrEnt2: pick(row, 'HR_ENT2', 'hr_ent2'),
+      hrSai2: pick(row, 'HR_SAI2', 'hr_sai2'),
+      justificativa: pick(row, 'JUSTIFICATIVA', 'justificativa') || null
+    });
+  }
+  return snapshots;
+}
+
+function assertFixoSnapshot(esperado, atual, funcionario) {
+  if (JSON.stringify(esperado || []) === JSON.stringify(atual || [])) return;
+  const id = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
+  const error = new Error(`Folgas ou horarios fixos do funcionario ${funcionario.chapa || id} mudaram durante a geracao. Recarregue e tente novamente.`);
+  error.statusCode = 409;
+  throw error;
+}
+
+function situacaoDaAlteracao(atual, oficializadaNova = 0) {
+  if (Number(oficializadaNova) === 1) return 'OFICIALIZADA';
+  if (!atual) return 'CRIACAO';
+  return Number(pick(atual.header, 'OFICIALIZADA', 'oficializada') || 0) === 1
+    ? 'POS_OFICIALIZACAO' : 'RASCUNHO';
+}
+
 async function lockFuncionariosEscala(connection, lojaId, funcionarios) {
   const ids = [...new Set(funcionarios.map((funcionario) => Number(funcionario.escfuncId || funcionario.ESCFUNC_ID)).filter(Boolean))].sort((a, b) => a - b);
   for (let offset = 0; offset < ids.length; offset += 500) {
@@ -913,6 +946,7 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
         error.statusCode = 404;
         throw error;
       }
+      await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
 
       const programacaoInput = String(data.PROGRAMACAO || data.programacao || 'TRB').trim().toUpperCase();
       const programacao = programacaoInput === 'F' || programacaoInput === 'FOLGA' ? 'FXF' : programacaoInput;
@@ -971,9 +1005,10 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
         binds,
         { autoCommit: false }
       );
+      const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
       await escalaEventService.appendEvent(connection, {
         operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, escsecaoId, escfuncId,
-        actor, acao: 'SALVAR_FIXO_ESCALA', origem: 'USUARIO', situacao: 'RASCUNHO',
+        actor, acao: 'SALVAR_FIXO_ESCALA', origem: 'USUARIO', situacao: situacaoDaAlteracao(escalaAntes),
         detalhe: { data: binds.dt, anterior: anterior.rows[0] || null,
           novo: { programacao, hrEnt1: binds.hrEnt1, hrSai1: binds.hrSai1,
             hrEnt2: binds.hrEnt2, hrSai2: binds.hrSai2, justificativa: binds.justificativa, status: 'A' } }
@@ -1003,6 +1038,7 @@ async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, act
         error.statusCode = 404;
         throw error;
       }
+      await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
       const anterior = await connection.execute(
         `select programacao, hr_ent1, hr_sai1, hr_ent2, hr_sai2, justificativa, status
            from sgn_esc_fixo_escala
@@ -1027,9 +1063,10 @@ async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, act
         { autoCommit: false }
       );
       if (result.rowsAffected) {
+        const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
         await escalaEventService.appendEvent(connection, {
           operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, escsecaoId, escfuncId,
-          actor, acao: 'REMOVER_FIXO_ESCALA', origem: 'USUARIO', situacao: 'RASCUNHO',
+          actor, acao: 'REMOVER_FIXO_ESCALA', origem: 'USUARIO', situacao: situacaoDaAlteracao(escalaAntes),
           detalhe: { data: dt, anterior: anterior.rows[0] || null, novo: null }
         });
       }
@@ -1742,8 +1779,16 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
   }
 }
 
-async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada = 0, actor, acao, operacaoId, expectedSnapshots }) {
+async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada = 0, actor, acao, operacaoId, expectedSnapshots, expectedFixoSnapshots }) {
   await lockFuncionariosEscala(connection, lojaId, funcionarios);
+  if (expectedFixoSnapshots) {
+    const escsecaoId = Number(funcionarios[0]?.escsecaoId || funcionarios[0]?.ESCSECAO_ID);
+    const atuais = buildFixoSnapshots(await listFixosEscalaComConnection(connection, { lojaId, mesRef, escsecaoId }));
+    for (const funcionario of funcionarios) {
+      const id = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
+      assertFixoSnapshot(expectedFixoSnapshots[id], atuais[id], funcionario);
+    }
+  }
   const latestActiveRevision = await getLatestRevision(connection, { lojaId, mesRef });
   const latestAnyRevision = latestActiveRevision === null
     ? await getLatestRevision(connection, { lojaId, mesRef, includeInactive: true })
@@ -1801,7 +1846,8 @@ async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcion
       await appendMudancaEscala(connection, {
         lojaId, mesRef, funcionario, anteriores: escalaAtualFuncionario.dias, novos: funcionario.dias || [],
         revisaoAnterior: escalaAtualFuncionario.revisao, revisaoNova: escalaAtualFuncionario.revisao,
-        actor, operacaoId, acao: acao || 'ATUALIZAR_ESCALA', origem: actor ? 'USUARIO' : 'SISTEMA'
+        actor, operacaoId, acao: acao || 'ATUALIZAR_ESCALA', origem: actor ? 'USUARIO' : 'SISTEMA',
+        situacao: situacaoDaAlteracao(escalaAtualFuncionario, oficializada)
       });
       continue;
     }
@@ -1818,14 +1864,15 @@ async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcion
     saved.push(novo);
     await appendMudancaEscala(connection, {
       lojaId, mesRef, funcionario, novos: funcionario.dias || [], revisaoNova: novo.revisao,
-      actor, operacaoId, acao: acao || 'CRIAR_ESCALA', origem: actor ? 'USUARIO' : 'SISTEMA'
+      actor, operacaoId, acao: acao || 'CRIAR_ESCALA', origem: actor ? 'USUARIO' : 'SISTEMA',
+      situacao: situacaoDaAlteracao(null, oficializada)
     });
   }
 
   return saved;
 }
 
-async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0, criarRevisao = true, actor, acao, expectedSnapshots }) {
+async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0, criarRevisao = true, actor, acao, expectedSnapshots, expectedFixoSnapshots }) {
   return withConnection(async (connection) => {
     try {
       assertUniqueFuncionarios(funcionarios);
@@ -1838,7 +1885,7 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
       }
 
       if (!criarRevisao) {
-        const saved = await upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada, actor, acao, operacaoId, expectedSnapshots });
+        const saved = await upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada, actor, acao, operacaoId, expectedSnapshots, expectedFixoSnapshots });
         await connection.commit();
         return saved;
       }
@@ -1883,7 +1930,7 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
           lojaId, mesRef, funcionario, anteriores: escalaAtualFuncionario?.dias || [],
           novos: funcionario.dias || [], revisaoAnterior: escalaAtualFuncionario?.revisao ?? null,
           revisaoNova: novo.revisao, actor, operacaoId, acao: acao || 'SALVAR_ESCALA',
-          origem: actor ? 'USUARIO' : 'SISTEMA', situacao: oficializada ? 'OFICIALIZADA' : 'RASCUNHO'
+          origem: actor ? 'USUARIO' : 'SISTEMA', situacao: situacaoDaAlteracao(escalaAtualFuncionario, oficializada)
         });
       }
 
@@ -1943,7 +1990,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
       lojaId, mesRef, funcionario, anteriores: atual?.dias || [], novos: funcionario.dias || [],
       revisaoAnterior: revisaoAtual, revisaoNova: novo.revisao,
       actor, operacaoId, acao, origem: actor ? 'USUARIO' : 'SISTEMA',
-      situacao: oficializada ? 'OFICIALIZADA' : 'RASCUNHO'
+      situacao: situacaoDaAlteracao(atual, oficializada)
     });
   }
   return saved;
@@ -2134,7 +2181,7 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
         revisaoAnterior: latestFuncionarioRevision, revisaoNova: saved.revisao,
         actor, operacaoId: escalaEventService.createOperationId(),
         acao: 'EDITAR_ESCALA_FUNCIONARIO', origem: actor ? 'USUARIO' : 'SISTEMA',
-        situacao: oficializada ? 'OFICIALIZADA' : 'RASCUNHO'
+        situacao: situacaoDaAlteracao(escalaAtualFuncionario, oficializada)
       });
       await connection.commit();
       return saved;
@@ -2418,6 +2465,7 @@ module.exports = {
   isEscalaSecaoOficializada,
   listDiasSecaoAtual,
   buildEscalaSnapshots,
+  buildFixoSnapshots,
   getEscalaMensal,
   getEscalaHeader,
   getEscalaDias,
@@ -2441,6 +2489,8 @@ module.exports = {
     montarDiasReconciliadosRm,
     assertRevisaoBase,
     assertEscalaSnapshot,
+    assertFixoSnapshot,
+    situacaoDaAlteracao,
     encontrarErrosAusencias
   }
 };
