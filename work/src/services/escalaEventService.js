@@ -37,7 +37,7 @@ async function appendEvent(connection, event) {
   );
 }
 
-async function listEvents({ lojasPermitidas, secoesPermitidas = null, lojaId = null, mesRef = null, escfuncId = null, limit = 100, offset = 0 }) {
+async function listEvents({ lojasPermitidas, secoesPermitidas = null, lojaId = null, mesRef = null, escfuncId = null, escsecaoId = null, limit = 100, offset = 0 }) {
   const lojas = [...new Set((lojasPermitidas || []).map(Number).filter(Boolean))];
   if (!lojas.length || (secoesPermitidas && !secoesPermitidas.length)) return [];
   return withConnection(async (connection) => {
@@ -57,6 +57,7 @@ async function listEvents({ lojasPermitidas, secoesPermitidas = null, lojaId = n
     if (lojaId) { filters.push('e.loja = :lojaId'); binds.lojaId = Number(lojaId); }
     if (mesRef) { filters.push("e.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')"); binds.mesRef = mesRef; }
     if (escfuncId) { filters.push('e.escfunc_id = :escfuncId'); binds.escfuncId = Number(escfuncId); }
+    if (escsecaoId) { filters.push('e.escsecao_id = :escsecaoId'); binds.escsecaoId = Number(escsecaoId); }
     const result = await connection.execute(
       `select e.evento_id, e.operacao_id, e.loja, e.mes_ref, e.escsecao_id,
               e.escfunc_id, e.usuario_id, e.login, e.acao, e.origem,

@@ -3,6 +3,7 @@
     const page = document.getElementById('alteracoes-page');
     const loja = document.getElementById('alteracoesLojaSelect');
     const mes = document.getElementById('alteracoesMesInput');
+    const secao = document.getElementById('alteracoesSecaoSelect');
     const acao = document.getElementById('alteracoesAcaoSelect');
     const situacao = document.getElementById('alteracoesSituacaoSelect');
     const origem = document.getElementById('alteracoesOrigemSelect');
@@ -51,6 +52,18 @@
       POS_OFICIALIZACAO: 'Após oficialização', OFICIALIZADA: 'Oficializada',
       CADASTRO: 'Cadastro'
     };
+
+    async function carregarSecoes() {
+      if (!secao) return;
+      const lojaId = Number(loja?.value || 0);
+      secao.innerHTML = '<option value="">Todas as seções</option>';
+      if (!lojaId) return;
+      const data = await apiRequest(`/api/catalog/lojas/${lojaId}/secoes?includeInactive=1`);
+      if (Number(loja?.value || 0) !== lojaId) return;
+      secao.innerHTML += (data.secoes || []).map((item) =>
+        `<option value="${texto(item.ESCSECAO_ID)}">${texto([item.COD_SECAO, item.DESCR].filter(Boolean).join(' - '))}</option>`
+      ).join('');
+    }
 
     function filtrados(base = eventos) {
       const termo = String(busca?.value || '').trim().toLocaleLowerCase('pt-BR');
@@ -109,6 +122,7 @@
       mais?.classList.add('hidden');
       try {
         const params = new URLSearchParams({ lojaId: String(lojaId), mesRef: `${mes.value}-01`, limit: '100', offset: String(eventos.length) });
+        if (secao?.value) params.set('escsecaoId', secao.value);
         const rmParams = new URLSearchParams({ lojaId: String(lojaId), mesRef: `${mes.value}-01` });
         const [data, enviosRm] = await Promise.all([
           apiRequest(`/api/escalas/eventos?${params}`),
@@ -147,7 +161,7 @@
       const preferida = String(preferredLoja || sourceSelect?.value || '');
       if ([...loja.options].some((option) => option.value === preferida)) loja.value = preferida;
       mes.value = /^\d{4}-\d{2}$/.test(preferredMes || '') ? preferredMes : mes.value || mesAtual();
-      load();
+      carregarSecoes().catch((error) => showInfoModal(error.message, 'error')).finally(() => load());
     }
 
     async function exportCsv() {
@@ -162,6 +176,7 @@
         let offset = 0;
         while (true) {
           const params = new URLSearchParams({ lojaId, mesRef, limit: '500', offset: String(offset) });
+          if (secao?.value) params.set('escsecaoId', secao.value);
           const data = await apiRequest(`/api/escalas/eventos?${params}`);
           const lote = Array.isArray(data.eventos) ? data.eventos : [];
           todos.push(...lote);
@@ -200,8 +215,11 @@
       }
     }
 
-    loja?.addEventListener('change', () => load());
+    loja?.addEventListener('change', () => {
+      carregarSecoes().catch((error) => showInfoModal(error.message, 'error')).finally(() => load());
+    });
     mes?.addEventListener('change', () => load());
+    secao?.addEventListener('change', () => load());
     acao?.addEventListener('change', render);
     situacao?.addEventListener('change', render);
     origem?.addEventListener('change', render);

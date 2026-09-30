@@ -337,7 +337,10 @@ router.get('/lojas/:lojaId/funcionarios', resolveLojaParam, requireLojaAccess, a
 router.get('/lojas/:lojaId/secoes', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {
     const secoesPermitidas = await getSecoesPermitidas(req, Number(req.params.lojaId));
-    const secoes = await catalogService.listSecoesByLoja(Number(req.params.lojaId), { secoesPermitidas });
+    const secoes = await catalogService.listSecoesByLoja(Number(req.params.lojaId), {
+      secoesPermitidas,
+      includeInactive: req.query.includeInactive === '1'
+    });
     res.json({ secoes });
   } catch (error) {
     next(error);

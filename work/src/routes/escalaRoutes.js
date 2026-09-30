@@ -334,6 +334,7 @@ router.get('/eventos', requirePermission('escalas', 'visualizar'), resolveLojaRe
       lojaId: z.coerce.number().int().positive(),
       mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       escfuncId: z.coerce.number().int().positive().optional(),
+      escsecaoId: z.coerce.number().int().positive().optional(),
       limit: z.coerce.number().int().min(1).max(500).optional(),
       offset: z.coerce.number().int().min(0).optional()
     }).parse(req.query);

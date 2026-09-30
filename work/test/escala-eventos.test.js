@@ -1,5 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 const { appendEvent, createOperationId } = require('../src/services/escalaEventService');
 const { buildEscalaSnapshots, buildFixoSnapshots,
   _private: { assertEscalaSnapshot, assertFixoSnapshot, situacaoDaAlteracao } } = require('../src/services/escalaService');
@@ -32,6 +35,33 @@ test('schedule event insert failure reaches the caller for rollback', async () =
     appendEvent(connection, { operacaoId: createOperationId(), lojaId: 35, mesRef: '2026-10-01', acao: 'TESTE' }),
     /audit unavailable/
   );
+});
+
+test('consulta de eventos restringe a secao solicitada e as permissoes do usuario', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/escalaEventService.js'), 'utf8');
+  let captured;
+  const module = { exports: {} };
+  vm.runInNewContext(source, {
+    module,
+    require(name) {
+      if (name === 'node:crypto') return { randomUUID: () => 'op' };
+      if (name === '../db/oracle') return {
+        oracledb: { OUT_FORMAT_OBJECT: 1, STRING: 2 },
+        withConnection: async (work) => work({
+          async execute(sql, binds) { captured = { sql, binds }; return { rows: [] }; }
+        })
+      };
+      throw new Error(`Dependencia inesperada: ${name}`);
+    }
+  });
+  await module.exports.listEvents({
+    lojasPermitidas: [35], secoesPermitidas: [2003], lojaId: 35,
+    mesRef: '2026-10-01', escsecaoId: 2003
+  });
+  assert.match(captured.sql, /e\.escsecao_id in \(:secao0\)/);
+  assert.match(captured.sql, /e\.escsecao_id = :escsecaoId/);
+  assert.equal(captured.binds.secao0, 2003);
+  assert.equal(captured.binds.escsecaoId, 2003);
 });
 
 test('generation detects a concurrent day edit even without a revision change', () => {
