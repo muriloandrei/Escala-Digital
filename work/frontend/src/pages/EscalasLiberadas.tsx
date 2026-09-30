@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, RefreshCw, Search } from 'lucide-react';
+import { ArrowUpRight, Plus, RefreshCw, Search, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getJson, type Loja, type ResumoEscala, type User } from '../api';
+import { canCreate, getJson, postJson, type Loja, type ResumoEscala, type User } from '../api';
 
 const months = [
   'Janeiro',
@@ -44,6 +44,16 @@ export function EscalasLiberadas({ user }: { user: User }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
+  const [releaseOpen, setReleaseOpen] = useState(false);
+  const [releaseStore, setReleaseStore] = useState('');
+  const [releaseMonth, setReleaseMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [inactiveTarget, setInactiveTarget] = useState<ResumoEscala | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -88,6 +98,49 @@ export function EscalasLiberadas({ user }: { user: User }) {
     [escalas, loja, mes, ano, status, busca],
   );
 
+  async function releaseSchedule(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!releaseStore || !/^\d{4}-\d{2}$/.test(releaseMonth) || busy) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      const response = await postJson<{ resultados: { criada?: boolean; erro?: string; motivo?: string }[] }>('/api/escalas/liberar-mensal', {
+        mesRef: `${releaseMonth}-01`, lojas: [Number(releaseStore)],
+      });
+      if (!response.resultados?.[0]?.criada) {
+        throw new Error(response.resultados?.[0]?.erro || response.resultados?.[0]?.motivo || 'A escala não foi liberada. Verifique o período e a loja.');
+      }
+      setReleaseOpen(false);
+      setMessage(`Liberação solicitada para a Loja ${releaseStore} · ${releaseMonth}. ${response.resultados?.length || 0} resultado(s).`);
+      setLoja(releaseStore);
+      setAno(releaseMonth.slice(0, 4));
+      setMes(releaseMonth.slice(5, 7));
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'Não foi possível liberar a escala.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function inactivateSchedule() {
+    if (!inactiveTarget || busy) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      await postJson('/api/escalas/inativar', {
+        lojaId: Number(inactiveTarget.LOJA), mesRef: dateKey(inactiveTarget.MES_REF),
+      });
+      setMessage(`Escala da Loja ${inactiveTarget.LOJA} de ${monthLabel(dateKey(inactiveTarget.MES_REF))} inativada.`);
+      setInactiveTarget(null);
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'Não foi possível inativar a escala.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="content">
       <div className="page-heading">
@@ -95,10 +148,18 @@ export function EscalasLiberadas({ user }: { user: User }) {
           <h1>Escalas liberadas</h1>
           <p>Consulte as escalas disponiveis para o seu perfil.</p>
         </div>
-        <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}>
-          <RefreshCw size={16} /> Atualizar
-        </button>
+        <div className="heading-actions">
+          <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}>
+            <RefreshCw size={16} /> Atualizar
+          </button>
+          {canCreate(user, 'escalas') && user.perfil !== 'LIDER' && <button className="button primary" type="button" onClick={() => {
+            setReleaseStore(String(user.lojaPrincipal || lojas[0]?.LOJA || ''));
+            setActionError('');
+            setReleaseOpen(true);
+          }}><Plus size={16} /> Liberar escala</button>}
+        </div>
       </div>
+      {message && <div className="notice success" role="status">{message}</div>}
       <section className="list-surface" aria-label="Escalas liberadas">
         <div className="filters">
           <label className="search-field">
@@ -216,6 +277,10 @@ export function EscalasLiberadas({ user }: { user: User }) {
                         >
                           <ArrowUpRight size={17} /> Abrir
                         </Link>
+                        {user.perfil === 'ADMIN' && <button className="icon-action" type="button" title={`Inativar escala da Loja ${item.LOJA} em ${monthLabel(key)}`} aria-label={`Inativar escala da Loja ${item.LOJA} em ${monthLabel(key)}`} onClick={() => {
+                          setActionError('');
+                          setInactiveTarget(item);
+                        }}><Archive size={16} /></button>}
                       </td>
                     </tr>
                   );
@@ -228,6 +293,27 @@ export function EscalasLiberadas({ user }: { user: User }) {
       <p className="access-note">
         Conectado como {user.perfil}. Os dados exibidos seguem as permissoes da sua sessao.
       </p>
+      {releaseOpen && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
+        if (event.key === 'Escape' && !busy) setReleaseOpen(false);
+      }}><form className="confirm-dialog release-form" role="dialog" aria-modal="true" aria-labelledby="release-title" onSubmit={releaseSchedule}>
+        <h2 id="release-title">Liberar escala mensal</h2>
+        <p>Funcionários ativos, férias, afastamentos e fixos serão carregados para a loja e período selecionados.</p>
+        <label>Loja<select required value={releaseStore} onChange={(event) => setReleaseStore(event.target.value)}>
+          <option value="">Selecione uma loja</option>
+          {lojas.map((item) => <option key={item.LOJA} value={item.LOJA}>Loja {item.LOJA}{item.NOME ? ` · ${item.NOME}` : ''}</option>)}
+        </select></label>
+        <label>Mês<input required type="month" value={releaseMonth} onChange={(event) => setReleaseMonth(event.target.value)} /></label>
+        {actionError && <div className="notice error" role="alert">{actionError}</div>}
+        <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setReleaseOpen(false)}>Cancelar</button><button className="button primary" type="submit" disabled={busy || !releaseStore}>{busy ? 'Liberando...' : 'Confirmar liberação'}</button></div>
+      </form></div>}
+      {inactiveTarget && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
+        if (event.key === 'Escape' && !busy) setInactiveTarget(null);
+      }}><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="inactive-title">
+        <h2 id="inactive-title">Inativar escala?</h2>
+        <p>Loja {inactiveTarget.LOJA} · {monthLabel(dateKey(inactiveTarget.MES_REF))}. Esta ação retira a escala ativa da listagem; o histórico permanece no banco.</p>
+        {actionError && <div className="notice error" role="alert">{actionError}</div>}
+        <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setInactiveTarget(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={inactivateSchedule}>{busy ? 'Inativando...' : 'Confirmar inativação'}</button></div>
+      </div></div>}
     </main>
   );
 }

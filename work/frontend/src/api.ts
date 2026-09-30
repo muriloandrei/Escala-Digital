@@ -5,7 +5,7 @@ export type User = {
   perfil: string;
   lojaPrincipal?: number;
   lojas?: number[];
-  permissoes?: { PAGINA: string; PODE_VISUALIZAR: number; PODE_EDITAR?: number }[];
+  permissoes?: { PAGINA: string; PODE_VISUALIZAR: number; PODE_EDITAR?: number; PODE_CRIAR?: number }[];
 };
 
 export function canView(user: User, page: string) {
@@ -20,6 +20,11 @@ export function canEdit(user: User, page: string) {
     user.perfil === 'ADMIN' ||
     user.permissoes?.some((item) => item.PAGINA === page && Number(item.PODE_EDITAR) === 1) === true
   );
+}
+
+export function canCreate(user: User, page: string) {
+  return user.perfil === 'ADMIN' ||
+    user.permissoes?.some((item) => item.PAGINA === page && Number(item.PODE_CRIAR) === 1) === true;
 }
 
 export function preferredStore(user: User, lojas: Loja[]) {
@@ -98,6 +103,18 @@ export type DiaEscala = Funcionario & {
   OFICIALIZADA?: number;
 };
 
+export type FixoEscala = {
+  ESCFUNC_ID: number;
+  ESCSECAO_ID: number;
+  DT: string;
+  PROGRAMACAO: string;
+  HR_ENT1?: string | null;
+  HR_SAI1?: string | null;
+  HR_ENT2?: string | null;
+  HR_SAI2?: string | null;
+  JUSTIFICATIVA?: string | null;
+};
+
 export type EscalaMensal = {
   revisao: number | null;
   status: string | null;
@@ -105,6 +122,7 @@ export type EscalaMensal = {
   funcionarios: Funcionario[];
   secoes: Secao[];
   dias: DiaEscala[];
+  fixos?: FixoEscala[];
 };
 
 export type PeriodoOperacional = { inicio: string; fim: string };

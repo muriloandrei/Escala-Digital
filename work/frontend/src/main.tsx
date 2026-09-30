@@ -10,6 +10,7 @@ import {
   Users,
   LayoutGrid,
   History,
+  ClipboardList,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { canView, getJson, type User } from './api';
@@ -21,6 +22,7 @@ import { Secoes } from './pages/Secoes';
 import { Subsecoes } from './pages/Subsecoes';
 import { Alteracoes } from './pages/Alteracoes';
 import { Treinamento } from './pages/Treinamento';
+import { EscalasFuncionarios } from './pages/EscalasFuncionarios';
 import './styles.css';
 import './responsive.css';
 import './schedule.css';
@@ -83,6 +85,11 @@ function App() {
             </NavLink>
           )}
           {canSeeEscalas && (
+            <NavLink to="/escalas-funcionarios">
+              <ClipboardList size={18} /> Por funcionário
+            </NavLink>
+          )}
+          {canSeeEscalas && (
             <NavLink to="/alteracoes">
               <History size={18} /> Alterações
             </NavLink>
@@ -123,6 +130,7 @@ function App() {
         <Routes>
           {canSeeEscalas && <Route path="/escalas-liberadas" element={<EscalasLiberadas user={user} />} />}
           {canSeeEscalas && <Route path="/escalas/:lojaId/:mesRef" element={<EscalaMensal user={user} />} />}
+          {canSeeEscalas && <Route path="/escalas-funcionarios" element={<EscalasFuncionarios user={user} />} />}
           {canSeeEscalas && (
             <Route path="/escalas/:lojaId/:mesRef/imprimir" element={<ImprimirEscala user={user} />} />
           )}

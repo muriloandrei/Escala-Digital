@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  ArrowRightLeft,
   Users,
   X,
 } from 'lucide-react';
@@ -16,6 +17,7 @@ import {
   canEdit,
   deleteJson,
   getJson,
+  patchJson,
   postJson,
   putJson,
   type Funcionario,
@@ -23,6 +25,7 @@ import {
   type Subsecao,
   type User,
 } from '../api';
+import { TransferirSubsecao } from './TransferirSubsecao';
 
 export function Subsecoes({ user }: { user: User }) {
   const { lojaId, secaoId } = useParams();
@@ -41,7 +44,14 @@ export function Subsecoes({ user }: { user: User }) {
   const [actionError, setActionError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Subsecao | null>(null);
-  const selected = params.get('subsecao') || 'sem';
+  const [transferTarget, setTransferTarget] = useState<Funcionario | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkSearch, setLinkSearch] = useState('');
+  const [unlinkTarget, setUnlinkTarget] = useState<Funcionario | null>(null);
+  const requestedSub = params.get('subsecao');
+  const selected = requestedSub === 'sem' || subsecoes.some((item) => String(item.ESCSUBSECAO_ID) === requestedSub)
+    ? requestedSub || 'sem'
+    : 'sem';
 
   useEffect(() => {
     if (!lojaId || !secaoId) return;
@@ -95,6 +105,12 @@ export function Subsecoes({ user }: { user: User }) {
       !item.ESCSUBSECAO_ID ||
       !subsecoes.some((sub) => Number(sub.ESCSUBSECAO_ID) === Number(item.ESCSUBSECAO_ID)),
   ).length;
+  const linkCandidates = sectionPeople.filter((item) =>
+    !/APRENDIZ/i.test(item.FUNCAO_DESCR || '') &&
+    String(item.ESCSUBSECAO_ID) !== selected &&
+    `${item.CHAPA} ${item.NOME} ${item.FUNCAO_DESCR || ''}`.toLocaleLowerCase('pt-BR')
+      .includes(linkSearch.toLocaleLowerCase('pt-BR').trim()),
+  );
 
   const base = `/api/catalog/lojas/${encodeURIComponent(lojaId || '')}/secoes/${encodeURIComponent(secaoId || '')}/subsecoes`;
 
@@ -155,6 +171,24 @@ export function Subsecoes({ user }: { user: User }) {
       setReload((value) => value + 1);
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : 'Não foi possível excluir a subseção.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmUnlink() {
+    if (!unlinkTarget || !lojaId) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      await patchJson(`/api/catalog/lojas/${encodeURIComponent(lojaId)}/funcionarios/${unlinkTarget.ESCFUNC_ID}/subsecao`, {
+        ESCSECAO_ID: Number(secaoId), ESCSUBSECAO_ID: null, VIGENCIA: 'IMEDIATO',
+      });
+      setUnlinkTarget(null);
+      setActionMessage('Funcionário movido para Sem subseção. Escalas já gravadas não foram alteradas.');
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'Não foi possível desvincular o funcionário.');
     } finally {
       setBusy(false);
     }
@@ -384,6 +418,7 @@ export function Subsecoes({ user }: { user: User }) {
                   placeholder="Buscar funcionário"
                 />
               </label>
+              {canManage && selectedSub?.STATUS === 'A' && <button className="button primary" type="button" onClick={() => { setLinkSearch(''); setLinkOpen(true); }}><Plus size={15} /> Vincular funcionário</button>}
             </div>
             {!visiblePeople.length ? (
               <div className="empty-state">Nenhum funcionário encontrado nesta subseção.</div>
@@ -396,6 +431,7 @@ export function Subsecoes({ user }: { user: User }) {
                       <th>Matrícula</th>
                       <th>Cargo</th>
                       <th>Horário-base</th>
+                      {canManage && <th><span className="sr-only">Ações</span></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -411,6 +447,14 @@ export function Subsecoes({ user }: { user: User }) {
                             ? `${item.HR_ENT1}–${item.HR_SAI2}`
                             : item.HR_ENT1 || '–'}
                         </td>
+                        {canManage && <td>
+                          {!/APRENDIZ/i.test(item.FUNCAO_DESCR || '') && (
+                            <button type="button" className="icon-action" title={`Transferir ${item.NOME}`} aria-label={`Transferir ${item.NOME}`} onClick={() => setTransferTarget(item)}>
+                              <ArrowRightLeft size={16} />
+                            </button>
+                          )}
+                          {selected !== 'sem' && <button type="button" className="icon-action" title={`Remover ${item.NOME} da subseção`} aria-label={`Remover ${item.NOME} da subseção`} onClick={() => setUnlinkTarget(item)}><X size={16} /></button>}
+                        </td>}
                       </tr>
                     ))}
                   </tbody>
@@ -456,6 +500,36 @@ export function Subsecoes({ user }: { user: User }) {
           </div>
         </div>
       )}
+      {transferTarget && lojaId && (
+        <TransferirSubsecao
+          lojaId={lojaId}
+          employee={transferTarget}
+          subsecoes={subsecoes}
+          initialDestination={selected !== 'sem' ? selected : undefined}
+          onClose={() => setTransferTarget(null)}
+          onTransferred={({ destination, warning }) => {
+            setTransferTarget(null);
+            setParams({ subsecao: destination });
+            setActionMessage(warning || 'Funcionário transferido de subseção.');
+            setReload((value) => value + 1);
+          }}
+        />
+      )}
+      {linkOpen && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
+        if (event.key === 'Escape') setLinkOpen(false);
+      }}><div className="confirm-dialog link-dialog" role="dialog" aria-modal="true" aria-labelledby="link-title">
+        <h2 id="link-title">Vincular funcionário · {selectedSub?.DESCR}</h2>
+        <label className="search-field"><Search size={16} /><span className="sr-only">Buscar funcionário</span><input autoFocus value={linkSearch} onChange={(event) => setLinkSearch(event.target.value)} placeholder="Nome ou matrícula" /></label>
+        <div className="link-candidates">{linkCandidates.length ? linkCandidates.map((item) => <button type="button" key={item.ESCFUNC_ID} onClick={() => { setLinkOpen(false); setTransferTarget(item); }}><strong>{item.CHAPA} · {item.NOME}</strong><small>{item.SUBSECAO_DESCR || 'Sem subseção'}</small></button>) : <p>Nenhum funcionário encontrado.</p>}</div>
+        <div className="confirm-actions"><button className="button secondary" type="button" onClick={() => setLinkOpen(false)}>Cancelar</button></div>
+      </div></div>}
+      {unlinkTarget && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
+        if (event.key === 'Escape' && !busy) setUnlinkTarget(null);
+      }}><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="unlink-title">
+        <h2 id="unlink-title">Remover {unlinkTarget.NOME} da subseção?</h2><p>O funcionário ficará em Sem subseção. Os dias de escala já gravados serão preservados.</p>
+        {actionError && <div className="notice error" role="alert">{actionError}</div>}
+        <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setUnlinkTarget(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={confirmUnlink}>{busy ? 'Removendo...' : 'Confirmar remoção'}</button></div>
+      </div></div>}
     </main>
   );
 }

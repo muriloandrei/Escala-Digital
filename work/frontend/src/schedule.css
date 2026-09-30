@@ -253,6 +253,59 @@
   white-space: nowrap;
   font-size: 10px;
 }
+.monthly-grid tbody .employee-col {
+  padding-right: 32px;
+}
+.monthly-grid .person-menu-trigger {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 27px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #536b84;
+}
+.monthly-grid .person-menu-trigger:hover,
+.monthly-grid .person-menu-trigger:focus-visible {
+  background: #e5edf8;
+  color: #1749a2;
+}
+.person-menu-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+.person-menu-popover {
+  position: fixed;
+  width: 210px;
+  padding: 5px;
+  border: 1px solid #d5e0ed;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(15 32 54 / 18%);
+}
+.person-menu-popover button,
+.person-menu-popover a {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 3px;
+  padding: 9px;
+  background: transparent;
+  color: #17283e;
+  text-align: left;
+  font-size: 12px;
+}
+.person-menu-popover button:hover,
+.person-menu-popover a:hover {
+  background: #eaf1fb;
+}
 .monthly-grid .week-start {
   border-left: 2px solid #3676bd;
 }

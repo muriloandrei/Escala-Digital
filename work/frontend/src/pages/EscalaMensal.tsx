@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, Pencil, Play, Printer, RefreshCw, RotateCcw, Search } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, MoreVertical, Pencil, Play, Printer, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   canEdit,
@@ -14,9 +15,16 @@ import {
   type User,
 } from '../api';
 import { EditarDiaEscala } from './EditarDiaEscala';
+import { TransferirSubsecao } from './TransferirSubsecao';
+import { EditarFixoEscala } from './EditarFixoEscala';
 
 function iso(value: string | null | undefined) {
   return String(value || '').slice(0, 10);
+}
+
+function localToday() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 function formatDate(value: string) {
@@ -88,7 +96,10 @@ export function EscalaMensal({ user }: { user: User }) {
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
   const [search, setSearch] = useState('');
-  const [pendingAction, setPendingAction] = useState<'gerar' | 'resetar' | null>(null);
+  const [pendingAction, setPendingAction] = useState<'gerar' | 'resetar' | 'oficializar' | null>(null);
+  const [individualTarget, setIndividualTarget] = useState<Funcionario | null>(null);
+  const [transferTarget, setTransferTarget] = useState<Funcionario | null>(null);
+  const [personMenu, setPersonMenu] = useState<{ employee: Funcionario; left: number; top: number } | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [actionError, setActionError] = useState('');
@@ -98,6 +109,7 @@ export function EscalaMensal({ user }: { user: User }) {
     day?: DiaEscala;
   } | null>(null);
   const [editingCell, setEditingCell] = useState<{ employee: Funcionario; day: DiaEscala } | null>(null);
+  const [fixedCell, setFixedCell] = useState<{ employee: Funcionario; date: string } | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const gridPosition = useRef({ left: 0, top: 0 });
 
@@ -159,11 +171,15 @@ export function EscalaMensal({ user }: { user: User }) {
     return subsectionIds.has(id) ? id : 'sem';
   };
   const subsection = params.get('subsecao') || 'all';
+  const personFilter = params.get('funcionario');
   const scopePeople = employees.filter((item) => {
-    return subsection === 'all' || personSubKey(item) === subsection;
+    return (subsection === 'all' || personSubKey(item) === subsection) &&
+      (!personFilter || String(item.ESCFUNC_ID) === personFilter);
   });
   const scopeName =
-    subsection === 'all'
+    personFilter
+      ? employees.find((item) => String(item.ESCFUNC_ID) === personFilter)?.NOME || 'Funcionário'
+      : subsection === 'all'
       ? section?.DESCR || 'Seção'
       : subsection === 'sem'
         ? 'Sem subseção'
@@ -187,6 +203,7 @@ export function EscalaMensal({ user }: { user: User }) {
           const subKey = personSubKey(item);
           return (
             (subsection === 'all' || subKey === subsection) &&
+            (!personFilter || String(item.ESCFUNC_ID) === personFilter) &&
             `${item.CHAPA} ${item.NOME} ${item.FUNCAO_DESCR || ''}`
               .toLocaleLowerCase('pt-BR')
               .includes(search.toLocaleLowerCase('pt-BR').trim())
@@ -204,7 +221,7 @@ export function EscalaMensal({ user }: { user: User }) {
           };
           return firstShift(a).localeCompare(firstShift(b)) || a.NOME.localeCompare(b.NOME, 'pt-BR');
         }),
-    [employees, subsection, search, daysByEmployee, dates, selectedDate, view, subsectionIds],
+    [employees, subsection, personFilter, search, daysByEmployee, dates, selectedDate, view, subsectionIds],
   );
 
   useLayoutEffect(() => {
@@ -220,6 +237,7 @@ export function EscalaMensal({ user }: { user: User }) {
     if (value === 'all' || !value) next.delete(key);
     else next.set(key, value);
     if (resetSubsection) next.delete('subsecao');
+    if (key === 'secao' || key === 'subsecao') next.delete('funcionario');
     setParams(next);
     setSelectedCell(null);
     setActionMessage('');
@@ -236,18 +254,25 @@ export function EscalaMensal({ user }: { user: User }) {
         lojaId: Number(lojaId),
         mesRef,
         escsecaoId: Number(sectionId),
-        ...(subsection !== 'all'
+        ...(subsection !== 'all' || personFilter
           ? { escfuncIds: scopePeople.map((person) => Number(person.ESCFUNC_ID)) }
           : {}),
       };
-      const response = await postJson<{
-        resultado: { criada?: boolean; resetada?: boolean; funcionarios?: number; criticas?: unknown[] };
-      }>(`/api/escalas/${action === 'gerar' ? 'gerar-secao' : 'resetar-secao'}`, payload);
-      const count = response.resultado?.funcionarios;
-      const critiques = response.resultado?.criticas?.length || 0;
-      setActionMessage(
-        `${action === 'gerar' ? 'Escala gerada' : 'Escala resetada'} para ${scopeName}${count ? ` · ${count} funcionário(s)` : ''}${critiques ? ` · ${critiques} crítica(s) a revisar` : ''}.`,
-      );
+      if (action === 'oficializar') {
+        const response = await postJson<{ affectedRows: number; rm?: { status?: string } }>(
+          '/api/escalas/oficializar', payload,
+        );
+        setActionMessage(`${scopeName} oficializada · ${response.affectedRows} dia(s). Envio RM: ${response.rm?.status || 'a verificar'}.`);
+      } else {
+        const response = await postJson<{
+          resultado: { criada?: boolean; resetada?: boolean; funcionarios?: number; criticas?: unknown[] };
+        }>(`/api/escalas/${action === 'gerar' ? 'gerar-secao' : 'resetar-secao'}`, payload);
+        const count = response.resultado?.funcionarios;
+        const critiques = response.resultado?.criticas?.length || 0;
+        setActionMessage(
+          `${action === 'gerar' ? 'Escala gerada' : 'Escala resetada'} para ${scopeName}${count ? ` · ${count} funcionário(s)` : ''}${critiques ? ` · ${critiques} crítica(s) a revisar` : ''}.`,
+        );
+      }
       setPendingAction(null);
       setReload((value) => value + 1);
     } catch (reason) {
@@ -257,12 +282,46 @@ export function EscalaMensal({ user }: { user: User }) {
     }
   }
 
+  async function generateIndividual() {
+    if (!individualTarget || !lojaId || !mesRef) return;
+    setActionBusy(true);
+    setActionError('');
+    try {
+      const response = await postJson<{ resultado: { criticas?: unknown[] } }>(
+        '/api/escalas/gerar-secao', {
+          lojaId: Number(lojaId), mesRef,
+          escsecaoId: Number(individualTarget.ESCSECAO_ID),
+          escfuncIds: [Number(individualTarget.ESCFUNC_ID)],
+        },
+      );
+      setActionMessage(`Escala de ${individualTarget.NOME} gerada${response.resultado?.criticas?.length ? ` · ${response.resultado.criticas.length} crítica(s) a revisar` : ''}.`);
+      setIndividualTarget(null);
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'Não foi possível gerar a escala individual.');
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  function openPersonMenu(event: React.MouseEvent<HTMLButtonElement>, employee: Funcionario) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setPersonMenu({
+      employee,
+      left: Math.max(8, Math.min(rect.right - 8, window.innerWidth - 225)),
+      top: rect.bottom + 154 > window.innerHeight ? Math.max(8, rect.top - 154) : rect.bottom + 4,
+    });
+  }
+
   const monthlyTitle = mesRef
     ? new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
         new Date(`${mesRef}T00:00:00Z`),
       )
     : '';
   const editUrl = `/app#/escala-banco-mensal/${encodeURIComponent(lojaId || '')}/${encodeURIComponent(mesRef || '')}`;
+  const scopeIds = new Set(scopePeople.map((person) => Number(person.ESCFUNC_ID)));
+  const scopedDays = (escala?.dias || []).filter((day) => scopeIds.has(Number(day.ESCFUNC_ID)));
+  const scopeOfficial = scopedDays.length > 0 && scopedDays.every((day) => Number(day.OFICIALIZADA) === 1);
 
   return (
     <main className="content schedule-page">
@@ -381,6 +440,11 @@ export function EscalaMensal({ user }: { user: User }) {
                   <strong>{sectionLabel(section!)}</strong>
                   <span>{visibleEmployees.length} funcionário(s) nesta visão</span>
                 </div>
+                {personFilter && <button className="button secondary" type="button" onClick={() => {
+                  const next = new URLSearchParams(params);
+                  next.delete('funcionario');
+                  setParams(next);
+                }}>Mostrar toda a seção</button>}
                 <label className="search-field">
                   <Search size={16} />
                   <span className="sr-only">Buscar funcionário</span>
@@ -447,6 +511,13 @@ export function EscalaMensal({ user }: { user: User }) {
                   >
                     <Play size={15} /> Gerar escala
                   </button>
+                  {user.perfil === 'ADMIN' && !scopeOfficial && scopedDays.length > 0 && (
+                    <button className="button secondary" type="button" disabled={loading} onClick={() => {
+                      setActionError('');
+                      setPendingAction('oficializar');
+                    }}><ShieldCheck size={15} /> Oficializar</button>
+                  )}
+                  {scopeOfficial && <span>Escopo oficializado</span>}
                 </div>
               )}
               {!visibleEmployees.length ? (
@@ -494,6 +565,7 @@ export function EscalaMensal({ user }: { user: User }) {
                               {person.CHAPA} · {person.NOME}
                             </strong>
                             <small>{person.FUNCAO_DESCR || 'Cargo não informado'}</small>
+                            <button type="button" className="person-menu-trigger" title={`Ações de ${person.NOME}`} aria-label={`Ações de ${person.NOME}`} onClick={(event) => openPersonMenu(event, person)}><MoreVertical size={16} /></button>
                           </th>
                           {dates.map((date, index) => {
                             const day = daysByEmployee.get(String(person.ESCFUNC_ID))?.get(date);
@@ -531,6 +603,7 @@ export function EscalaMensal({ user }: { user: User }) {
                         <th>Saída intervalo</th>
                         <th>Retorno</th>
                         <th>Saída</th>
+                        <th><span className="sr-only">Ações</span></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -550,6 +623,7 @@ export function EscalaMensal({ user }: { user: User }) {
                             <td>{hasShift(day) ? day?.HR_SAI1 || '–' : '–'}</td>
                             <td>{hasShift(day) ? day?.HR_ENT2 || '–' : '–'}</td>
                             <td>{hasShift(day) ? day?.HR_SAI2 || '–' : '–'}</td>
+                            <td><button type="button" className="icon-action" title={`Ações de ${person.NOME}`} aria-label={`Ações de ${person.NOME}`} onClick={(event) => openPersonMenu(event, person)}><MoreVertical size={16} /></button></td>
                           </tr>
                         );
                       })}
@@ -557,7 +631,7 @@ export function EscalaMensal({ user }: { user: User }) {
                   </table>
                 </div>
               )}
-              {selectedCell && view === 'mensal' && (
+              {selectedCell && (
                 <div className="cell-detail">
                   <div>
                     <strong>{selectedCell.employee.NOME}</strong>
@@ -572,6 +646,10 @@ export function EscalaMensal({ user }: { user: User }) {
                   {canEdit(user, 'escalas') &&
                     canEdit(user, 'escalas-funcionarios') &&
                     selectedCell.day &&
+                    !selectedCell.day.FIXO_ESCALA &&
+                    !selectedCell.day.AUSENCIA_OBRIGATORIA &&
+                    !['FER', 'AFA'].includes(String(selectedCell.day.PROGRAMACAO || '').toUpperCase()) &&
+                    Number(selectedCell.day.OFICIALIZADA) !== 1 &&
                     escala?.status !== 'FINALIZADA' && (
                       <button
                         type="button"
@@ -583,6 +661,13 @@ export function EscalaMensal({ user }: { user: User }) {
                         <Pencil size={15} /> Editar dia
                       </button>
                     )}
+                  {canEdit(user, 'escalas') && selectedCell.date >= localToday() &&
+                    !selectedCell.day?.AUSENCIA_OBRIGATORIA &&
+                    !['FER', 'AFA'].includes(String(selectedCell.day?.PROGRAMACAO || '').toUpperCase()) &&
+                    Number(selectedCell.day?.OFICIALIZADA) !== 1 &&
+                    <button type="button" className="button secondary" onClick={() => setFixedCell({ employee: selectedCell.employee, date: selectedCell.date })}>
+                      <Pencil size={15} /> {selectedCell.day?.FIXO_ESCALA ? 'Editar fixo' : 'Adicionar fixo'}
+                    </button>}
                   <button type="button" className="button secondary" onClick={() => setSelectedCell(null)}>
                     Fechar
                   </button>
@@ -609,6 +694,47 @@ export function EscalaMensal({ user }: { user: User }) {
           )}
         </>
       )}
+      {personMenu && createPortal(
+        <div className="person-menu-layer" onClick={() => setPersonMenu(null)} onKeyDown={(event) => {
+          if (event.key === 'Escape') setPersonMenu(null);
+        }}>
+          <div className="person-menu-popover" role="menu" style={{ left: personMenu.left, top: personMenu.top }} onClick={(event) => event.stopPropagation()}>
+            <button type="button" role="menuitem" onClick={() => {
+              const day = dates.map((date) => daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.get(date)).find(Boolean);
+              if (day) setSelectedCell({ employee: personMenu.employee, date: iso(day.DT), day });
+              setPersonMenu(null);
+            }}>Ver detalhes</button>
+            {!/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && <Link role="menuitem" to={`/funcionarios?loja=${lojaId}&funcionario=${personMenu.employee.ESCFUNC_ID}&mes=${mesRef?.slice(0, 7)}`} onClick={() => setPersonMenu(null)}>Editar horário-base</Link>}
+            {canEdit(user, 'escalas') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
+              setIndividualTarget(personMenu.employee);
+              setPersonMenu(null);
+            }}>Gerar escala individual</button>}
+            {canEdit(user, 'escalas') && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
+              setTransferTarget(personMenu.employee);
+              setPersonMenu(null);
+            }}>Transferir de subseção</button>}
+          </div>
+        </div>, document.body,
+      )}
+      {transferTarget && lojaId && mesRef && <TransferirSubsecao
+        lojaId={lojaId} mesRef={mesRef} employee={transferTarget}
+        subsecoes={sectionCatalog?.SUBSECOES || []}
+        onClose={() => setTransferTarget(null)}
+        onTransferred={({ destination, warning }) => {
+          setTransferTarget(null);
+          setReload((value) => value + 1);
+          updateFilter('subsecao', destination);
+          setActionMessage(warning || 'Funcionário transferido e escala individual regenerada.');
+        }}
+      />}
+      {individualTarget && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
+        if (event.key === 'Escape' && !actionBusy) setIndividualTarget(null);
+      }}><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="individual-title">
+        <h2 id="individual-title">Gerar escala de {individualTarget.NOME}</h2>
+        <p>Os dias editáveis deste funcionário serão recalculados. Os demais funcionários não serão gravados novamente.</p>
+        {actionError && <div className="notice error" role="alert">{actionError}</div>}
+        <div className="confirm-actions"><button className="button secondary" type="button" disabled={actionBusy} onClick={() => setIndividualTarget(null)}>Cancelar</button><button className="button primary" type="button" disabled={actionBusy} onClick={generateIndividual}>{actionBusy ? 'Gerando...' : 'Confirmar geração'}</button></div>
+      </div></div>}
       {editingCell && lojaId && mesRef && (
         <EditarDiaEscala
           key={`${editingCell.employee.ESCFUNC_ID}-${editingCell.day.DT}`}
@@ -628,6 +754,13 @@ export function EscalaMensal({ user }: { user: User }) {
           }}
         />
       )}
+      {fixedCell && lojaId && mesRef && <EditarFixoEscala
+        lojaId={lojaId} mesRef={mesRef} employee={fixedCell.employee} date={fixedCell.date}
+        existing={escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(fixedCell.employee.ESCFUNC_ID) && iso(item.DT) === fixedCell.date)}
+        reference={(escala?.dias || []).find((item) => Number(item.ESCFUNC_ID) === Number(fixedCell.employee.ESCFUNC_ID) && hasShift(item))}
+        onClose={() => setFixedCell(null)}
+        onSaved={(message) => { setFixedCell(null); setSelectedCell(null); setActionMessage(message); setReload((value) => value + 1); }}
+      />}
       {pendingAction && (
         <div
           className="confirm-backdrop"
@@ -643,13 +776,15 @@ export function EscalaMensal({ user }: { user: User }) {
             aria-labelledby="schedule-confirm-title"
           >
             <h2 id="schedule-confirm-title">
-              {pendingAction === 'gerar' ? 'Gerar escala' : 'Resetar escala'}
+              {pendingAction === 'gerar' ? 'Gerar escala' : pendingAction === 'resetar' ? 'Resetar escala' : 'Oficializar escala'}
             </h2>
             <p>
               Loja {lojaId} · {section?.DESCR} · {scopeName} · {scopePeople.length} funcionário(s).
             </p>
             <p>
-              {pendingAction === 'gerar'
+              {pendingAction === 'oficializar'
+                ? 'A oficialização deste escopo aprova a revisão atual e inicia o envio ao RM. As demais seções e subseções continuam editáveis.'
+                : pendingAction === 'gerar'
                 ? 'A geração recalcula os dias editáveis deste escopo. Alterações manuais futuras podem ser substituídas.'
                 : 'O reset remove os dias gerados deste escopo e restaura folgas fixas, férias e afastamentos protegidos.'}
             </p>
@@ -678,7 +813,9 @@ export function EscalaMensal({ user }: { user: User }) {
                   ? 'Aguarde...'
                   : pendingAction === 'gerar'
                     ? 'Confirmar geração'
-                    : 'Confirmar reset'}
+                    : pendingAction === 'resetar'
+                      ? 'Confirmar reset'
+                      : 'Confirmar oficialização'}
               </button>
             </div>
           </div>

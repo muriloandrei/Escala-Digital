@@ -23,6 +23,105 @@
 .directory-page .text-action:hover {
   text-decoration: underline;
 }
+.icon-action {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #536b84;
+}
+.icon-action:hover {
+  background: #e5edf8;
+  color: #1749a2;
+}
+.transfer-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  color: #526a83;
+  font-size: 12px;
+  font-weight: 650;
+}
+.transfer-field select {
+  height: 38px;
+  border: 1px solid #ccd8e6;
+  border-radius: 4px;
+  padding: 0 9px;
+  background: #fff;
+  color: #17283e;
+}
+.release-form > label {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  color: #526a83;
+  font-size: 12px;
+  font-weight: 650;
+}
+.release-form select,
+.release-form input[type='month'] {
+  width: 100%;
+  height: 38px;
+  border: 1px solid #ccd8e6;
+  border-radius: 4px;
+  padding: 0 9px;
+  background: #fff;
+  color: #17283e;
+}
+.release-form input[type='date'],
+.release-form textarea {
+  width: 100%;
+  border: 1px solid #ccd8e6;
+  border-radius: 4px;
+  padding: 9px;
+  background: #fff;
+  color: #17283e;
+}
+.release-form textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+.link-dialog .search-field {
+  position: relative;
+}
+.link-dialog .search-field input {
+  width: 100%;
+  height: 38px;
+  border: 1px solid #ccd8e6;
+  border-radius: 4px;
+  padding-left: 34px;
+}
+.link-candidates {
+  max-height: min(45vh, 350px);
+  overflow: auto;
+  margin-top: 12px;
+  border: 1px solid #e2eaf3;
+}
+.link-candidates button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #e2eaf3;
+  padding: 10px;
+  background: #fff;
+  text-align: left;
+  color: #17283e;
+  font-size: 12px;
+}
+.link-candidates button:hover {
+  background: #eef4fc;
+}
+.link-candidates small {
+  color: #61758b;
+}
+.link-candidates p {
+  margin: 0;
+  padding: 15px;
+}
 .directory-detail {
   border: 1px solid #d9e2ec;
   background: #fff;

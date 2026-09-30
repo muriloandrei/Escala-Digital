@@ -174,6 +174,11 @@ router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest
   try {
     const payload = fixoEscalaSchema.parse(req.body);
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+    if (String(payload.PROGRAMACAO).toUpperCase() === 'TRB') {
+      const errors = validateStandardShift(payload);
+      if (errors.length) return res.status(422).json({ error: 'Horario fixo invalido.', details: errors });
+      await getFuncionarioParaEdicaoHorario(req, payload);
+    }
     const fixo = await escalaService.saveFixoEscala({
       lojaId: payload.lojaId,
       mesRef: payload.mesRef,

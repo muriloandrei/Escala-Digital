@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Pencil, RefreshCw, Search, UserRound } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowUpRight, Pencil, RefreshCw, Search, UserRound, UserRoundX } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import {
   canEdit,
@@ -23,6 +23,7 @@ type ShiftForm = {
 };
 
 type ShiftImpact = { diasAlterados: number; diasManuais: number; possuiEscala: boolean };
+type Suspension = { ESCPEND_ID: number; ESCFUNC_ID: number; DT_INICIO: string; DT_FIM?: string | null; TIPO?: string; STATUS: string; JUSTIFICATIVA?: string };
 
 function currentMonth() {
   const today = new Date();
@@ -33,6 +34,7 @@ export function Funcionarios({ user }: { user: User }) {
   const [params, setParams] = useSearchParams();
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
+  const [suspensions, setSuspensions] = useState<Suspension[]>([]);
   const [search, setSearch] = useState('');
   const [section, setSection] = useState('all');
   const [includeInactive, setIncludeInactive] = useState(false);
@@ -45,6 +47,15 @@ export function Funcionarios({ user }: { user: User }) {
   const [shiftError, setShiftError] = useState('');
   const [shiftBusy, setShiftBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [suspendTarget, setSuspendTarget] = useState<Funcionario | null>(null);
+  const [closeTarget, setCloseTarget] = useState<Suspension | null>(null);
+  const [suspendType, setSuspendType] = useState('AFASTAMENTO');
+  const [suspendStart, setSuspendStart] = useState(() => new Date().toISOString().slice(0, 10));
+  const [suspendEnd, setSuspendEnd] = useState('');
+  const [suspendReason, setSuspendReason] = useState('');
+  const [suspendError, setSuspendError] = useState('');
+  const [suspendBusy, setSuspendBusy] = useState(false);
+  const deepLinkOpened = useRef('');
   const loja = params.get('loja') || preferredStore(user, lojas);
 
   useEffect(() => {
@@ -64,12 +75,13 @@ export function Funcionarios({ user }: { user: User }) {
     setError('');
     setSelected(null);
     const query = includeInactive ? '?includeInactive=1' : '';
-    getJson<{ funcionarios: Funcionario[] }>(
-      `/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios${query}`,
-      controller.signal,
-    )
-      .then((data) => {
+    Promise.all([
+      getJson<{ funcionarios: Funcionario[] }>(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios${query}`, controller.signal),
+      getJson<{ suspensoes: Suspension[] }>(`/api/catalog/suspensoes-funcionarios?lojaId=${encodeURIComponent(loja)}`, controller.signal),
+    ])
+      .then(([data, suspended]) => {
         setFuncionarios(data.funcionarios || []);
+        setSuspensions(suspended.suspensoes || []);
         setLoading(false);
       })
       .catch((reason) => {
@@ -103,6 +115,65 @@ export function Funcionarios({ user }: { user: User }) {
     [funcionarios, section, search],
   );
   const detail = funcionarios.find((item) => item.ESCFUNC_ID === selected);
+  const detailSuspension = suspensions.find((item) => Number(item.ESCFUNC_ID) === Number(selected) && item.STATUS === 'P');
+  const canSuspend = ['ADMIN', 'RH'].includes(user.perfil.toUpperCase());
+
+  async function saveSuspension(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!suspendTarget || suspendBusy) return;
+    setSuspendBusy(true);
+    setSuspendError('');
+    try {
+      await postJson(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios/${suspendTarget.ESCFUNC_ID}/suspensoes`, {
+        tipo: suspendType, inicio: suspendStart, fim: suspendEnd || null, justificativa: suspendReason.trim(),
+      });
+      setMessage(`Suspensão de ${suspendTarget.NOME} registrada. A geração futura respeitará o período informado.`);
+      setSuspendTarget(null);
+      setSuspendReason('');
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setSuspendError(reason instanceof Error ? reason.message : 'Não foi possível registrar a suspensão.');
+    } finally {
+      setSuspendBusy(false);
+    }
+  }
+
+  async function closeSuspension() {
+    if (!closeTarget || suspendBusy) return;
+    setSuspendBusy(true);
+    setSuspendError('');
+    try {
+      await postJson(`/api/catalog/lojas/${encodeURIComponent(loja)}/suspensoes/${closeTarget.ESCPEND_ID}/encerrar`, {});
+      setMessage('Suspensão encerrada. Confira o cadastro do RM antes de gerar novamente a escala.');
+      setCloseTarget(null);
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setSuspendError(reason instanceof Error ? reason.message : 'Não foi possível encerrar a suspensão.');
+    } finally {
+      setSuspendBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const id = params.get('funcionario');
+    if (!id || !funcionarios.length || deepLinkOpened.current === `${loja}:${id}`) return;
+    const employee = funcionarios.find((item) => String(item.ESCFUNC_ID) === id);
+    if (!employee) return;
+    deepLinkOpened.current = `${loja}:${id}`;
+    setSearch(employee.CHAPA);
+    setSelected(employee.ESCFUNC_ID);
+    if (canEdit(user, 'escalas') && !employee.DT_DEMISS && !/APRENDIZ/i.test(employee.FUNCAO_DESCR || '')) {
+      setShiftForm({
+        employee,
+        month: /^\d{4}-\d{2}$/.test(params.get('mes') || '') ? params.get('mes')! : currentMonth(),
+        apply: true,
+        HR_ENT1: employee.HR_ENT1 || '',
+        HR_SAI1: employee.HR_SAI1 || '',
+        HR_ENT2: employee.HR_ENT2 || '',
+        HR_SAI2: employee.HR_SAI2 || '',
+      });
+    }
+  }, [funcionarios, loja, params, user]);
 
   function openShift(employee: Funcionario) {
     setShiftForm({
@@ -296,7 +367,7 @@ export function Funcionarios({ user }: { user: User }) {
                           ? `${item.HR_ENT1}–${item.HR_SAI1}`
                           : '–'}
                     </td>
-                    <td>{item.DT_DEMISS ? 'Desligado' : 'Ativo'}</td>
+                    <td>{item.DT_DEMISS ? 'Desligado' : suspensions.some((entry) => Number(entry.ESCFUNC_ID) === Number(item.ESCFUNC_ID) && entry.STATUS === 'P') ? 'Suspenso da escala' : 'Ativo'}</td>
                     <td>
                       <button
                         className="text-action"
@@ -330,11 +401,16 @@ export function Funcionarios({ user }: { user: User }) {
                   <Pencil size={15} /> Editar horário
                 </button>
               )}
+            {canSuspend && !detail.DT_DEMISS && !detailSuspension && <button type="button" className="button secondary" onClick={() => {
+              setSuspendTarget(detail); setSuspendError('');
+            }}><UserRoundX size={15} /> Suspender da escala</button>}
+            {canSuspend && detailSuspension && <button type="button" className="button secondary" disabled={suspendBusy} onClick={() => { setSuspendError(''); setCloseTarget(detailSuspension); }}>Encerrar suspensão</button>}
             <button type="button" className="button secondary" onClick={() => setSelected(null)}>
               Fechar
             </button>
           </div>
           <dl>
+            {detailSuspension && <div><dt>Suspensão local</dt><dd>{detailSuspension.TIPO || 'Ativa'} · {String(detailSuspension.DT_INICIO).slice(0, 10)}{detailSuspension.DT_FIM ? ` a ${String(detailSuspension.DT_FIM).slice(0, 10)}` : ''}</dd></div>}
             <div>
               <dt>Loja</dt>
               <dd>{detail.LOJA || loja}</dd>
@@ -364,8 +440,29 @@ export function Funcionarios({ user }: { user: User }) {
               <dd>{detail.HR_SAI2 || '–'}</dd>
             </div>
           </dl>
+          {suspendError && <div className="notice error" role="alert">{suspendError}</div>}
         </section>
       )}
+      {suspendTarget && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
+        if (event.key === 'Escape' && !suspendBusy) setSuspendTarget(null);
+      }}><form className="confirm-dialog release-form" role="dialog" aria-modal="true" aria-labelledby="suspension-title" onSubmit={saveSuspension}>
+        <h2 id="suspension-title">Suspender {suspendTarget.NOME} da escala</h2>
+        <p>Esta é uma suspensão local auditada; não altera o cadastro no RM. A geração respeita o intervalo até a sincronização oficial.</p>
+        <label>Motivo<select value={suspendType} onChange={(event) => setSuspendType(event.target.value)}><option value="AFASTAMENTO">Afastamento</option><option value="TRANSFERENCIA">Transferência</option><option value="DESLIGAMENTO">Desligamento</option><option value="OUTRO">Outro</option></select></label>
+        <label>Início<input required type="date" value={suspendStart} onChange={(event) => setSuspendStart(event.target.value)} /></label>
+        <label>Fim (opcional)<input type="date" min={suspendStart} value={suspendEnd} onChange={(event) => setSuspendEnd(event.target.value)} /></label>
+        <label>Justificativa<textarea required minLength={10} maxLength={500} value={suspendReason} onChange={(event) => setSuspendReason(event.target.value)} /></label>
+        {suspendError && <div className="notice error" role="alert">{suspendError}</div>}
+        <div className="confirm-actions"><button className="button secondary" type="button" disabled={suspendBusy} onClick={() => setSuspendTarget(null)}>Cancelar</button><button className="button primary" type="submit" disabled={suspendBusy || suspendReason.trim().length < 10}>{suspendBusy ? 'Registrando...' : 'Confirmar suspensão'}</button></div>
+      </form></div>}
+      {closeTarget && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
+        if (event.key === 'Escape' && !suspendBusy) setCloseTarget(null);
+      }}><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="close-suspension-title">
+        <h2 id="close-suspension-title">Encerrar suspensão local?</h2>
+        <p>O funcionário voltará a ser elegível para gerações futuras. Confirme no RM se o cadastro já está atualizado.</p>
+        {suspendError && <div className="notice error" role="alert">{suspendError}</div>}
+        <div className="confirm-actions"><button className="button secondary" type="button" disabled={suspendBusy} onClick={() => setCloseTarget(null)}>Cancelar</button><button className="button primary" type="button" disabled={suspendBusy} onClick={closeSuspension}>{suspendBusy ? 'Encerrando...' : 'Confirmar encerramento'}</button></div>
+      </div></div>}
       {shiftForm && (
         <div
           className="confirm-backdrop"
