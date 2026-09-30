@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Clock3,
   ShieldCheck,
+  Settings2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { canView, getJson, type User } from './api';
@@ -30,6 +31,7 @@ import { TurnosSecao } from './pages/TurnosSecao';
 import { Acessos } from './pages/Acessos';
 import { PerfisAcesso } from './pages/PerfisAcesso';
 import { LiberacaoSecoes } from './pages/LiberacaoSecoes';
+import { RegrasEscala, HorariosPadrao, TiposDescanso } from './pages/ConfiguracoesEscala';
 import './styles.css';
 import './responsive.css';
 import './schedule.css';
@@ -121,6 +123,9 @@ function App() {
               <Clock3 size={18} /> Turnos por seção
             </NavLink>
           )}
+          {canView(user, 'regras') && <NavLink to="/regras"><Settings2 size={18} /> Regras da escala</NavLink>}
+          {canView(user, 'tipos-descanso') && <NavLink to="/tipos-descanso"><CalendarDays size={18} /> Tipos de descanso</NavLink>}
+          {canView(user, 'horarios-padrao') && <NavLink to="/horarios-padrao"><Clock3 size={18} /> Horários padrão</NavLink>}
           {user.perfil === 'ADMIN' && (
             <NavLink to="/acessos">
               <ShieldCheck size={18} /> Usuários e acessos
@@ -171,6 +176,9 @@ function App() {
           {canSeeFuncionarios && <Route path="/funcionarios" element={<Funcionarios user={user} />} />}
           {canSeeSecoes && <Route path="/secoes" element={<Secoes user={user} />} />}
           {canView(user, 'turnos-secao') && <Route path="/turnos-secao" element={<TurnosSecao user={user} />} />}
+          {canView(user, 'regras') && <Route path="/regras" element={<RegrasEscala />} />}
+          {canView(user, 'tipos-descanso') && <Route path="/tipos-descanso" element={<TiposDescanso user={user} />} />}
+          {canView(user, 'horarios-padrao') && <Route path="/horarios-padrao" element={<HorariosPadrao user={user} />} />}
           {user.perfil === 'ADMIN' && <Route path="/acessos" element={<Acessos user={user} />} />}
           {user.perfil === 'ADMIN' && <Route path="/perfis" element={<PerfisAcesso />} />}
           {canView(user, 'liberacao-secoes') && !['LIDER', 'OPERADOR'].includes(user.perfil) && <Route path="/liberacao-secoes" element={<LiberacaoSecoes user={user} />} />}
