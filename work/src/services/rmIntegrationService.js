@@ -376,7 +376,7 @@ async function postFolgas(payload) {
   });
 }
 
-async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId = null, escfuncIds = null, apenasOficializada = false }) {
+async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId = null, escfuncIds = null, apenasOficializada = false, apenasNaoOficializada = false }) {
   const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
   const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
   const cpfSelect = funcionarioColumns.has('CPF') ? 'f.cpf' : funcionarioColumns.has('CPF_FUNCIONARIO') ? 'f.cpf_funcionario as cpf' : 'cast(null as varchar2(20)) as cpf';
@@ -391,7 +391,8 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId
     binds[`escfuncId${index}`] = id;
     return `:escfuncId${index}`;
   }).join(', ')})` : '';
-  const filtroOficializada = apenasOficializada ? 'and nvl(p.oficializada, 0) = 1' : '';
+  const filtroOficializada = apenasOficializada ? 'and nvl(p.oficializada, 0) = 1'
+    : apenasNaoOficializada ? 'and nvl(p.oficializada, 0) = 0' : '';
   const result = await connection.execute(
     `select p.loja, p.mes_ref, p.revisao, p.escfunc_id, p.chapa, f.nome, f.codcoligada, ${cpfSelect},
             d.dt, d.programacao
@@ -479,7 +480,7 @@ async function validarPreRequisitosRm({ lojaId, mesRef, revisao, escsecaoId, esc
       return { enabled: true, revisao: null, errors: ['Escala ativa nao encontrada para oficializacao.'] };
     }
 
-    const funcionarios = agruparPorFuncionario(await getEscalaParaRm(connection, { lojaId, mesRef, revisao: revisaoAlvo, escsecaoId, escfuncIds }));
+    const funcionarios = agruparPorFuncionario(await getEscalaParaRm(connection, { lojaId, mesRef, revisao: revisaoAlvo, escsecaoId, escfuncIds, apenasNaoOficializada: true }));
     const errors = [];
     for (const funcionario of funcionarios) {
       const cpf = sanitizeCpf(funcionario.cpf);
@@ -506,10 +507,13 @@ async function validarPreRequisitosRm({ lojaId, mesRef, revisao, escsecaoId, esc
   });
 }
 
-async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds }) {
+async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds, exigirEscala = false }) {
   const rmConfig = getEnv().rm;
   return withConnection(async (connection) => {
     const rows = await getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId, escfuncIds, apenasOficializada: true });
+    if (exigirEscala && !rows.length) {
+      throw new Error('Programacao oficializada nao encontrada para a pendencia RM. Verifique a revisao antes de reprocessar.');
+    }
     if (!rmConfig.enabled) {
       await registrarRmLog(connection, {
         loja: lojaId,
@@ -526,6 +530,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
 
     let enviados = 0;
     let falhas = 0;
+    const erros = [];
     for (const funcionario of agruparPorFuncionario(rows)) {
       try {
         const cpf = sanitizeCpf(funcionario.cpf);
@@ -583,6 +588,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
         });
       } catch (error) {
         falhas += 1;
+        erros.push(error.message);
         await registrarRmLog(connection, {
           loja: lojaId, mesRef, revisao: funcionario.revisao ?? revisao, escfuncId: funcionario.escfuncId, chapa: funcionario.chapa, cpf: mask(funcionario.cpf),
           acao: 'RM_ENVIAR_DESCANSOS', status: 'FALHA',
@@ -593,8 +599,182 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
     }
 
     await connection.commit();
-    return { enabled: true, enviados, falhas };
+    return { enabled: true, enviados, falhas, erros };
   });
+}
+
+async function listEnviosRm({ lojaId, mesRef, lojasPermitidas = [] }) {
+  return withConnection(async (connection) => {
+    const binds = {};
+    const filters = [];
+    if (lojaId) {
+      binds.lojaId = Number(lojaId);
+      filters.push('e.loja = :lojaId');
+    } else if (Array.isArray(lojasPermitidas)) {
+      const lojas = [...new Set(lojasPermitidas.map(Number).filter(Boolean))];
+      if (!lojas.length) return [];
+      filters.push(`e.loja in (${lojas.map((loja, index) => {
+        binds[`loja${index}`] = loja;
+        return `:loja${index}`;
+      }).join(', ')})`);
+    }
+    if (mesRef) {
+      binds.mesRef = mesRef;
+      filters.push("e.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')");
+    }
+    const result = await connection.execute(
+      `select e.envio_id, e.operacao_id, e.loja, e.mes_ref, e.escsecao_id,
+              e.escfunc_id, e.revisao, e.status, e.tentativas, e.erro,
+              e.dt_hr_incl, e.dt_hr_alter, f.chapa, f.nome
+         from sgn_esc_rm_envio e
+         left join sgn_esc_funcionario f on f.escfunc_id = e.escfunc_id
+        ${filters.length ? `where ${filters.join(' and ')}` : ''}
+        order by e.dt_hr_incl desc, e.envio_id desc`,
+      binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows || [];
+  });
+}
+
+async function getEnviosOperacao(operacaoId) {
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select envio_id, loja, mes_ref, escsecao_id, escfunc_id, revisao, status
+         from sgn_esc_rm_envio where operacao_id = :operacaoId order by envio_id`,
+      { operacaoId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows || [];
+  });
+}
+
+async function listPendenciasRm({ lojaId = null, limit = 100 } = {}) {
+  const limite = Math.min(500, Math.max(1, Number(limit) || 100));
+  return withConnection(async (connection) => {
+    const binds = { limite };
+    const filtroLoja = lojaId ? 'and loja = :lojaId' : '';
+    if (lojaId) binds.lojaId = Number(lojaId);
+    const result = await connection.execute(
+      `select * from (
+         select envio_id, loja, mes_ref, escsecao_id, escfunc_id, revisao, status
+           from sgn_esc_rm_envio
+          where status = 'PENDENTE' ${filtroLoja}
+          order by dt_hr_incl, envio_id
+       ) where rownum <= :limite`,
+      binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows || [];
+  });
+}
+
+async function processarEnvioRm(envio, { manual = false } = {}) {
+  const envioId = Number(pick(envio, 'ENVIO_ID', 'envio_id'));
+  const claimed = await withConnection(async (connection) => {
+    const statusSql = manual
+      ? "(status in ('PENDENTE', 'INCERTO') or (status = 'PROCESSANDO' and dt_hr_alter < sysdate - 30/1440))"
+      : "status = 'PENDENTE'";
+    const result = await connection.execute(
+      `update sgn_esc_rm_envio
+          set status = 'PROCESSANDO', tentativas = tentativas + 1, dt_hr_alter = sysdate
+        where envio_id = :envioId and ${statusSql}`,
+      { envioId }, { autoCommit: false }
+    );
+    await connection.commit();
+    return result.rowsAffected === 1;
+  });
+  if (!claimed) return { enabled: true, enviados: 0, falhas: 0, ignorado: true };
+
+  let rm;
+  try {
+    rm = await oficializarNoRm({
+      lojaId: Number(pick(envio, 'LOJA', 'loja')),
+      mesRef: formatDate(pick(envio, 'MES_REF', 'mes_ref')),
+      escsecaoId: Number(pick(envio, 'ESCSECAO_ID', 'escsecao_id')),
+      escfuncIds: [Number(pick(envio, 'ESCFUNC_ID', 'escfunc_id'))],
+      revisao: Number(pick(envio, 'REVISAO', 'revisao')),
+      exigirEscala: true
+    });
+  } catch (error) {
+    rm = { enabled: true, enviados: 0, falhas: 1, erros: [error.message] };
+  }
+  await withConnection(async (connection) => {
+    await connection.execute(
+      `update sgn_esc_rm_envio
+          set status = :status, erro = :erro, dt_hr_alter = sysdate
+        where envio_id = :envioId and status = 'PROCESSANDO'`,
+      {
+        envioId,
+        status: rm.falhas ? 'INCERTO' : 'ENVIADO',
+        erro: rm.erros?.[0] ? String(rm.erros[0]).slice(0, 1000) : null
+      },
+      { autoCommit: false }
+    );
+    await connection.commit();
+  });
+  return rm;
+}
+
+async function processarOperacaoRm({ operacaoId }) {
+  const envios = await getEnviosOperacao(operacaoId);
+  if (!envios.length) throw new Error('Oficializacao sem pendencias RM registradas. Verifique a migracao e a transacao.');
+  if (!getEnv().rm.enabled) {
+    return { enabled: false, status: 'PENDENTE', pendentes: envios.length, enviados: 0, falhas: 0 };
+  }
+  const resultado = { enabled: true, status: 'ENVIADO', pendentes: 0, enviados: 0, falhas: 0 };
+  for (const envio of envios) {
+    const rm = await processarEnvioRm(envio);
+    resultado.enviados += rm.enviados || 0;
+    resultado.falhas += rm.falhas || 0;
+    if (rm.ignorado) resultado.pendentes += 1;
+  }
+  if (resultado.falhas) resultado.status = 'INCERTO';
+  else if (resultado.pendentes) resultado.status = 'PENDENTE';
+  return resultado;
+}
+
+async function processarPendenciasRm({ lojaId = null, limit = 100 } = {}) {
+  if (!getEnv().rm.enabled) throw new Error('Integracao RM desabilitada. Nenhum envio foi iniciado.');
+  const envios = await listPendenciasRm({ lojaId, limit });
+  const resultados = [];
+  for (const envio of envios) {
+    const envioId = Number(pick(envio, 'ENVIO_ID', 'envio_id'));
+    try {
+      const resultado = await processarEnvioRm(envio);
+      resultados.push({ envioId, status: resultado.ignorado ? 'IGNORADO' : resultado.falhas ? 'INCERTO' : 'ENVIADO' });
+    } catch (error) {
+      resultados.push({ envioId, status: 'VERIFICAR', erro: error.message });
+    }
+  }
+  return resultados;
+}
+
+async function reprocessarEnvioRm({ lojaId, mesRef, revisao, escfuncId, envioId = null }) {
+  const envios = await withConnection(async (connection) => {
+    const binds = { lojaId, mesRef, escfuncId, revisao };
+    const filtroEnvio = envioId ? 'and envio_id = :envioId' : '';
+    if (envioId) binds.envioId = envioId;
+    const result = await connection.execute(
+      `select envio_id, loja, mes_ref, escsecao_id, escfunc_id, revisao, status
+         from sgn_esc_rm_envio
+        where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          and escfunc_id = :escfuncId and revisao = :revisao ${filtroEnvio}`,
+      binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows || [];
+  });
+  if (envioId && !envios.length) {
+    const error = new Error('Pendencia RM nao encontrada para esta loja e funcionario.');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (envios.length > 1) {
+    const error = new Error('Ha mais de uma pendencia para este funcionario. Selecione a linha exata do envio.');
+    error.statusCode = 409;
+    throw error;
+  }
+  const envio = envios[0];
+  if (!envio) return oficializarNoRm({ lojaId, mesRef, revisao, escfuncIds: [escfuncId], exigirEscala: true });
+  if (!getEnv().rm.enabled) return { enabled: false, status: 'PENDENTE', enviados: 0, falhas: 0 };
+  return processarEnvioRm(envio, { manual: true });
 }
 
 async function listRmLogs({ lojaId, mesRef, lojasPermitidas = [] }) {
@@ -631,6 +811,11 @@ async function listRmLogs({ lojaId, mesRef, lojasPermitidas = [] }) {
 
 module.exports = {
   oficializarNoRm,
+  processarOperacaoRm,
+  listPendenciasRm,
+  processarPendenciasRm,
+  reprocessarEnvioRm,
+  listEnviosRm,
   consultarFolgasFuncionarioMes,
   listRmLogs,
   validarPreRequisitosRm,

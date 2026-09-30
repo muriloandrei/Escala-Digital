@@ -2350,37 +2350,77 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
       const ativaSql = await getAtivaSql(connection, 'p');
       const ativaSubSql = await getAtivaSql(connection, 'px');
       const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
-      const result = await connection.execute(
-      `update sgn_esc_prog p
-       set p.oficializada = 1
-       where p.loja = :lojaId
-         and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-         and p.escsecao_id = :escsecaoId
-         ${filtroIds}
-         and exists (select 1 from sgn_esc_prog_dia d where d.escprog_id = p.escprog_id)
-         and p.revisao = (
-           select max(px.revisao)
-           from sgn_esc_prog px
-           where px.loja = p.loja
-             and px.mes_ref = p.mes_ref
-             and px.escfunc_id = p.escfunc_id
-             and ${ativaSubSql}
-         )
-         and ${ativaSql}
-         and ${secaoAtivaSql}`,
-      binds,
-        { autoCommit: false }
+      const candidatos = await connection.execute(
+        `select distinct p.escfunc_id from sgn_esc_prog p
+          where p.loja = :lojaId
+            and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and p.escsecao_id = :escsecaoId
+            ${filtroIds}
+            and ${ativaSql}`,
+        binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
-      if (result.rowsAffected) {
-        await escalaEventService.appendEvent(connection, {
-          operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, escsecaoId, actor,
-          acao: 'OFICIALIZAR_ESCALA', origem: 'USUARIO', situacao: 'OFICIALIZADA',
-          revisaoAnterior: latestRevision, revisaoNova: latestRevision,
-          detalhe: { totalProgramacoes: result.rowsAffected, escfuncIds: ids }
-        });
+      await lockFuncionariosEscala(connection, lojaId, candidatos.rows || []);
+      const selecionadas = await connection.execute(
+        `select p.escprog_id, p.escfunc_id, p.revisao
+           from sgn_esc_prog p
+          where p.loja = :lojaId
+            and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and p.escsecao_id = :escsecaoId
+            ${filtroIds}
+            and nvl(p.oficializada, 0) = 0
+            and exists (select 1 from sgn_esc_prog_dia d where d.escprog_id = p.escprog_id)
+            and p.revisao = (
+              select max(px.revisao) from sgn_esc_prog px
+               where px.loja = p.loja and px.mes_ref = p.mes_ref
+                 and px.escfunc_id = p.escfunc_id and ${ativaSubSql}
+            )
+            and ${ativaSql}
+            and ${secaoAtivaSql}
+          for update of p.oficializada wait 5`,
+        binds,
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const programacoes = selecionadas.rows || [];
+      if (!programacoes.length) {
+        await connection.rollback();
+        return { affectedRows: 0, revisao: latestRevision };
       }
+      const operacaoId = escalaEventService.createOperationId();
+      for (const programacao of programacoes) {
+        const escprogId = Number(pick(programacao, 'ESCPROG_ID', 'escprog_id'));
+        const escfuncId = Number(pick(programacao, 'ESCFUNC_ID', 'escfunc_id'));
+        const revisao = Number(pick(programacao, 'REVISAO', 'revisao'));
+        const updated = await connection.execute(
+          `update sgn_esc_prog set oficializada = 1
+            where escprog_id = :escprogId and nvl(oficializada, 0) = 0`,
+          { escprogId }, { autoCommit: false }
+        );
+        if (updated.rowsAffected !== 1) {
+          const error = new Error('A programacao mudou durante a oficializacao. Recarregue a escala.');
+          error.statusCode = 409;
+          throw error;
+        }
+        await connection.execute(
+          `insert into sgn_esc_rm_envio
+            (envio_id, operacao_id, loja, mes_ref, escsecao_id, escfunc_id, revisao,
+             status, tentativas, dt_hr_incl, dt_hr_alter)
+           values (sgn_esc_rm_envio_seq.nextval, :operacaoId, :lojaId,
+             to_date(:mesRef, 'YYYY-MM-DD'), :escsecaoId, :escfuncId, :revisao,
+             'PENDENTE', 0, sysdate, sysdate)`,
+          { operacaoId, lojaId, mesRef, escsecaoId, escfuncId, revisao },
+          { autoCommit: false }
+        );
+      }
+      const idsOficializados = programacoes.map((row) => Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')));
+      const revisaoOficializada = Math.max(...programacoes.map((row) => Number(pick(row, 'REVISAO', 'revisao'))));
+      await escalaEventService.appendEvent(connection, {
+        operacaoId, lojaId, mesRef, escsecaoId, actor,
+        acao: 'OFICIALIZAR_ESCALA', origem: 'USUARIO', situacao: 'OFICIALIZADA',
+        revisaoAnterior: latestRevision, revisaoNova: revisaoOficializada,
+        detalhe: { totalProgramacoes: programacoes.length, escfuncIds: idsOficializados }
+      });
       await connection.commit();
-      return { affectedRows: result.rowsAffected || 0, revisao: latestRevision };
+      return { affectedRows: programacoes.length, revisao: revisaoOficializada, operacaoId, escfuncIds: idsOficializados };
     } catch (error) {
       await connection.rollback();
       throw normalizeOracleSaveError(error);

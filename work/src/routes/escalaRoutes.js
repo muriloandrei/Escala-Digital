@@ -441,9 +441,10 @@ router.post('/rm/reprocessar', requirePermission('integracao-rm', 'reprocessar')
       lojaId: z.number().int().positive(),
       mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       revisao: z.number().int().min(0),
-      escfuncId: z.number().int().positive()
+      escfuncId: z.number().int().positive(),
+      envioId: z.number().int().positive().optional()
     }).parse(req.body);
-    const rm = await rmIntegrationService.oficializarNoRm({ ...payload, escfuncIds: [payload.escfuncId] });
+    const rm = await rmIntegrationService.reprocessarEnvioRm(payload);
     await auditService.registerAudit({
       action: 'REPROCESSAR_RM',
       user: req.user,
@@ -455,6 +456,19 @@ router.post('/rm/reprocessar', requirePermission('integracao-rm', 'reprocessar')
     return res.json({ ok: true, rm });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de reprocessamento invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
+router.get('/rm/envios', requirePermission('integracao-rm', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
+    const envios = await rmIntegrationService.listEnviosRm({
+      lojaId, mesRef: req.query.mesRef || null,
+      lojasPermitidas: getLojasPermitidasParaConsulta(req)
+    });
+    return res.json({ envios });
+  } catch (error) {
     return next(error);
   }
 });
@@ -479,16 +493,21 @@ router.post('/oficializar', requireAdmin, requirePermission('escalas', 'oficiali
 
     const result = await escalaService.oficializarEscala({ ...payload, actor: req.user });
     if (!result.affectedRows) return res.status(404).json({ error: 'Escala ativa nao encontrada.' });
-    const rm = await rmIntegrationService.oficializarNoRm({ ...payload, revisao: result.revisao });
+    let rm;
+    try {
+      rm = await rmIntegrationService.processarOperacaoRm({ operacaoId: result.operacaoId });
+    } catch (error) {
+      rm = { enabled: true, status: 'PENDENTE', pendentes: result.affectedRows, enviados: 0, falhas: 0, error: error.message };
+    }
     await auditService.registerAudit({
       action: 'OFICIALIZAR_ESCALA',
       user: req.user,
       lojaId: payload.lojaId,
       mesRef: payload.mesRef,
       revisao: result.revisao,
-      details: { oficializada: 1, rmStatus: rm.enabled ? (rm.falhas ? 'FALHA_PARCIAL' : 'ENVIADO') : 'IGNORADO', rmEnviados: rm.enviados, rmFalhas: rm.falhas }
+      details: { oficializada: 1, rmStatus: rm.status, rmEnviados: rm.enviados, rmFalhas: rm.falhas, operacaoId: result.operacaoId }
     });
-    return res.json({ ok: true, revisao: result.revisao, affectedRows: result.affectedRows, rm });
+    return res.json({ ok: true, revisao: result.revisao, affectedRows: result.affectedRows, operacaoId: result.operacaoId, rm });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de oficializacao invalidos.', details: error.errors });
     return next(error);

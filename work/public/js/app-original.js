@@ -4195,7 +4195,9 @@
             if (rmResumo) rmResumo.textContent = rows.length + ' registro(s) encontrado(s).';
             tabelaRmLogsBody.innerHTML = rows.length ? rows.map((log) => {
                 const mesRef = String(log.MES_REF || '').slice(0, 10);
-                const falha = String(log.STATUS || '').toUpperCase() === 'FALHA';
+                const status = String(log.STATUS || '').toUpperCase();
+                const falha = ['FALHA', 'INCERTO', 'PENDENTE', 'PROCESSANDO'].includes(status);
+                const podeReprocessar = ['FALHA', 'INCERTO', 'PENDENTE', 'PROCESSANDO'].includes(status);
                 return `
                     <tr>
                         <td data-label="Data">${formatarDataTabela(log.DT_HR_INCL)}</td>
@@ -4206,7 +4208,7 @@
                         <td data-label="Acao">${escapeHtml(log.ACAO || '-')}</td>
                         <td data-label="Status"><span class="escala-status-chip ${falha ? 'danger-chip' : 'official-chip'}">${escapeHtml(log.STATUS || '-')}</span></td>
                         <td data-label="Mensagem">${escapeHtml(log.MENSAGEM || '-')}</td>
-                        <td data-label="Acoes" class="actions-cell">${falha && log.ESCFUNC_ID && hasPermission('integracao-rm', 'reprocessar') ? `<button class="action-btn-table banco-action rm-reprocessar" data-loja="${escapeHtml(log.LOJA || '')}" data-mes-ref="${escapeHtml(mesRef)}" data-revisao="${escapeHtml(log.REVISAO ?? 0)}" data-escfunc-id="${escapeHtml(log.ESCFUNC_ID)}"><span class="material-symbols-outlined">sync</span>Reprocessar</button>` : '-'}</td>
+                        <td data-label="Acoes" class="actions-cell">${podeReprocessar && log.ESCFUNC_ID && hasPermission('integracao-rm', 'reprocessar') ? `<button class="action-btn-table banco-action rm-reprocessar" data-loja="${escapeHtml(log.LOJA || '')}" data-mes-ref="${escapeHtml(mesRef)}" data-revisao="${escapeHtml(log.REVISAO ?? 0)}" data-escfunc-id="${escapeHtml(log.ESCFUNC_ID)}" data-envio-id="${escapeHtml(log.ENVIO_ID || '')}"><span class="material-symbols-outlined">sync</span>Reprocessar</button>` : '-'}</td>
                     </tr>`;
             }).join('') : '<tr><td colspan="9" class="text-center text-gray-500 py-8">Nenhum log encontrado.</td></tr>';
         };
@@ -4217,8 +4219,20 @@
             if (rmMesSelect?.value !== 'all' && rmAnoSelect?.value !== 'all') {
                 params.set('mesRef', formatDateForDb(Number(rmAnoSelect.value), Number(rmMesSelect.value), 1));
             }
-            const data = await apiRequest('/api/escalas/rm/logs' + (params.toString() ? '?' + params.toString() : ''));
-            rmLogsCache = data.logs || [];
+            const query = params.toString() ? '?' + params.toString() : '';
+            const [data, envios] = await Promise.all([
+                apiRequest('/api/escalas/rm/logs' + query),
+                apiRequest('/api/escalas/rm/envios' + query)
+            ]);
+            const pendencias = (envios.envios || []).filter(envio => String(envio.STATUS || '').toUpperCase() !== 'ENVIADO')
+                .map(envio => ({
+                    ...envio,
+                    ACAO: 'ENVIO_RM',
+                    MENSAGEM: envio.ERRO || (envio.STATUS === 'PENDENTE' ? 'Aguardando envio ao RM.'
+                        : envio.STATUS === 'PROCESSANDO' ? 'Envio em andamento.' : 'Resultado do envio exige conferência.'),
+                    DT_HR_INCL: envio.DT_HR_ALTER
+                }));
+            rmLogsCache = [...pendencias, ...(data.logs || [])];
             aplicarFiltroRmTela();
         };
 
@@ -4301,12 +4315,15 @@
                 return;
             }
             try {
-                await apiRequest('/api/escalas/rm/reprocessar', {
+                const result = await apiRequest('/api/escalas/rm/reprocessar', {
                     method: 'POST',
-                    body: JSON.stringify({ lojaId: Number(button.dataset.loja), mesRef: button.dataset.mesRef, revisao: Number(button.dataset.revisao || 0), escfuncId: Number(button.dataset.escfuncId) })
+                    body: JSON.stringify({ lojaId: Number(button.dataset.loja), mesRef: button.dataset.mesRef, revisao: Number(button.dataset.revisao || 0), escfuncId: Number(button.dataset.escfuncId), ...(button.dataset.envioId ? { envioId: Number(button.dataset.envioId) } : {}) })
                 });
                 await carregarRmLogsTela();
-                showInfoModal('Reprocessamento enviado para o RM.', 'success');
+                showInfoModal(result.rm?.ignorado ? 'Envio ja processado ou em andamento. Consulte o status atualizado.'
+                    : result.rm?.enabled === false ? 'Integracao RM desabilitada. O envio permanece pendente.'
+                    : result.rm?.falhas ? 'Falha no reprocessamento. Consulte o status atualizado.'
+                    : 'Reprocessamento concluido.', result.rm?.falhas ? 'error' : 'info');
             } catch (error) {
                 showInfoModal(error.message, 'error');
             }
@@ -8740,7 +8757,9 @@
         });
 
         const mensagemOficializacaoRm = (rm) => !rm?.enabled
-            ? { texto: 'Escala oficializada. Integração com o RM desabilitada.', tipo: 'success' }
+            ? { texto: 'Escala oficializada. Envio ao RM pendente porque a integração está desabilitada.', tipo: 'info' }
+            : rm.status === 'PENDENTE'
+                ? { texto: 'Escala oficializada. Envio ao RM pendente; consulte a Integração RM.', tipo: 'info' }
             : rm.falhas
                 ? { texto: `Escala oficializada, mas ${rm.falhas} colaborador(es) falharam no envio ao RM. Consulte a integração RM.`, tipo: 'error' }
                 : { texto: 'Escala oficializada e enviada ao RM.', tipo: 'success' };

@@ -14,5 +14,6 @@ require('./auth-md5-password.test');
 require('./access-permissions.test');
 require('./absence-validation.test');
 require('./rm-integration.test');
+require('./rm-outbox.test');
 require('./escala-sync-rm.test');
 require('./escala-eventos.test');
