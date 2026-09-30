@@ -1,9 +1,11 @@
 (function () {
-  function create({ apiRequest, escapeHtml, showInfoModal }) {
+  function create({ apiRequest, escapeHtml, showInfoModal, hasPermission = () => false }) {
     const page = document.getElementById('alteracoes-page');
     const loja = document.getElementById('alteracoesLojaSelect');
     const mes = document.getElementById('alteracoesMesInput');
     const acao = document.getElementById('alteracoesAcaoSelect');
+    const situacao = document.getElementById('alteracoesSituacaoSelect');
+    const origem = document.getElementById('alteracoesOrigemSelect');
     const busca = document.getElementById('alteracoesBuscaInput');
     const resumo = document.getElementById('alteracoesResumo');
     const lista = document.getElementById('alteracoesLista');
@@ -12,6 +14,9 @@
     const colaboradores = document.getElementById('alteracoesColaboradores');
     const total = document.getElementById('alteracoesTotal');
     const manuais = document.getElementById('alteracoesManuais');
+    const antes = document.getElementById('alteracoesAntes');
+    const depois = document.getElementById('alteracoesDepois');
+    const pendenciasRm = document.getElementById('alteracoesPendenciasRm');
     let eventos = [];
     let carregando = false;
     let fim = false;
@@ -51,6 +56,8 @@
       const termo = String(busca?.value || '').trim().toLocaleLowerCase('pt-BR');
       return eventos.filter((evento) => {
         if (acao?.value && evento.ACAO !== acao.value) return false;
+        if (situacao?.value && evento.SITUACAO !== situacao.value) return false;
+        if (origem?.value && evento.ORIGEM !== origem.value) return false;
         const info = detalhe(evento);
         const alvo = [info.chapa, evento.FUNCIONARIO_CHAPA, evento.FUNCIONARIO_NOME,
           evento.SECAO_NOME, evento.LOGIN, evento.ACAO, rotulosAcao[evento.ACAO], evento.ESCFUNC_ID, info.justificativa]
@@ -65,6 +72,8 @@
       colaboradores.textContent = String(new Set(rows.map(escfuncId).filter(Boolean)).size);
       total.textContent = String(rows.length);
       manuais.textContent = String(rows.filter((item) => item.ORIGEM === 'USUARIO').length);
+      antes.textContent = String(rows.filter((item) => item.SITUACAO === 'CRIACAO' || item.SITUACAO === 'RASCUNHO').length);
+      depois.textContent = String(rows.filter((item) => item.SITUACAO === 'POS_OFICIALIZACAO').length);
       resumo.textContent = `${rows.length} evento(s) exibido(s) de ${eventos.length} carregado(s).`;
       lista.innerHTML = rows.length ? rows.map((evento) => {
         const info = detalhe(evento);
@@ -100,8 +109,17 @@
       mais?.classList.add('hidden');
       try {
         const params = new URLSearchParams({ lojaId: String(lojaId), mesRef: `${mes.value}-01`, limit: '100', offset: String(eventos.length) });
-        const data = await apiRequest(`/api/escalas/eventos?${params}`);
+        const rmParams = new URLSearchParams({ lojaId: String(lojaId), mesRef: `${mes.value}-01` });
+        const [data, enviosRm] = await Promise.all([
+          apiRequest(`/api/escalas/eventos?${params}`),
+          hasPermission('integracao-rm', 'visualizar')
+            ? apiRequest(`/api/escalas/rm/envios?${rmParams}`).catch(() => null)
+            : Promise.resolve(null)
+        ]);
         if (atual !== consulta) return;
+        pendenciasRm.textContent = enviosRm
+          ? String((enviosRm.envios || []).filter((item) => item.STATUS !== 'ENVIADO').length)
+          : '-';
         const recebidos = Array.isArray(data.eventos) ? data.eventos : [];
         eventos.push(...recebidos);
         fim = recebidos.length < 100;
@@ -159,6 +177,8 @@
     loja?.addEventListener('change', () => load());
     mes?.addEventListener('change', () => load());
     acao?.addEventListener('change', render);
+    situacao?.addEventListener('change', render);
+    origem?.addEventListener('change', render);
     busca?.addEventListener('input', render);
     mais?.addEventListener('click', () => load(false));
     exportar?.addEventListener('click', exportCsv);

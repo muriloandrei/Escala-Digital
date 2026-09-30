@@ -14,8 +14,8 @@
         }
 
 #alteracoes-page .table-card { overflow: visible; }
-#alteracoes-page .catalog-filter-bar { grid-template-columns: repeat(2, minmax(150px, 1fr)) minmax(160px, 1fr) minmax(230px, 1.5fr); }
-.alteracoes-indicadores { display: flex; gap: 32px; padding: 0 0 16px; border-bottom: 1px solid #dfe5ed; }
+#alteracoes-page .catalog-filter-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.alteracoes-indicadores { display: flex; flex-wrap: wrap; gap: 16px 32px; padding: 0 0 16px; border-bottom: 1px solid #dfe5ed; }
 .alteracoes-indicadores div { display: flex; flex-direction: column; min-width: 120px; }
 .alteracoes-indicadores span { color: #586a80; font-size: 12px; }
 .alteracoes-indicadores strong { color: #152744; font-size: 22px; }

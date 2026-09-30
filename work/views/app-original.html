@@ -716,6 +716,8 @@
                         <select id="alteracoesLojaSelect" class="escala-filter-select" aria-label="Loja"></select>
                         <input id="alteracoesMesInput" type="month" class="escala-filter-select" aria-label="Mês da escala">
                         <select id="alteracoesAcaoSelect" class="escala-filter-select" aria-label="Ação"><option value="">Todas as ações</option></select>
+                        <select id="alteracoesSituacaoSelect" class="escala-filter-select" aria-label="Situação da alteração"><option value="">Todas as situações</option><option value="CRIACAO">Criação</option><option value="RASCUNHO">Antes da oficialização</option><option value="OFICIALIZADA">Oficialização</option><option value="POS_OFICIALIZACAO">Após oficialização</option><option value="CADASTRO">Cadastro</option></select>
+                        <select id="alteracoesOrigemSelect" class="escala-filter-select" aria-label="Origem da alteração"><option value="">Todas as origens</option><option value="USUARIO">Usuário</option><option value="SISTEMA">Sistema</option><option value="RM">RM</option></select>
                         <label class="escala-search-field"><span class="material-symbols-outlined">search</span><input id="alteracoesBuscaInput" type="search" placeholder="Colaborador, chapa ou usuário"></label>
                     </div>
                     <div class="table-card-header"><h2>Movimentações</h2><p id="alteracoesResumo" class="table-card-subtitle">Selecione loja e período.</p></div>
@@ -723,6 +725,9 @@
                         <div><span>Colaboradores</span><strong id="alteracoesColaboradores">0</strong></div>
                         <div><span>Eventos exibidos</span><strong id="alteracoesTotal">0</strong></div>
                         <div><span>Ações de usuários</span><strong id="alteracoesManuais">0</strong></div>
+                        <div><span>Antes da oficialização</span><strong id="alteracoesAntes">0</strong></div>
+                        <div><span>Após oficialização</span><strong id="alteracoesDepois">0</strong></div>
+                        <div><span>Pendências RM</span><strong id="alteracoesPendenciasRm">-</strong></div>
                     </div>
                     <div id="alteracoesLista" class="alteracoes-lista" aria-live="polite"></div>
                     <button id="alteracoesMaisBtn" type="button" class="action-button secondary hidden">Carregar mais</button>

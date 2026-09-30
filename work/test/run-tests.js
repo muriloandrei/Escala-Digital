@@ -17,5 +17,6 @@ require('./rm-integration.test');
 require('./rm-outbox.test');
 require('./horario-funcionario.test');
 require('./app-version.test');
+require('./eventos-page.test');
 require('./escala-sync-rm.test');
 require('./escala-eventos.test');

@@ -2431,7 +2431,7 @@
         const getLojaContextoEscala = () => String(escalaRascunhoContexto?.loja || lojaEscalaSelect?.value || '');
 
         const apiRequest = window.EscalaApi.request.bind(window.EscalaApi);
-        const eventosPageController = window.EscalaEventosPage.create({ apiRequest, escapeHtml, showInfoModal });
+        const eventosPageController = window.EscalaEventosPage.create({ apiRequest, escapeHtml, showInfoModal, hasPermission });
         const formatApiError = (error) => {
             if (Array.isArray(error?.details)) return error.details.join(' ');
             if (Array.isArray(error?.details?.errors)) return error.details.errors.join(' ');
