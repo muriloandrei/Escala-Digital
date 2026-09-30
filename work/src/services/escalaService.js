@@ -2008,13 +2008,37 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
 async function saveEscalasFuncionariosRevision(payload) {
   return withConnection(async (connection) => {
     try {
-      const saved = await saveEscalasFuncionariosRevisionComConnection(connection, payload);
+      const operacaoId = payload.operacaoId || escalaEventService.createOperationId();
+      const saved = await saveEscalasFuncionariosRevisionComConnection(connection, { ...payload, operacaoId });
+      await escalaEventService.appendEvent(connection, {
+        operacaoId, lojaId: payload.lojaId, mesRef: payload.mesRef,
+        actor: payload.actor, acao: 'CONFIRMAR_RASCUNHO', origem: 'USUARIO', situacao: 'RASCUNHO',
+        detalhe: { revisoes: saved.map((item, index) => ({
+          escfuncId: Number(payload.funcionarios[index].escfuncId || payload.funcionarios[index].ESCFUNC_ID),
+          revisao: item.revisao
+        })) }
+      });
       await connection.commit();
       return saved;
     } catch (error) {
       await connection.rollback();
       throw normalizeOracleSaveError(error);
     }
+  });
+}
+
+async function getCommittedDraftOperation({ lojaId, mesRef, operacaoId, usuarioId }) {
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select detalhe from sgn_esc_evento
+        where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          and operacao_id = :operacaoId and usuario_id = :usuarioId
+          and acao = 'CONFIRMAR_RASCUNHO'`,
+      { lojaId, mesRef, operacaoId, usuarioId },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT, fetchInfo: { DETALHE: { type: oracledb.STRING } } }
+    );
+    const detalhe = pick(result.rows?.[0], 'DETALHE', 'detalhe');
+    return detalhe ? JSON.parse(detalhe) : null;
   });
 }
 
@@ -2587,6 +2611,7 @@ module.exports = {
   saveEscala,
   saveEscalasBatch,
   saveEscalasFuncionariosRevision,
+  getCommittedDraftOperation,
   previewHorarioFuncionarioEscala,
   updateHorarioFuncionarioEscala,
   saveEscalaFuncionarioRevision,

@@ -46,7 +46,7 @@ async function listEvents({ lojasPermitidas, secoesPermitidas = null, lojaId = n
       binds[`loja${index}`] = loja;
       return `:loja${index}`;
     }).join(', ');
-    const filters = [`e.loja in (${lojasSql})`];
+    const filters = [`e.loja in (${lojasSql})`, "e.acao <> 'CONFIRMAR_RASCUNHO'"];
     if (secoesPermitidas) {
       const secoesSql = [...new Set(secoesPermitidas.map(Number).filter(Boolean))].map((secao, index) => {
         binds[`secao${index}`] = secao;

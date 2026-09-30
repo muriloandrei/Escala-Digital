@@ -60,6 +60,7 @@ test('consulta de eventos restringe a secao solicitada e as permissoes do usuari
   });
   assert.match(captured.sql, /e\.escsecao_id in \(:secao0\)/);
   assert.match(captured.sql, /e\.escsecao_id = :escsecaoId/);
+  assert.match(captured.sql, /e\.acao <> 'CONFIRMAR_RASCUNHO'/);
   assert.equal(captured.binds.secao0, 2003);
   assert.equal(captured.binds.escsecaoId, 2003);
 });

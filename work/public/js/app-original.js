@@ -153,6 +153,7 @@
         const gerarDetalhadaBancoBtn = document.getElementById('gerarDetalhadaBancoBtn');
         const criticasDetalheBancoBtn = document.getElementById('criticasDetalheBancoBtn');
         const salvarRascunhoBancoBtn = document.getElementById('salvarRascunhoBancoBtn');
+        const verificarRascunhoBancoBtn = document.getElementById('verificarRascunhoBancoBtn');
         const oficializarBancoBtn = document.getElementById('oficializarBancoBtn');
         const abrirImpressaoEscalaBtn = document.getElementById('abrirImpressaoEscalaBtn');
         const imprimirDetalheBancoBtn = document.getElementById('imprimirDetalheBancoBtn');
@@ -720,6 +721,22 @@
                 return;
             }
 
+            if (pageKey !== currentHashRoute && currentHashRoute.startsWith('escala-banco-mensal/') &&
+                (escalaDetalheBancoAlterados.size || escalaDetalheBancoAguardandoConfirmacao)) {
+                const confirmado = await showInputModal({
+                    title: 'Sair da escala?',
+                    inputs: [{ type: 'message', text: escalaDetalheBancoAguardandoConfirmacao
+                        ? 'A gravação ainda não foi confirmada. Verifique antes de sair para não perder os ajustes locais.'
+                        : 'Existem alterações não salvas nesta escala.' }],
+                    confirmText: 'Sair mesmo assim'
+                });
+                if (!confirmado) {
+                    hashNavigationLock = true;
+                    window.location.hash = '/' + currentHashRoute;
+                    return;
+                }
+            }
+
             if (escalaRascunhoAtivo && !pageKey.startsWith('escalas/nova')) {
                 const confirmacao = await navigationController.confirmDiscardDraft(true);
                 if (!confirmacao) {
@@ -894,6 +911,7 @@
         let escalaDetalheBancoValidada = false;
         let escalaDetalheBancoAlterados = new Map();
         let escalaDetalheBancoAguardandoConfirmacao = false;
+        let escalaDetalheBancoOperacaoPendente = null;
         let currentLoadedScale = null;
         let funcionariosLojaCache = [];
         let ausenciasLojaCache = [];
@@ -6711,6 +6729,8 @@
             escalaDetalheBancoValidada = false;
             escalaDetalheBancoAlterados = new Map();
             escalaDetalheBancoAguardandoConfirmacao = false;
+            escalaDetalheBancoOperacaoPendente = null;
+            verificarRascunhoBancoBtn?.classList.add('hidden');
             salvarDetalheBancoBtn?.classList.add('hidden');
             escalaBancoDetalhadaCard?.classList.add('hidden');
             criticasDetalheBancoBtn?.classList.add('hidden');
@@ -8777,10 +8797,43 @@
                 ? { texto: `Escala oficializada, mas ${rm.falhas} colaborador(es) falharam no envio ao RM. Consulte a integração RM.`, tipo: 'error' }
                 : { texto: 'Escala oficializada e enviada ao RM.', tipo: 'success' };
 
+        const verificarGravacaoRascunhoBanco = async () => {
+            const pendente = escalaDetalheBancoOperacaoPendente;
+            if (!pendente) return;
+            verificarRascunhoBancoBtn.disabled = true;
+            try {
+                const params = new URLSearchParams({ lojaId: String(pendente.lojaId), mesRef: pendente.mesRef });
+                const resposta = await apiRequest(`/api/escalas/operacoes/${encodeURIComponent(pendente.operacaoId)}?${params}`);
+                const revisoes = resposta.confirmacao?.revisoes || [];
+                const idsConfirmados = new Set(revisoes.map((item) => String(item.escfuncId)));
+                if (!resposta.confirmada || !pendente.escfuncIds.every((id) => idsConfirmados.has(String(id)))) {
+                    showInfoModal('A gravação ainda não foi confirmada. Mantenha esta tela aberta e verifique novamente antes de descartar as alterações.', 'info');
+                    return;
+                }
+                await recarregarSecaoAtualEscalaBanco(pendente.lojaId, pendente.mesRef, pendente.secaoAtiva, {
+                    subsetorAtivo: pendente.subsetorAtivo
+                });
+                escalaDetalheBancoAlterados = new Map();
+                escalaDetalheBancoAguardandoConfirmacao = false;
+                escalaDetalheBancoOperacaoPendente = null;
+                verificarRascunhoBancoBtn.classList.add('hidden');
+                showInfoModal('Gravação confirmada no banco. A escala foi recarregada.', 'success');
+            } catch (error) {
+                showInfoModal('Não foi possível verificar a gravação: ' + formatApiError(error), 'error');
+            } finally {
+                verificarRascunhoBancoBtn.disabled = false;
+                if (salvarDetalheBancoBtn) salvarDetalheBancoBtn.disabled = escalaDetalheBancoAguardandoConfirmacao;
+                if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = escalaDetalheBancoAguardandoConfirmacao;
+                if (oficializarBancoBtn) oficializarBancoBtn.disabled = escalaDetalheBancoAguardandoConfirmacao;
+            }
+        };
+
+        verificarRascunhoBancoBtn?.addEventListener('click', verificarGravacaoRascunhoBanco);
+
         const salvarAlteracoesDetalheBanco = async ({ oficializar = false } = {}) => {
             const escopoOficializacao = oficializar ? getEscopoOficializacaoBanco() : null;
             if (escalaDetalheBancoAguardandoConfirmacao) {
-                showInfoModal('A gravação anterior precisa ser conferida. Reabra a escala antes de enviar outra alteração.', 'info');
+                showInfoModal('A gravação anterior precisa ser conferida. Use Verificar gravação antes de enviar outra alteração.', 'info');
                 return;
             }
             if (!hasPermission('escalas', 'editar')) {
@@ -8807,6 +8860,12 @@
                 return;
             }
             if (!(await validarDetalheBancoAtual())) return;
+
+            const operacaoId = window.crypto?.randomUUID?.();
+            if (!operacaoId) {
+                showInfoModal('O navegador não oferece identificador seguro para confirmar o salvamento. Atualize o navegador antes de salvar.', 'error');
+                return;
+            }
 
             if (salvarDetalheBancoBtn) salvarDetalheBancoBtn.disabled = true;
             if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = true;
@@ -8843,6 +8902,7 @@
                     body: JSON.stringify({
                         lojaId: Number(escalaDetalheAtual.lojaId),
                         mesRef: escalaDetalheAtual.mesRef,
+                        operacaoId,
                         funcionarios: funcionariosAlterados,
                         oficializada: 0
                     })
@@ -8860,6 +8920,7 @@
                     resultadoRm = oficializacao.rm || null;
                 }
                 if (oficializar) {
+                    escalaDetalheBancoAlterados = new Map();
                     window.location.hash = '/escalas-geradas';
                 } else if (lojaAtual && mesAtual) {
                     const leitura = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaAtual) + '&mesRef=' + encodeURIComponent(mesAtual));
@@ -8874,15 +8935,25 @@
                     await recarregarSecaoAtualEscalaBanco(lojaAtual, mesAtual, secaoAtual, { subsetorAtivo: subsetorAtual });
                 }
                 escalaDetalheBancoAlterados = new Map();
+                escalaDetalheBancoOperacaoPendente = null;
+                verificarRascunhoBancoBtn?.classList.add('hidden');
                 const feedback = oficializar ? mensagemOficializacaoRm(resultadoRm)
                     : { texto: 'Rascunho salvo e recarregado do banco.', tipo: 'success' };
                 showInfoModal(feedback.texto, feedback.tipo);
             } catch (error) {
-                if (envioIniciado) escalaDetalheBancoAguardandoConfirmacao = true;
+                if (envioIniciado) {
+                    escalaDetalheBancoAguardandoConfirmacao = true;
+                    escalaDetalheBancoOperacaoPendente = {
+                        operacaoId, lojaId: lojaAtual, mesRef: mesAtual,
+                        secaoAtiva: secaoAtual, subsetorAtivo: subsetorAtual,
+                        escfuncIds: [...escalaDetalheBancoAlterados.values()].map((item) => item.escfuncId)
+                    };
+                    verificarRascunhoBancoBtn?.classList.remove('hidden');
+                }
                 const mensagem = gravado
-                    ? 'Alterações gravadas no banco, mas a etapa seguinte falhou. Recarregue a escala antes de editar novamente: ' + error.message
+                    ? 'Alterações gravadas no banco, mas a etapa seguinte falhou. Use Verificar gravação: ' + error.message
                     : envioIniciado
-                        ? 'Não foi possível confirmar se a gravação terminou. Reabra a escala antes de tentar novamente: ' + error.message
+                        ? 'Não foi possível confirmar se a gravação terminou. Use Verificar gravação antes de tentar novamente: ' + error.message
                         : 'Nenhuma alteração foi enviada. ' + error.message;
                 showInfoModal(error.details?.length && !envioIniciado ? error.details : mensagem, 'error');
             } finally {
@@ -9642,7 +9713,7 @@
         };
 
         window.addEventListener('beforeunload', (event) => {
-            if (!escalaRascunhoAtivo) return;
+            if (!escalaRascunhoAtivo && !escalaDetalheBancoAlterados.size && !escalaDetalheBancoAguardandoConfirmacao) return;
             event.preventDefault();
             event.returnValue = '';
         });

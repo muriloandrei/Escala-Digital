@@ -18,6 +18,7 @@ const router = express.Router();
 const saveSchema = z.object({
   lojaId: z.number().int().positive(),
   mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  operacaoId: z.string().uuid().optional(),
   escalaOrigemId: z.number().int().positive().optional(),
   funcionarios: z.array(z.object({
     escfuncId: z.number().int().positive(),
@@ -556,7 +557,8 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
         lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: funcionario.escfuncId
       })
     ));
-    const saved = await escalaService.saveEscalasFuncionariosRevision({ ...payload, actor: req.user });
+    const operacaoId = payload.operacaoId || escalaEventService.createOperationId();
+    const saved = await escalaService.saveEscalasFuncionariosRevision({ ...payload, operacaoId, actor: req.user });
     await Promise.all(saved.map((item, index) => auditService.registerAudit({
       action: 'EDITAR_ESCALA_FUNCIONARIO',
       user: req.user,
@@ -565,6 +567,7 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
       revisao: item.revisao,
       referenceId: item.escprogId,
       details: {
+        operacaoId,
         escfuncId: payload.funcionarios[index].escfuncId,
         chapa: payload.funcionarios[index].chapa,
         revisaoAnterior: anteriores[index]?.revisao ?? null,
@@ -572,9 +575,26 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
         alteracoes: buildDiaAlteracoes(anteriores[index]?.dias || [], payload.funcionarios[index].dias)
       }
     })));
-    return res.status(201).json({ saved });
+    return res.status(201).json({ saved, operacaoId });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Formato da escala invalido.', details: error.errors });
+    return next(error);
+  }
+});
+
+router.get('/operacoes/:operacaoId', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const query = z.object({
+      lojaId: z.coerce.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+    }).parse(req.query);
+    const operacaoId = z.string().uuid().parse(req.params.operacaoId);
+    const confirmacao = await escalaService.getCommittedDraftOperation({
+      ...query, operacaoId, usuarioId: Number(req.user.sub)
+    });
+    return res.json({ confirmada: Boolean(confirmacao), confirmacao });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados da operacao invalidos.' });
     return next(error);
   }
 });
