@@ -893,6 +893,7 @@
         let escalaFuncionarioEdicaoAlterada = false;
         let escalaDetalheBancoValidada = false;
         let escalaDetalheBancoAlterados = new Map();
+        let escalaDetalheBancoAguardandoConfirmacao = false;
         let currentLoadedScale = null;
         let funcionariosLojaCache = [];
         let ausenciasLojaCache = [];
@@ -6688,6 +6689,7 @@
         const resetarEstadoEdicaoBanco = () => {
             escalaDetalheBancoValidada = false;
             escalaDetalheBancoAlterados = new Map();
+            escalaDetalheBancoAguardandoConfirmacao = false;
             salvarDetalheBancoBtn?.classList.add('hidden');
             escalaBancoDetalhadaCard?.classList.add('hidden');
             criticasDetalheBancoBtn?.classList.add('hidden');
@@ -8035,26 +8037,6 @@
         };
 
         const carregarDetalheEscalaMensal = async (lojaId, mesRef, options = {}) => {
-            resetarEstadoEdicaoBanco();
-            escalaDetalheAtual = {
-                escprogId: null,
-                lojaId,
-                mesRef,
-                modo: 'mensal',
-                visao: options.visao || 'mensal',
-                status: null,
-                dias: [],
-                funcionarios: [],
-                fixos: [],
-                ausencias: [],
-                secoesLiberadas: [],
-                secoes: [],
-                secaoAtiva: options.secaoAtiva || null,
-                subsetorAtivo: options.subsetorAtivo || null,
-                subsetores: []
-            };
-            escalaDetalheTitulo.textContent = 'Escala Loja ' + lojaId + ' - ' + formatarMesTabela(mesRef);
-            escalaDetalheResumo.textContent = 'Carregando escala mensal...';
             const data = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaId) + '&mesRef=' + encodeURIComponent(mesRef));
             const escala = data.escala || {};
             let secoesCatalogo = [];
@@ -8064,6 +8046,16 @@
             } catch (error) {
                 secoesCatalogo = [];
             }
+            resetarEstadoEdicaoBanco();
+            escalaDetalheAtual = {
+                escprogId: null, lojaId, mesRef, modo: 'mensal',
+                visao: options.visao || 'mensal', status: null,
+                dias: [], funcionarios: [], fixos: [], ausencias: [],
+                secoesLiberadas: [], secoes: [],
+                secaoAtiva: options.secaoAtiva || null,
+                subsetorAtivo: options.subsetorAtivo || null, subsetores: []
+            };
+            escalaDetalheTitulo.textContent = 'Escala Loja ' + lojaId + ' - ' + formatarMesTabela(mesRef);
             escalaDetalheAtual.dias = escala.dias || [];
             escalaDetalheAtual.funcionarios = escala.funcionarios || [];
             escalaDetalheAtual.fixos = escala.fixos || [];
@@ -8766,6 +8758,10 @@
 
         const salvarAlteracoesDetalheBanco = async ({ oficializar = false } = {}) => {
             const escopoOficializacao = oficializar ? getEscopoOficializacaoBanco() : null;
+            if (escalaDetalheBancoAguardandoConfirmacao) {
+                showInfoModal('A gravação anterior precisa ser conferida. Reabra a escala antes de enviar outra alteração.', 'info');
+                return;
+            }
             if (!hasPermission('escalas', 'editar')) {
                 showInfoModal('Usuario sem permissao para salvar escalas.', 'error');
                 return;
@@ -8799,6 +8795,7 @@
             const secaoAtual = escalaDetalheAtual.secaoAtiva;
             const subsetorAtual = escalaDetalheAtual.subsetorAtivo;
             let gravado = false;
+            let envioIniciado = false;
             let resultadoRm = null;
             try {
                 const funcionariosAlterados = [...escalaDetalheBancoAlterados.values()].map(funcionario => {
@@ -8819,6 +8816,7 @@
                         });
                     return { ...funcionario, dias };
                 });
+                envioIniciado = true;
                 const result = await apiRequest('/api/escalas/funcionarios/revisao', {
                     method: 'POST',
                     body: JSON.stringify({
@@ -8843,8 +8841,8 @@
                 if (oficializar) {
                     window.location.hash = '/escalas-geradas';
                 } else if (lojaAtual && mesAtual) {
-                    await recarregarSecaoAtualEscalaBanco(lojaAtual, mesAtual, secaoAtual, { subsetorAtivo: subsetorAtual });
-                    const revisoesRecarregadas = new Map((escalaDetalheAtual.dias || []).map((dia) => [
+                    const leitura = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaAtual) + '&mesRef=' + encodeURIComponent(mesAtual));
+                    const revisoesRecarregadas = new Map((leitura.escala?.dias || []).map((dia) => [
                         String(dia.ESCFUNC_ID), Number(dia.REVISAO)
                     ]));
                     const leituraConfirmada = funcionariosAlterados.every((funcionario, index) =>
@@ -8852,20 +8850,24 @@
                     if (!leituraConfirmada) {
                         throw new Error('A leitura de volta nao confirmou a revisao gravada de todos os funcionarios. Consulte o historico e recarregue antes de editar novamente.');
                     }
+                    await recarregarSecaoAtualEscalaBanco(lojaAtual, mesAtual, secaoAtual, { subsetorAtivo: subsetorAtual });
                 }
                 escalaDetalheBancoAlterados = new Map();
                 const feedback = oficializar ? mensagemOficializacaoRm(resultadoRm)
                     : { texto: 'Rascunho salvo e recarregado do banco.', tipo: 'success' };
                 showInfoModal(feedback.texto, feedback.tipo);
             } catch (error) {
+                if (envioIniciado) escalaDetalheBancoAguardandoConfirmacao = true;
                 const mensagem = gravado
                     ? 'Alterações gravadas no banco, mas a etapa seguinte falhou. Recarregue a escala antes de editar novamente: ' + error.message
-                    : 'Nenhuma alteração foi gravada. ' + error.message;
-                showInfoModal(error.details?.length && !gravado ? error.details : mensagem, 'error');
+                    : envioIniciado
+                        ? 'Não foi possível confirmar se a gravação terminou. Reabra a escala antes de tentar novamente: ' + error.message
+                        : 'Nenhuma alteração foi enviada. ' + error.message;
+                showInfoModal(error.details?.length && !envioIniciado ? error.details : mensagem, 'error');
             } finally {
-                if (salvarDetalheBancoBtn) salvarDetalheBancoBtn.disabled = false;
-                if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = false;
-                if (oficializarBancoBtn) oficializarBancoBtn.disabled = false;
+                if (salvarDetalheBancoBtn) salvarDetalheBancoBtn.disabled = escalaDetalheBancoAguardandoConfirmacao;
+                if (salvarRascunhoBancoBtn) salvarRascunhoBancoBtn.disabled = escalaDetalheBancoAguardandoConfirmacao;
+                if (oficializarBancoBtn) oficializarBancoBtn.disabled = escalaDetalheBancoAguardandoConfirmacao;
             }
         };
 
