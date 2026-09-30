@@ -2018,6 +2018,30 @@ async function saveEscalasFuncionariosRevision(payload) {
   });
 }
 
+function aplicarHorarioBaseNosDias(diasAtuais, horario, hojeIso, datasFixas = new Set()) {
+  let diasAlterados = 0;
+  const campos = [
+    ['HR_ENT1', 'hrEnt1'], ['HR_SAI1', 'hrSai1'],
+    ['HR_ENT2', 'hrEnt2'], ['HR_SAI2', 'hrSai2']
+  ];
+  const dias = diasAtuais.map((dia) => {
+    const data = formatDateValue(pick(dia, 'DT', 'dt'));
+    const programacao = String(pick(dia, 'PROGRAMACAO', 'programacao') || 'TRB').trim().toUpperCase();
+    const editavel = data >= hojeIso && !datasFixas.has(data) && !isDescansoProgramacao(programacao);
+    const alterado = editavel && campos.some(([campo]) => pick(dia, campo, campo.toLowerCase()) !== horario[campo]);
+    if (alterado) diasAlterados += 1;
+    return {
+      data,
+      programacao,
+      ...Object.fromEntries(campos.map(([campo, destino]) => [
+        destino, alterado ? horario[campo] : pick(dia, campo, campo.toLowerCase())
+      ])),
+      justificativa: alterado ? 'Atualizacao de horario do funcionario' : null
+    };
+  });
+  return { dias, diasAlterados };
+}
+
 async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, horario, actor }) {
   return withConnection(async (connection) => {
     try {
@@ -2040,25 +2064,17 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
       if (mesRef) {
         const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
         if (atual?.dias?.length) {
-          const hojeIso = formatDateValue(new Date());
-          const dias = atual.dias.map((dia) => {
-            const data = formatDateValue(pick(dia, 'DT', 'dt'));
-            const programacao = String(pick(dia, 'PROGRAMACAO', 'programacao') || 'TRB').trim().toUpperCase();
-            const descanso = isDescansoProgramacao(programacao);
-            const editavel = !descanso && data >= hojeIso;
-            if (editavel && ['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'].some((campo) => pick(dia, campo, campo.toLowerCase()) !== horario[campo])) {
-              diasAlterados += 1;
-            }
-            return {
-              data,
-              hrEnt1: descanso ? null : (editavel ? horario.HR_ENT1 : pick(dia, 'HR_ENT1', 'hr_ent1')),
-              hrSai1: descanso ? null : (editavel ? horario.HR_SAI1 : pick(dia, 'HR_SAI1', 'hr_sai1')),
-              hrEnt2: descanso ? null : (editavel ? horario.HR_ENT2 : pick(dia, 'HR_ENT2', 'hr_ent2')),
-              hrSai2: descanso ? null : (editavel ? horario.HR_SAI2 : pick(dia, 'HR_SAI2', 'hr_sai2')),
-              programacao: descanso ? programacao : 'TRB',
-              justificativa: editavel ? 'Atualizacao de horario do funcionario' : null
-            };
-          });
+          const fixos = await connection.execute(
+            `select dt from sgn_esc_fixo_escala
+              where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+                and escfunc_id = :escfuncId and nvl(status, 'A') = 'A'`,
+            { lojaId, mesRef, escfuncId },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+          );
+          const datasFixas = new Set((fixos.rows || []).map((row) => formatDateValue(pick(row, 'DT', 'dt'))));
+          const alteracao = aplicarHorarioBaseNosDias(atual.dias, horario, formatDateValue(new Date()), datasFixas);
+          const dias = alteracao.dias;
+          diasAlterados = alteracao.diasAlterados;
           if (diasAlterados) {
             const [revisao] = await saveEscalasFuncionariosRevisionComConnection(connection, {
               lojaId, mesRef, actor, operacaoId, acao: 'EDITAR_HORARIO_ESCALA', funcionarios: [{
@@ -2066,6 +2082,13 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
                 chapa: pick(funcionario, 'CHAPA', 'chapa'),
                 escsecaoId: pick(funcionario, 'ESCSECAO_ID', 'escsecaoId'),
                 escfuncaoId: pick(funcionario, 'ESCFUNCAO_ID', 'escfuncaoId'),
+                turnoOficial: {
+                  escsecaoTurnoId: null,
+                  hrEnt1: horario.HR_ENT1,
+                  hrSai1: horario.HR_SAI1,
+                  hrEnt2: horario.HR_ENT2,
+                  hrSai2: horario.HR_SAI2
+                },
                 revisaoBase: atual.revisao,
                 dias
               }]
@@ -2550,6 +2573,7 @@ module.exports = {
     assertEscalaSnapshot,
     assertFixoSnapshot,
     situacaoDaAlteracao,
-    encontrarErrosAusencias
+    encontrarErrosAusencias,
+    aplicarHorarioBaseNosDias
   }
 };
