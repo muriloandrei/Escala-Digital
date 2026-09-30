@@ -55,3 +55,55 @@ test('alteracoes separa eventos antes e depois da oficializacao', async () => {
   assert.equal(elements.alteracoesTotal.textContent, '2');
   assert.equal(elements.alteracoesManuais.textContent, '2');
 });
+
+test('exportacao inclui eventos alem da primeira pagina e aplica busca', async () => {
+  const ids = [
+    'alteracoes-page', 'alteracoesLojaSelect', 'alteracoesMesInput',
+    'alteracoesAcaoSelect', 'alteracoesSituacaoSelect', 'alteracoesOrigemSelect',
+    'alteracoesBuscaInput', 'alteracoesResumo', 'alteracoesLista',
+    'alteracoesMaisBtn', 'alteracoesExportarBtn', 'alteracoesColaboradores',
+    'alteracoesTotal', 'alteracoesManuais', 'alteracoesAntes', 'alteracoesDepois',
+    'alteracoesPendenciasRm'
+  ];
+  const elements = Object.fromEntries(ids.map((id) => [id, {
+    value: '', textContent: '', innerHTML: '', listeners: {}, disabled: false,
+    addEventListener(name, callback) { this.listeners[name] = callback; },
+    classList: { add() {}, toggle() {} }
+  }]));
+  elements.alteracoesLojaSelect.value = '35';
+  elements.alteracoesMesInput.value = '2026-10';
+  elements.alteracoesBuscaInput.value = 'final';
+  let exportedBlob;
+  let clicked = false;
+  const window = {};
+  const source = fs.readFileSync(path.join(__dirname, '../public/js/escala-eventos-page.js'), 'utf8');
+  vm.runInNewContext(source, {
+    window,
+    document: {
+      getElementById: (id) => elements[id],
+      createElement: () => ({ click() { clicked = true; } })
+    },
+    URL: { createObjectURL(blob) { exportedBlob = blob; return 'blob:test'; }, revokeObjectURL() {} },
+    URLSearchParams, encodeURIComponent, Date, Blob, setTimeout: () => 0
+  });
+  const calls = [];
+  window.EscalaEventosPage.create({
+    apiRequest: async (url) => {
+      calls.push(url);
+      const offset = Number(new URL(url, 'http://localhost').searchParams.get('offset'));
+      if (offset === 0) return { eventos: Array.from({ length: 500 }, (_, index) => ({
+        ACAO: 'EDITAR_DIA_ESCALA', FUNCIONARIO_NOME: `Pessoa ${index}`, DETALHE: {}, LOJA: 35
+      })) };
+      return { eventos: [{ ACAO: 'EDITAR_DIA_ESCALA', FUNCIONARIO_NOME: 'Pessoa final', DETALHE: {}, LOJA: 35 }] };
+    },
+    escapeHtml: String,
+    showInfoModal(message) { throw new Error(message); }
+  });
+  await elements.alteracoesExportarBtn.listeners.click();
+  const csv = await exportedBlob.text();
+  assert.equal(calls.length, 2);
+  assert.match(csv, /Pessoa final/);
+  assert.doesNotMatch(csv, /Pessoa 499/);
+  assert.equal(clicked, true);
+  assert.equal(elements.alteracoesExportarBtn.disabled, false);
+});

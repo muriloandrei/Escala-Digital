@@ -65,6 +65,7 @@ const horarioFuncionarioSchema = z.object({
   lojaId: z.number().int().positive(),
   mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   escfuncId: z.number().int().positive(),
+  aplicarNaEscala: z.boolean().optional().default(true),
   HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
   HR_SAI1: z.string().regex(/^\d{2}:\d{2}$/),
   HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/),
@@ -630,23 +631,49 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
   }
 });
 
+async function getFuncionarioParaEdicaoHorario(req, payload) {
+  const secoesPermitidas = await getSecoesPermitidas(req, payload.lojaId);
+  const funcionarios = await catalogService.listFuncionariosByLoja(payload.lojaId, {
+    mesRef: payload.mesRef, secoesPermitidas
+  });
+  const funcionario = funcionarios.find((item) => Number(item.ESCFUNC_ID) === Number(payload.escfuncId));
+  if (!funcionario) {
+    const error = new Error('Funcionario nao encontrado para a loja ou secoes permitidas.');
+    error.statusCode = 404;
+    throw error;
+  }
+  await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [Number(funcionario.ESCSECAO_ID)]);
+  if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) {
+    const error = new Error('O horario do aprendiz e fixo e nao pode ser alterado.');
+    error.statusCode = 422;
+    throw error;
+  }
+  return funcionario;
+}
+
+router.post('/funcionario/horario/preview', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = horarioFuncionarioSchema.parse(req.body);
+    const errors = validateStandardShift(payload);
+    if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
+    await getFuncionarioParaEdicaoHorario(req, payload);
+    const impacto = await escalaService.previewHorarioFuncionarioEscala({
+      lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: payload.escfuncId,
+      horario: payload, aplicarNaEscala: payload.aplicarNaEscala
+    });
+    return res.json({ impacto });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados de horario invalidos.', details: error.errors });
+    return next(error);
+  }
+});
+
 router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = horarioFuncionarioSchema.parse(req.body);
     const errors = validateStandardShift(payload);
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
-
-    const secoesPermitidas = await getSecoesPermitidas(req, payload.lojaId);
-    const funcionarios = await catalogService.listFuncionariosByLoja(payload.lojaId, {
-      mesRef: payload.mesRef,
-      secoesPermitidas
-    });
-    const funcionario = funcionarios.find((item) => Number(item.ESCFUNC_ID) === Number(payload.escfuncId));
-    if (!funcionario) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja ou secoes permitidas.' });
-    await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [Number(funcionario.ESCSECAO_ID)]);
-    if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) {
-      return res.status(422).json({ error: 'O horario do aprendiz e fixo e nao pode ser alterado.' });
-    }
+    const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
 
     const horario = {
       HR_ENT1: payload.HR_ENT1,
@@ -659,6 +686,7 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
       mesRef: payload.mesRef,
       funcionario,
       horario,
+      aplicarNaEscala: payload.aplicarNaEscala,
       actor: req.user
     });
     const { funcionario: funcionarioAtualizado, saved, diasAlterados } = atualizacao;
@@ -674,6 +702,7 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
         escfuncId: payload.escfuncId,
         chapa: funcionarioAtualizado.CHAPA || funcionario.CHAPA,
         horario,
+        aplicarNaEscala: payload.aplicarNaEscala,
         escalaAtualizada: Boolean(saved),
         diasAlterados
       }

@@ -4860,6 +4860,8 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
+        #ALCANCE.choice-group { grid-template-columns: 1fr; }
+
         .choice-pill {
             align-items: center;
             border: 1px solid var(--cor-borda);

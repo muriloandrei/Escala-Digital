@@ -3080,13 +3080,24 @@
                 showInfoModal('Usuario sem permissao para editar horarios do funcionario.', 'error');
                 return;
             }
+            const origemEscala = options.origemEscala === true;
+            const lojaId = Number(options.lojaId || escalaDetalheAtual.lojaId || subsecoesPageState.loja || funcionario.LOJA || funcionario.loja);
+            const hoje = new Date();
+            const mesRef = options.mesRef || (origemEscala
+                ? escalaDetalheAtual.mesRef
+                : formatDateForDb(hoje.getFullYear(), hoje.getMonth(), 1));
             const values = await showInputModal({
                 title: 'Editar horários - ' + (funcionario.NOME || funcionario.nome || funcionario.CHAPA || funcionario.chapa || ''),
+                panelClass: 'bg-white rounded-lg shadow-xl w-11/12 max-w-lg flex flex-col',
                 inputs: [
                     { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || funcionario.hrEnt1 || '08:00', required: true },
                     { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || funcionario.hrSai1 || '12:00', required: true },
                     { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: funcionario.HR_ENT2 || funcionario.hrEnt2 || '13:10', required: true },
-                    { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || funcionario.hrSai2 || '17:58', required: true }
+                    { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || funcionario.hrSai2 || '17:58', required: true },
+                    { label: 'Aplicação', type: 'choice-group', id: 'ALCANCE', value: 'escala', options: [
+                        { value: 'escala', label: 'Cadastro e dias editáveis da escala de ' + formatarMesTabela(mesRef) },
+                        { value: 'cadastro', label: 'Somente cadastro para próximas gerações' }
+                    ], required: true }
                 ],
                 onRender: (body) => configurarEditorHorario(body, {
                     HR_ENT1: 'HR_ENT1', HR_SAI1: 'HR_SAI1', HR_ENT2: 'HR_ENT2', HR_SAI2: 'HR_SAI2'
@@ -3101,25 +3112,35 @@
                 HR_ENT2: values.HR_ENT2,
                 HR_SAI2: values.HR_SAI2
             };
-            const origemEscala = options.origemEscala === true;
-            const lojaId = Number(options.lojaId || escalaDetalheAtual.lojaId || subsecoesPageState.loja || funcionario.LOJA || funcionario.loja);
-            const hoje = new Date();
-            const mesRef = options.mesRef || (origemEscala
-                ? escalaDetalheAtual.mesRef
-                : formatDateForDb(hoje.getFullYear(), hoje.getMonth(), 1));
             const escfuncId = Number(funcionario.ESCFUNC_ID || funcionario.escfuncId);
             if (!lojaId || !escfuncId) {
                 showInfoModal('Não foi possível identificar loja ou funcionário para salvar os horários.', 'error');
                 return;
             }
+            const payload = {
+                lojaId,
+                mesRef,
+                escfuncId,
+                aplicarNaEscala: values.ALCANCE !== 'cadastro',
+                ...horario
+            };
+            const preview = await apiRequest('/api/escalas/funcionario/horario/preview', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            const impacto = preview?.impacto || {};
+            const resumo = payload.aplicarNaEscala
+                ? `${impacto.diasAlterados || 0} dia(s) de trabalho da escala serão atualizados. ${impacto.diasManuais || 0} dia(s) com edição individual serão preservados.`
+                : 'A escala atual não será alterada.';
+            const confirmou = await showInputModal({
+                title: 'Confirmar alteração de horário',
+                inputs: [{ type: 'message', text: resumo + ' O cadastro passará a usar este horário nas próximas gerações.' }],
+                confirmText: 'Confirmar alteração'
+            });
+            if (!confirmou) return;
             const response = await apiRequest('/api/escalas/funcionario/horario', {
                 method: 'PATCH',
-                body: JSON.stringify({
-                    lojaId,
-                    mesRef,
-                    escfuncId,
-                    ...horario
-                }),
+                body: JSON.stringify(payload),
                 timeoutMs: 120000
             });
             if (origemEscala && escalaDetalheAtual.lojaId && escalaDetalheAtual.mesRef) {
@@ -3131,7 +3152,7 @@
             } else {
                 await recarregarSubsecoesPage();
             }
-            showInfoModal(response?.escalaAtualizada ? 'Horários atualizados no cadastro e na escala atual.' : 'Horários atualizados no cadastro do funcionário.', 'success');
+            showInfoModal(response?.escalaAtualizada ? 'Horários atualizados no cadastro e nos dias editáveis da escala selecionada.' : 'Horários atualizados no cadastro para as próximas gerações.', 'success');
         }
 
         const abrirModalTransferenciaSubsecao = async (funcionario, options = {}) => {

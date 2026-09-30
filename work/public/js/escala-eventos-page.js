@@ -52,9 +52,9 @@
       CADASTRO: 'Cadastro'
     };
 
-    function filtrados() {
+    function filtrados(base = eventos) {
       const termo = String(busca?.value || '').trim().toLocaleLowerCase('pt-BR');
-      return eventos.filter((evento) => {
+      return base.filter((evento) => {
         if (acao?.value && evento.ACAO !== acao.value) return false;
         if (situacao?.value && evento.SITUACAO !== situacao.value) return false;
         if (origem?.value && evento.ORIGEM !== origem.value) return false;
@@ -150,28 +150,54 @@
       load();
     }
 
-    function exportCsv() {
-      const rows = filtrados();
-      if (!rows.length) return;
-      const csvCell = (value) => {
-        const cell = String(value ?? '');
-        const safe = /^[=+\-@]/.test(cell) ? `'${cell}` : cell;
-        return `"${safe.replaceAll('"', '""')}"`;
-      };
-      const lines = [['Data', 'Loja', 'Colaborador', 'Ação', 'Origem', 'Situação', 'Usuário', 'Revisão anterior', 'Revisão nova', 'Alterações']
-        .map(csvCell).join(';')];
-      for (const evento of rows) lines.push([
-        dataHora(evento.DT_HR_INCL), evento.LOJA,
-        [detalhe(evento).chapa || evento.FUNCIONARIO_CHAPA, evento.FUNCIONARIO_NOME].filter(Boolean).join(' | ') || evento.ESCFUNC_ID,
-        evento.ACAO, evento.ORIGEM, evento.SITUACAO, evento.LOGIN,
-        evento.REVISAO_ANTERIOR, evento.REVISAO_NOVA, JSON.stringify(detalhe(evento).alteracoes || detalhe(evento))
-      ].map(csvCell).join(';'));
-      const url = URL.createObjectURL(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `alteracoes-escala-${loja.value}-${mes.value}.csv`;
-      anchor.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    async function exportCsv() {
+      if (!loja?.value || !/^\d{4}-\d{2}$/.test(mes?.value || '') || exportar.disabled) return;
+      const lojaId = loja.value;
+      const mesRef = `${mes.value}-01`;
+      const originalLabel = exportar.innerHTML;
+      exportar.disabled = true;
+      exportar.textContent = 'Exportando...';
+      try {
+        const todos = [];
+        let offset = 0;
+        while (true) {
+          const params = new URLSearchParams({ lojaId, mesRef, limit: '500', offset: String(offset) });
+          const data = await apiRequest(`/api/escalas/eventos?${params}`);
+          const lote = Array.isArray(data.eventos) ? data.eventos : [];
+          todos.push(...lote);
+          if (lote.length < 500) break;
+          offset += lote.length;
+        }
+        const rows = filtrados(todos);
+        if (!rows.length) {
+          showInfoModal('Nenhuma alteração encontrada para exportar.', 'info');
+          return;
+        }
+        const csvCell = (value) => {
+          const cell = String(value ?? '');
+          const safe = /^[=+\-@]/.test(cell) ? `'${cell}` : cell;
+          return `"${safe.replaceAll('"', '""')}"`;
+        };
+        const lines = [['Data', 'Loja', 'Colaborador', 'Ação', 'Origem', 'Situação', 'Usuário', 'Revisão anterior', 'Revisão nova', 'Alterações']
+          .map(csvCell).join(';')];
+        for (const evento of rows) lines.push([
+          dataHora(evento.DT_HR_INCL), evento.LOJA,
+          [detalhe(evento).chapa || evento.FUNCIONARIO_CHAPA, evento.FUNCIONARIO_NOME].filter(Boolean).join(' | ') || evento.ESCFUNC_ID,
+          evento.ACAO, evento.ORIGEM, evento.SITUACAO, evento.LOGIN,
+          evento.REVISAO_ANTERIOR, evento.REVISAO_NOVA, JSON.stringify(detalhe(evento).alteracoes || detalhe(evento))
+        ].map(csvCell).join(';'));
+        const url = URL.createObjectURL(new Blob(['\ufeff', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `alteracoes-escala-${lojaId}-${mesRef.slice(0, 7)}.csv`;
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) {
+        showInfoModal(error.message, 'error');
+      } finally {
+        exportar.disabled = false;
+        exportar.innerHTML = originalLabel;
+      }
     }
 
     loja?.addEventListener('change', () => load());

@@ -2018,7 +2018,7 @@ async function saveEscalasFuncionariosRevision(payload) {
   });
 }
 
-function aplicarHorarioBaseNosDias(diasAtuais, horario, hojeIso, datasFixas = new Set()) {
+function aplicarHorarioBaseNosDias(diasAtuais, horario, hojeIso, datasFixas = new Set(), datasManuais = new Set()) {
   let diasAlterados = 0;
   const campos = [
     ['HR_ENT1', 'hrEnt1'], ['HR_SAI1', 'hrSai1'],
@@ -2027,7 +2027,7 @@ function aplicarHorarioBaseNosDias(diasAtuais, horario, hojeIso, datasFixas = ne
   const dias = diasAtuais.map((dia) => {
     const data = formatDateValue(pick(dia, 'DT', 'dt'));
     const programacao = String(pick(dia, 'PROGRAMACAO', 'programacao') || 'TRB').trim().toUpperCase();
-    const editavel = data >= hojeIso && !datasFixas.has(data) && !isDescansoProgramacao(programacao);
+    const editavel = data >= hojeIso && !datasFixas.has(data) && !datasManuais.has(data) && !isDescansoProgramacao(programacao);
     const alterado = editavel && campos.some(([campo]) => pick(dia, campo, campo.toLowerCase()) !== horario[campo]);
     if (alterado) diasAlterados += 1;
     return {
@@ -2042,7 +2042,46 @@ function aplicarHorarioBaseNosDias(diasAtuais, horario, hojeIso, datasFixas = ne
   return { dias, diasAlterados };
 }
 
-async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, horario, actor }) {
+async function calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId, mesRef, escfuncId, horario }) {
+  const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+  if (!atual?.dias?.length) return { atual, dias: [], diasAlterados: 0, diasManuais: 0 };
+  const fixos = await connection.execute(
+    `select dt from sgn_esc_fixo_escala
+      where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+        and escfunc_id = :escfuncId and nvl(status, 'A') = 'A'`,
+    { lojaId, mesRef, escfuncId },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  const manuais = await connection.execute(
+    `select detalhe from sgn_esc_evento
+      where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+        and escfunc_id = :escfuncId
+        and acao in ('EDITAR_DIA_ESCALA', 'EDITAR_ESCALA_FUNCIONARIO')
+        and revisao_nova <= :revisao`,
+    { lojaId, mesRef, escfuncId, revisao: atual.revisao },
+    { outFormat: oracledb.OUT_FORMAT_OBJECT, fetchInfo: { DETALHE: { type: oracledb.STRING } } }
+  );
+  const datasFixas = new Set((fixos.rows || []).map((row) => formatDateValue(pick(row, 'DT', 'dt'))));
+  const datasManuais = new Set((manuais.rows || []).flatMap((row) => {
+    const detalhe = JSON.parse(pick(row, 'DETALHE', 'detalhe') || '{}');
+    return (detalhe.alteracoes || []).map((alteracao) => alteracao.data);
+  }));
+  return {
+    atual,
+    ...aplicarHorarioBaseNosDias(atual.dias, horario, formatDateValue(new Date()), datasFixas, datasManuais),
+    diasManuais: datasManuais.size
+  };
+}
+
+async function previewHorarioFuncionarioEscala({ lojaId, mesRef, escfuncId, horario, aplicarNaEscala = true }) {
+  if (!mesRef || !aplicarNaEscala) return { diasAlterados: 0, diasManuais: 0, possuiEscala: false };
+  return withConnection(async (connection) => {
+    const alteracao = await calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId, mesRef, escfuncId, horario });
+    return { diasAlterados: alteracao.diasAlterados, diasManuais: alteracao.diasManuais, possuiEscala: Boolean(alteracao.atual) };
+  });
+}
+
+async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, horario, aplicarNaEscala = true, actor }) {
   return withConnection(async (connection) => {
     try {
       const operacaoId = escalaEventService.createOperationId();
@@ -2061,18 +2100,10 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
 
       let saved = null;
       let diasAlterados = 0;
-      if (mesRef) {
-        const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+      if (mesRef && aplicarNaEscala) {
+        const alteracao = await calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId, mesRef, escfuncId, horario });
+        const { atual } = alteracao;
         if (atual?.dias?.length) {
-          const fixos = await connection.execute(
-            `select dt from sgn_esc_fixo_escala
-              where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-                and escfunc_id = :escfuncId and nvl(status, 'A') = 'A'`,
-            { lojaId, mesRef, escfuncId },
-            { outFormat: oracledb.OUT_FORMAT_OBJECT }
-          );
-          const datasFixas = new Set((fixos.rows || []).map((row) => formatDateValue(pick(row, 'DT', 'dt'))));
-          const alteracao = aplicarHorarioBaseNosDias(atual.dias, horario, formatDateValue(new Date()), datasFixas);
           const dias = alteracao.dias;
           diasAlterados = alteracao.diasAlterados;
           if (diasAlterados) {
@@ -2116,7 +2147,7 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
           detalhe: {
             chapa: pick(funcionario, 'CHAPA', 'chapa'),
             anterior: Object.fromEntries(['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'].map((field) => [field, pick(funcionario, field, field.toLowerCase())])),
-            novo: horario, diasAlterados
+            novo: horario, aplicarNaEscala, diasAlterados
           }
       });
       await connection.commit();
@@ -2556,6 +2587,7 @@ module.exports = {
   saveEscala,
   saveEscalasBatch,
   saveEscalasFuncionariosRevision,
+  previewHorarioFuncionarioEscala,
   updateHorarioFuncionarioEscala,
   saveEscalaFuncionarioRevision,
   sincronizarEscalaFuncionarioComRm,
