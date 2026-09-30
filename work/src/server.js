@@ -1,6 +1,5 @@
 const path = require('path');
 const crypto = require('crypto');
-const fs = require('fs');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
@@ -17,34 +16,12 @@ const stateRoutes = require('./routes/stateRoutes');
 const accessRoutes = require('./routes/accessRoutes');
 const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
 const monthlyReleaseService = require('./services/monthlyReleaseService');
+const { getAppVersion } = require('./utils/appVersion');
 
 const env = getEnv();
 const app = express();
 
-function getLatestMtime(pathsToInspect) {
-  let latest = 0;
-  for (const targetPath of pathsToInspect) {
-    if (!fs.existsSync(targetPath)) continue;
-    const stat = fs.statSync(targetPath);
-    latest = Math.max(latest, stat.mtimeMs);
-    if (stat.isDirectory()) {
-      const children = fs.readdirSync(targetPath).map((child) => path.join(targetPath, child));
-      latest = Math.max(latest, getLatestMtime(children));
-    }
-  }
-  return latest;
-}
-
-const appVersion = process.env.APP_VERSION || crypto
-  .createHash('sha1')
-  .update(String(getLatestMtime([
-    path.join(__dirname, '..', 'src'),
-    path.join(__dirname, '..', 'public', 'js'),
-    path.join(__dirname, '..', 'public', 'css'),
-    path.join(__dirname, '..', 'views')
-  ])))
-  .digest('hex')
-  .slice(0, 12);
+const appVersion = process.env.APP_VERSION || getAppVersion(path.join(__dirname, '..'));
 
 function setNoStore(res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
