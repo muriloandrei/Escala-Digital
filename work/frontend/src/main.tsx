@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   CalendarDays,
@@ -164,6 +164,7 @@ function App() {
           <span>Escala Inteligente</span>
           <span className="topbar-user">{user.nome || user.login}</span>
         </header>
+        {canSeeEscalas && <TrainingPrompt user={user} />}
         <Routes>
           {canSeeEscalas && <Route path="/escalas-liberadas" element={<EscalasLiberadas user={user} />} />}
           {canSeeEscalas && <Route path="/escalas/:lojaId/:mesRef" element={<EscalaMensal user={user} />} />}
@@ -198,6 +199,38 @@ function App() {
           <Route path="*" element={<Navigate to={start} replace />} />
         </Routes>
       </div>
+    </div>
+  );
+}
+
+function TrainingPrompt({ user }: { user: User }) {
+  const location = useLocation();
+  const [stage, setStage] = useState<number | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setStage(null);
+    getJson<{ stage: number; persisted: boolean }>('/api/auth/treinamento', controller.signal)
+      .then((progress) => {
+        if (progress.persisted) {
+          setStage(progress.stage);
+          return;
+        }
+        try {
+          const cached = JSON.parse(localStorage.getItem(`escala:treinamento:v1:${user.sub}`) || '{}');
+          setStage(cached.version === 1 && Number.isInteger(cached.stage) && cached.stage >= 0 && cached.stage <= 7 ? cached.stage : 0);
+        } catch { setStage(0); }
+      })
+      .catch((reason) => { if (reason.name !== 'AbortError') setStage(null); });
+    return () => controller.abort();
+  }, [location.pathname, user.sub]);
+
+  if (location.pathname === '/treinamento' || stage === null || stage >= 7) return null;
+  return (
+    <div className="training-prompt" role="status">
+      <GraduationCap size={20} aria-hidden="true" />
+      <span>{stage === 0 ? 'Comece pelo treinamento de escala.' : 'Seu treinamento está em andamento.'}</span>
+      <NavLink to="/treinamento">{stage === 0 ? 'Iniciar treinamento' : 'Continuar treinamento'}</NavLink>
     </div>
   );
 }

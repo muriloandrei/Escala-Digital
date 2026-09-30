@@ -110,6 +110,34 @@ a {
   font-weight: 400;
   color: #596b80;
 }
+.training-prompt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 26px;
+  border-bottom: 1px solid #c8d8e9;
+  background: #eaf3fc;
+  color: #173c65;
+  font-size: 13px;
+}
+.training-prompt a {
+  margin-left: auto;
+  color: #1156a3;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.training-prompt a:hover {
+  text-decoration: underline;
+}
+@media (max-width: 640px) {
+  .training-prompt {
+    flex-wrap: wrap;
+    padding: 10px 16px;
+  }
+  .training-prompt a {
+    margin-left: 32px;
+  }
+}
 .content {
   padding: 26px;
   max-width: 1600px;
