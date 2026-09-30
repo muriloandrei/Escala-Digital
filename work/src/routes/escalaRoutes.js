@@ -359,13 +359,13 @@ router.get('/mensal', requirePermission('escalas', 'visualizar'), resolveLojaReq
   try {
     const lojaId = Number(req.query.lojaId);
     const mesRef = req.query.mesRef;
-    if (!lojaId || !mesRef) {
-      return res.status(400).json({ error: 'lojaId e mesRef sao obrigatorios.' });
+    if (!lojaId || !/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(String(mesRef || ''))) {
+      return res.status(400).json({ error: 'lojaId e mesRef validos sao obrigatorios.' });
     }
 
     const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
     const escala = await escalaService.getEscalaMensal({ lojaId, mesRef, secoesPermitidas });
-    return res.json({ escala });
+    return res.json({ escala, periodo: getOperationalPeriodIso(mesRef) });
   } catch (error) {
     return next(error);
   }

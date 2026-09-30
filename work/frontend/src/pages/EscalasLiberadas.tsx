@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, RefreshCw, Search } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { getJson, type Loja, type ResumoEscala, type User } from '../api';
 
 const months = [
@@ -208,13 +209,13 @@ export function EscalasLiberadas({ user }: { user: User }) {
                       <td>{displayDate(item.MODIFICADA_EM)}</td>
                       <td>{item.MODIFICADO_POR || 'Sistema'}</td>
                       <td>
-                        <a
+                        <Link
                           className="open-link"
-                          href={`/app#/escala-banco-mensal/${encodeURIComponent(item.LOJA)}/${encodeURIComponent(key)}`}
+                          to={`/escalas/${encodeURIComponent(item.LOJA)}/${encodeURIComponent(key)}`}
                           aria-label={`Abrir escala da loja ${item.LOJA} de ${monthLabel(key)}`}
                         >
                           <ArrowUpRight size={17} /> Abrir
-                        </a>
+                        </Link>
                       </td>
                     </tr>
                   );

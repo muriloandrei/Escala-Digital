@@ -1,13 +1,29 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, GraduationCap, List, LogOut } from 'lucide-react';
+import {
+  ArrowLeft,
+  CalendarDays,
+  GraduationCap,
+  List,
+  LogOut,
+  Users,
+  LayoutGrid,
+  History,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { getJson, type User } from './api';
+import { canView, getJson, type User } from './api';
 import { EscalasLiberadas } from './pages/EscalasLiberadas';
+import { EscalaMensal } from './pages/EscalaMensal';
+import { Funcionarios } from './pages/Funcionarios';
+import { Secoes } from './pages/Secoes';
+import { Subsecoes } from './pages/Subsecoes';
+import { Alteracoes } from './pages/Alteracoes';
 import { Treinamento } from './pages/Treinamento';
 import './styles.css';
 import './responsive.css';
+import './schedule.css';
+import './directory.css';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -41,6 +57,17 @@ function App() {
       </main>
     );
 
+  const canSeeEscalas = canView(user, 'escalas');
+  const canSeeFuncionarios = canView(user, 'funcionarios');
+  const canSeeSecoes = canView(user, 'secoes');
+  const start = canSeeEscalas
+    ? '/escalas-liberadas'
+    : canSeeFuncionarios
+      ? '/funcionarios'
+      : canSeeSecoes
+        ? '/secoes'
+        : '/sem-acesso';
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -48,12 +75,31 @@ function App() {
           <img src="/assets/escala-inteligente-logo.png" alt="Escala Inteligente" />
         </div>
         <nav aria-label="Menu principal">
-          <NavLink to="/escalas-liberadas">
-            <List size={18} /> Escalas liberadas
-          </NavLink>
-          <NavLink to="/treinamento">
-            <GraduationCap size={18} /> Treinamento
-          </NavLink>
+          {canSeeEscalas && (
+            <NavLink to="/escalas-liberadas">
+              <List size={18} /> Escalas liberadas
+            </NavLink>
+          )}
+          {canSeeEscalas && (
+            <NavLink to="/alteracoes">
+              <History size={18} /> Alterações
+            </NavLink>
+          )}
+          {canSeeFuncionarios && (
+            <NavLink to="/funcionarios">
+              <Users size={18} /> Funcionários
+            </NavLink>
+          )}
+          {canSeeSecoes && (
+            <NavLink to="/secoes">
+              <LayoutGrid size={18} /> Seções
+            </NavLink>
+          )}
+          {canSeeEscalas && (
+            <NavLink to="/treinamento">
+              <GraduationCap size={18} /> Treinamento
+            </NavLink>
+          )}
           <a href="/app#/escalas-geradas">
             <ArrowLeft size={18} /> Interface anterior
           </a>
@@ -73,9 +119,23 @@ function App() {
           <span className="topbar-user">{user.nome || user.login}</span>
         </header>
         <Routes>
-          <Route path="/escalas-liberadas" element={<EscalasLiberadas user={user} />} />
-          <Route path="/treinamento" element={<Treinamento user={user} />} />
-          <Route path="*" element={<Navigate to="/escalas-liberadas" replace />} />
+          {canSeeEscalas && <Route path="/escalas-liberadas" element={<EscalasLiberadas user={user} />} />}
+          {canSeeEscalas && <Route path="/escalas/:lojaId/:mesRef" element={<EscalaMensal user={user} />} />}
+          {canSeeEscalas && <Route path="/alteracoes" element={<Alteracoes user={user} />} />}
+          {canSeeFuncionarios && <Route path="/funcionarios" element={<Funcionarios user={user} />} />}
+          {canSeeSecoes && <Route path="/secoes" element={<Secoes user={user} />} />}
+          {canSeeSecoes && <Route path="/secoes/:lojaId/:secaoId/subsecoes" element={<Subsecoes />} />}
+          {canSeeEscalas && <Route path="/treinamento" element={<Treinamento user={user} />} />}
+          <Route
+            path="/sem-acesso"
+            element={
+              <main className="content">
+                <h1>Sem acesso</h1>
+                <p>Seu perfil não possui páginas disponíveis nesta interface.</p>
+              </main>
+            }
+          />
+          <Route path="*" element={<Navigate to={start} replace />} />
         </Routes>
       </div>
     </div>

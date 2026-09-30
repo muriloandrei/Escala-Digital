@@ -10,6 +10,40 @@ body {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .sidebar {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .sidebar nav {
+    display: flex;
+    min-width: 0;
+    overflow-x: auto;
+    padding: 8px 10px 12px;
+  }
+
+  .sidebar nav a {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    font-size: 11px;
+  }
+
+  .sidebar-user small {
+    display: none;
+  }
+
+  .sidebar-user button {
+    margin: 0 0 0 auto;
+    flex: none;
+  }
+
   .training-steps {
     min-width: 0;
     overflow: hidden;
