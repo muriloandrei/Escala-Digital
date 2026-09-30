@@ -17,6 +17,7 @@ import {
 import { EditarDiaEscala } from './EditarDiaEscala';
 import { TransferirSubsecao } from './TransferirSubsecao';
 import { EditarFixoEscala } from './EditarFixoEscala';
+import { EditarDiasEmMassa } from './EditarDiasEmMassa';
 
 function iso(value: string | null | undefined) {
   return String(value || '').slice(0, 10);
@@ -110,6 +111,7 @@ export function EscalaMensal({ user }: { user: User }) {
   } | null>(null);
   const [editingCell, setEditingCell] = useState<{ employee: Funcionario; day: DiaEscala } | null>(null);
   const [fixedCell, setFixedCell] = useState<{ employee: Funcionario; date: string } | null>(null);
+  const [bulkEditing, setBulkEditing] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const gridPosition = useRef({ left: 0, top: 0 });
 
@@ -489,6 +491,7 @@ export function EscalaMensal({ user }: { user: User }) {
                   <span>
                     Escopo: <strong>{scopeName}</strong> · {scopePeople.length} funcionário(s)
                   </span>
+                  {canEdit(user, 'escalas-funcionarios') && <button className="button secondary" type="button" disabled={!scopePeople.length || loading || escala?.status === 'FINALIZADA'} onClick={() => setBulkEditing(true)}><Pencil size={15} /> Editar vários</button>}
                   <button
                     className="button secondary"
                     type="button"
@@ -754,6 +757,11 @@ export function EscalaMensal({ user }: { user: User }) {
           }}
         />
       )}
+      {bulkEditing && lojaId && mesRef && <EditarDiasEmMassa
+        lojaId={lojaId} mesRef={mesRef} dates={dates} people={scopePeople} allDays={escala?.dias || []}
+        initialDate={selectedDate} onClose={() => setBulkEditing(false)}
+        onSaved={(count) => { setBulkEditing(false); setSelectedCell(null); setActionMessage(`${count} colaborador(es) atualizados; revisão confirmada pela leitura da escala.`); setReload((value) => value + 1); }}
+      />}
       {fixedCell && lojaId && mesRef && <EditarFixoEscala
         lojaId={lojaId} mesRef={mesRef} employee={fixedCell.employee} date={fixedCell.date}
         existing={escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(fixedCell.employee.ESCFUNC_ID) && iso(item.DT) === fixedCell.date)}

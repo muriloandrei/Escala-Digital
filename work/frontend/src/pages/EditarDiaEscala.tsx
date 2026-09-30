@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '../api';
 
 type Shift = { hrEnt1: string; hrSai1: string; hrEnt2: string; hrSai2: string };
-type PayloadDay = {
+export type PayloadDay = {
   data: string;
   hrEnt1: string | null;
   hrSai1: string | null;
@@ -25,7 +25,7 @@ function isRest(day: DiaEscala) {
   return String(day.PROGRAMACAO || 'TRB').toUpperCase() !== 'TRB';
 }
 
-function toPayloadDay(day: DiaEscala): PayloadDay {
+export function toPayloadDay(day: DiaEscala): PayloadDay {
   const rest = isRest(day);
   return {
     data: dateOnly(day.DT),
