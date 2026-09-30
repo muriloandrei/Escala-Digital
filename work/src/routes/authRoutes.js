@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { getEnv } = require('../config/env');
 const authService = require('../services/authService');
+const trainingProgressService = require('../services/trainingProgressService');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -52,6 +53,28 @@ router.post('/logout', (req, res) => {
 
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
+});
+
+router.get('/treinamento', requireAuth, async (req, res, next) => {
+  try {
+    return res.json(await trainingProgressService.getProgress(Number(req.user.sub)));
+  } catch (error) { return next(error); }
+});
+
+router.put('/treinamento', requireAuth, async (req, res, next) => {
+  try {
+    const { stage } = z.object({ stage: z.number().int().min(0).max(7) }).strict().parse(req.body);
+    return res.json(await trainingProgressService.saveProgress(Number(req.user.sub), stage));
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Etapa de treinamento invalida.' });
+    return next(error);
+  }
+});
+
+router.delete('/treinamento', requireAuth, async (req, res, next) => {
+  try {
+    return res.json(await trainingProgressService.resetProgress(Number(req.user.sub)));
+  } catch (error) { return next(error); }
 });
 
 router.patch('/me/loja-principal', requireAuth, async (req, res, next) => {

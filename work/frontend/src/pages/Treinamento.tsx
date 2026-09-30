@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, RotateCcw, ShieldCheck } from 'lucide-react';
-import type { User } from '../api';
+import { deleteJson, getJson, putJson, type User } from '../api';
 
 const VERSION = 1;
 const stageTitles = [
@@ -13,6 +13,7 @@ const stageTitles = [
   'Concluir',
 ];
 type Progress = { version: number; stage: number };
+type ServerProgress = Progress & { found: boolean; persisted: boolean };
 
 function readProgress(key: string): Progress {
   try {
@@ -49,32 +50,75 @@ const people = [
 export function Treinamento({ user }: { user: User }) {
   const key = `escala:treinamento:v${VERSION}:${user.sub}`;
   const [stage, setStage] = useState(() => readProgress(key).stage);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [persisted, setPersisted] = useState(false);
+  const [progressError, setProgressError] = useState('');
   const [store, setStore] = useState('');
   const [period, setPeriod] = useState('');
   const [section, setSection] = useState('');
   const completed = stage >= stageTitles.length;
 
-  function advance() {
+  useEffect(() => {
+    const controller = new AbortController();
+    getJson<ServerProgress>('/api/auth/treinamento', controller.signal).then(async (result) => {
+      if (controller.signal.aborted) return;
+      const local = readProgress(key).stage;
+      if (!result.persisted) {
+        setStage(local);
+        setPersisted(false);
+        setProgressError('Progresso apenas neste navegador até aplicar a migração do treinamento.');
+      } else if (!result.found && local > 0) {
+        try {
+          const imported = await putJson<ServerProgress>('/api/auth/treinamento', { stage: local });
+          if (!controller.signal.aborted) { setStage(imported.stage); setPersisted(true); }
+        } catch {
+          if (!controller.signal.aborted) { setStage(local); setPersisted(false); setProgressError('Progresso apenas neste navegador; a sincronização falhou.'); }
+        }
+      } else {
+        setStage(result.stage);
+        setPersisted(true);
+        try { localStorage.setItem(key, JSON.stringify({ version: VERSION, stage: result.stage })); } catch { /* Cache opcional. */ }
+      }
+      if (!controller.signal.aborted) setLoading(false);
+    }).catch((reason) => {
+      if (reason.name !== 'AbortError') { setPersisted(false); setProgressError('Não foi possível consultar o progresso no servidor. Este navegador continuará o exercício.'); setLoading(false); }
+    });
+    return () => controller.abort();
+  }, [key]);
+
+  async function advance() {
+    if (busy) return;
     const next = Math.min(stage + 1, stageTitles.length);
-    setStage(next);
+    setBusy(true);
+    setProgressError('');
     try {
-      localStorage.setItem(key, JSON.stringify({ version: VERSION, stage: next }));
-    } catch {
-      /* Sem armazenamento, a sessao atual continua. */
-    }
+      const confirmed = persisted ? await putJson<ServerProgress>('/api/auth/treinamento', { stage: next }) : null;
+      const current = confirmed?.stage ?? next;
+      setStage(current);
+      try { localStorage.setItem(key, JSON.stringify({ version: VERSION, stage: current })); } catch { /* Cache opcional. */ }
+    } catch (reason) {
+      setProgressError(reason instanceof Error ? reason.message : 'Não foi possível salvar o progresso.');
+    } finally { setBusy(false); }
   }
 
-  function restart() {
-    setStage(0);
-    setStore('');
-    setPeriod('');
-    setSection('');
+  async function restart() {
+    if (busy) return;
+    setBusy(true);
+    setProgressError('');
     try {
-      localStorage.removeItem(key);
-    } catch {
-      /* Opcional. */
-    }
+      if (persisted) await deleteJson<ServerProgress>('/api/auth/treinamento');
+      setStage(0);
+      setStore('');
+      setPeriod('');
+      setSection('');
+      try { localStorage.removeItem(key); } catch { /* Cache opcional. */ }
+    } catch (reason) {
+      setProgressError(reason instanceof Error ? reason.message : 'Não foi possível reiniciar o treinamento.');
+    } finally { setBusy(false); }
   }
+
+  if (loading) return <main className="content training"><div className="empty-state" role="status">Carregando treinamento...</div></main>;
 
   return (
     <main className="content training">
@@ -83,16 +127,17 @@ export function Treinamento({ user }: { user: User }) {
           <h1>Treinamento de escala</h1>
           <p>Exercicio pratico com dados ficticios para {user.perfil.toLocaleLowerCase('pt-BR')}.</p>
         </div>
-        <button type="button" className="button secondary" onClick={restart}>
+        <button type="button" className="button secondary" disabled={busy} onClick={restart}>
           <RotateCcw size={16} /> Reiniciar
         </button>
       </div>
       <div className="simulation-banner">
         <ShieldCheck size={18} />
         <span>
-          <strong>Ambiente simulado</strong> · Nenhuma acao aqui altera a escala, o banco de dados ou o RM.
+          <strong>Ambiente simulado</strong> · Nenhuma ação altera escalas reais ou o RM. Somente o progresso do exercício pode ser registrado.
         </span>
       </div>
+      {progressError && <div className="notice warning" role="status">{progressError}</div>}
       <div className="training-layout">
         <aside className="training-steps" aria-label="Etapas do treinamento">
           <h2>Etapas</h2>
@@ -118,7 +163,7 @@ export function Treinamento({ user }: { user: User }) {
                 <a className="button primary" href="/nova/escalas-liberadas">
                   Escalas liberadas
                 </a>
-                <button className="button secondary" onClick={restart}>
+                <button className="button secondary" disabled={busy} onClick={restart}>
                   Repetir exercicio
                 </button>
               </div>
@@ -141,7 +186,7 @@ export function Treinamento({ user }: { user: User }) {
                       <option value="10">Loja Escola 10</option>
                     </select>
                   </label>
-                  <button className="button primary" disabled={store !== '10'} onClick={advance}>
+                  <button className="button primary" disabled={busy || store !== '10'} onClick={advance}>
                     Confirmar loja
                   </button>
                 </div>
@@ -160,7 +205,7 @@ export function Treinamento({ user }: { user: User }) {
                       <option value="2026-10">05/10/2026 a 01/11/2026</option>
                     </select>
                   </label>
-                  <button className="button primary" disabled={period !== '2026-10'} onClick={advance}>
+                  <button className="button primary" disabled={busy || period !== '2026-10'} onClick={advance}>
                     Abrir periodo
                   </button>
                 </div>
@@ -180,7 +225,7 @@ export function Treinamento({ user }: { user: User }) {
                       <option value="deposito">Deposito</option>
                     </select>
                   </label>
-                  <button className="button primary" disabled={section !== 'caixa'} onClick={advance}>
+                  <button className="button primary" disabled={busy || section !== 'caixa'} onClick={advance}>
                     Abrir Frente de Caixa
                   </button>
                 </div>
@@ -196,7 +241,7 @@ export function Treinamento({ user }: { user: User }) {
                       </p>
                     </div>
                     {stage === 3 && (
-                      <button className="button primary" data-tour="gerar" onClick={advance}>
+                      <button className="button primary" data-tour="gerar" disabled={busy} onClick={advance}>
                         Gerar escala simulada
                       </button>
                     )}
@@ -231,6 +276,7 @@ export function Treinamento({ user }: { user: User }) {
                                           className="day-target"
                                           data-tour="corrigir"
                                           title="Adicionar folga a Maria na sexta-feira"
+                                          disabled={busy}
                                           onClick={advance}
                                         >
                                           {value}
@@ -258,7 +304,7 @@ export function Treinamento({ user }: { user: User }) {
                             <Check size={16} /> Critica corrigida. Salve o rascunho para preservar a
                             alteracao.
                           </p>
-                          <button className="button primary" data-tour="salvar" onClick={advance}>
+                          <button className="button primary" data-tour="salvar" disabled={busy} onClick={advance}>
                             Salvar rascunho simulado
                           </button>
                         </div>
@@ -266,10 +312,9 @@ export function Treinamento({ user }: { user: User }) {
                       {stage === 6 && (
                         <div className="training-task inline-task">
                           <p>
-                            <Check size={16} /> Rascunho salvo apenas neste navegador. A escala real nao foi
-                            modificada.
+                            <Check size={16} /> Rascunho simulado salvo. A escala real nao foi modificada.
                           </p>
-                          <button className="button primary" onClick={advance}>
+                          <button className="button primary" disabled={busy} onClick={advance}>
                             Concluir treinamento
                           </button>
                         </div>
