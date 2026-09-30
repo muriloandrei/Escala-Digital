@@ -437,6 +437,12 @@
   max-height: min(88vh, 780px);
   overflow-y: auto;
 }
+.heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .access-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(150px, 0.65fr);
@@ -559,15 +565,14 @@
   gap: 16px;
   padding: 14px 16px;
 }
-.profile-fields > label:first-child {
+.profile-fields > label:not(.access-status) {
   display: grid;
   flex: 1;
   min-width: 220px;
   gap: 5px;
   font-size: 12px;
 }
-.profile-fields input[type='text'],
-.profile-fields > label:first-child input {
+.profile-fields > label:not(.access-status) input {
   height: 36px;
   border: 1px solid #ccd8e6;
   border-radius: 4px;
