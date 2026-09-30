@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 import { canView, getJson, type User } from './api';
 import { EscalasLiberadas } from './pages/EscalasLiberadas';
 import { EscalaMensal } from './pages/EscalaMensal';
+import { ImprimirEscala } from './pages/ImprimirEscala';
 import { Funcionarios } from './pages/Funcionarios';
 import { Secoes } from './pages/Secoes';
 import { Subsecoes } from './pages/Subsecoes';
@@ -24,6 +25,7 @@ import './styles.css';
 import './responsive.css';
 import './schedule.css';
 import './directory.css';
+import './print.css';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -121,10 +123,15 @@ function App() {
         <Routes>
           {canSeeEscalas && <Route path="/escalas-liberadas" element={<EscalasLiberadas user={user} />} />}
           {canSeeEscalas && <Route path="/escalas/:lojaId/:mesRef" element={<EscalaMensal user={user} />} />}
+          {canSeeEscalas && (
+            <Route path="/escalas/:lojaId/:mesRef/imprimir" element={<ImprimirEscala user={user} />} />
+          )}
           {canSeeEscalas && <Route path="/alteracoes" element={<Alteracoes user={user} />} />}
           {canSeeFuncionarios && <Route path="/funcionarios" element={<Funcionarios user={user} />} />}
           {canSeeSecoes && <Route path="/secoes" element={<Secoes user={user} />} />}
-          {canSeeSecoes && <Route path="/secoes/:lojaId/:secaoId/subsecoes" element={<Subsecoes />} />}
+          {canSeeSecoes && (
+            <Route path="/secoes/:lojaId/:secaoId/subsecoes" element={<Subsecoes user={user} />} />
+          )}
           {canSeeEscalas && <Route path="/treinamento" element={<Treinamento user={user} />} />}
           <Route
             path="/sem-acesso"

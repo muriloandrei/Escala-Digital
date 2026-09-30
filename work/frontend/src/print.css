@@ -1,0 +1,432 @@
+.print-page {
+  max-width: none;
+}
+.print-page-heading {
+  max-width: 1600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.print-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.print-controls {
+  background: #fff;
+  border: 1px solid #d9e2ec;
+  border-radius: 6px;
+  position: sticky;
+  top: 16px;
+}
+.print-modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid #e3eaf2;
+}
+.print-modes button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: #fff;
+  min-width: 0;
+  padding: 10px 2px;
+  color: #596e88;
+  font-size: 11px;
+}
+.print-modes button.selected {
+  color: #1854bf;
+  border-bottom-color: #2459d5;
+  font-weight: 700;
+}
+.print-controls-body {
+  display: grid;
+  gap: 16px;
+  padding: 17px;
+}
+.print-filter-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: #526984;
+}
+.print-filter-group > strong {
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.print-filter-group select,
+.print-filter-group input[type='date'],
+.print-select summary {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  background: #fff;
+  color: #233d58;
+  border: 1px solid #ccd8e6;
+  border-radius: 4px;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+.print-select {
+  position: relative;
+}
+.print-select summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.print-select summary::-webkit-details-marker {
+  display: none;
+}
+.print-select summary::after {
+  content: '▾';
+  color: #69809a;
+}
+.print-select[open] summary {
+  border-color: #4d80dc;
+}
+.print-select-menu {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  width: min(360px, calc(100vw - 40px));
+  background: #fff;
+  border: 1px solid #cad6e5;
+  box-shadow: 0 12px 24px #1a2b4330;
+  border-radius: 5px;
+}
+.print-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid #e2eaf2;
+}
+.print-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  min-width: 0;
+  font-size: 12px;
+}
+.print-select-actions {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  border-bottom: 1px solid #e2eaf2;
+}
+.print-select-actions button {
+  border: 0;
+  background: transparent;
+  color: #2259b4;
+  padding: 2px;
+  font-size: 11px;
+}
+.print-select-options {
+  overflow: auto;
+  max-height: 240px;
+}
+.print-select-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  color: #283d55;
+  border-bottom: 1px solid #eef2f6;
+  cursor: pointer;
+}
+.print-select-options label:hover {
+  background: #f3f7fd;
+}
+.print-select-options label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.print-select-options p {
+  margin: 8px;
+}
+.print-date-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.print-format {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.print-format legend {
+  color: #526984;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+.print-format label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 35px;
+  border: 1px solid #d4dfec;
+  border-radius: 4px;
+  padding: 7px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.print-format label.selected {
+  border-color: #2459d5;
+  background: #eef4ff;
+  color: #164da9;
+  font-weight: 650;
+}
+.print-format input {
+  accent-color: #2459d5;
+}
+.print-controls-footer {
+  border-top: 1px solid #e3eaf2;
+  padding: 12px 17px;
+  font-size: 12px;
+  color: #586e87;
+}
+.print-preview {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+  overflow-x: auto;
+  padding-bottom: 20px;
+}
+.print-sheet {
+  min-width: 670px;
+  min-height: 410px;
+  background: #fff;
+  border: 1px solid #d4deea;
+  box-shadow: 0 5px 20px #21344d12;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.print-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 2px solid #1c3453;
+  padding-bottom: 10px;
+  color: #1a2c46;
+}
+.print-sheet-header > div {
+  display: grid;
+  gap: 3px;
+}
+.print-sheet-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.print-sheet-header strong,
+.print-sheet-header span {
+  font-size: 10px;
+}
+.print-sheet-header img {
+  width: 84px;
+  max-height: 38px;
+  object-fit: contain;
+}
+.print-grid {
+  table-layout: fixed;
+  width: 100%;
+  font-size: 10px;
+}
+.print-grid th,
+.print-grid td {
+  border: 1px solid #d4dfea;
+  padding: 5px 2px;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.print-grid thead th {
+  background: #eef2f7;
+  color: #273e58;
+}
+.print-grid th:first-child {
+  width: 150px;
+}
+.print-grid th small {
+  margin: 2px 0 0;
+  text-transform: capitalize;
+  font-size: 8px;
+}
+.print-grid .print-person-col {
+  text-align: left;
+  width: 160px;
+  padding: 5px;
+}
+.print-person-col strong,
+.print-person-col span,
+.print-person-col em {
+  display: block;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 400;
+}
+.print-person-col strong {
+  font-weight: 700;
+}
+.print-person-col em {
+  margin-top: 5px;
+}
+.print-grid td.rest {
+  background: #c9eaf8;
+  color: #0c577a;
+}
+.print-grid td.fixed {
+  background: #e8d6f5;
+  color: #5a3186;
+}
+.print-grid td.absence {
+  background: #ffebae;
+  color: #775208;
+}
+.print-grid td.empty {
+  color: #9aa9ba;
+}
+.print-grid tfoot {
+  background: #f3f7fb;
+  font-weight: 700;
+}
+.print-individual-list {
+  display: grid;
+  gap: 15px;
+}
+.print-person {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  border: 1px solid #d6dfe9;
+  padding: 8px;
+}
+.print-person-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  align-items: baseline;
+  margin-bottom: 7px;
+  font-size: 10px;
+}
+.print-person-heading span:last-child {
+  margin-left: auto;
+}
+.print-sheet-footer {
+  margin-top: auto;
+  border-top: 1px solid #dae3ed;
+  padding-top: 7px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #65758a;
+  font-size: 9px;
+}
+.print-sheet.compact .print-grid {
+  font-size: 7px;
+}
+.print-sheet.compact .print-grid th,
+.print-sheet.compact .print-grid td {
+  padding: 4px 1px;
+}
+.print-sheet.compact .print-grid th:first-child {
+  width: 145px;
+}
+
+@media (max-width: 1200px) {
+  .print-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .print-controls {
+    position: static;
+  }
+  .print-controls-body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .print-controls-body .print-format {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 560px) {
+  .print-controls-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .print-page-heading {
+    flex-wrap: wrap;
+  }
+}
+
+@page {
+  size: A3 landscape;
+  margin: 10mm;
+}
+@media print {
+  :root,
+  body {
+    background: #fff;
+  }
+  .shell {
+    display: block;
+  }
+  .sidebar,
+  .topbar,
+  .print-page-heading,
+  .print-controls {
+    display: none !important;
+  }
+  .workspace,
+  .content,
+  .print-layout,
+  .print-preview {
+    display: block;
+    padding: 0;
+    margin: 0;
+    max-width: none;
+    overflow: visible;
+  }
+  .print-sheet {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 265mm;
+    box-shadow: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    break-after: page;
+    page-break-after: always;
+  }
+  .print-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .print-sheet-header {
+    padding-bottom: 6mm;
+  }
+  .print-sheet.compact .print-grid {
+    font-size: 6px;
+  }
+  .print-grid tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-grid td.rest,
+  .print-grid td.fixed,
+  .print-grid td.absence,
+  .print-grid thead th {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

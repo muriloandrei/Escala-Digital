@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, Play, RefreshCw, RotateCcw, Search } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Play, Printer, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   canEdit,
@@ -267,6 +267,12 @@ export function EscalaMensal({ user }: { user: User }) {
           </p>
         </div>
         <div className="heading-actions">
+          <Link
+            className="button secondary"
+            to={`/escalas/${encodeURIComponent(lojaId || '')}/${encodeURIComponent(mesRef || '')}/imprimir?secao=${sectionId || ''}`}
+          >
+            <Printer size={16} /> Imprimir
+          </Link>
           <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}>
             <RefreshCw size={16} /> Atualizar
           </button>

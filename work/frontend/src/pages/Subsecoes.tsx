@@ -1,9 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, RefreshCw, Search, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Check,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { getJson, type Funcionario, type Secao, type Subsecao } from '../api';
+import {
+  canEdit,
+  deleteJson,
+  getJson,
+  postJson,
+  putJson,
+  type Funcionario,
+  type Secao,
+  type Subsecao,
+  type User,
+} from '../api';
 
-export function Subsecoes() {
+export function Subsecoes({ user }: { user: User }) {
   const { lojaId, secaoId } = useParams();
   const [params, setParams] = useSearchParams();
   const [secoes, setSecoes] = useState<Secao[]>([]);
@@ -13,6 +34,13 @@ export function Subsecoes() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Subsecao | null>(null);
   const selected = params.get('subsecao') || 'sem';
 
   useEffect(() => {
@@ -45,6 +73,7 @@ export function Subsecoes() {
   }, [lojaId, secaoId, reload]);
 
   const secao = secoes.find((item) => String(item.ESCSECAO_ID) === secaoId);
+  const canManage = canEdit(user, 'escalas') && /frente de caixa/i.test(secao?.DESCR || '');
   const sectionPeople = useMemo(
     () => funcionarios.filter((item) => String(item.ESCSECAO_ID) === secaoId),
     [funcionarios, secaoId],
@@ -66,6 +95,70 @@ export function Subsecoes() {
       !item.ESCSUBSECAO_ID ||
       !subsecoes.some((sub) => Number(sub.ESCSUBSECAO_ID) === Number(item.ESCSUBSECAO_ID)),
   ).length;
+
+  const base = `/api/catalog/lojas/${encodeURIComponent(lojaId || '')}/secoes/${encodeURIComponent(secaoId || '')}/subsecoes`;
+
+  async function saveName(event: React.FormEvent) {
+    event.preventDefault();
+    const descr = name.trim();
+    if (!descr || descr.length > 100) {
+      setActionError('Informe um nome de até 100 caracteres.');
+      return;
+    }
+    setBusy(true);
+    setActionError('');
+    try {
+      if (editingId) {
+        const current = subsecoes.find((item) => item.ESCSUBSECAO_ID === editingId);
+        await putJson(`${base}/${editingId}`, { DESCR: descr, STATUS: current?.STATUS || 'A' });
+        setActionMessage('Subseção atualizada.');
+      } else {
+        const result = await postJson<{ subsecao: Subsecao }>(base, { DESCR: descr });
+        if (result.subsecao?.ESCSUBSECAO_ID) setParams({ subsecao: String(result.subsecao.ESCSUBSECAO_ID) });
+        setActionMessage('Subseção criada.');
+      }
+      setCreating(false);
+      setEditingId(null);
+      setName('');
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'Não foi possível salvar a subseção.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleStatus(item: Subsecao) {
+    setBusy(true);
+    setActionError('');
+    try {
+      const status = item.STATUS === 'I' ? 'A' : 'I';
+      await putJson(`${base}/${item.ESCSUBSECAO_ID}`, { DESCR: item.DESCR, STATUS: status });
+      setActionMessage(`Subseção ${status === 'A' ? 'ativada' : 'inativada'}.`);
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'Não foi possível alterar o status.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      await deleteJson(`${base}/${deleteTarget.ESCSUBSECAO_ID}`);
+      if (selected === String(deleteTarget.ESCSUBSECAO_ID)) setParams({ subsecao: 'sem' });
+      setActionMessage('Subseção excluída. Os funcionários vinculados ficaram sem subseção.');
+      setDeleteTarget(null);
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'Não foi possível excluir a subseção.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <main className="content directory-page">
@@ -101,6 +194,16 @@ export function Subsecoes() {
           </button>
         </div>
       )}
+      {actionMessage && (
+        <div className="notice success" role="status">
+          {actionMessage}
+        </div>
+      )}
+      {actionError && (
+        <div className="notice error" role="alert">
+          {actionError}
+        </div>
+      )}
       {!loading && !error && (
         <div className="subsection-layout">
           <aside className="list-surface subsection-list" aria-label="Subseções">
@@ -108,6 +211,52 @@ export function Subsecoes() {
               <strong>Subseções</strong>
               <span>{subsecoes.length}</span>
             </div>
+            {canManage && (
+              <div className="subsection-add">
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={busy || creating}
+                  onClick={() => {
+                    setCreating(true);
+                    setEditingId(null);
+                    setName('');
+                    setActionError('');
+                  }}
+                >
+                  <Plus size={15} /> Nova subseção
+                </button>
+              </div>
+            )}
+            {creating && (
+              <form className="subsection-inline-form" onSubmit={saveName}>
+                <input
+                  autoFocus
+                  value={name}
+                  maxLength={100}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Nome da subseção"
+                  aria-label="Nome da nova subseção"
+                />
+                <button
+                  type="submit"
+                  title="Salvar subseção"
+                  aria-label="Salvar subseção"
+                  disabled={busy || !name.trim()}
+                >
+                  <Check size={16} />
+                </button>
+                <button
+                  type="button"
+                  title="Cancelar"
+                  aria-label="Cancelar nova subseção"
+                  disabled={busy}
+                  onClick={() => setCreating(false)}
+                >
+                  <X size={16} />
+                </button>
+              </form>
+            )}
             <button
               type="button"
               className={selected === 'sem' ? 'subsection-item selected' : 'subsection-item'}
@@ -119,26 +268,103 @@ export function Subsecoes() {
               <b>{unassigned}</b>
             </button>
             {subsecoes.map((item) => (
-              <button
-                type="button"
+              <div
                 key={item.ESCSUBSECAO_ID}
                 className={
-                  selected === String(item.ESCSUBSECAO_ID) ? 'subsection-item selected' : 'subsection-item'
+                  selected === String(item.ESCSUBSECAO_ID) ? 'subsection-row selected' : 'subsection-row'
                 }
-                onClick={() => setParams({ subsecao: String(item.ESCSUBSECAO_ID) })}
               >
-                <span>
-                  {item.DESCR}
-                  <small>{item.STATUS === 'I' ? 'Inativa' : 'Ativa'}</small>
-                </span>
-                <b>
-                  {
-                    sectionPeople.filter(
-                      (person) => Number(person.ESCSUBSECAO_ID) === Number(item.ESCSUBSECAO_ID),
-                    ).length
-                  }
-                </b>
-              </button>
+                {editingId === item.ESCSUBSECAO_ID ? (
+                  <form className="subsection-inline-form" onSubmit={saveName}>
+                    <input
+                      autoFocus
+                      value={name}
+                      maxLength={100}
+                      onChange={(event) => setName(event.target.value)}
+                      aria-label={`Nome de ${item.DESCR}`}
+                    />
+                    <button
+                      type="submit"
+                      title="Salvar"
+                      aria-label={`Salvar ${item.DESCR}`}
+                      disabled={busy || !name.trim()}
+                    >
+                      <Check size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Cancelar"
+                      aria-label={`Cancelar edição de ${item.DESCR}`}
+                      disabled={busy}
+                      onClick={() => setEditingId(null)}
+                    >
+                      <X size={16} />
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="subsection-item"
+                      onClick={() => setParams({ subsecao: String(item.ESCSUBSECAO_ID) })}
+                    >
+                      <span>
+                        {item.DESCR}
+                        <small>{item.STATUS === 'I' ? 'Inativa' : 'Ativa'}</small>
+                      </span>
+                      <b>
+                        {
+                          sectionPeople.filter(
+                            (person) => Number(person.ESCSUBSECAO_ID) === Number(item.ESCSUBSECAO_ID),
+                          ).length
+                        }
+                      </b>
+                    </button>
+                    {canManage && (
+                      <div className="subsection-row-actions">
+                        <button
+                          type="button"
+                          className={`subsection-toggle ${item.STATUS !== 'I' ? 'on' : ''}`}
+                          role="switch"
+                          aria-checked={item.STATUS !== 'I'}
+                          aria-label={`${item.STATUS === 'I' ? 'Ativar' : 'Inativar'} ${item.DESCR}`}
+                          title={`${item.STATUS === 'I' ? 'Ativar' : 'Inativar'} subseção`}
+                          disabled={busy}
+                          onClick={() => toggleStatus(item)}
+                        >
+                          <span />
+                        </button>
+                        <button
+                          type="button"
+                          title="Editar subseção"
+                          aria-label={`Editar ${item.DESCR}`}
+                          disabled={busy}
+                          onClick={() => {
+                            setEditingId(item.ESCSUBSECAO_ID);
+                            setCreating(false);
+                            setName(item.DESCR);
+                            setActionError('');
+                          }}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          title="Excluir subseção"
+                          aria-label={`Excluir ${item.DESCR}`}
+                          disabled={busy}
+                          onClick={() => {
+                            setDeleteTarget(item);
+                            setActionError('');
+                          }}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             ))}
           </aside>
           <section className="list-surface subsection-people" aria-label="Funcionários da subseção">
@@ -192,6 +418,42 @@ export function Subsecoes() {
               </div>
             )}
           </section>
+        </div>
+      )}
+      {deleteTarget && (
+        <div
+          className="confirm-backdrop"
+          role="presentation"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !busy) setDeleteTarget(null);
+          }}
+        >
+          <div
+            className="confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-subsection-title"
+          >
+            <h2 id="delete-subsection-title">Excluir {deleteTarget.DESCR}?</h2>
+            <p>
+              Os funcionários vinculados ficarão sem subseção. A exclusão não apaga os dias já gravados da
+              escala.
+            </p>
+            <div className="confirm-actions">
+              <button
+                className="button secondary"
+                type="button"
+                autoFocus
+                disabled={busy}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancelar
+              </button>
+              <button className="button primary" type="button" disabled={busy} onClick={confirmDelete}>
+                {busy ? 'Aguarde...' : 'Excluir subseção'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </main>

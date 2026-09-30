@@ -201,3 +201,30 @@ export async function patchJson<T>(path: string, payload: unknown): Promise<T> {
   if (!response.ok) throw new ApiError(responseError(data), response.status);
   return data as T;
 }
+
+export async function putJson<T>(path: string, payload: unknown): Promise<T> {
+  const response = await fetch(path, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (response.status === 401) {
+    window.location.assign('/');
+    throw new ApiError('Sessao expirada. Entre novamente.', 401);
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new ApiError(responseError(data), response.status);
+  return data as T;
+}
+
+export async function deleteJson<T>(path: string): Promise<T> {
+  const response = await fetch(path, { method: 'DELETE', credentials: 'same-origin' });
+  if (response.status === 401) {
+    window.location.assign('/');
+    throw new ApiError('Sessao expirada. Entre novamente.', 401);
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new ApiError(responseError(data), response.status);
+  return data as T;
+}
