@@ -339,12 +339,16 @@ router.get('/eventos', requirePermission('escalas', 'visualizar'), resolveLojaRe
       limit: z.coerce.number().int().min(1).max(500).optional(),
       offset: z.coerce.number().int().min(0).optional()
     }).parse(req.query);
-    const eventos = await escalaEventService.listEvents({
+    const scope = {
       ...query,
       lojasPermitidas: [query.lojaId],
       secoesPermitidas: await getSecoesPermitidas(req, query.lojaId)
-    });
-    return res.json({ eventos });
+    };
+    const [eventos, resumo] = await Promise.all([
+      escalaEventService.listEvents(scope),
+      (query.offset || 0) === 0 ? escalaEventService.summarizeEvents(scope) : Promise.resolve(null)
+    ]);
+    return res.json({ eventos, resumo });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Filtros de eventos invalidos.' });
     return next(error);

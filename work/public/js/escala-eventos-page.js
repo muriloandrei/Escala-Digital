@@ -22,6 +22,7 @@
     let carregando = false;
     let fim = false;
     let consulta = 0;
+    let resumoPeriodo = null;
 
     const mesAtual = () => {
       const agora = new Date();
@@ -82,12 +83,12 @@
     function render() {
       if (!lista) return;
       const rows = filtrados();
-      colaboradores.textContent = String(new Set(rows.map(escfuncId).filter(Boolean)).size);
-      total.textContent = String(rows.length);
-      manuais.textContent = String(rows.filter((item) => item.ORIGEM === 'USUARIO').length);
-      antes.textContent = String(rows.filter((item) => item.SITUACAO === 'CRIACAO' || item.SITUACAO === 'RASCUNHO').length);
-      depois.textContent = String(rows.filter((item) => item.SITUACAO === 'POS_OFICIALIZACAO').length);
-      resumo.textContent = `${rows.length} evento(s) exibido(s) de ${eventos.length} carregado(s).`;
+      colaboradores.textContent = String(resumoPeriodo?.colaboradores ?? new Set(rows.map(escfuncId).filter(Boolean)).size);
+      total.textContent = String(resumoPeriodo?.total ?? rows.length);
+      manuais.textContent = String(resumoPeriodo?.manuais ?? rows.filter((item) => item.ORIGEM === 'USUARIO').length);
+      antes.textContent = String(resumoPeriodo?.antes ?? rows.filter((item) => item.SITUACAO === 'CRIACAO' || item.SITUACAO === 'RASCUNHO').length);
+      depois.textContent = String(resumoPeriodo?.depois ?? rows.filter((item) => item.SITUACAO === 'POS_OFICIALIZACAO').length);
+      resumo.textContent = `${rows.length} evento(s) exibido(s) de ${resumoPeriodo?.total ?? eventos.length} no período.`;
       lista.innerHTML = rows.length ? rows.map((evento) => {
         const info = detalhe(evento);
         const alteracoes = Array.isArray(info.alteracoes) ? info.alteracoes : [];
@@ -116,7 +117,7 @@
         return;
       }
       const atual = ++consulta;
-      if (reset) { eventos = []; fim = false; }
+      if (reset) { eventos = []; fim = false; resumoPeriodo = null; }
       carregando = true;
       resumo.textContent = 'Carregando alterações...';
       mais?.classList.add('hidden');
@@ -135,6 +136,7 @@
           ? String((enviosRm.envios || []).filter((item) => item.STATUS !== 'ENVIADO').length)
           : '-';
         const recebidos = Array.isArray(data.eventos) ? data.eventos : [];
+        if (data.resumo) resumoPeriodo = data.resumo;
         eventos.push(...recebidos);
         fim = recebidos.length < 100;
         const selecionada = acao?.value || '';

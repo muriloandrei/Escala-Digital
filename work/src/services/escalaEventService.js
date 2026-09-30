@@ -37,27 +37,34 @@ async function appendEvent(connection, event) {
   );
 }
 
-async function listEvents({ lojasPermitidas, secoesPermitidas = null, lojaId = null, mesRef = null, escfuncId = null, escsecaoId = null, limit = 100, offset = 0 }) {
+function buildEventScope({ lojasPermitidas, secoesPermitidas = null, lojaId = null, mesRef = null, escfuncId = null, escsecaoId = null }) {
   const lojas = [...new Set((lojasPermitidas || []).map(Number).filter(Boolean))];
-  if (!lojas.length || (secoesPermitidas && !secoesPermitidas.length)) return [];
-  return withConnection(async (connection) => {
-    const binds = { limit: Math.min(Math.max(Number(limit) || 100, 1), 500), offset: Math.max(Number(offset) || 0, 0) };
-    const lojasSql = lojas.map((loja, index) => {
-      binds[`loja${index}`] = loja;
-      return `:loja${index}`;
+  if (!lojas.length || (secoesPermitidas && !secoesPermitidas.length)) return null;
+  const binds = {};
+  const lojasSql = lojas.map((loja, index) => {
+    binds[`loja${index}`] = loja;
+    return `:loja${index}`;
+  }).join(', ');
+  const filters = [`e.loja in (${lojasSql})`, "e.acao <> 'CONFIRMAR_RASCUNHO'"];
+  if (secoesPermitidas) {
+    const secoesSql = [...new Set(secoesPermitidas.map(Number).filter(Boolean))].map((secao, index) => {
+      binds[`secao${index}`] = secao;
+      return `:secao${index}`;
     }).join(', ');
-    const filters = [`e.loja in (${lojasSql})`, "e.acao <> 'CONFIRMAR_RASCUNHO'"];
-    if (secoesPermitidas) {
-      const secoesSql = [...new Set(secoesPermitidas.map(Number).filter(Boolean))].map((secao, index) => {
-        binds[`secao${index}`] = secao;
-        return `:secao${index}`;
-      }).join(', ');
-      filters.push(`e.escsecao_id in (${secoesSql})`);
-    }
-    if (lojaId) { filters.push('e.loja = :lojaId'); binds.lojaId = Number(lojaId); }
-    if (mesRef) { filters.push("e.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')"); binds.mesRef = mesRef; }
-    if (escfuncId) { filters.push('e.escfunc_id = :escfuncId'); binds.escfuncId = Number(escfuncId); }
-    if (escsecaoId) { filters.push('e.escsecao_id = :escsecaoId'); binds.escsecaoId = Number(escsecaoId); }
+    filters.push(`e.escsecao_id in (${secoesSql})`);
+  }
+  if (lojaId) { filters.push('e.loja = :lojaId'); binds.lojaId = Number(lojaId); }
+  if (mesRef) { filters.push("e.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')"); binds.mesRef = mesRef; }
+  if (escfuncId) { filters.push('e.escfunc_id = :escfuncId'); binds.escfuncId = Number(escfuncId); }
+  if (escsecaoId) { filters.push('e.escsecao_id = :escsecaoId'); binds.escsecaoId = Number(escsecaoId); }
+  return { binds, filters };
+}
+
+async function listEvents({ limit = 100, offset = 0, ...scope }) {
+  const query = buildEventScope(scope);
+  if (!query) return [];
+  return withConnection(async (connection) => {
+    const binds = { ...query.binds, limit: Math.min(Math.max(Number(limit) || 100, 1), 500), offset: Math.max(Number(offset) || 0, 0) };
     const result = await connection.execute(
       `select e.evento_id, e.operacao_id, e.loja, e.mes_ref, e.escsecao_id,
               e.escfunc_id, e.usuario_id, e.login, e.acao, e.origem,
@@ -67,7 +74,7 @@ async function listEvents({ lojasPermitidas, secoesPermitidas = null, lojaId = n
          from sgn_esc_evento e
          left join sgn_esc_funcionario f on f.escfunc_id = e.escfunc_id
          left join sgn_esc_secao s on s.escsecao_id = e.escsecao_id
-        where ${filters.join(' and ')}
+        where ${query.filters.join(' and ')}
         order by e.dt_hr_incl desc, e.evento_id desc
         offset :offset rows fetch next :limit rows only`,
       binds,
@@ -82,4 +89,25 @@ async function listEvents({ lojasPermitidas, secoesPermitidas = null, lojaId = n
   });
 }
 
-module.exports = { createOperationId, appendEvent, listEvents };
+async function summarizeEvents(scope) {
+  const query = buildEventScope(scope);
+  if (!query) return { colaboradores: 0, total: 0, manuais: 0, antes: 0, depois: 0 };
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select count(distinct e.escfunc_id) as colaboradores,
+              count(*) as total,
+              nvl(sum(case when e.origem = 'USUARIO' then 1 else 0 end), 0) as manuais,
+              nvl(sum(case when e.situacao in ('CRIACAO', 'RASCUNHO') then 1 else 0 end), 0) as antes,
+              nvl(sum(case when e.situacao = 'POS_OFICIALIZACAO' then 1 else 0 end), 0) as depois
+         from sgn_esc_evento e
+        where ${query.filters.join(' and ')}`,
+      query.binds,
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const row = result.rows?.[0] || {};
+    return Object.fromEntries(['colaboradores', 'total', 'manuais', 'antes', 'depois']
+      .map((key) => [key, Number(row[key.toUpperCase()] || 0)]));
+  });
+}
+
+module.exports = { createOperationId, appendEvent, listEvents, summarizeEvents };

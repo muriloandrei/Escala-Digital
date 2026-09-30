@@ -48,7 +48,12 @@ test('consulta de eventos restringe a secao solicitada e as permissoes do usuari
       if (name === '../db/oracle') return {
         oracledb: { OUT_FORMAT_OBJECT: 1, STRING: 2 },
         withConnection: async (work) => work({
-          async execute(sql, binds) { captured = { sql, binds }; return { rows: [] }; }
+          async execute(sql, binds) {
+            captured = { sql, binds };
+            return /count\(distinct/i.test(sql)
+              ? { rows: [{ COLABORADORES: 12, TOTAL: 30, MANUAIS: 8, ANTES: 10, DEPOIS: 4 }] }
+              : { rows: [] };
+          }
         })
       };
       throw new Error(`Dependencia inesperada: ${name}`);
@@ -63,6 +68,14 @@ test('consulta de eventos restringe a secao solicitada e as permissoes do usuari
   assert.match(captured.sql, /e\.acao <> 'CONFIRMAR_RASCUNHO'/);
   assert.equal(captured.binds.secao0, 2003);
   assert.equal(captured.binds.escsecaoId, 2003);
+  const resumo = await module.exports.summarizeEvents({
+    lojasPermitidas: [35], secoesPermitidas: [2003], lojaId: 35,
+    mesRef: '2026-10-01', escsecaoId: 2003
+  });
+  assert.equal(resumo.colaboradores, 12);
+  assert.equal(resumo.total, 30);
+  assert.equal(resumo.depois, 4);
+  assert.match(captured.sql, /e\.escsecao_id = :escsecaoId/);
 });
 
 test('generation detects a concurrent day edit even without a revision change', () => {

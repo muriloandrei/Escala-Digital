@@ -33,12 +33,13 @@ test('alteracoes separa eventos antes e depois da oficializacao', async () => {
     { ACAO: 'OFICIALIZAR_ESCALA', SITUACAO: 'OFICIALIZADA', ORIGEM: 'SISTEMA', ESCFUNC_ID: 2, DETALHE: {} }
   ];
   const calls = [];
+  let resumoServidor = null;
   const controller = window.EscalaEventosPage.create({
     apiRequest: async (url) => {
       calls.push(url);
       return url.includes('/rm/envios')
       ? { envios: [{ STATUS: 'PENDENTE' }, { STATUS: 'ENVIADO' }] }
-      : { eventos };
+      : { eventos, resumo: resumoServidor };
     },
     escapeHtml: String,
     showInfoModal() {},
@@ -60,6 +61,11 @@ test('alteracoes separa eventos antes e depois da oficializacao', async () => {
   elements.alteracoesOrigemSelect.listeners.change();
   assert.equal(elements.alteracoesTotal.textContent, '2');
   assert.equal(elements.alteracoesManuais.textContent, '2');
+  resumoServidor = { colaboradores: 12, total: 30, manuais: 8, antes: 10, depois: 4 };
+  await controller.load();
+  assert.equal(elements.alteracoesTotal.textContent, '30');
+  assert.equal(elements.alteracoesColaboradores.textContent, '12');
+  assert.equal(elements.alteracoesDepois.textContent, '4');
 });
 
 test('exportacao inclui eventos alem da primeira pagina e aplica busca', async () => {
