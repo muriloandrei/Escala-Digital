@@ -11,6 +11,7 @@ import {
   LayoutGrid,
   History,
   ClipboardList,
+  Clock3,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { canView, getJson, type User } from './api';
@@ -23,6 +24,8 @@ import { Subsecoes } from './pages/Subsecoes';
 import { Alteracoes } from './pages/Alteracoes';
 import { Treinamento } from './pages/Treinamento';
 import { EscalasFuncionarios } from './pages/EscalasFuncionarios';
+import { Historico } from './pages/Historico';
+import { TurnosSecao } from './pages/TurnosSecao';
 import './styles.css';
 import './responsive.css';
 import './schedule.css';
@@ -94,6 +97,11 @@ function App() {
               <History size={18} /> Alterações
             </NavLink>
           )}
+          {user.perfil === 'ADMIN' && (
+            <NavLink to="/historico">
+              <History size={18} /> Histórico administrativo
+            </NavLink>
+          )}
           {canSeeFuncionarios && (
             <NavLink to="/funcionarios">
               <Users size={18} /> Funcionários
@@ -102,6 +110,11 @@ function App() {
           {canSeeSecoes && (
             <NavLink to="/secoes">
               <LayoutGrid size={18} /> Seções
+            </NavLink>
+          )}
+          {canView(user, 'turnos-secao') && (
+            <NavLink to="/turnos-secao">
+              <Clock3 size={18} /> Turnos por seção
             </NavLink>
           )}
           {canSeeEscalas && (
@@ -135,8 +148,10 @@ function App() {
             <Route path="/escalas/:lojaId/:mesRef/imprimir" element={<ImprimirEscala user={user} />} />
           )}
           {canSeeEscalas && <Route path="/alteracoes" element={<Alteracoes user={user} />} />}
+          {user.perfil === 'ADMIN' && <Route path="/historico" element={<Historico user={user} />} />}
           {canSeeFuncionarios && <Route path="/funcionarios" element={<Funcionarios user={user} />} />}
           {canSeeSecoes && <Route path="/secoes" element={<Secoes user={user} />} />}
+          {canView(user, 'turnos-secao') && <Route path="/turnos-secao" element={<TurnosSecao user={user} />} />}
           {canSeeSecoes && (
             <Route path="/secoes/:lojaId/:secaoId/subsecoes" element={<Subsecoes user={user} />} />
           )}

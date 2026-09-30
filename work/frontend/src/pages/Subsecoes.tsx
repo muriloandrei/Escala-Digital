@@ -48,6 +48,10 @@ export function Subsecoes({ user }: { user: User }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkSearch, setLinkSearch] = useState('');
   const [unlinkTarget, setUnlinkTarget] = useState<Funcionario | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkDestination, setBulkDestination] = useState('');
+  const [bulkOutcome, setBulkOutcome] = useState<{ completed: string[]; pending: string[] } | null>(null);
   const requestedSub = params.get('subsecao');
   const selected = requestedSub === 'sem' || subsecoes.some((item) => String(item.ESCSUBSECAO_ID) === requestedSub)
     ? requestedSub || 'sem'
@@ -111,6 +115,14 @@ export function Subsecoes({ user }: { user: User }) {
     `${item.CHAPA} ${item.NOME} ${item.FUNCAO_DESCR || ''}`.toLocaleLowerCase('pt-BR')
       .includes(linkSearch.toLocaleLowerCase('pt-BR').trim()),
   );
+  const transferablePeople = visiblePeople.filter((item) => !/APRENDIZ/i.test(item.FUNCAO_DESCR || ''));
+  const selectedPeople = scopedPeople.filter((item) => selectedIds.has(Number(item.ESCFUNC_ID)) && !/APRENDIZ/i.test(item.FUNCAO_DESCR || ''));
+  const activeDestinations = subsecoes.filter((item) => item.STATUS !== 'I' && String(item.ESCSUBSECAO_ID) !== selected);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setBulkOpen(false);
+  }, [selected, lojaId, secaoId]);
 
   const base = `/api/catalog/lojas/${encodeURIComponent(lojaId || '')}/secoes/${encodeURIComponent(secaoId || '')}/subsecoes`;
 
@@ -194,6 +206,43 @@ export function Subsecoes({ user }: { user: User }) {
     }
   }
 
+  async function confirmBulkTransfer() {
+    if (!lojaId || !secaoId || !bulkDestination || !selectedPeople.length || busy) return;
+    const people = [...selectedPeople];
+    setBusy(true);
+    setActionError('');
+    setActionMessage('');
+    const completed: string[] = [];
+    let failedAt = 0;
+    try {
+      for (const [index, person] of people.entries()) {
+        failedAt = index;
+        await patchJson(`/api/catalog/lojas/${encodeURIComponent(lojaId)}/funcionarios/${person.ESCFUNC_ID}/subsecao`, {
+          ESCSECAO_ID: Number(secaoId), ESCSUBSECAO_ID: Number(bulkDestination), VIGENCIA: 'IMEDIATO',
+        });
+        completed.push(person.NOME);
+      }
+      failedAt = people.length;
+      const refreshed = await getJson<{ funcionarios: Funcionario[] }>(`/api/catalog/lojas/${encodeURIComponent(lojaId)}/funcionarios`);
+      const notConfirmed = people.filter((person) => !refreshed.funcionarios.some((item) =>
+        Number(item.ESCFUNC_ID) === Number(person.ESCFUNC_ID) && Number(item.ESCSUBSECAO_ID) === Number(bulkDestination),
+      ));
+      if (notConfirmed.length) throw new Error(`Leitura não confirmou: ${notConfirmed.map((person) => person.NOME).join(', ')}.`);
+      setBulkOutcome({ completed, pending: [] });
+      setActionMessage(`${completed.length} funcionário(s) transferido(s). Escalas já gravadas não foram recalculadas.`);
+      setSelectedIds(new Set());
+      setParams({ subsecao: bulkDestination });
+    } catch (reason) {
+      setBulkOutcome({ completed, pending: people.slice(failedAt).map((person) => person.NOME) });
+      setActionError(`${completed.length} de ${people.length} transferência(s) receberam resposta da API. Falha em ${people[failedAt]?.NOME || 'leitura de confirmação'}: ${reason instanceof Error ? reason.message : 'resultado incerto'}. Confira os vínculos antes de tentar novamente.`);
+      setSelectedIds(new Set());
+    } finally {
+      setBulkOpen(false);
+      setReload((value) => value + 1);
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="content directory-page">
       <div className="page-heading">
@@ -233,6 +282,10 @@ export function Subsecoes({ user }: { user: User }) {
           {actionMessage}
         </div>
       )}
+      {bulkOutcome && <details className="bulk-outcome"><summary>Resultado por funcionário</summary>
+        {bulkOutcome.completed.map((person, index) => <p key={`${person}-${index}`}>Resposta recebida · {person}</p>)}
+        {bulkOutcome.pending.map((person, index) => <p key={`${person}-${index}`}>Verificar antes de repetir · {person}</p>)}
+      </details>}
       {actionError && (
         <div className="notice error" role="alert">
           {actionError}
@@ -420,6 +473,15 @@ export function Subsecoes({ user }: { user: User }) {
               </label>
               {canManage && selectedSub?.STATUS === 'A' && <button className="button primary" type="button" onClick={() => { setLinkSearch(''); setLinkOpen(true); }}><Plus size={15} /> Vincular funcionário</button>}
             </div>
+            {canManage && selectedPeople.length > 0 && <div className="subsection-bulk-bar">
+              <strong>{selectedPeople.length} selecionado(s)</strong>
+              <button type="button" className="button secondary" disabled={!activeDestinations.length || busy} onClick={() => {
+                setBulkOutcome(null);
+                setBulkDestination(String(activeDestinations[0]?.ESCSUBSECAO_ID || ''));
+                setBulkOpen(true);
+              }}><ArrowRightLeft size={15} /> Transferir selecionados</button>
+              <button type="button" className="icon-action" title="Limpar seleção" aria-label="Limpar seleção" onClick={() => setSelectedIds(new Set())}><X size={16} /></button>
+            </div>}
             {!visiblePeople.length ? (
               <div className="empty-state">Nenhum funcionário encontrado nesta subseção.</div>
             ) : (
@@ -427,6 +489,11 @@ export function Subsecoes({ user }: { user: User }) {
                 <table>
                   <thead>
                     <tr>
+                      {canManage && <th><input type="checkbox" aria-label="Selecionar funcionários visíveis" checked={transferablePeople.length > 0 && transferablePeople.every((person) => selectedIds.has(Number(person.ESCFUNC_ID)))} disabled={!transferablePeople.length} onChange={(event) => {
+                        const next = new Set(selectedIds);
+                        transferablePeople.forEach((person) => event.target.checked ? next.add(Number(person.ESCFUNC_ID)) : next.delete(Number(person.ESCFUNC_ID)));
+                        setSelectedIds(next);
+                      }} /></th>}
                       <th>Funcionário</th>
                       <th>Matrícula</th>
                       <th>Cargo</th>
@@ -437,6 +504,12 @@ export function Subsecoes({ user }: { user: User }) {
                   <tbody>
                     {visiblePeople.map((item) => (
                       <tr key={item.ESCFUNC_ID}>
+                        {canManage && <td><input type="checkbox" aria-label={`Selecionar ${item.NOME}`} disabled={/APRENDIZ/i.test(item.FUNCAO_DESCR || '')} checked={selectedIds.has(Number(item.ESCFUNC_ID))} onChange={(event) => {
+                          const next = new Set(selectedIds);
+                          if (event.target.checked) next.add(Number(item.ESCFUNC_ID));
+                          else next.delete(Number(item.ESCFUNC_ID));
+                          setSelectedIds(next);
+                        }} /></td>}
                         <td>
                           <strong>{item.NOME}</strong>
                         </td>
@@ -529,6 +602,18 @@ export function Subsecoes({ user }: { user: User }) {
         <h2 id="unlink-title">Remover {unlinkTarget.NOME} da subseção?</h2><p>O funcionário ficará em Sem subseção. Os dias de escala já gravados serão preservados.</p>
         {actionError && <div className="notice error" role="alert">{actionError}</div>}
         <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setUnlinkTarget(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={confirmUnlink}>{busy ? 'Removendo...' : 'Confirmar remoção'}</button></div>
+      </div></div>}
+      {bulkOpen && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
+        if (event.key === 'Escape' && !busy) setBulkOpen(false);
+      }}><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="bulk-transfer-title">
+        <h2 id="bulk-transfer-title">Transferir {selectedPeople.length} funcionário(s)</h2>
+        <p>Os vínculos serão alterados imediatamente, um funcionário por vez. Escalas já gravadas não serão recalculadas nesta página.</p>
+        <label className="transfer-field">Subseção de destino
+          <select value={bulkDestination} onChange={(event) => setBulkDestination(event.target.value)} disabled={busy}>
+            {activeDestinations.map((item) => <option key={item.ESCSUBSECAO_ID} value={item.ESCSUBSECAO_ID}>{item.DESCR}</option>)}
+          </select>
+        </label>
+        <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setBulkOpen(false)}>Cancelar</button><button className="button primary" type="button" disabled={busy || !bulkDestination} onClick={confirmBulkTransfer}>{busy ? 'Transferindo...' : 'Confirmar transferência'}</button></div>
       </div></div>}
     </main>
   );
