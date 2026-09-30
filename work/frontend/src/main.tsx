@@ -12,6 +12,7 @@ import {
   History,
   ClipboardList,
   Clock3,
+  ShieldCheck,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { canView, getJson, type User } from './api';
@@ -26,6 +27,9 @@ import { Treinamento } from './pages/Treinamento';
 import { EscalasFuncionarios } from './pages/EscalasFuncionarios';
 import { Historico } from './pages/Historico';
 import { TurnosSecao } from './pages/TurnosSecao';
+import { Acessos } from './pages/Acessos';
+import { PerfisAcesso } from './pages/PerfisAcesso';
+import { LiberacaoSecoes } from './pages/LiberacaoSecoes';
 import './styles.css';
 import './responsive.css';
 import './schedule.css';
@@ -117,6 +121,21 @@ function App() {
               <Clock3 size={18} /> Turnos por seção
             </NavLink>
           )}
+          {user.perfil === 'ADMIN' && (
+            <NavLink to="/acessos">
+              <ShieldCheck size={18} /> Usuários e acessos
+            </NavLink>
+          )}
+          {user.perfil === 'ADMIN' && (
+            <NavLink to="/perfis">
+              <ShieldCheck size={18} /> Perfis de acesso
+            </NavLink>
+          )}
+          {canView(user, 'liberacao-secoes') && !['LIDER', 'OPERADOR'].includes(user.perfil) && (
+            <NavLink to="/liberacao-secoes">
+              <LayoutGrid size={18} /> Liberação de seções
+            </NavLink>
+          )}
           {canSeeEscalas && (
             <NavLink to="/treinamento">
               <GraduationCap size={18} /> Treinamento
@@ -152,6 +171,9 @@ function App() {
           {canSeeFuncionarios && <Route path="/funcionarios" element={<Funcionarios user={user} />} />}
           {canSeeSecoes && <Route path="/secoes" element={<Secoes user={user} />} />}
           {canView(user, 'turnos-secao') && <Route path="/turnos-secao" element={<TurnosSecao user={user} />} />}
+          {user.perfil === 'ADMIN' && <Route path="/acessos" element={<Acessos user={user} />} />}
+          {user.perfil === 'ADMIN' && <Route path="/perfis" element={<PerfisAcesso />} />}
+          {canView(user, 'liberacao-secoes') && !['LIDER', 'OPERADOR'].includes(user.perfil) && <Route path="/liberacao-secoes" element={<LiberacaoSecoes user={user} />} />}
           {canSeeSecoes && (
             <Route path="/secoes/:lojaId/:secaoId/subsecoes" element={<Subsecoes user={user} />} />
           )}
