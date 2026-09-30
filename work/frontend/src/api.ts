@@ -45,6 +45,7 @@ export type ResumoEscala = {
 
 export type Funcionario = {
   ESCFUNC_ID: number;
+  ESCFUNCAO_ID?: number | null;
   LOJA?: number;
   CHAPA: string;
   NOME: string;
@@ -83,6 +84,8 @@ export type Secao = {
 
 export type DiaEscala = Funcionario & {
   DT: string;
+  REVISAO?: number;
+  ESCPROGDIA_ID?: number;
   PROGRAMACAO?: string | null;
   HR_ENT1?: string | null;
   HR_SAI1?: string | null;
@@ -91,6 +94,7 @@ export type DiaEscala = Funcionario & {
   FIXO_ESCALA?: number;
   AUSENCIA_OBRIGATORIA?: number;
   MOTIVO_AUSENCIA?: string | null;
+  JUSTIFICATIVA_ALTERACAO?: string | null;
   OFICIALIZADA?: number;
 };
 

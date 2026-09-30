@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, Play, Printer, RefreshCw, RotateCcw, Search } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ArrowUpRight, Pencil, Play, Printer, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   canEdit,
@@ -13,6 +13,7 @@ import {
   type Subsecao,
   type User,
 } from '../api';
+import { EditarDiaEscala } from './EditarDiaEscala';
 
 function iso(value: string | null | undefined) {
   return String(value || '').slice(0, 10);
@@ -96,6 +97,9 @@ export function EscalaMensal({ user }: { user: User }) {
     date: string;
     day?: DiaEscala;
   } | null>(null);
+  const [editingCell, setEditingCell] = useState<{ employee: Funcionario; day: DiaEscala } | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const gridPosition = useRef({ left: 0, top: 0 });
 
   useEffect(() => {
     if (!lojaId || !mesRef) return;
@@ -203,7 +207,15 @@ export function EscalaMensal({ user }: { user: User }) {
     [employees, subsection, search, daysByEmployee, dates, selectedDate, view, subsectionIds],
   );
 
+  useLayoutEffect(() => {
+    if (!loading && view === 'mensal' && gridRef.current) {
+      gridRef.current.scrollLeft = gridPosition.current.left;
+      gridRef.current.scrollTop = gridPosition.current.top;
+    }
+  }, [loading, view, sectionId]);
+
   function updateFilter(key: string, value: string, resetSubsection = false) {
+    if (key === 'secao' || key === 'visao') gridPosition.current = { left: 0, top: 0 };
     const next = new URLSearchParams(params);
     if (value === 'all' || !value) next.delete(key);
     else next.set(key, value);
@@ -440,7 +452,19 @@ export function EscalaMensal({ user }: { user: User }) {
               {!visibleEmployees.length ? (
                 <div className="empty-state">Nenhum funcionário encontrado neste filtro.</div>
               ) : view === 'mensal' ? (
-                <div className="schedule-scroll" role="region" aria-label="Grade mensal" tabIndex={0}>
+                <div
+                  ref={gridRef}
+                  className="schedule-scroll"
+                  role="region"
+                  aria-label="Grade mensal"
+                  tabIndex={0}
+                  onScroll={(event) => {
+                    gridPosition.current = {
+                      left: event.currentTarget.scrollLeft,
+                      top: event.currentTarget.scrollTop,
+                    };
+                  }}
+                >
                   <table className="monthly-grid">
                     <thead>
                       <tr>
@@ -545,6 +569,20 @@ export function EscalaMensal({ user }: { user: User }) {
                     <strong>{cellText(selectedCell.day)}</strong>
                     <span>{shiftLabel(selectedCell.day)}</span>
                   </div>
+                  {canEdit(user, 'escalas') &&
+                    canEdit(user, 'escalas-funcionarios') &&
+                    selectedCell.day &&
+                    escala?.status !== 'FINALIZADA' && (
+                      <button
+                        type="button"
+                        className="button primary"
+                        onClick={() =>
+                          setEditingCell({ employee: selectedCell.employee, day: selectedCell.day! })
+                        }
+                      >
+                        <Pencil size={15} /> Editar dia
+                      </button>
+                    )}
                   <button type="button" className="button secondary" onClick={() => setSelectedCell(null)}>
                     Fechar
                   </button>
@@ -570,6 +608,25 @@ export function EscalaMensal({ user }: { user: User }) {
             </>
           )}
         </>
+      )}
+      {editingCell && lojaId && mesRef && (
+        <EditarDiaEscala
+          key={`${editingCell.employee.ESCFUNC_ID}-${editingCell.day.DT}`}
+          lojaId={lojaId}
+          mesRef={mesRef}
+          employee={editingCell.employee}
+          day={editingCell.day}
+          days={(escala?.dias || []).filter(
+            (item) => Number(item.ESCFUNC_ID) === Number(editingCell.employee.ESCFUNC_ID),
+          )}
+          onClose={() => setEditingCell(null)}
+          onSaved={() => {
+            setEditingCell(null);
+            setSelectedCell(null);
+            setActionMessage('Rascunho do funcionário salvo e confirmado pela leitura da escala.');
+            setReload((value) => value + 1);
+          }}
+        />
       )}
       {pendingAction && (
         <div
