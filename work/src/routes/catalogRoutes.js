@@ -5,6 +5,7 @@ const catalogService = require('../services/catalogService');
 const accessService = require('../services/accessService');
 const pendenciaFuncionarioService = require('../services/pendenciaFuncionarioService');
 const auditService = require('../services/auditService');
+const { validateStandardShift } = require('../domain/shiftValidation');
 
 const router = express.Router();
 
@@ -91,49 +92,8 @@ const horarioPadraoSchema = z.object({
 
 router.use(requireAuth);
 
-function timeToMinutes(value) {
-  if (!/^\d{2}:\d{2}$/.test(String(value || ''))) return null;
-  const [hours, minutes] = String(value).split(':').map(Number);
-  if (hours > 23 || minutes > 59) return null;
-  return hours * 60 + minutes;
-}
-
-function minutesToTime(totalMinutes) {
-  const safeMinutes = Math.max(0, Number(totalMinutes) || 0);
-  const hours = String(Math.floor(safeMinutes / 60)).padStart(2, '0');
-  const minutes = String(safeMinutes % 60).padStart(2, '0');
-  return `${hours}:${minutes}`;
-}
-
-function validateSecaoTurno(data) {
-  const ent1 = timeToMinutes(data.HR_ENT1);
-  const sai1 = timeToMinutes(data.HR_SAI1);
-  const ent2 = timeToMinutes(data.HR_ENT2);
-  const sai2 = timeToMinutes(data.HR_SAI2);
-  const errors = [];
-
-  if ([ent1, sai1, ent2, sai2].some((value) => value === null)) {
-    return ['Informe todos os horarios do turno no formato HH:MM.'];
-  }
-
-  const primeiraJornada = sai1 - ent1;
-  const intervalo = ent2 - sai1;
-  const segundaJornada = sai2 - ent2;
-  const jornadaTotal = primeiraJornada + segundaJornada;
-
-  if (primeiraJornada <= 0) errors.push('Saida 1 deve ser maior que Entrada 1.');
-  if (segundaJornada <= 0) errors.push('Saida 2 deve ser maior que Entrada 2.');
-  if (intervalo <= 0) errors.push('Entrada 2 deve ser maior que Saida 1.');
-  if (primeiraJornada >= 360) errors.push(`Primeiro periodo deve ser menor que 06:00. Atual: ${minutesToTime(primeiraJornada)}.`);
-  if (segundaJornada >= 360) errors.push(`Segundo periodo deve ser menor que 06:00. Atual: ${minutesToTime(segundaJornada)}.`);
-  if (jornadaTotal !== 528) errors.push(`Jornada total deve ser exatamente 08:48. Atual: ${minutesToTime(jornadaTotal)}.`);
-  if (intervalo < 70) errors.push(`Intervalo entre as jornadas deve ter no minimo 01:10. Atual: ${minutesToTime(intervalo)}.`);
-
-  return errors;
-}
-
 function assertValidSecaoTurno(data) {
-  const errors = validateSecaoTurno(data);
+  const errors = validateStandardShift(data);
   if (!errors.length) return;
   const error = new Error('Campos de turno da secao invalidos.');
   error.statusCode = 422;
