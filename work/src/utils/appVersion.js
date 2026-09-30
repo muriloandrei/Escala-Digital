@@ -11,7 +11,7 @@ function listFiles(target) {
 }
 
 function getAppVersion(root) {
-  const sources = ['src', 'public', 'views', 'package-lock.json'];
+  const sources = ['src', 'public', 'views', 'frontend', 'dist/react', 'package-lock.json'];
   const files = sources.flatMap((source) => listFiles(path.join(root, source)));
   const hash = crypto.createHash('sha256');
   for (const file of files) {

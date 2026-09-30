@@ -1,0 +1,17 @@
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+@media (max-width: 850px) {
+  .shell,
+  .training-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .training-steps {
+    min-width: 0;
+    overflow: hidden;
+  }
+}

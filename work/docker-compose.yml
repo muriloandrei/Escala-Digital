@@ -41,6 +41,7 @@ services:
       - ./src:/app/src
       - ./public:/app/public
       - ./views:/app/views
+      - ./dist:/app/dist:ro
       - ./scripts:/app/scripts
       - ./db/migrations:/app/db/migrations:ro
       - ./docker/oracle/migrations:/app/docker/oracle/migrations:ro

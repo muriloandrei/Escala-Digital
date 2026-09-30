@@ -20,6 +20,15 @@ test('versao depende do conteudo da aplicacao, nao do mtime ou de segredos', () 
     const second = getAppVersion(root);
     fs.writeFileSync(path.join(root, '.env'), 'SECRET=changed');
     assert.equal(getAppVersion(root), second);
+    const frontend = path.join(root, 'frontend');
+    fs.mkdirSync(frontend);
+    fs.writeFileSync(path.join(frontend, 'main.tsx'), 'export default true;');
+    assert.notEqual(getAppVersion(root), second);
+    const sourceVersion = getAppVersion(root);
+    const compiled = path.join(root, 'dist', 'react');
+    fs.mkdirSync(compiled, { recursive: true });
+    fs.writeFileSync(path.join(compiled, 'index.html'), '<div id="root"></div>');
+    assert.notEqual(getAppVersion(root), sourceVersion);
   } finally {
     if (!path.resolve(root).startsWith(path.resolve(os.tmpdir()) + path.sep)) throw new Error('Diretorio temporario invalido.');
     fs.rmSync(root, { recursive: true, force: true });

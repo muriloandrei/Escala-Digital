@@ -27,3 +27,6 @@ jobs:
       - name: Run unit tests
         working-directory: work
         run: npm test
+      - name: Validate React client
+        working-directory: work
+        run: npm run check:client && npm run build:client

@@ -127,6 +127,18 @@ app.get('/app', redirectToLoginWhenMissingSession, requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'views', 'app-original.html'));
 });
 
+const reactDist = path.join(__dirname, '..', 'dist', 'react');
+app.use('/nova/assets', express.static(path.join(reactDist, 'assets'), {
+  immutable: true,
+  maxAge: '1y'
+}));
+app.get(/^\/nova(?:\/.*)?$/, redirectToLoginWhenMissingSession, requireAuth, (req, res) => {
+  setNoStore(res);
+  res.sendFile(path.join(reactDist, 'index.html'), (error) => {
+    if (error && !res.headersSent) res.status(503).json({ error: 'Interface React ainda nao compilada.' });
+  });
+});
+
 app.use('/api/auth/login', loginLimiter);
 app.use('/api', apiLimiter);
 app.use('/api', csrfSameOriginGuard);

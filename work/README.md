@@ -5,8 +5,8 @@ Aplicacao web para gerar, consultar e salvar escalas diretamente em banco Oracle
 ## Decisoes
 
 - Backend em Node.js para reaproveitar as regras JavaScript sem reescrita em outra linguagem.
-- Frontend separado em HTML, CSS e JavaScript.
-- Oracle e obrigatorio: nao existe modo de simulacao local nesta branch.
+- Migracao gradual do frontend para React e TypeScript; a interface anterior permanece disponivel durante a transicao.
+- Operacoes reais exigem Oracle; o treinamento React e uma simulacao de interface isolada do banco.
 - Credenciais do Oracle somente por variaveis de ambiente.
 - Login validado no backend, com senha armazenada como hash bcrypt.
 - Regras de calculo isoladas em modulo proprio.
@@ -69,11 +69,14 @@ RM_API_TIMEZONE_OFFSET=-03:00
 npm install
 ```
 
-5. Iniciar:
+5. Compilar a interface React e iniciar:
 
 ```bash
+npm run build:client
 npm start
 ```
+
+A listagem React fica em `/nova/escalas-liberadas`. O treinamento em `/nova/treinamento` usa apenas dados ficticios e estado local do navegador; nao grava no Oracle e nao chama a integracao RM. A edicao de escalas continua em `/app` ate sua migracao. O `Dockerfile` compila o React automaticamente. Para instalacao Linux sem Docker, execute `npm ci` e `npm run build:client` no diretorio `/opt/escala-app/work` antes de iniciar o servidor; nao use `npm ci --omit=dev` antes do build.
 
 6. Abrir:
 
