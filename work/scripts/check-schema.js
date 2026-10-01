@@ -13,7 +13,9 @@ const required = {
   SGN_ESC_RM_ENVIO: ['ENVIO_ID', 'OPERACAO_ID', 'LOJA', 'MES_REF', 'ESCSECAO_ID', 'ESCFUNC_ID', 'REVISAO', 'STATUS', 'TENTATIVAS'],
   SGN_ESC_MIGRACAO: ['ARQUIVO', 'CHECKSUM_SHA256', 'APLICADO_EM', 'APLICADO_POR']
 };
-const sequences = ['SGN_ESC_PROG_SEQ', 'SGN_ESC_PROG_DIA_SEQ', 'SGN_ESC_AUDITORIA_SEQ', 'SGN_ESC_EVENTO_SEQ', 'SGN_ESC_TRANSFER_SUB_SEQ', 'SGN_ESC_RM_ENVIO_SEQ'];
+const sequences = ['SGN_ESC_PROG_SEQ', 'SGN_ESC_PROG_DIA_SEQ', 'SGN_ESC_AUDITORIA_SEQ', 'SGN_ESC_PENDENCIA_FUNC_SEQ', 'SGN_ESC_EVENTO_SEQ', 'SGN_ESC_TRANSFER_SUB_SEQ', 'SGN_ESC_RM_ENVIO_SEQ'];
+const constraints = ['SGN_ESC_RM_ENVIO_ESCOPO_UK'];
+const indexes = ['SGN_ESC_PEND_FUNC_ABERTA_UK', 'SGN_ESC_TRANSFER_SUB_OP_IX'];
 
 async function main() {
   await initOraclePool();
@@ -36,12 +38,26 @@ async function main() {
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
       const availableSequences = new Set((sequenceRows.rows || []).map((row) => row.SEQUENCE_NAME));
+      const constraintRows = await connection.execute(
+        `select constraint_name from user_constraints where constraint_name in (${constraints.map((_, index) => `:constraint${index}`).join(', ')})`,
+        Object.fromEntries(constraints.map((name, index) => [`constraint${index}`, name])),
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const availableConstraints = new Set((constraintRows.rows || []).map((row) => row.CONSTRAINT_NAME));
+      const indexRows = await connection.execute(
+        `select index_name from user_indexes where index_name in (${indexes.map((_, index) => `:index${index}`).join(', ')})`,
+        Object.fromEntries(indexes.map((name, index) => [`index${index}`, name])),
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const availableIndexes = new Set((indexRows.rows || []).map((row) => row.INDEX_NAME));
       return [
         ...Object.entries(required).flatMap(([table, fields]) => fields
           .map((field) => field.toUpperCase())
           .filter((field) => !columns.get(table)?.has(field))
           .map((field) => `${table}.${field}`)),
-        ...sequences.filter((name) => !availableSequences.has(name))
+        ...sequences.filter((name) => !availableSequences.has(name)),
+        ...constraints.filter((name) => !availableConstraints.has(name)),
+        ...indexes.filter((name) => !availableIndexes.has(name))
       ];
     });
     if (missing.length) {

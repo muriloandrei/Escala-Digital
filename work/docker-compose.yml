@@ -30,6 +30,7 @@ services:
       JWT_SECRET: dev-docker-secret-change-me
       SESSION_MAX_AGE_HOURS: 4
       REACT_DEFAULT_UI: "true"
+      REACT_ALLOWED_LOGINS: "${REACT_ALLOWED_LOGINS:-murilo.jesus}"
       ESCALA_TRANSFER_SCHEDULER_ENABLED: "true"
       COOKIE_SECURE: "false"
       TRUST_PROXY: "false"

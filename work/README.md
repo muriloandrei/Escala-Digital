@@ -76,7 +76,9 @@ npm run build:client
 npm start
 ```
 
-A listagem React fica em `/nova/escalas-liberadas`. O treinamento em `/nova/treinamento` usa apenas dados ficticios e estado local do navegador; nao grava no Oracle e nao chama a integracao RM. A edicao de escalas continua em `/app` ate sua migracao. O `Dockerfile` compila o React automaticamente. Para instalacao Linux sem Docker, execute `npm ci` e `npm run build:client` no diretorio `/opt/escala-app/work` antes de iniciar o servidor; nao use `npm ci --omit=dev` antes do build.
+A listagem React fica em `/nova/escalas-liberadas`. O treinamento em `/nova/treinamento` usa dados ficticios: nao altera escalas reais nem chama a integracao RM, mas salva o progresso do exercicio no Oracle quando a migration correspondente esta presente. A edicao de escalas continua em `/app` ate sua migracao. O `Dockerfile` compila o React automaticamente. Para instalacao Linux sem Docker, execute `npm ci` e `npm run build:client` no diretorio `/opt/escala-app/work` antes de iniciar o servidor; nao use `npm ci --omit=dev` antes do build.
+
+Para publicar a `main` mantendo `/nova` restrita a `murilo.jesus`, siga [o roteiro de deploy com allowlist](docs/deploy-main-canario-react.md). Configure `REACT_ALLOWED_LOGINS=murilo.jesus` no servidor e `REACT_DEFAULT_UI=true` para abrir a nova interface no login desse usuario. Sem allowlist, ninguem acessa `/nova`. O allowlist nao isola mudancas de backend ou banco.
 
 6. Abrir:
 

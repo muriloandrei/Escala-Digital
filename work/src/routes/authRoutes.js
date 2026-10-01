@@ -1,6 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 const { getEnv } = require('../config/env');
+const { getLoginStartPath, isReactUiAllowed } = require('../config/reactUiAccess');
 const authService = require('../services/authService');
 const trainingProgressService = require('../services/trainingProgressService');
 const { requireAuth } = require('../middleware/auth');
@@ -36,7 +37,7 @@ router.post('/login', async (req, res, next) => {
       maxAge: auth.sessionMaxAgeMs
     });
 
-    res.json({ user, startPath: ui.reactDefault ? '/nova' : '/app#/escalas-geradas' });
+    res.json({ user, startPath: getLoginStartPath(user, ui) });
   } catch (error) {
     if (error.name === 'ZodError') {
       error.statusCode = 400;
@@ -52,7 +53,7 @@ router.post('/logout', (req, res) => {
 });
 
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ user: req.user });
+  res.json({ user: req.user, reactUiAllowed: isReactUiAllowed(req.user, getEnv().ui) });
 });
 
 router.get('/treinamento', requireAuth, async (req, res, next) => {

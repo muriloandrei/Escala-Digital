@@ -5,6 +5,7 @@ const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { getEnv } = require('./config/env');
+const { isReactUiAllowed } = require('./config/reactUiAccess');
 const { initOraclePool, closeOraclePool, withConnection } = require('./db/oracle');
 const { csrfSameOriginGuard } = require('./middleware/csrf');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
@@ -129,11 +130,17 @@ app.get('/app', redirectToLoginWhenMissingSession, requireAuth, (req, res) => {
 });
 
 const reactDist = path.join(__dirname, '..', 'dist', 'react');
-app.use('/nova/assets', express.static(path.join(reactDist, 'assets'), {
+function requireReactUiAccess(req, res, next) {
+  if (isReactUiAllowed(req.user, env.ui)) return next();
+  if (req.baseUrl === '/nova/assets') return res.status(403).end();
+  return res.redirect('/app#/escalas-geradas');
+}
+
+app.use('/nova/assets', redirectToLoginWhenMissingSession, requireAuth, requireReactUiAccess, express.static(path.join(reactDist, 'assets'), {
   immutable: true,
   maxAge: '1y'
 }));
-app.get(/^\/nova(?:\/.*)?$/, redirectToLoginWhenMissingSession, requireAuth, (req, res) => {
+app.get(/^\/nova(?:\/.*)?$/, redirectToLoginWhenMissingSession, requireAuth, requireReactUiAccess, (req, res) => {
   setNoStore(res);
   res.sendFile(path.join(reactDist, 'index.html'), (error) => {
     if (error && !res.headersSent) res.status(503).json({ error: 'Interface React ainda nao compilada.' });

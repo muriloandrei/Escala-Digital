@@ -2498,6 +2498,11 @@
             lojaPrincipalCache = user.lojaPrincipal ? String(user.lojaPrincipal) : lojaPrincipalCache;
             window.EscalaPermissions?.setUser(user);
             applyPermissionBindings();
+            const navNovaInterface = document.getElementById('nav-nova-interface');
+            if (navNovaInterface) {
+                navNovaInterface.hidden = !data.reactUiAllowed;
+                navNovaInterface.classList.toggle('hidden', !data.reactUiAllowed);
+            }
             atualizarVisibilidadeRelatoriosHome();
             if (goToTimelineBtn) goToTimelineBtn.classList.toggle('hidden', !canCreateEscalaSessao());
             navTimeline?.classList.toggle('hidden', !isPerfilAdminSessao());

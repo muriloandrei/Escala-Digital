@@ -1,5 +1,7 @@
 # Publicacao em Linux via PuTTY
 
+> Para o deploy atual da `main` com React restrito a `murilo.jesus`, use [deploy-main-canario-react.md](deploy-main-canario-react.md). Este guia antigo descreve outro layout de checkout e inclui comandos de instalacao que nao compilam o React.
+
 ## Visao geral
 
 O servidor Linux deve rodar a aplicacao Node.js como servico `systemd`, com Nginx na frente como proxy reverso e Oracle acessado por variaveis de ambiente.

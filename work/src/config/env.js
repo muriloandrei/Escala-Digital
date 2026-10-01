@@ -1,6 +1,7 @@
 const dotenv = require('dotenv');
+const { parseAllowedLogins } = require('./reactUiAccess');
 
-dotenv.config();
+dotenv.config(process.env.ESCALA_ENV_FILE ? { path: process.env.ESCALA_ENV_FILE } : undefined);
 
 function parseTrustProxy(value) {
   const normalized = String(value || 'false').trim().toLowerCase();
@@ -53,7 +54,8 @@ function getEnv() {
       loginLimit: Number(process.env.RATE_LIMIT_LOGIN_MAX || 30)
     },
     ui: {
-      reactDefault: String(process.env.REACT_DEFAULT_UI || 'false').trim().toLowerCase() === 'true'
+      reactDefault: String(process.env.REACT_DEFAULT_UI || 'false').trim().toLowerCase() === 'true',
+      reactAllowedLogins: parseAllowedLogins(process.env.REACT_ALLOWED_LOGINS)
     },
     rm: {
       enabled: String(process.env.RM_API_ENABLED || 'false').trim().toLowerCase() === 'true',
