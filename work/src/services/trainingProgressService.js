@@ -1,7 +1,7 @@
 const { withConnection, oracledb } = require('../db/oracle');
 
-const VERSION = 1;
-const LAST_STAGE = 7;
+const VERSION = 2;
+const LAST_STAGE = 12;
 
 function missingTable(error) {
   return Number(error?.errorNum) === 942 || /ORA-00942/.test(String(error?.message || ''));

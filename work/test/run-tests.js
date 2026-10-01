@@ -24,3 +24,4 @@ require('./shift-validation.test');
 require('./escala-sync-rm.test');
 require('./escala-eventos.test');
 require('./subsection-transfer.test');
+require('./training-progress.test');

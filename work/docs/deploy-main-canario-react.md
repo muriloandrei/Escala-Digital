@@ -14,7 +14,7 @@ Este procedimento publica o codigo da `homologacao` na `main`, mas libera as tel
 
 No servidor, o projeto Node fica em `/opt/escala-app/work`; confirme o caminho real com `pwd` e `ls package.json`. Use o checkout de staging para inspecionar os SQLs novos sem modificar o codigo servido. O SQL deve ser executado como dono do schema usado pela aplicacao. Compare `npm run migrations:status` com o schema e com a documentacao da implantacao anterior. `SEM_REGISTRO` nao comprova que uma migration antiga esta ausente; nao reaplique scripts antigos cegamente.
 
-Estas oito migrations existem na `homologacao` e nao na `main` anterior, nesta ordem:
+Estas nove migrations existem na `homologacao` e nao na `main` anterior, nesta ordem:
 
 1. `db/migrations/20260929_registro_migrations.sql`
 2. `db/migrations/20260929_pendencia_operacional_funcionario.sql`
@@ -23,7 +23,8 @@ Estas oito migrations existem na `homologacao` e nao na `main` anterior, nesta o
 5. `db/migrations/20260930_rm_envio_escopo_unique.sql`
 6. `db/migrations/20260930_treinamento_progresso.sql`
 7. `db/migrations/20261001_evento_subsecao.sql`
-8. `db/migrations/20261001_transferencia_subsecao_agendada.sql`
+8. `db/migrations/20261001_treinamento_tour_v2.sql`
+9. `db/migrations/20261001_transferencia_subsecao_agendada.sql`
 
 Abra `sqlplus /nolog` e use `connect USUARIO@HOST:PORTA/SERVICO` para digitar a senha no prompt, sem grava-la no historico do shell. No SQL*Plus, configure `whenever sqlerror exit sql.sqlcode` e execute cada arquivo com `@/CAMINHO/DO/STAGING/work/db/migrations/NOME.sql`, conferindo a saida antes de continuar. A migration da restricao unica do envio RM pode falhar se houver duplicatas em `(LOJA, MES_REF, ESCSECAO_ID, ESCFUNC_ID, REVISAO)`; investigue os dados antes de qualquer correcao. DDL no Oracle pode fazer commit implicito, entao o backup e o plano de recuperacao precisam ser externos a esta sessao.
 

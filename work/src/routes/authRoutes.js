@@ -64,7 +64,7 @@ router.get('/treinamento', requireAuth, async (req, res, next) => {
 
 router.put('/treinamento', requireAuth, async (req, res, next) => {
   try {
-    const { stage } = z.object({ stage: z.number().int().min(0).max(7) }).strict().parse(req.body);
+    const { stage } = z.object({ stage: z.number().int().min(0).max(12) }).strict().parse(req.body);
     return res.json(await trainingProgressService.saveProgress(Number(req.user.sub), stage));
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Etapa de treinamento invalida.' });

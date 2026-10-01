@@ -221,15 +221,15 @@ function TrainingPrompt({ user }: { user: User }) {
           return;
         }
         try {
-          const cached = JSON.parse(localStorage.getItem(`escala:treinamento:v1:${user.sub}`) || '{}');
-          setStage(cached.version === 1 && Number.isInteger(cached.stage) && cached.stage >= 0 && cached.stage <= 7 ? cached.stage : 0);
+          const cached = JSON.parse(localStorage.getItem(`escala:treinamento:v2:${user.sub}`) || '{}');
+          setStage(cached.version === 2 && Number.isInteger(cached.stage) && cached.stage >= 0 && cached.stage <= 12 ? cached.stage : 0);
         } catch { setStage(0); }
       })
       .catch((reason) => { if (reason.name !== 'AbortError') setStage(null); });
     return () => controller.abort();
   }, [location.pathname, navigate, user.sub]);
 
-  if (location.pathname === '/treinamento' || stage === null || stage >= 7) return null;
+  if (location.pathname === '/treinamento' || stage === null || stage >= 12) return null;
   return (
     <div className="training-prompt" role="status">
       <GraduationCap size={20} aria-hidden="true" />

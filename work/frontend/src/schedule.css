@@ -438,6 +438,118 @@
   color: #155f3d;
   border: 1px solid #b9e5c9;
 }
+.training-tour .simulation-banner {
+  margin-bottom: 12px;
+}
+.tour-guide {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 16px;
+  margin-bottom: 14px;
+  border: 1px solid #a9c5e9;
+  border-left: 4px solid #2459d5;
+  border-radius: 5px;
+  background: #f5f9ff;
+  box-shadow: 0 5px 18px #17283e12;
+}
+.tour-guide h2 {
+  margin: 3px 0;
+  font-size: 16px;
+}
+.tour-guide p {
+  margin: 0;
+  font-size: 13px;
+  color: #4e6680;
+}
+.tour-progress {
+  width: 120px;
+  flex: none;
+  text-align: right;
+  color: #4d6684;
+  font-size: 12px;
+}
+.tour-progress > div {
+  height: 5px;
+  margin-top: 6px;
+  background: #dbe7f5;
+  border-radius: 3px;
+}
+.tour-progress i {
+  display: block;
+  height: 100%;
+  background: #2459d5;
+  border-radius: 3px;
+}
+.tour-filters {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.tour-filters label,
+.tour-dialog label {
+  display: grid;
+  gap: 5px;
+  color: #53677e;
+  font-size: 12px;
+  font-weight: 650;
+}
+.tour-filters select,
+.tour-dialog select,
+.tour-dialog input {
+  width: 100%;
+  height: 35px;
+  padding: 0 8px;
+  border: 1px solid #cbd8e7;
+  border-radius: 4px;
+  background: #fff;
+  color: #17283e;
+}
+.tour-filters select {
+  min-width: 190px;
+}
+.training-tour [data-tour="active"] {
+  outline: 3px solid #2459d5;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px #2459d52b;
+}
+.training-tour .monthly-grid td button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.training-tour .monthly-grid td button[data-tour="active"] {
+  position: relative;
+  z-index: 1;
+  background: #eaf2ff;
+  cursor: pointer;
+}
+.tour-dialog > label + label {
+  margin-top: 12px;
+}
+.tour-time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.tour-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #d9e2ec;
+  padding-top: 16px;
+  font-size: 13px;
+  color: #52677f;
+}
+.tour-footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .confirm-backdrop {
   position: fixed;
   inset: 0;
@@ -473,6 +585,17 @@
   margin-top: 18px;
 }
 @media (max-width: 850px) {
+  .tour-guide,
+  .tour-footer {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .tour-filters {
+    flex-wrap: wrap;
+  }
+  .tour-filters label {
+    flex: 1 1 190px;
+  }
   .schedule-toolbar input {
     width: 100%;
   }
