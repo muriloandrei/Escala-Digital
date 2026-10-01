@@ -4,6 +4,7 @@ const { requireAuth, requireLojaAccess, requirePermission } = require('../middle
 const catalogService = require('../services/catalogService');
 const accessService = require('../services/accessService');
 const pendenciaFuncionarioService = require('../services/pendenciaFuncionarioService');
+const subsectionTransferService = require('../services/subsectionTransferService');
 const auditService = require('../services/auditService');
 const { validateStandardShift } = require('../domain/shiftValidation');
 
@@ -484,9 +485,6 @@ router.patch('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/funcionarios/:escfuncI
 router.patch('/lojas/:lojaId/funcionarios/:escfuncId/subsecao', resolveLojaParam, requireLojaAccess, requirePermission('escalas', 'editar'), async (req, res, next) => {
   try {
     const data = funcionarioSubsecaoSchema.parse(req.body);
-    if (data.VIGENCIA && data.VIGENCIA !== 'IMEDIATO') {
-      return res.status(422).json({ error: 'Transferencia futura ainda nao disponivel. Nenhum vinculo foi alterado.' });
-    }
     const lojaId = Number(req.params.lojaId);
     const escfuncId = Number(req.params.escfuncId);
     const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
@@ -499,6 +497,19 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId/subsecao', resolveLojaParam
       return res.status(422).json({ error: 'Subsecao deve pertencer a secao atual do funcionario.' });
     }
     await accessService.assertSecoesPermitidas(req.user, lojaId, [escsecaoId]);
+
+    if (data.VIGENCIA && data.VIGENCIA !== 'IMEDIATO') {
+      const agendamento = await subsectionTransferService.agendar({
+        lojaId, escfuncId, escsecaoId, destinoId: data.ESCSUBSECAO_ID,
+        vigencia: data.VIGENCIA, actor: req.user
+      });
+      return res.status(202).json({ agendamento });
+    }
+
+    const unresolved = await subsectionTransferService.listar({ lojaId, escfuncId });
+    if (unresolved.some((item) => ['P', 'E', 'F'].includes(item.STATUS))) {
+      return res.status(409).json({ error: 'Existe transferencia pendente ou em falha. Resolva-a antes de mudar a subsecao.' });
+    }
 
     const funcionario = await catalogService.updateFuncionarioEscala({
       lojaId,
@@ -513,6 +524,41 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId/subsecao', resolveLojaParam
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Campos de funcionario invalidos.', details: error.errors });
     if (error.statusCode === 422) return res.status(422).json({ error: error.message });
+    return next(error);
+  }
+});
+
+router.get('/lojas/:lojaId/funcionarios/:escfuncId/transferencias', resolveLojaParam, requireLojaAccess, requirePermission('escalas', 'visualizar'), async (req, res, next) => {
+  try {
+    const lojaId = Number(req.params.lojaId);
+    const escfuncId = Number(req.params.escfuncId);
+    if (!Number.isInteger(escfuncId) || escfuncId <= 0) return res.status(400).json({ error: 'Funcionario invalido.' });
+    const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
+    const funcionarios = await catalogService.listFuncionariosByLoja(lojaId, { includeInactive: true, secoesPermitidas });
+    if (!funcionarios.some((item) => Number(item.ESCFUNC_ID) === escfuncId)) {
+      return res.status(404).json({ error: 'Funcionario nao encontrado para as secoes permitidas.' });
+    }
+    return res.json({ transferencias: await subsectionTransferService.listar({ lojaId, escfuncId }) });
+  } catch (error) { return next(error); }
+});
+
+router.post('/lojas/:lojaId/funcionarios/:escfuncId/transferencias/:transfId/retomar', resolveLojaParam, requireLojaAccess, requirePermission('escalas', 'editar'), async (req, res, next) => {
+  try {
+    if (req.user?.perfil !== 'ADMIN') return res.status(403).json({ error: 'Somente Admin pode retomar transferencias em falha.' });
+    const lojaId = Number(req.params.lojaId);
+    const escfuncId = Number(req.params.escfuncId);
+    const transfId = Number(req.params.transfId);
+    if (![escfuncId, transfId].every((value) => Number.isInteger(value) && value > 0)) {
+      return res.status(400).json({ error: 'Funcionario ou transferencia invalida.' });
+    }
+    const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
+    const funcionarios = await catalogService.listFuncionariosByLoja(lojaId, { includeInactive: true, secoesPermitidas });
+    if (!funcionarios.some((item) => Number(item.ESCFUNC_ID) === escfuncId)) {
+      return res.status(404).json({ error: 'Funcionario nao encontrado para a loja.' });
+    }
+    return res.json({ agendamento: await subsectionTransferService.retryFailed({ lojaId, escfuncId, transfId, actor: req.user }) });
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
     return next(error);
   }
 });

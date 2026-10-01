@@ -163,8 +163,7 @@ export function EscalaMensal({ user }: { user: User }) {
   );
   const subsections = useMemo(() => {
     return (sectionCatalog?.SUBSECOES || [])
-      .filter((item: Subsecao) => item.STATUS !== 'I')
-      .map((item: Subsecao) => [String(item.ESCSUBSECAO_ID), item.DESCR] as const)
+      .map((item: Subsecao) => [String(item.ESCSUBSECAO_ID), item.STATUS === 'I' ? `${item.DESCR} (inativa)` : item.DESCR] as const)
       .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
   }, [sectionCatalog]);
   const subsectionIds = useMemo(() => new Set(subsections.map(([id]) => id)), [subsections]);
@@ -174,10 +173,6 @@ export function EscalaMensal({ user }: { user: User }) {
   };
   const subsection = params.get('subsecao') || 'all';
   const personFilter = params.get('funcionario');
-  const scopePeople = employees.filter((item) => {
-    return (subsection === 'all' || personSubKey(item) === subsection) &&
-      (!personFilter || String(item.ESCFUNC_ID) === personFilter);
-  });
   const scopeName =
     personFilter
       ? employees.find((item) => String(item.ESCFUNC_ID) === personFilter)?.NOME || 'Funcionário'
@@ -198,13 +193,33 @@ export function EscalaMensal({ user }: { user: User }) {
     });
     return map;
   }, [escala]);
+  const daySubKey = (day: DiaEscala) => {
+    const id = String(day.ESCSUBSECAO_ID || '');
+    return subsectionIds.has(id) ? id : 'sem';
+  };
+  const memberOfSubsection = (person: Funcionario, target: string, date?: string) => {
+    if (target === 'all') return true;
+    const personDays = daysByEmployee.get(String(person.ESCFUNC_ID));
+    if (!personDays?.size) return personSubKey(person) === target;
+    if (date) {
+      const day = personDays.get(date);
+      return day ? daySubKey(day) === target : false;
+    }
+    return [...personDays.values()].some((day) => daySubKey(day) === target);
+  };
+  const scopePeople = employees.filter((item) =>
+    memberOfSubsection(item, subsection) &&
+    (!personFilter || String(item.ESCFUNC_ID) === personFilter));
+  const mixedSubsectionScope = subsection !== 'all' && scopePeople.some((person) => {
+    const personDays = daysByEmployee.get(String(person.ESCFUNC_ID));
+    return personDays && [...personDays.values()].some((day) => daySubKey(day) !== subsection);
+  });
   const visibleEmployees = useMemo(
     () =>
       employees
         .filter((item) => {
-          const subKey = personSubKey(item);
           return (
-            (subsection === 'all' || subKey === subsection) &&
+            memberOfSubsection(item, subsection, view === 'diaria' ? selectedDate : undefined) &&
             (!personFilter || String(item.ESCFUNC_ID) === personFilter) &&
             `${item.CHAPA} ${item.NOME} ${item.FUNCAO_DESCR || ''}`
               .toLocaleLowerCase('pt-BR')
@@ -248,6 +263,10 @@ export function EscalaMensal({ user }: { user: User }) {
 
   async function confirmOperation() {
     if (!pendingAction || !lojaId || !mesRef || !sectionId || !scopePeople.length) return;
+    if (mixedSubsectionScope) {
+      setActionError('Esta subseção possui funcionário transferido durante o mês. Use a visão da seção para operações no mês inteiro.');
+      return;
+    }
     const action = pendingAction;
     setActionBusy(true);
     setActionError('');
@@ -322,7 +341,8 @@ export function EscalaMensal({ user }: { user: User }) {
     : '';
   const editUrl = `/app#/escala-banco-mensal/${encodeURIComponent(lojaId || '')}/${encodeURIComponent(mesRef || '')}`;
   const scopeIds = new Set(scopePeople.map((person) => Number(person.ESCFUNC_ID)));
-  const scopedDays = (escala?.dias || []).filter((day) => scopeIds.has(Number(day.ESCFUNC_ID)));
+  const scopedDays = (escala?.dias || []).filter((day) =>
+    scopeIds.has(Number(day.ESCFUNC_ID)) && (subsection === 'all' || daySubKey(day) === subsection));
   const scopeOfficial = scopedDays.length > 0 && scopedDays.every((day) => Number(day.OFICIALIZADA) === 1);
 
   return (
@@ -424,16 +444,16 @@ export function EscalaMensal({ user }: { user: User }) {
                     onClick={() => updateFilter('subsecao', id)}
                   >
                     {name}{' '}
-                    <small>{employees.filter((item) => String(item.ESCSUBSECAO_ID) === id).length}</small>
+                    <small>{employees.filter((item) => memberOfSubsection(item, id)).length}</small>
                   </button>
                 ))}
-                {employees.some((item) => personSubKey(item) === 'sem') && (
+                {employees.some((item) => memberOfSubsection(item, 'sem')) && (
                   <button
                     className={subsection === 'sem' ? 'selected' : ''}
                     onClick={() => updateFilter('subsecao', 'sem')}
                   >
                     Sem subseção{' '}
-                    <small>{employees.filter((item) => personSubKey(item) === 'sem').length}</small>
+                    <small>{employees.filter((item) => memberOfSubsection(item, 'sem')).length}</small>
                   </button>
                 )}
               </div>
@@ -491,11 +511,12 @@ export function EscalaMensal({ user }: { user: User }) {
                   <span>
                     Escopo: <strong>{scopeName}</strong> · {scopePeople.length} funcionário(s)
                   </span>
-                  {canEdit(user, 'escalas-funcionarios') && <button className="button secondary" type="button" disabled={!scopePeople.length || loading || escala?.status === 'FINALIZADA'} onClick={() => setBulkEditing(true)}><Pencil size={15} /> Editar vários</button>}
+                  {mixedSubsectionScope && <span title="Operações por subseção com transferência no mês exigem recorte por data.">Transferência no mês: operações em lote disponíveis na seção inteira</span>}
+                  {canEdit(user, 'escalas-funcionarios') && <button className="button secondary" type="button" disabled={!scopePeople.length || loading || mixedSubsectionScope || escala?.status === 'FINALIZADA'} onClick={() => setBulkEditing(true)}><Pencil size={15} /> Editar vários</button>}
                   <button
                     className="button secondary"
                     type="button"
-                    disabled={!scopePeople.length || loading}
+                    disabled={!scopePeople.length || loading || mixedSubsectionScope}
                     onClick={() => {
                       setActionError('');
                       setPendingAction('resetar');
@@ -506,7 +527,7 @@ export function EscalaMensal({ user }: { user: User }) {
                   <button
                     className="button primary"
                     type="button"
-                    disabled={!scopePeople.length || loading}
+                    disabled={!scopePeople.length || loading || mixedSubsectionScope}
                     onClick={() => {
                       setActionError('');
                       setPendingAction('gerar');
@@ -515,7 +536,7 @@ export function EscalaMensal({ user }: { user: User }) {
                     <Play size={15} /> Gerar escala
                   </button>
                   {user.perfil === 'ADMIN' && !scopeOfficial && scopedDays.length > 0 && (
-                    <button className="button secondary" type="button" disabled={loading} onClick={() => {
+                    <button className="button secondary" type="button" disabled={loading || mixedSubsectionScope} onClick={() => {
                       setActionError('');
                       setPendingAction('oficializar');
                     }}><ShieldCheck size={15} /> Oficializar</button>
@@ -571,7 +592,9 @@ export function EscalaMensal({ user }: { user: User }) {
                             <button type="button" className="person-menu-trigger" title={`Ações de ${person.NOME}`} aria-label={`Ações de ${person.NOME}`} onClick={(event) => openPersonMenu(event, person)}><MoreVertical size={16} /></button>
                           </th>
                           {dates.map((date, index) => {
-                            const day = daysByEmployee.get(String(person.ESCFUNC_ID))?.get(date);
+                            const scheduled = daysByEmployee.get(String(person.ESCFUNC_ID))?.get(date);
+                            const day = scheduled && (subsection === 'all' || daySubKey(scheduled) === subsection)
+                              ? scheduled : undefined;
                             return (
                               <td
                                 key={date}
@@ -581,6 +604,7 @@ export function EscalaMensal({ user }: { user: User }) {
                                   type="button"
                                   title={`${person.NOME} · ${formatDate(date)} · ${shiftLabel(day)}`}
                                   aria-label={`${person.NOME}, ${formatDate(date)}, ${shiftLabel(day)}`}
+                                  disabled={Boolean(scheduled && !day)}
                                   onClick={() => setSelectedCell({ employee: person, date, day })}
                                 >
                                   {cellText(day)}
@@ -722,12 +746,13 @@ export function EscalaMensal({ user }: { user: User }) {
       {transferTarget && lojaId && mesRef && <TransferirSubsecao
         lojaId={lojaId} mesRef={mesRef} employee={transferTarget}
         subsecoes={sectionCatalog?.SUBSECOES || []}
+        canRetry={user.perfil === 'ADMIN'}
         onClose={() => setTransferTarget(null)}
-        onTransferred={({ destination, warning }) => {
+        onTransferred={({ destination, warning, scheduled }) => {
           setTransferTarget(null);
           setReload((value) => value + 1);
-          updateFilter('subsecao', destination);
-          setActionMessage(warning || 'Funcionário transferido e escala individual regenerada.');
+          if (!scheduled) updateFilter('subsecao', destination);
+          setActionMessage(warning || (scheduled ? `Transferência agendada para ${scheduled}. A escala atual não foi alterada.` : 'Funcionário transferido e escala individual regenerada.'));
         }}
       />}
       {individualTarget && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {

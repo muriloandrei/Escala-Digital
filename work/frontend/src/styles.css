@@ -409,6 +409,10 @@ tbody tr:hover {
   border-radius: 6px;
   padding: 23px;
 }
+.training [data-tour] {
+  outline: 2px solid #2459d5;
+  outline-offset: 3px;
+}
 .training-header {
   border-bottom: 1px solid #e4ebf3;
   padding-bottom: 12px;

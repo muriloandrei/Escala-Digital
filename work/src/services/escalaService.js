@@ -706,6 +706,29 @@ async function getLatestRevision(connection, { lojaId, mesRef, includeInactive =
   return value === null || value === undefined ? null : Number(value);
 }
 
+function aplicarHistoricoSubsecoes(rows = [], transfers = []) {
+  const byEmployee = new Map();
+  for (const transfer of transfers) {
+    const id = String(pick(transfer, 'ESCFUNC_ID', 'escfunc_id'));
+    if (!byEmployee.has(id)) byEmployee.set(id, []);
+    byEmployee.get(id).push(transfer);
+  }
+  for (const row of rows) {
+    const history = byEmployee.get(String(pick(row, 'ESCFUNC_ID', 'escfunc_id')));
+    if (!history?.length) continue;
+    const date = formatDateValue(pick(row, 'DT', 'dt'));
+    const latest = history.filter((item) => pick(item, 'VIGENCIA', 'vigencia') <= date).at(-1);
+    const source = latest || history[0];
+    row.ESCSUBSECAO_ID = latest
+      ? pick(source, 'DESTINO_ID', 'destino_id')
+      : pick(source, 'ORIGEM_ID', 'origem_id');
+    row.SUBSECAO_DESCR = latest
+      ? pick(source, 'DESTINO_NOME', 'destino_nome')
+      : pick(source, 'ORIGEM_NOME', 'origem_nome');
+  }
+  return rows;
+}
+
 function filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo = [], rows = []) {
   const secoesDaEscala = new Set((rows || [])
     .map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id')))
@@ -1265,14 +1288,25 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       if (!atual) return;
       row.CHAPA = pick(atual, 'CHAPA', 'chapa') || pick(row, 'CHAPA', 'chapa');
       row.NOME = pick(atual, 'NOME', 'nome') || pick(row, 'NOME', 'nome');
-      row.ESCSECAO_ID = pick(atual, 'ESCSECAO_ID', 'escsecao_id') || pick(row, 'ESCSECAO_ID', 'escsecao_id');
       row.ESCSUBSECAO_ID = pick(atual, 'ESCSUBSECAO_ID', 'escsubsecao_id');
       row.SUBSECAO_DESCR = pick(atual, 'SUBSECAO_DESCR', 'subsecao_descr');
       row.ESCFUNCAO_ID = pick(atual, 'ESCFUNCAO_ID', 'escfuncao_id') || pick(row, 'ESCFUNCAO_ID', 'escfuncao_id');
       row.FUNCAO_DESCR = pick(atual, 'FUNCAO_DESCR', 'funcao_descr') || pick(row, 'FUNCAO_DESCR', 'funcao_descr');
-      row.COD_SECAO = pick(atual, 'COD_SECAO', 'cod_secao') || pick(row, 'COD_SECAO', 'cod_secao');
-      row.SECAO_DESCR = pick(atual, 'SECAO_DESCR', 'secao_descr') || pick(row, 'SECAO_DESCR', 'secao_descr');
     });
+    const transferHistory = await connection.execute(
+      `select t.escfunc_id, to_char(t.dt_vigencia, 'YYYY-MM-DD') as vigencia,
+              t.origem_id, t.destino_id,
+              origem.descr as origem_nome, destino.descr as destino_nome
+         from sgn_esc_transfer_sub t
+         left join sgn_esc_funcionario f_transfer on f_transfer.escfunc_id = t.escfunc_id
+         left join sgn_esc_subsecao origem on origem.escsubsecao_id = t.origem_id
+         left join sgn_esc_subsecao destino on destino.escsubsecao_id = t.destino_id
+        where t.loja = :lojaId
+          and (t.status = 'C' or (t.status in ('P', 'E', 'F') and f_transfer.escsubsecao_id = t.destino_id))
+        order by t.escfunc_id, t.dt_vigencia, t.transf_id`,
+      { lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    aplicarHistoricoSubsecoes(rows, transferHistory.rows || []);
     const inicio = getOperationalPeriod(mesRef).inicio;
     const fim = getMonthEndIso(mesRef);
     let ausencias = await listAusenciasEscalaMensalComConnection(connection, { lojaId, inicio, fim });
@@ -1343,7 +1377,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       }
       return secoesMap.get(secaoKey);
     };
-    const ensureFuncionarioMap = (funcionario, gerada = 0) => {
+    const ensureFuncionarioMap = (funcionario, gerada = 0, preservarAlocacao = false) => {
       const escfuncId = pick(funcionario, 'ESCFUNC_ID', 'escfunc_id');
       if (!escfuncId) return;
       const key = String(escfuncId);
@@ -1353,12 +1387,12 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
         ESCFUNC_ID: escfuncId,
         CHAPA: pick(funcionario, 'CHAPA', 'chapa') || atual.CHAPA,
         NOME: pick(funcionario, 'NOME', 'nome') || atual.NOME,
-        ESCSECAO_ID: pick(funcionario, 'ESCSECAO_ID', 'escsecao_id') || atual.ESCSECAO_ID,
-        ESCSUBSECAO_ID: pick(funcionario, 'ESCSUBSECAO_ID', 'escsubsecao_id'),
-        SUBSECAO_DESCR: pick(funcionario, 'SUBSECAO_DESCR', 'subsecao_descr'),
+        ESCSECAO_ID: preservarAlocacao && atual.ESCSECAO_ID ? atual.ESCSECAO_ID : pick(funcionario, 'ESCSECAO_ID', 'escsecao_id') || atual.ESCSECAO_ID,
+        ESCSUBSECAO_ID: preservarAlocacao && atual.ESCSECAO_ID ? atual.ESCSUBSECAO_ID : pick(funcionario, 'ESCSUBSECAO_ID', 'escsubsecao_id'),
+        SUBSECAO_DESCR: preservarAlocacao && atual.ESCSECAO_ID ? atual.SUBSECAO_DESCR : pick(funcionario, 'SUBSECAO_DESCR', 'subsecao_descr'),
         ESCFUNCAO_ID: pick(funcionario, 'ESCFUNCAO_ID', 'escfuncao_id') || atual.ESCFUNCAO_ID,
-        COD_SECAO: pick(funcionario, 'COD_SECAO', 'cod_secao') || atual.COD_SECAO,
-        SECAO_DESCR: pick(funcionario, 'SECAO_DESCR', 'secao_descr') || atual.SECAO_DESCR,
+        COD_SECAO: preservarAlocacao && atual.ESCSECAO_ID ? atual.COD_SECAO : pick(funcionario, 'COD_SECAO', 'cod_secao') || atual.COD_SECAO,
+        SECAO_DESCR: preservarAlocacao && atual.ESCSECAO_ID ? atual.SECAO_DESCR : pick(funcionario, 'SECAO_DESCR', 'secao_descr') || atual.SECAO_DESCR,
         FUNCAO_DESCR: pick(funcionario, 'FUNCAO_DESCR', 'funcao_descr') || atual.FUNCAO_DESCR,
         GERADA: gerada || atual.GERADA || 0
       });
@@ -1375,7 +1409,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     });
     funcionariosCatalogo.forEach((funcionario) => {
       const escfuncId = pick(funcionario, 'ESCFUNC_ID', 'escfunc_id');
-      ensureFuncionarioMap(funcionario, funcionariosMap.get(String(escfuncId))?.GERADA || 0);
+      ensureFuncionarioMap(funcionario, funcionariosMap.get(String(escfuncId))?.GERADA || 0, true);
       const secao = ensureSecaoMap(funcionario);
       if (secao) secao.FUNCIONARIOS.add(String(escfuncId));
     });
@@ -2123,10 +2157,42 @@ async function calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId,
   };
 }
 
+async function listarMesesComDiasFuturosFuncionario(connection, { lojaId, escfuncId }) {
+  const ativaSql = await getAtivaSql(connection, 'p');
+  const result = await connection.execute(
+    `select distinct to_char(p.mes_ref, 'YYYY-MM-DD') as mes_ref
+       from sgn_esc_prog p
+      where p.loja = :lojaId and p.escfunc_id = :escfuncId
+        and ${ativaSql}
+        and exists (select 1 from sgn_esc_prog_dia d
+                     where d.escprog_id = p.escprog_id and d.dt >= trunc(sysdate))
+      order by mes_ref`,
+    { lojaId, escfuncId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  return (result.rows || []).map((row) => pick(row, 'MES_REF', 'mes_ref'));
+}
+
+async function calcularImpactoHorarioFuturo(connection, { lojaId, escfuncId, horario }) {
+  const meses = (await listarMesesComDiasFuturosFuncionario(connection, { lojaId, escfuncId }))
+    .filter((mesRef) => !isMesFinalizado(mesRef));
+  const alteracoes = [];
+  for (const mesRef of meses) {
+    const resultado = await calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId, mesRef, escfuncId, horario });
+    alteracoes.push({ mesRef, ...resultado });
+  }
+  return alteracoes;
+}
+
 async function previewHorarioFuncionarioEscala({ lojaId, mesRef, escfuncId, horario }) {
   return withConnection(async (connection) => {
-    const alteracao = await calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId, mesRef, escfuncId, horario });
-    return { diasAlterados: alteracao.diasAlterados, diasManuais: alteracao.diasManuais, possuiEscala: Boolean(alteracao.atual) };
+    const alteracoes = await calcularImpactoHorarioFuturo(connection, { lojaId, escfuncId, horario });
+    return {
+      diasAlterados: alteracoes.reduce((total, item) => total + item.diasAlterados, 0),
+      diasManuais: alteracoes.reduce((total, item) => total + item.diasManuais, 0),
+      possuiEscala: alteracoes.some((item) => Boolean(item.atual)),
+      mesesImpactados: alteracoes.filter((item) => item.diasAlterados).map((item) => item.mesRef),
+      mesesParaReoficializar: alteracoes.filter((item) => item.diasAlterados && Number(pick(item.atual?.header, 'OFICIALIZADA', 'oficializada') || 0) === 1).map((item) => item.mesRef)
+    };
   });
 }
 
@@ -2149,15 +2215,20 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
 
       let saved = null;
       let diasAlterados = 0;
-      if (mesRef) {
-        const alteracao = await calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId, mesRef, escfuncId, horario });
+      const mesesAtualizados = [];
+      const mesesParaReoficializar = [];
+      const alteracoes = await calcularImpactoHorarioFuturo(connection, { lojaId, escfuncId, horario });
+      for (const alteracao of alteracoes) {
         const { atual } = alteracao;
-        if (atual?.dias?.length) {
+        if (atual?.dias?.length && alteracao.diasAlterados) {
           const dias = alteracao.dias;
-          diasAlterados = alteracao.diasAlterados;
-          if (diasAlterados) {
+          diasAlterados += alteracao.diasAlterados;
+          mesesAtualizados.push(alteracao.mesRef);
+          if (Number(pick(atual.header, 'OFICIALIZADA', 'oficializada') || 0) === 1) mesesParaReoficializar.push(alteracao.mesRef);
             const [revisao] = await saveEscalasFuncionariosRevisionComConnection(connection, {
-              lojaId, mesRef, actor, operacaoId, acao: 'EDITAR_HORARIO_ESCALA', funcionarios: [{
+              lojaId, mesRef: alteracao.mesRef, actor, operacaoId, acao: 'EDITAR_HORARIO_ESCALA',
+              oficializada: 0,
+              funcionarios: [{
                 escfuncId,
                 chapa: pick(funcionario, 'CHAPA', 'chapa'),
                 escsecaoId: pick(funcionario, 'ESCSECAO_ID', 'escsecaoId'),
@@ -2174,7 +2245,6 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
               }]
             });
             saved = revisao;
-          }
         }
       }
 
@@ -2196,11 +2266,11 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
           detalhe: {
             chapa: pick(funcionario, 'CHAPA', 'chapa'),
             anterior: Object.fromEntries(['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'].map((field) => [field, pick(funcionario, field, field.toLowerCase())])),
-            novo: horario, aplicarNaEscala: true, diasAlterados
+            novo: horario, aplicarNaEscala: true, diasAlterados, mesesAtualizados, mesesParaReoficializar
           }
       });
       await connection.commit();
-      return { funcionario: { ...funcionario, ...horario }, saved, diasAlterados };
+      return { funcionario: { ...funcionario, ...horario }, saved, diasAlterados, mesesAtualizados, mesesParaReoficializar };
     } catch (error) {
       await connection.rollback();
       throw normalizeOracleSaveError(error);
@@ -2657,6 +2727,7 @@ module.exports = {
     assertFixoSnapshot,
     situacaoDaAlteracao,
     encontrarErrosAusencias,
+    aplicarHistoricoSubsecoes,
     aplicarHorarioBaseNosDias
   }
 };

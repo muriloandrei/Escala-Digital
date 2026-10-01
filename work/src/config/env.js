@@ -78,6 +78,10 @@ function getEnv() {
       monthlyReleaseDay: Number(process.env.ESCALA_MONTHLY_RELEASE_DAY || 1),
       monthlyReleaseIntervalMs: Number(process.env.ESCALA_MONTHLY_RELEASE_INTERVAL_MS || 60 * 1000)
     },
+    subsectionTransfers: {
+      enabled: String(process.env.ESCALA_TRANSFER_SCHEDULER_ENABLED || 'false').trim().toLowerCase() === 'true',
+      intervalMs: parsePositiveNumber(process.env.ESCALA_TRANSFER_INTERVAL_MS, 60 * 1000)
+    },
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY)
   };
 }

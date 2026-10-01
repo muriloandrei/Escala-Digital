@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   CalendarDays,
@@ -205,6 +205,7 @@ function App() {
 
 function TrainingPrompt({ user }: { user: User }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [stage, setStage] = useState<number | null>(null);
 
   useEffect(() => {
@@ -214,6 +215,9 @@ function TrainingPrompt({ user }: { user: User }) {
       .then((progress) => {
         if (progress.persisted) {
           setStage(progress.stage);
+          if (progress.stage === 0 && location.pathname !== '/treinamento') {
+            navigate('/treinamento', { replace: true });
+          }
           return;
         }
         try {
@@ -223,7 +227,7 @@ function TrainingPrompt({ user }: { user: User }) {
       })
       .catch((reason) => { if (reason.name !== 'AbortError') setStage(null); });
     return () => controller.abort();
-  }, [location.pathname, user.sub]);
+  }, [location.pathname, navigate, user.sub]);
 
   if (location.pathname === '/treinamento' || stage === null || stage >= 7) return null;
   return (

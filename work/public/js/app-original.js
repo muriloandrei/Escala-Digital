@@ -735,6 +735,7 @@
                     window.location.hash = '/' + currentHashRoute;
                     return;
                 }
+                if (!escalaDetalheBancoAguardandoConfirmacao) limparRascunhoLocalBanco(escalaDetalheAtual.lojaId, escalaDetalheAtual.mesRef);
             }
 
             if (escalaRascunhoAtivo && !pageKey.startsWith('escalas/nova')) {
@@ -910,6 +911,7 @@
         let escalaFuncionarioEdicaoAlterada = false;
         let escalaDetalheBancoValidada = false;
         let escalaDetalheBancoAlterados = new Map();
+        let escalaDetalheBancoDiasLocais = new Set();
         let escalaDetalheBancoAguardandoConfirmacao = false;
         let escalaDetalheBancoOperacaoPendente = null;
         let currentLoadedScale = null;
@@ -6718,6 +6720,7 @@
         const resetarEstadoEdicaoBanco = () => {
             escalaDetalheBancoValidada = false;
             escalaDetalheBancoAlterados = new Map();
+            escalaDetalheBancoDiasLocais = new Set();
             escalaDetalheBancoAguardandoConfirmacao = false;
             escalaDetalheBancoOperacaoPendente = null;
             verificarRascunhoBancoBtn?.classList.add('hidden');
@@ -6725,6 +6728,77 @@
             escalaBancoDetalhadaCard?.classList.add('hidden');
             criticasDetalheBancoBtn?.classList.add('hidden');
             gerarDetalhadaBancoBtn?.classList.add('hidden');
+        };
+
+        const podeExecutarAcaoEscalaBanco = () => {
+            if (!escalaDetalheBancoAlterados.size && !escalaDetalheBancoAguardandoConfirmacao) return true;
+            showInfoModal(escalaDetalheBancoAguardandoConfirmacao
+                ? 'Verifique a gravação pendente antes de executar outra ação na escala.'
+                : 'Salve o rascunho antes de gerar, resetar ou alterar fixos.', 'info');
+            return false;
+        };
+
+        const getRascunhoLocalBancoKey = (lojaId = escalaDetalheAtual.lojaId, mesRef = escalaDetalheAtual.mesRef) =>
+            `escala:rascunho-local:v1:${usuarioSessaoCache?.sub || usuarioSessaoCache?.login || 'anonimo'}:${lojaId}:${mesRef}`;
+
+        const limparRascunhoLocalBanco = (lojaId, mesRef) => {
+            try { window.sessionStorage.removeItem(getRascunhoLocalBancoKey(lojaId, mesRef)); } catch (_) { /* Armazenamento opcional. */ }
+        };
+
+        const persistirRascunhoLocalBanco = () => {
+            if (!escalaDetalheAtual.lojaId || !escalaDetalheAtual.mesRef) return;
+            const dias = (escalaDetalheAtual.dias || [])
+                .filter((dia) => escalaDetalheBancoDiasLocais.has(`${dia.ESCFUNC_ID}|${String(dia.DT).slice(0, 10)}`))
+                .map((dia) => ({
+                    escfuncId: Number(dia.ESCFUNC_ID), data: String(dia.DT).slice(0, 10),
+                    programacao: dia.PROGRAMACAO, hrEnt1: dia.HR_ENT1, hrSai1: dia.HR_SAI1,
+                    hrEnt2: dia.HR_ENT2, hrSai2: dia.HR_SAI2,
+                    justificativa: dia.JUSTIFICATIVA_ALTERACAO || null
+                }));
+            try {
+                window.sessionStorage.setItem(getRascunhoLocalBancoKey(), JSON.stringify({
+                    alterados: [...escalaDetalheBancoAlterados.values()], dias, salvoEm: new Date().toISOString()
+                }));
+            } catch (_) {
+                showInfoModal('O navegador não conseguiu guardar uma cópia local dos ajustes. Salve o rascunho no banco antes de sair.', 'error');
+            }
+        };
+
+        const restaurarRascunhoLocalBanco = () => {
+            let snapshot;
+            try { snapshot = JSON.parse(window.sessionStorage.getItem(getRascunhoLocalBancoKey()) || 'null'); } catch (_) { return; }
+            if (!Array.isArray(snapshot?.alterados) || !Array.isArray(snapshot?.dias) || !snapshot.dias.length) return;
+            const atuais = new Map((escalaDetalheAtual.dias || [])
+                .map((dia) => [`${dia.ESCFUNC_ID}|${String(dia.DT).slice(0, 10)}`, dia]));
+            const revisoes = new Map(snapshot.alterados.map((item) => [String(item.escfuncId), Number(item.revisaoBase)]));
+            const partesHoje = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
+            }).formatToParts(new Date());
+            const camposHoje = Object.fromEntries(partesHoje.map((parte) => [parte.type, parte.value]));
+            const hoje = `${camposHoje.year}-${camposHoje.month}-${camposHoje.day}`;
+            const conflito = snapshot.dias.some((item) => {
+                const atual = atuais.get(`${item.escfuncId}|${item.data}`);
+                return !atual || Number(atual.REVISAO || 0) !== revisoes.get(String(item.escfuncId))
+                    || item.data < hoje || isDiaProtegidoBanco(atual);
+            });
+            if (conflito) {
+                showInfoModal('Há ajustes locais de uma visita anterior, mas a escala mudou ou contém dias bloqueados. Eles não foram reaplicados. Confira o histórico antes de editar.', 'error');
+                return;
+            }
+            for (const item of snapshot.dias) {
+                const dia = atuais.get(`${item.escfuncId}|${item.data}`);
+                dia.PROGRAMACAO = item.programacao;
+                dia.HR_ENT1 = item.hrEnt1;
+                dia.HR_SAI1 = item.hrSai1;
+                dia.HR_ENT2 = item.hrEnt2;
+                dia.HR_SAI2 = item.hrSai2;
+                dia.JUSTIFICATIVA_ALTERACAO = item.justificativa;
+                dia.CRITICA_MANUAL = 1;
+                escalaDetalheBancoDiasLocais.add(`${item.escfuncId}|${item.data}`);
+            }
+            escalaDetalheBancoAlterados = new Map(snapshot.alterados.map((item) => [String(item.escfuncId), item]));
+            escalaDetalheBancoValidada = false;
+            showInfoModal('Ajustes ainda não salvos foram recuperados neste navegador. Revise e salve o rascunho.', 'info');
         };
 
         const marcarDiaBancoAlterado = (dia) => {
@@ -6738,6 +6812,8 @@
                 escfuncaoId: dia.ESCFUNCAO_ID,
                 revisaoBase: Number(dia.REVISAO || 0)
             });
+            escalaDetalheBancoDiasLocais.add(`${dia.ESCFUNC_ID}|${String(dia.DT).slice(0, 10)}`);
+            persistirRascunhoLocalBanco();
             escalaDetalheBancoValidada = false;
             salvarDetalheBancoBtn?.classList.add('hidden');
         };
@@ -7038,6 +7114,7 @@
 
         const removerFixoDiaGeradoBanco = async (dia, { renderizar = true } = {}) => {
             if (!dia || !isDiaFixoBanco(dia)) return false;
+            if (!podeExecutarAcaoEscalaBanco()) return false;
             await removerFixoSecaoBanco({
                 escfuncId: Number(dia.ESCFUNC_ID),
                 DT: String(dia.DT || '').slice(0, 10)
@@ -7058,6 +7135,7 @@
         };
 
         const abrirModalFixoSecaoBanco = async (defaults = {}) => {
+            if (!podeExecutarAcaoEscalaBanco()) return;
             const funcionarios = getFuncionariosSecaoAtualBanco();
             if (!funcionarios.length) {
                 showInfoModal('Nenhum funcionário encontrado para cadastrar fixo nesta seção.', 'info');
@@ -8100,6 +8178,7 @@
             const diasEscala = getDatasPeriodoOperacionalBanco(escalaDetalheAtual.mesRef);
             escalaDetalheResumo.textContent = diasEscala.length + ' dia(s), revisão ' + (escala.revisao || '-') + ', status ' + (escala.status || '-');
             prepararSecoesDetalheEscala();
+            restaurarRascunhoLocalBanco();
             validarDetalheBancoSilencioso().then(() => renderizarSecaoAtivaEscala()).catch(() => atualizarAcoesValidacaoBanco());
         };
 
@@ -8626,6 +8705,7 @@
 
         resetarEscalaSecaoBancoBtn?.addEventListener('click', async () => {
             if (!escalaDetalheAtual.lojaId || !escalaDetalheAtual.mesRef || !escalaDetalheAtual.secaoAtiva) return;
+            if (!podeExecutarAcaoEscalaBanco()) return;
             const confirmacao = await showInputModal({
                 title: 'Resetar Escala',
                 inputs: [{ type: 'message', text: 'A seção voltará para a etapa de liberação, mantendo os funcionários e os fixos cadastrados.' }],
@@ -8800,6 +8880,7 @@
                     showInfoModal('A gravação ainda não foi confirmada. Mantenha esta tela aberta e verifique novamente antes de descartar as alterações.', 'info');
                     return;
                 }
+                limparRascunhoLocalBanco(pendente.lojaId, pendente.mesRef);
                 await recarregarSecaoAtualEscalaBanco(pendente.lojaId, pendente.mesRef, pendente.secaoAtiva, {
                     subsetorAtivo: pendente.subsetorAtivo
                 });
@@ -8911,6 +8992,7 @@
                 }
                 if (oficializar) {
                     escalaDetalheBancoAlterados = new Map();
+                    limparRascunhoLocalBanco(lojaAtual, mesAtual);
                     window.location.hash = '/escalas-geradas';
                 } else if (lojaAtual && mesAtual) {
                     const leitura = await apiRequest('/api/escalas/mensal?lojaId=' + encodeURIComponent(lojaAtual) + '&mesRef=' + encodeURIComponent(mesAtual));
@@ -8922,6 +9004,7 @@
                     if (!leituraConfirmada) {
                         throw new Error('A leitura de volta nao confirmou a revisao gravada de todos os funcionarios. Consulte o historico e recarregue antes de editar novamente.');
                     }
+                    limparRascunhoLocalBanco(lojaAtual, mesAtual);
                     await recarregarSecaoAtualEscalaBanco(lojaAtual, mesAtual, secaoAtual, { subsetorAtivo: subsetorAtual });
                 }
                 escalaDetalheBancoAlterados = new Map();
@@ -9168,6 +9251,7 @@
                     return;
                 }
                 if (scaleGerarFuncionario) {
+                    if (!podeExecutarAcaoEscalaBanco()) return;
                     const confirmacao = await showInputModal({
                         title: 'Gerar escala do funcionário',
                         inputs: [{ type: 'message', text: 'A escala será regerada apenas para este funcionário, mantendo as demais escalas da seção como estão.' }],
@@ -9198,6 +9282,7 @@
                     return;
                 }
                 if (scaleEditarHorarios) {
+                    if (!podeExecutarAcaoEscalaBanco()) return;
                     await abrirModalHorarioFuncionario(funcionario, {
                         origemEscala: true,
                         lojaId: escalaDetalheAtual.lojaId,
@@ -9206,6 +9291,7 @@
                     return;
                 }
                 if (scaleTransferir) {
+                    if (!podeExecutarAcaoEscalaBanco()) return;
                     abrirModalTransferenciaSubsecao(funcionario, {
                         origemEscala: true,
                         subsecoes: getSubsecoesRawSecaoAtualBanco()
@@ -9222,6 +9308,7 @@
             const pendingCell = event.target.closest('.pending-skeleton-cell[data-pending-fixed="1"]');
             if (pendingCell) {
                 event.preventDefault();
+                if (!podeExecutarAcaoEscalaBanco()) return;
                 if (pendingCell.classList.contains('locked-day')) {
                     showInfoModal('Dias ja passados nao podem receber fixos de escala.', 'info');
                     return;
@@ -9251,6 +9338,7 @@
             const gerarSecaoButton = event.target.closest('.gerar-escala-secao-banco');
             if (gerarSecaoButton) {
                 event.preventDefault();
+                if (!podeExecutarAcaoEscalaBanco()) return;
                 const secaoKey = gerarSecaoButton.dataset.secaoKey;
                 const subsetorKey = escalaDetalheAtual.subsetorAtivo;
                 gerarSecaoButton.disabled = true;

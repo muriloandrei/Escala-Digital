@@ -16,6 +16,7 @@ const stateRoutes = require('./routes/stateRoutes');
 const accessRoutes = require('./routes/accessRoutes');
 const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
 const monthlyReleaseService = require('./services/monthlyReleaseService');
+const subsectionTransferService = require('./services/subsectionTransferService');
 const { getAppVersion } = require('./utils/appVersion');
 
 const env = getEnv();
@@ -184,9 +185,11 @@ async function start() {
 
   const server = await listen(env.port);
   const monthlyReleaseInterval = monthlyReleaseService.startMonthlyReleaseScheduler(env);
+  const transferInterval = subsectionTransferService.startScheduler(env.subsectionTransfers);
 
   async function shutdown() {
     if (monthlyReleaseInterval) clearInterval(monthlyReleaseInterval);
+    if (transferInterval) clearInterval(transferInterval);
     server.close(async () => {
       await closeOraclePool();
       process.exit(0);

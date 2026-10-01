@@ -132,6 +132,7 @@ export type EscalaEvento = {
   LOJA: number;
   MES_REF: string;
   ESCSECAO_ID?: number | null;
+  ESCSUBSECAO_ID?: number | null;
   ESCFUNC_ID?: number | null;
   LOGIN: string;
   ACAO: string;
@@ -144,6 +145,7 @@ export type EscalaEvento = {
   FUNCIONARIO_NOME?: string | null;
   FUNCIONARIO_CHAPA?: string | null;
   SECAO_NOME?: string | null;
+  SUBSECAO_NOME?: string | null;
 };
 
 export type EventosResumo = {

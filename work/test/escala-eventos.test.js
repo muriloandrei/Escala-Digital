@@ -27,6 +27,7 @@ test('schedule event is part of the caller transaction and keeps complete detail
   assert.equal(JSON.parse(captured.binds.detalhe.val).alteracoes[0].depois, detail);
   assert.equal(captured.binds.usuarioId, 42);
   assert.equal(captured.binds.login, 'lider35');
+  assert.match(captured.sql, /escsubsecao_id/);
 });
 
 test('schedule event insert failure reaches the caller for rollback', async () => {
@@ -76,6 +77,47 @@ test('consulta de eventos restringe a secao solicitada e as permissoes do usuari
   assert.equal(resumo.total, 30);
   assert.equal(resumo.depois, 4);
   assert.match(captured.sql, /e\.escsecao_id = :escsecaoId/);
+});
+
+test('filtros de auditoria restringem lista e resumo no servidor', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/escalaEventService.js'), 'utf8');
+  const queries = [];
+  const loaded = { exports: {} };
+  vm.runInNewContext(source, {
+    module: loaded,
+    require(name) {
+      if (name === 'node:crypto') return { randomUUID: () => 'op' };
+      if (name === '../db/oracle') return {
+        oracledb: { OUT_FORMAT_OBJECT: 1, STRING: 2 },
+        withConnection: async (work) => work({
+          async execute(sql, binds) {
+            queries.push({ sql, binds });
+            return { rows: [] };
+          }
+        })
+      };
+      throw new Error(name);
+    }
+  });
+  const scope = {
+    lojasPermitidas: [35], secoesPermitidas: [2003], lojaId: 35,
+    escsubsecaoId: 804, acao: 'EDITAR_DIA_ESCALA', origem: 'USUARIO', situacao: 'RASCUNHO',
+    login: 'Lider35', funcionario: 'Ana'
+  };
+  await loaded.exports.listEvents(scope);
+  await loaded.exports.summarizeEvents(scope);
+  assert.equal(queries.length, 2);
+  for (const { sql, binds } of queries) {
+    assert.match(sql, /e\.acao = :acao/);
+    assert.match(sql, /e\.origem = :origem/);
+    assert.match(sql, /e\.situacao = :situacao/);
+    assert.match(sql, /e\.escsecao_id in \(:secao0\)/);
+    assert.match(sql, /e\.escsubsecao_id = :escsubsecaoId/);
+    assert.match(sql, /f_filter\.escfunc_id = e\.escfunc_id/);
+    assert.equal(binds.login, '%LIDER35%');
+    assert.equal(binds.funcionarioNome, '%ANA%');
+    assert.equal(binds.escsubsecaoId, 804);
+  }
 });
 
 test('generation detects a concurrent day edit even without a revision change', () => {

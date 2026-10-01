@@ -341,6 +341,12 @@ router.get('/eventos', requirePermission('escalas', 'visualizar'), resolveLojaRe
       mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       escfuncId: z.coerce.number().int().positive().optional(),
       escsecaoId: z.coerce.number().int().positive().optional(),
+      escsubsecaoId: z.coerce.number().int().positive().optional(),
+      acao: z.string().trim().max(80).optional(),
+      origem: z.string().trim().max(40).optional(),
+      situacao: z.string().trim().max(40).optional(),
+      login: z.string().trim().max(100).optional(),
+      funcionario: z.string().trim().max(100).optional(),
       limit: z.coerce.number().int().min(1).max(500).optional(),
       offset: z.coerce.number().int().min(0).optional()
     }).parse(req.query);
@@ -724,7 +730,7 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
       horario,
       actor: req.user
     });
-    const { funcionario: funcionarioAtualizado, saved, diasAlterados } = atualizacao;
+    const { funcionario: funcionarioAtualizado, saved, diasAlterados, mesesAtualizados } = atualizacao;
 
     await auditService.registerAudit({
       action: 'EDITAR_HORARIO_FUNCIONARIO',
@@ -739,11 +745,12 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
         horario,
         aplicarNaEscala: true,
         escalaAtualizada: Boolean(saved),
-        diasAlterados
+        diasAlterados,
+        mesesAtualizados
       }
     });
 
-    return res.json({ funcionario: funcionarioAtualizado, escalaAtualizada: Boolean(saved), saved, diasAlterados });
+    return res.json({ funcionario: funcionarioAtualizado, escalaAtualizada: Boolean(saved), saved, diasAlterados, mesesAtualizados });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados de horario invalidos.', details: error.errors });
     return next(error);

@@ -21,7 +21,7 @@ type ShiftForm = {
   HR_SAI2: string;
 };
 
-type ShiftImpact = { diasAlterados: number; diasManuais: number; possuiEscala: boolean };
+type ShiftImpact = { diasAlterados: number; diasManuais: number; possuiEscala: boolean; mesesImpactados: string[]; mesesParaReoficializar: string[] };
 type Suspension = { ESCPEND_ID: number; ESCFUNC_ID: number; DT_INICIO: string; DT_FIM?: string | null; TIPO?: string; STATUS: string; JUSTIFICATIVA?: string };
 
 function currentMonth() {
@@ -123,10 +123,11 @@ export function Funcionarios({ user }: { user: User }) {
     setSuspendBusy(true);
     setSuspendError('');
     try {
-      await postJson(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios/${suspendTarget.ESCFUNC_ID}/suspensoes`, {
+      const result = await postJson<{ impacto?: { diasProgramados?: number; mesesImpactados?: number } }>(`/api/catalog/lojas/${encodeURIComponent(loja)}/funcionarios/${suspendTarget.ESCFUNC_ID}/suspensoes`, {
         tipo: suspendType, inicio: suspendStart, fim: suspendEnd || null, justificativa: suspendReason.trim(),
       });
-      setMessage(`Suspensão de ${suspendTarget.NOME} registrada. A geração futura respeitará o período informado.`);
+      const impact = result.impacto;
+      setMessage(`Suspensão de ${suspendTarget.NOME} registrada. A geração futura respeitará o período informado.${impact?.diasProgramados ? ` Existem ${impact.diasProgramados} dia(s) já programado(s) em ${impact.mesesImpactados || 1} mês(es); revise as escalas publicadas.` : ''}`);
       setSuspendTarget(null);
       setSuspendReason('');
       setReload((value) => value + 1);
@@ -227,12 +228,12 @@ export function Funcionarios({ user }: { user: User }) {
     setShiftBusy(true);
     setShiftError('');
     try {
-      const result = await patchJson<{ diasAlterados: number }>(
+      const result = await patchJson<{ diasAlterados: number; mesesAtualizados: string[]; mesesParaReoficializar: string[] }>(
         '/api/escalas/funcionario/horario',
         shiftPayload(shiftForm),
       );
       setMessage(
-        `Horário-base de ${shiftForm.employee.NOME} atualizado${result.diasAlterados ? ` · ${result.diasAlterados} dia(s) da escala ajustado(s)` : ''}.`,
+        `Horário-base de ${shiftForm.employee.NOME} atualizado${result.diasAlterados ? ` · ${result.diasAlterados} dia(s) em ${result.mesesAtualizados.length} mês(es) ajustado(s)` : ''}.${result.mesesParaReoficializar?.length ? ` Reoficialize a escala em ${result.mesesParaReoficializar.join(', ')} para criar novas pendências RM.` : ''}`,
       );
       setShiftForm(null);
       setShiftImpact(null);
@@ -312,8 +313,8 @@ export function Funcionarios({ user }: { user: User }) {
             className="button secondary"
             type="button"
             onClick={() => setReload((value) => value + 1)}
-            aria-label="Atualizar funcionários"
-            title="Atualizar funcionários"
+            aria-label="Reconsultar cadastro local"
+            title="Reconsultar cadastro local; não executa a carga do RM"
           >
             <RefreshCw size={16} />
           </button>
@@ -493,7 +494,7 @@ export function Funcionarios({ user }: { user: User }) {
             </div>
             <div className="shift-options">
               <label>
-                Mês da escala
+                Mês de referência
                 <input
                   type="month"
                   value={shiftForm.month}
@@ -502,16 +503,17 @@ export function Funcionarios({ user }: { user: User }) {
                 />
               </label>
             </div>
-            <p>O cadastro e os dias editáveis da escala deste mês serão atualizados juntos. Dias com ajuste manual permanecem como estão.</p>
+            <p>O cadastro e os dias editáveis de todas as escalas futuras serão atualizados juntos. Folgas, fixos e ajustes manuais permanecem como estão.</p>
             {shiftImpact && (
               <div className="shift-impact">
                 <strong>Prévia</strong>
                 <span>
                   {shiftImpact.possuiEscala
-                    ? `${shiftImpact.diasAlterados} dia(s) ajustável(is) neste mês.`
-                    : 'Nenhuma escala existente para este mês.'}
+                    ? `${shiftImpact.diasAlterados} dia(s) ajustável(is) em ${shiftImpact.mesesImpactados.length} mês(es).`
+                    : 'Nenhuma escala futura existente.'}
                 </span>
                 <span>{shiftImpact.diasManuais} dia(s) com ajuste manual preservado(s).</span>
+                {shiftImpact.mesesParaReoficializar?.length > 0 && <span>Será necessário oficializar novamente em {shiftImpact.mesesParaReoficializar.join(', ')} para enviar ao RM.</span>}
               </div>
             )}
             {shiftError && (
