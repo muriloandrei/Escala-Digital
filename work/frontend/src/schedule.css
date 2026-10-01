@@ -521,6 +521,37 @@
   color: #17283e;
 }
 .bulk-editor-controls select { min-width: 170px; }
+.bulk-hours {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 15px;
+}
+.bulk-hours label {
+  display: grid;
+  gap: 5px;
+  color: #526a83;
+  font-size: 12px;
+  font-weight: 650;
+}
+.bulk-hours input {
+  width: 100%;
+  min-width: 0;
+  height: 37px;
+  border: 1px solid #ccd8e6;
+  border-radius: 4px;
+  padding: 0 7px;
+  background: #fff;
+  color: #17283e;
+}
+.bulk-hours span {
+  grid-column: 1 / -1;
+  color: #526a83;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .bulk-hours { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .bulk-dates {
   margin: 0 0 12px;
   padding: 9px;

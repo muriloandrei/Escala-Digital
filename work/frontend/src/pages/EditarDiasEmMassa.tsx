@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '../api';
+import { validateStandardHours, type StandardHours } from '../shiftValidation';
 import { toPayloadDay, type PayloadDay } from './EditarDiaEscala';
 
 function today() {
@@ -29,13 +30,19 @@ function issueText(issue: unknown) {
   return String(issue);
 }
 
+function sameHours(day: DiaEscala | undefined, hours: StandardHours) {
+  return day?.HR_ENT1 === hours.HR_ENT1 && day.HR_SAI1 === hours.HR_SAI1
+    && day.HR_ENT2 === hours.HR_ENT2 && day.HR_SAI2 === hours.HR_SAI2;
+}
+
 export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, initialDate, onClose, onSaved }: {
   lojaId: string; mesRef: string; dates: string[]; people: Funcionario[]; allDays: DiaEscala[];
   initialDate: string; onClose: () => void; onSaved: (count: number) => void;
 }) {
   const futureDates = dates.filter((date) => date >= today());
   const [selectedDates, setSelectedDates] = useState<string[]>([futureDates.includes(initialDate) ? initialDate : futureDates[0]].filter(Boolean));
-  const [mode, setMode] = useState<'F' | 'TRB'>('F');
+  const [mode, setMode] = useState<'F' | 'TRB' | 'HORARIO'>('F');
+  const [hours, setHours] = useState<StandardHours>({ HR_ENT1: '08:00', HR_SAI1: '12:30', HR_ENT2: '13:40', HR_SAI2: '17:58' });
   const [ids, setIds] = useState<number[]>([]);
   const [search, setSearch] = useState('');
   const [justification, setJustification] = useState('');
@@ -59,13 +66,16 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
     const targetDays = selectedDates.map((date) => days.find((item) => onlyDate(item.DT) === date));
     const shift = workingShift(person, days);
     const revisions = new Set(targetDays.map((day) => Number(day?.REVISAO)));
-    const needsChange = targetDays.some((day) => String(day?.PROGRAMACAO || '').toUpperCase() !== mode);
+    const needsChange = targetDays.some((day) => mode === 'HORARIO'
+      ? !sameHours(day, hours) : String(day?.PROGRAMACAO || '').toUpperCase() !== mode);
     const reason = !selectedDates.length ? 'Selecione um dia'
       : targetDays.some((day) => !day) ? 'Dia sem escala gerada'
         : targetDays.some((day) => isProtected(day!)) ? 'Dia protegido na seleção'
           : revisions.size !== 1 || !Number.isInteger(Number(targetDays[0]?.REVISAO)) ? 'Revisões divergentes'
-            : !needsChange ? mode === 'F' ? 'Já em folga nos dias' : 'Já trabalha nos dias'
-              : mode === 'TRB' && !shift ? 'Sem horário-base' : '';
+            : mode === 'HORARIO' && /APRENDIZ/i.test(person.FUNCAO_DESCR || '') ? 'Horário de aprendiz é fixo'
+              : mode === 'HORARIO' && targetDays.some((day) => String(day?.PROGRAMACAO || '').toUpperCase() !== 'TRB') ? 'Dia sem trabalho na seleção'
+                : !needsChange ? mode === 'F' ? 'Já em folga nos dias' : mode === 'TRB' ? 'Já trabalha nos dias' : 'Já usa este horário'
+                  : mode === 'TRB' && !shift ? 'Sem horário-base' : '';
     return { person, days, targetDays, shift, reason };
   });
   const eligible = candidates.filter((item) => !item.reason);
@@ -91,6 +101,10 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
 
   async function save() {
     if (busy || uncertain || !selectedDates.length || !selected.length || selected.length > 500) return;
+    if (mode === 'HORARIO') {
+      const invalid = validateStandardHours(hours);
+      if (invalid) { setError(invalid); return; }
+    }
     const note = justification.trim();
     if (note.length < 5 || note.length > 500) { setError('Informe uma justificativa de 5 a 500 caracteres.'); return; }
     if (!crypto.randomUUID) { setError('Este navegador não oferece identificador seguro para confirmar o rascunho.'); return; }
@@ -101,11 +115,13 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
     const funcionarios = selected.map(({ person, targetDays, days, shift }) => {
       const changed = new Map<string, PayloadDay>();
       for (const day of targetDays) {
-        if (String(day!.PROGRAMACAO || '').toUpperCase() === mode) continue;
+        if (mode === 'HORARIO' ? sameHours(day, hours) : String(day!.PROGRAMACAO || '').toUpperCase() === mode) continue;
         const date = onlyDate(day!.DT);
-        changed.set(date, { data: date, programacao: mode,
-          hrEnt1: mode === 'F' ? null : shift!.hrEnt1!, hrSai1: mode === 'F' ? null : shift!.hrSai1!,
-          hrEnt2: mode === 'F' ? null : shift!.hrEnt2 || null, hrSai2: mode === 'F' ? null : shift!.hrSai2 || null,
+        changed.set(date, { data: date, programacao: mode === 'HORARIO' ? 'TRB' : mode,
+          hrEnt1: mode === 'F' ? null : mode === 'HORARIO' ? hours.HR_ENT1 : shift!.hrEnt1!,
+          hrSai1: mode === 'F' ? null : mode === 'HORARIO' ? hours.HR_SAI1 : shift!.hrSai1!,
+          hrEnt2: mode === 'F' ? null : mode === 'HORARIO' ? hours.HR_ENT2 : shift!.hrEnt2 || null,
+          hrSai2: mode === 'F' ? null : mode === 'HORARIO' ? hours.HR_SAI2 : shift!.hrSai2 || null,
           justificativa: note });
       }
       changes.set(Number(person.ESCFUNC_ID), changed);
@@ -157,7 +173,13 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
   return <div className="confirm-backdrop" role="presentation"><div className="confirm-dialog bulk-editor" role="dialog" aria-modal="true" aria-labelledby="bulk-editor-title">
     <h2 id="bulk-editor-title">Editar dias em massa</h2><p>Somente os colaboradores selecionados nesta seção/subseção terão os dias alterados.</p>
     <div className="bulk-editor-controls"><div className="segmented" role="group" aria-label="Programação em massa"><button className={mode === 'F' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('F'); setIds([]); setIssues([]); }}>Folga</button>
-        <button className={mode === 'TRB' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('TRB'); setIds([]); setIssues([]); }}>Trabalho</button></div></div>
+        <button className={mode === 'TRB' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('TRB'); setIds([]); setIssues([]); }}>Trabalho</button>
+        <button className={mode === 'HORARIO' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('HORARIO'); setIds([]); setIssues([]); }}>Horários</button></div></div>
+    {mode === 'HORARIO' && <div className="bulk-hours">
+      {([['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída intervalo'], ['HR_ENT2', 'Retorno'], ['HR_SAI2', 'Saída']] as const).map(([key, label]) =>
+        <label key={key}>{label}<input type="time" value={hours[key]} disabled={busy || uncertain} onChange={(event) => { setHours((current) => ({ ...current, [key]: event.target.value })); setError(''); setIssues([]); }} /></label>)}
+      <span>Jornada do dia: 08:48. O horário-base do funcionário não muda.</span>
+    </div>}
     {!futureDates.length && <div className="notice error">Não há dias futuros neste período.</div>}
     <fieldset className="bulk-dates" disabled={busy || uncertain}><legend>Dias ({selectedDates.length}/7)</legend><div>
       {futureDates.map((item) => <label key={item}><input type="checkbox" checked={selectedDates.includes(item)} onChange={() => toggleDate(item)} />
