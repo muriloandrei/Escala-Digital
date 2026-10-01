@@ -11,8 +11,8 @@
     const password = String(formData.get('password') || '');
 
     try {
-      await api.login(login, password);
-      window.location.href = '/app#/escalas-geradas';
+      const result = await api.login(login, password);
+      window.location.href = result.startPath === '/nova' ? '/nova' : '/app#/escalas-geradas';
     } catch (error) {
       message.textContent = error.message;
     }

@@ -52,6 +52,9 @@ function getEnv() {
       loginWindowMs: Number(process.env.RATE_LIMIT_LOGIN_WINDOW_MS || 15 * 60 * 1000),
       loginLimit: Number(process.env.RATE_LIMIT_LOGIN_MAX || 30)
     },
+    ui: {
+      reactDefault: String(process.env.REACT_DEFAULT_UI || 'false').trim().toLowerCase() === 'true'
+    },
     rm: {
       enabled: String(process.env.RM_API_ENABLED || 'false').trim().toLowerCase() === 'true',
       baseUrl: process.env.RM_API_BASE_URL || '',

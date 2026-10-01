@@ -29,6 +29,7 @@ services:
       PORT: 3000
       JWT_SECRET: dev-docker-secret-change-me
       SESSION_MAX_AGE_HOURS: 4
+      REACT_DEFAULT_UI: "true"
       COOKIE_SECURE: "false"
       TRUST_PROXY: "false"
       ORACLE_USER: ESCALA

@@ -20,7 +20,7 @@ router.post('/login', async (req, res, next) => {
   try {
     const credentials = loginSchema.parse(req.body);
     const { token, user } = await authService.login(credentials);
-    const { auth, nodeEnv } = getEnv();
+    const { auth, nodeEnv, ui } = getEnv();
     const requestIsSecure = req.secure || String(req.get('x-forwarded-proto') || '').split(',')[0].trim() === 'https';
 
     if (auth.cookieSecure && !requestIsSecure) {
@@ -36,7 +36,7 @@ router.post('/login', async (req, res, next) => {
       maxAge: auth.sessionMaxAgeMs
     });
 
-    res.json({ user });
+    res.json({ user, startPath: ui.reactDefault ? '/nova' : '/app#/escalas-geradas' });
   } catch (error) {
     if (error.name === 'ZodError') {
       error.statusCode = 400;
