@@ -5,13 +5,14 @@ Este procedimento publica o codigo da `homologacao` na `main`, mas libera as tel
 ## 1. Antes de promover a branch
 
 - Confirme que `main` nao recebeu commits novos: `git fetch origin` e `git log --oneline origin/main..origin/homologacao`. Revise tambem `git log --oneline origin/homologacao..origin/main`.
+- Prepare e teste o commit candidato em um checkout de staging separado do diretorio usado pelo processo vivo. Nao altere arquivos do checkout de producao durante o build ou antes da janela de troca.
 - Valide `npm ci`, `npm run check:client`, `npm run build:client`, `npm test` e `npm run migrations:check` no checkout `work`.
 - Tire backup/snapshot do Oracle e registre o commit e a revisao atual do servico. Nao rode smoke tests que gravam escala na base produtiva.
 - Nao promova o codigo antes de aplicar e conferir as migrations abaixo. Um banco parcialmente atualizado pode causar erro nas telas antigas tambem.
 
 ## 2. Migrations no Oracle do servidor
 
-No servidor, o projeto Node fica em `/opt/escala-app/work`; confirme o caminho real com `pwd` e `ls package.json`. O SQL deve ser executado como dono do schema usado pela aplicacao. Compare `npm run migrations:status` com o schema e com a documentacao da implantacao anterior. `SEM_REGISTRO` nao comprova que uma migration antiga esta ausente; nao reaplique scripts antigos cegamente.
+No servidor, o projeto Node fica em `/opt/escala-app/work`; confirme o caminho real com `pwd` e `ls package.json`. Use o checkout de staging para inspecionar os SQLs novos sem modificar o codigo servido. O SQL deve ser executado como dono do schema usado pela aplicacao. Compare `npm run migrations:status` com o schema e com a documentacao da implantacao anterior. `SEM_REGISTRO` nao comprova que uma migration antiga esta ausente; nao reaplique scripts antigos cegamente.
 
 Estas oito migrations existem na `homologacao` e nao na `main` anterior, nesta ordem:
 
@@ -24,7 +25,7 @@ Estas oito migrations existem na `homologacao` e nao na `main` anterior, nesta o
 7. `db/migrations/20261001_evento_subsecao.sql`
 8. `db/migrations/20261001_transferencia_subsecao_agendada.sql`
 
-Abra `sqlplus /nolog` e use `connect USUARIO@HOST:PORTA/SERVICO` para digitar a senha no prompt, sem grava-la no historico do shell. No SQL*Plus, configure `whenever sqlerror exit sql.sqlcode` e execute cada arquivo com `@/opt/escala-app/work/db/migrations/NOME.sql`, conferindo a saida antes de continuar. A migration da restricao unica do envio RM pode falhar se houver duplicatas em `(LOJA, MES_REF, ESCSECAO_ID, ESCFUNC_ID, REVISAO)`; investigue os dados antes de qualquer correcao. DDL no Oracle pode fazer commit implicito, entao o backup e o plano de recuperacao precisam ser externos a esta sessao.
+Abra `sqlplus /nolog` e use `connect USUARIO@HOST:PORTA/SERVICO` para digitar a senha no prompt, sem grava-la no historico do shell. No SQL*Plus, configure `whenever sqlerror exit sql.sqlcode` e execute cada arquivo com `@/CAMINHO/DO/STAGING/work/db/migrations/NOME.sql`, conferindo a saida antes de continuar. A migration da restricao unica do envio RM pode falhar se houver duplicatas em `(LOJA, MES_REF, ESCSECAO_ID, ESCFUNC_ID, REVISAO)`; investigue os dados antes de qualquer correcao. DDL no Oracle pode fazer commit implicito, entao o backup e o plano de recuperacao precisam ser externos a esta sessao.
 
 Depois de confirmar cada SQL aplicado, registre-o com `npm run migrations:record -- --name NOME.sql --confirm-applied --by OPERADOR`. Isso registra evidencia/checksum, nao executa a migration. Se o ledger acabou de ser criado, migrations antigas podem continuar `SEM_REGISTRO`; reconcilie-as individualmente. Execute `npm run db:check-schema`; este comando verifica tabelas, colunas, sequences, indices e a restricao essenciais, mas nao substitui validacao dos dados.
 
@@ -44,10 +45,9 @@ Mantenha as demais configuracoes existentes, sobretudo Oracle, JWT, cookie e RM.
 
 Se o ambiente usar Docker Compose, `REACT_ALLOWED_LOGINS` aceita override pela variavel do host e usa `murilo.jesus` por padrao. Para testar com o usuario `admin` no Oracle local, defina `REACT_ALLOWED_LOGINS=admin` explicitamente antes de recriar o container; nao leve esse override para producao.
 
-No checkout `work` do commit que sera promovido:
+No checkout de staging do commit que sera promovido, entre no subdiretorio `work` e execute:
 
 ```bash
-cd /opt/escala-app/work
 npm ci
 npm run check:client
 npm run build:client
@@ -57,7 +57,7 @@ npm run migrations:check
 
 `vite` e `typescript` sao dependencias de desenvolvimento: nao use `npm ci --omit=dev` antes do build. Se for reduzir a instalacao depois, faca isso somente apos compilar/testar. Sem `EnvironmentFile` carregado no shell, rode as checagens de banco como o usuario do servico com `ESCALA_ENV_FILE=/opt/escala-app/.env npm run db:check-schema` e `ESCALA_ENV_FILE=/opt/escala-app/.env npm run rollout:check-ui -- murilo.jesus`. O preflight exige uma unica conta ativa no allowlist e o build React presente.
 
-So depois dessas verificacoes, promova o commit testado para `main`, atualize o checkout do servidor para o mesmo SHA e reinicie `escala-app`. Nao force push nem use `git reset --hard` em checkout com alteracoes locais; resolva o estado do repositorio antes. Confirme `/health` e `/ready` apos o restart.
+So depois dessas verificacoes, promova o commit testado para `main`. Na janela de publicacao, pare o servico, implante no diretorio de producao o mesmo SHA e o build aprovado, confira o ambiente e reinicie `escala-app`. Nao force push nem use `git reset --hard` em checkout com alteracoes locais; resolva o estado do repositorio antes. Confirme `/health` e `/ready` apos o restart.
 
 ## 4. Aceite e reversao
 
