@@ -22,3 +22,4 @@ require('./eventos-page.test');
 require('./shift-validation.test');
 require('./escala-sync-rm.test');
 require('./escala-eventos.test');
+require('./subsection-transfer.test');

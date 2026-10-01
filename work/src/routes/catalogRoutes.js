@@ -484,6 +484,9 @@ router.patch('/lojas/:lojaId/secoes/:escsecaoId/subsecoes/funcionarios/:escfuncI
 router.patch('/lojas/:lojaId/funcionarios/:escfuncId/subsecao', resolveLojaParam, requireLojaAccess, requirePermission('escalas', 'editar'), async (req, res, next) => {
   try {
     const data = funcionarioSubsecaoSchema.parse(req.body);
+    if (data.VIGENCIA && data.VIGENCIA !== 'IMEDIATO') {
+      return res.status(422).json({ error: 'Transferencia futura ainda nao disponivel. Nenhum vinculo foi alterado.' });
+    }
     const lojaId = Number(req.params.lojaId);
     const escfuncId = Number(req.params.escfuncId);
     const secoesPermitidas = await getSecoesPermitidas(req, lojaId);

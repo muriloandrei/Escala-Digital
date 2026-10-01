@@ -3188,13 +3188,8 @@
             const values = await showInputModal({
                 title: 'Transferir ' + (funcionario.NOME || funcionario.nome || funcionario.CHAPA || funcionario.chapa || 'funcionário'),
                 inputs: [
-                    { type: 'message', text: origemEscala ? 'A transferência muda a subseção do funcionário e recalcula a escala para evitar buracos e conflitos. Se a vigência for no meio do mês, apenas os dias a partir dela serão regerados.' : 'O funcionário será movido para a subseção selecionada. Ele sai da lista atual e passa a aparecer na nova subseção.' },
-                    { label: 'Nova Subseção', type: 'select', id: 'ESCSUBSECAO_ID', value: destinos[0]?.value || '', options: destinos, required: true },
-                    { label: 'A partir de quando?', type: 'select', id: 'VIGENCIA', value: 'IMEDIATO', options: [
-                        { value: 'IMEDIATO', label: 'Imediatamente' },
-                        { value: 'PROXIMA_SEMANA', label: 'A partir da próxima semana' },
-                        { value: 'PROXIMO_MES', label: 'A partir do próximo mês' }
-                    ] }
+                    { type: 'message', text: origemEscala ? 'A transferência muda a subseção imediatamente e recalcula apenas os dias futuros deste funcionário. Os demais funcionários não serão regerados.' : 'O funcionário será movido imediatamente para a subseção selecionada. Escalas existentes não serão recalculadas nesta tela.' },
+                    { label: 'Nova Subseção', type: 'select', id: 'ESCSUBSECAO_ID', value: destinos[0]?.value || '', options: destinos, required: true }
                 ],
                 confirmText: 'Confirmar Transferência',
                 cancelText: 'Cancelar',
@@ -3203,23 +3198,24 @@
             if (!values?.ESCSUBSECAO_ID) return;
             const loja = origemEscala ? escalaDetalheAtual.lojaId : subsecoesPageState.loja;
             const escsecaoId = origemEscala ? (funcionario.ESCSECAO_ID || funcionario.escsecaoId || escalaDetalheAtual.secaoAtiva) : subsecoesPageState.secao?.ESCSECAO_ID;
+            const escfuncId = funcionario.ESCFUNC_ID || funcionario.escfuncId;
             await atualizarFuncionarioSubsecaoApi({
                 loja,
                 escsecaoId,
-                escfuncId: funcionario.ESCFUNC_ID || funcionario.escfuncId,
+                escfuncId,
                 escsubsecaoId: values.ESCSUBSECAO_ID,
                 mesRef: origemEscala ? escalaDetalheAtual.mesRef : null,
-                vigencia: values.VIGENCIA
+                vigencia: 'IMEDIATO'
             });
-            if (origemEscala && values.VIGENCIA !== 'PROXIMO_MES' && escalaDetalheAtual.mesRef) {
-                const inicio = values.VIGENCIA === 'PROXIMA_SEMANA' ? getProximaSegundaIsoBanco() : getHojeIsoBanco();
+            if (origemEscala && escalaDetalheAtual.mesRef) {
                 await apiRequest('/api/escalas/gerar-secao', {
                     method: 'POST',
                     body: JSON.stringify({
                         lojaId: Number(escalaDetalheAtual.lojaId),
                         mesRef: escalaDetalheAtual.mesRef,
                         escsecaoId: Number(escsecaoId),
-                        hojeIso: inicio
+                        escfuncIds: [Number(escfuncId)],
+                        hojeIso: getHojeIsoBanco()
                     }),
                     timeoutMs: 120000
                 });
