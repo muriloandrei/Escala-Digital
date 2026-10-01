@@ -2097,15 +2097,14 @@ async function calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId,
   };
 }
 
-async function previewHorarioFuncionarioEscala({ lojaId, mesRef, escfuncId, horario, aplicarNaEscala = true }) {
-  if (!mesRef || !aplicarNaEscala) return { diasAlterados: 0, diasManuais: 0, possuiEscala: false };
+async function previewHorarioFuncionarioEscala({ lojaId, mesRef, escfuncId, horario }) {
   return withConnection(async (connection) => {
     const alteracao = await calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId, mesRef, escfuncId, horario });
     return { diasAlterados: alteracao.diasAlterados, diasManuais: alteracao.diasManuais, possuiEscala: Boolean(alteracao.atual) };
   });
 }
 
-async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, horario, aplicarNaEscala = true, actor }) {
+async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, horario, actor }) {
   return withConnection(async (connection) => {
     try {
       const operacaoId = escalaEventService.createOperationId();
@@ -2124,7 +2123,7 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
 
       let saved = null;
       let diasAlterados = 0;
-      if (mesRef && aplicarNaEscala) {
+      if (mesRef) {
         const alteracao = await calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId, mesRef, escfuncId, horario });
         const { atual } = alteracao;
         if (atual?.dias?.length) {
@@ -2171,7 +2170,7 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
           detalhe: {
             chapa: pick(funcionario, 'CHAPA', 'chapa'),
             anterior: Object.fromEntries(['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'].map((field) => [field, pick(funcionario, field, field.toLowerCase())])),
-            novo: horario, aplicarNaEscala, diasAlterados
+            novo: horario, aplicarNaEscala: true, diasAlterados
           }
       });
       await connection.commit();

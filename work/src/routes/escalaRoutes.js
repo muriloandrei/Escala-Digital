@@ -683,13 +683,16 @@ async function getFuncionarioParaEdicaoHorario(req, payload) {
 
 router.post('/funcionario/horario/preview', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
+    if (!req.body?.mesRef || req.body?.aplicarNaEscala === false) {
+      return res.status(422).json({ error: 'Informe o mes da escala. O horario-base e os dias editaveis devem ser atualizados juntos.' });
+    }
     const payload = horarioFuncionarioSchema.parse(req.body);
     const errors = validateStandardShift(payload);
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
     await getFuncionarioParaEdicaoHorario(req, payload);
     const impacto = await escalaService.previewHorarioFuncionarioEscala({
       lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: payload.escfuncId,
-      horario: payload, aplicarNaEscala: payload.aplicarNaEscala
+      horario: payload
     });
     return res.json({ impacto });
   } catch (error) {
@@ -700,6 +703,9 @@ router.post('/funcionario/horario/preview', requirePermission('escalas', 'editar
 
 router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
+    if (!req.body?.mesRef || req.body?.aplicarNaEscala === false) {
+      return res.status(422).json({ error: 'Informe o mes da escala. O horario-base e os dias editaveis devem ser atualizados juntos.' });
+    }
     const payload = horarioFuncionarioSchema.parse(req.body);
     const errors = validateStandardShift(payload);
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
@@ -716,7 +722,6 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
       mesRef: payload.mesRef,
       funcionario,
       horario,
-      aplicarNaEscala: payload.aplicarNaEscala,
       actor: req.user
     });
     const { funcionario: funcionarioAtualizado, saved, diasAlterados } = atualizacao;
@@ -732,7 +737,7 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
         escfuncId: payload.escfuncId,
         chapa: funcionarioAtualizado.CHAPA || funcionario.CHAPA,
         horario,
-        aplicarNaEscala: payload.aplicarNaEscala,
+        aplicarNaEscala: true,
         escalaAtualizada: Boolean(saved),
         diasAlterados
       }

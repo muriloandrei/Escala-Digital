@@ -15,7 +15,6 @@ import {
 type ShiftForm = {
   employee: Funcionario;
   month: string;
-  apply: boolean;
   HR_ENT1: string;
   HR_SAI1: string;
   HR_ENT2: string;
@@ -166,7 +165,6 @@ export function Funcionarios({ user }: { user: User }) {
       setShiftForm({
         employee,
         month: /^\d{4}-\d{2}$/.test(params.get('mes') || '') ? params.get('mes')! : currentMonth(),
-        apply: true,
         HR_ENT1: employee.HR_ENT1 || '',
         HR_SAI1: employee.HR_SAI1 || '',
         HR_ENT2: employee.HR_ENT2 || '',
@@ -179,7 +177,6 @@ export function Funcionarios({ user }: { user: User }) {
     setShiftForm({
       employee,
       month: currentMonth(),
-      apply: true,
       HR_ENT1: employee.HR_ENT1 || '',
       HR_SAI1: employee.HR_SAI1 || '',
       HR_ENT2: employee.HR_ENT2 || '',
@@ -200,7 +197,7 @@ export function Funcionarios({ user }: { user: User }) {
       lojaId: Number(loja),
       escfuncId: Number(form.employee.ESCFUNC_ID),
       mesRef: `${form.month}-01`,
-      aplicarNaEscala: form.apply,
+      aplicarNaEscala: true,
       HR_ENT1: form.HR_ENT1,
       HR_SAI1: form.HR_SAI1,
       HR_ENT2: form.HR_ENT2,
@@ -504,15 +501,8 @@ export function Funcionarios({ user }: { user: User }) {
                   required
                 />
               </label>
-              <label className="check-filter">
-                <input
-                  type="checkbox"
-                  checked={shiftForm.apply}
-                  onChange={(event) => updateShift({ apply: event.target.checked })}
-                />{' '}
-                Aplicar aos dias editáveis da escala
-              </label>
             </div>
+            <p>O cadastro e os dias editáveis da escala deste mês serão atualizados juntos. Dias com ajuste manual permanecem como estão.</p>
             {shiftImpact && (
               <div className="shift-impact">
                 <strong>Prévia</strong>

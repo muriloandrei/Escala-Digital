@@ -3111,11 +3111,7 @@
                     { label: 'Entrada 1', type: 'time', id: 'HR_ENT1', value: funcionario.HR_ENT1 || funcionario.hrEnt1 || '08:00', required: true },
                     { label: 'Saída 1', type: 'time', id: 'HR_SAI1', value: funcionario.HR_SAI1 || funcionario.hrSai1 || '12:00', required: true },
                     { label: 'Entrada 2', type: 'time', id: 'HR_ENT2', value: funcionario.HR_ENT2 || funcionario.hrEnt2 || '13:10', required: true },
-                    { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || funcionario.hrSai2 || '17:58', required: true },
-                    { label: 'Aplicação', type: 'choice-group', id: 'ALCANCE', value: 'escala', options: [
-                        { value: 'escala', label: 'Cadastro e dias editáveis da escala de ' + formatarMesTabela(mesRef) },
-                        { value: 'cadastro', label: 'Somente cadastro para próximas gerações' }
-                    ], required: true }
+                    { label: 'Saída 2', type: 'time', id: 'HR_SAI2', value: funcionario.HR_SAI2 || funcionario.hrSai2 || '17:58', required: true }
                 ],
                 onRender: (body) => configurarEditorHorario(body, {
                     HR_ENT1: 'HR_ENT1', HR_SAI1: 'HR_SAI1', HR_ENT2: 'HR_ENT2', HR_SAI2: 'HR_SAI2'
@@ -3139,7 +3135,7 @@
                 lojaId,
                 mesRef,
                 escfuncId,
-                aplicarNaEscala: values.ALCANCE !== 'cadastro',
+                aplicarNaEscala: true,
                 ...horario
             };
             const preview = await apiRequest('/api/escalas/funcionario/horario/preview', {
@@ -3147,9 +3143,7 @@
                 body: JSON.stringify(payload)
             });
             const impacto = preview?.impacto || {};
-            const resumo = payload.aplicarNaEscala
-                ? `${impacto.diasAlterados || 0} dia(s) de trabalho da escala serão atualizados. ${impacto.diasManuais || 0} dia(s) com edição individual serão preservados.`
-                : 'A escala atual não será alterada.';
+            const resumo = `${impacto.diasAlterados || 0} dia(s) de trabalho da escala serão atualizados. ${impacto.diasManuais || 0} dia(s) com edição individual serão preservados.`;
             const confirmou = await showInputModal({
                 title: 'Confirmar alteração de horário',
                 inputs: [{ type: 'message', text: resumo + ' O cadastro passará a usar este horário nas próximas gerações.' }],

@@ -1,9 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
-const { previewHorarioFuncionarioEscala, _private: { aplicarHorarioBaseNosDias } } = require('../src/services/escalaService');
+const { _private: { aplicarHorarioBaseNosDias } } = require('../src/services/escalaService');
+const escalaRouter = require('../src/routes/escalaRoutes');
 
 const horario = { HR_ENT1: '09:00', HR_SAI1: '13:00', HR_ENT2: '14:10', HR_SAI2: '18:58' };
 const jornada = (dt, programacao = 'TRB') => ({
@@ -46,49 +44,20 @@ test('edicao do horario-base preserva ajuste individual do dia', () => {
   assert.equal(result.dias[1].hrEnt1, '08:00');
 });
 
-test('previa somente cadastro nao acessa nem modifica a escala', async () => {
-  const result = await previewHorarioFuncionarioEscala({
-    lojaId: 35, mesRef: '2026-10-01', escfuncId: 90, horario, aplicarNaEscala: false
+for (const method of ['post', 'patch']) {
+  test(`${method} de horario-base rejeita cadastro isolado e mes ausente`, async () => {
+    const layer = escalaRouter.stack.find((item) => item.route?.path === '/funcionario/horario' + (method === 'post' ? '/preview' : '') && item.route.methods[method]);
+    const handler = layer.route.stack.at(-1).handle;
+    for (const body of [{ mesRef: '2026-10-01', aplicarNaEscala: false }, { aplicarNaEscala: true }]) {
+      let status;
+      let response;
+      const res = {
+        status(code) { status = code; return this; },
+        json(value) { response = value; return this; }
+      };
+      await handler({ body }, res, (error) => { throw error; });
+      assert.equal(status, 422);
+      assert.match(response.error, /atualizados juntos/i);
+    }
   });
-  assert.deepEqual(result, { diasAlterados: 0, diasManuais: 0, possuiEscala: false });
-});
-
-test('alcance somente cadastro nao regrava dias da escala', async () => {
-  const operations = [];
-  const connection = {
-    async execute(sql) {
-      if (/select escfunc_id from sgn_esc_funcionario/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90 }] };
-      if (/update sgn_esc_funcionario/i.test(sql)) {
-        operations.push('update-cadastro');
-        return { rowsAffected: 1 };
-      }
-      throw new Error(`SQL inesperado: ${sql}`);
-    },
-    async commit() { operations.push('commit'); },
-    async rollback() { operations.push('rollback'); }
-  };
-  const module = { exports: {} };
-  const dependencies = {
-    '../db/oracle': { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } },
-    './catalogService': {},
-    './escalaEventService': {
-      createOperationId: () => 'op-horario',
-      appendEvent: async (_, event) => {
-        assert.equal(event.detalhe.aplicarNaEscala, false);
-        operations.push('event');
-      }
-    },
-    '../domain/operationalPeriod': {},
-    '../utils/scheduleDiff': {}
-  };
-  const source = fs.readFileSync(path.join(__dirname, '../src/services/escalaService.js'), 'utf8');
-  vm.runInNewContext(source, { module, require: (name) => dependencies[name], console });
-  const result = await module.exports.updateHorarioFuncionarioEscala({
-    lojaId: 35, mesRef: '2026-10-01', aplicarNaEscala: false,
-    funcionario: { ESCFUNC_ID: 90, ESCSECAO_ID: 2003, CHAPA: '035.0090' },
-    horario, actor: { sub: 1, login: 'admin' }
-  });
-  assert.equal(result.saved, null);
-  assert.equal(result.diasAlterados, 0);
-  assert.deepEqual(operations, ['update-cadastro', 'event', 'commit']);
-});
+}
