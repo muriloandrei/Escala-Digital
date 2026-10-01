@@ -84,6 +84,31 @@ function assertSemAlteracaoEmDiasBloqueados(diasAtuais = [], diasNovos = [], hoj
   throw error;
 }
 
+function assertPreservaDatasEscala(diasAtuais = [], diasNovos = []) {
+  const datasNovas = (diasNovos || []).map((dia) => normalizeDiaComparavel(dia).data);
+  if (datasNovas.some((data) => !/^\d{4}-\d{2}-\d{2}$/.test(data)) || new Set(datasNovas).size !== datasNovas.length) {
+    const error = new Error('O rascunho contem datas invalidas ou repetidas. Recarregue a escala antes de salvar.');
+    error.statusCode = 422;
+    throw error;
+  }
+  if (!diasAtuais?.length) return;
+  const datasAtuais = diasAtuais.map((dia) => normalizeDiaComparavel(dia).data);
+  if (new Set(datasAtuais).size !== datasAtuais.length) {
+    const error = new Error('A escala gravada contem datas repetidas. Corrija o cadastro antes de salvar uma nova revisao.');
+    error.statusCode = 422;
+    throw error;
+  }
+  const atuais = new Set(datasAtuais);
+  const novas = new Set(datasNovas);
+  const faltantes = [...atuais].filter((data) => !novas.has(data));
+  const extras = [...novas].filter((data) => !atuais.has(data));
+  if (!faltantes.length && !extras.length) return;
+  const error = new Error('O rascunho nao contem os mesmos dias da escala gravada. Recarregue antes de salvar para nao perder programacoes.');
+  error.statusCode = 422;
+  error.details = { faltantes, extras };
+  throw error;
+}
+
 function assertSemDiasBloqueadosEmNovaEscala(dias = [], hojeIso = getHojeIso()) {
   const bloqueados = [...new Set((dias || [])
     .map((dia) => normalizeDiaComparavel(dia).data)
@@ -1988,6 +2013,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
     }
     assertRevisaoBase(funcionario, revisaoAtual);
     const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+    assertPreservaDatasEscala(atual?.dias || [], funcionario.dias || []);
     assertSemAlteracaoEmDiasBloqueados(atual?.dias || [], funcionario.dias || []);
     const revisaoQualquer = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
     const novo = await insertEscalaOracle(connection, {
@@ -2620,6 +2646,7 @@ module.exports = {
   validateAusencias,
   _private: {
     getAlteracoesDiasBloqueados,
+    assertPreservaDatasEscala,
     isDiaBloqueadoParaEdicao,
     escolherRevisaoParaUpsertSemNovaRevisao,
     buildHistoricoAuditoriaQuery,
