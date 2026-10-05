@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '../api';
+import { createOperationId } from '../operationId';
 import { validateStandardHours, type StandardHours } from '../shiftValidation';
 import { toPayloadDay, type PayloadDay } from './EditarDiaEscala';
 
@@ -108,7 +109,9 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
     }
     const note = justification.trim();
     if (note.length < 5 || note.length > 500) { setError('Informe uma justificativa de 5 a 500 caracteres.'); return; }
-    if (!crypto.randomUUID) { setError('Este navegador não oferece identificador seguro para confirmar o rascunho.'); return; }
+    let operacaoId: string;
+    try { operacaoId = createOperationId(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Identificador indisponível.'); return; }
     setBusy(true);
     setIssues([]);
     setError('');
@@ -133,7 +136,7 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
         escfuncaoId: person.ESCFUNCAO_ID, aprendiz: /APRENDIZ/i.test(person.FUNCAO_DESCR || ''),
         dias: days.map((item) => changed.get(onlyDate(item.DT)) || toPayloadDay(item)) };
     });
-    const payload = { lojaId: Number(lojaId), mesRef, operacaoId: crypto.randomUUID(), funcionarios, oficializada: 0 };
+    const payload = { lojaId: Number(lojaId), mesRef, operacaoId, funcionarios, oficializada: 0 };
     try {
       const validation = await postJson<{ ok: boolean; errors: unknown[] }>('/api/escalas/validar', payload);
       if (!validation.ok) { setIssues((validation.errors || []).map(issueText)); return; }

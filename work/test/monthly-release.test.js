@@ -1254,6 +1254,43 @@ test('section reset preserves previous days and restores future protected absenc
   }
 });
 
+test('section reset includes saved employees no longer in the active section catalog', async () => {
+  const originals = {
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    isEscalaSecaoOficializada: escalaService.isEscalaSecaoOficializada,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    listFixosEscala: escalaService.listFixosEscala,
+    saveEscalasBatch: escalaService.saveEscalasBatch,
+    listarIntervalosSuspensos: pendenciaFuncionarioService.listarIntervalosSuspensos
+  };
+  let savedPayload;
+  catalogService.listFuncionariosByLoja = async (_lojaId, options) => options.secoesPermitidas ? [] : [{
+    ESCFUNC_ID: 701, CHAPA: '000701', NOME: 'Transferido', ESCSECAO_ID: 30, ESCFUNCAO_ID: 40,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  }];
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.isEscalaSecaoOficializada = async () => false;
+  escalaService.listFixosEscala = async () => [];
+  escalaService.listDiasSecaoAtual = async () => [{ ESCFUNC_ID: 701, DT: '2026-10-12', PROGRAMACAO: 'TRB' }];
+  escalaService.saveEscalasBatch = async (payload) => { savedPayload = payload; return payload.funcionarios; };
+  pendenciaFuncionarioService.listarIntervalosSuspensos = async () => new Map();
+  try {
+    const result = await monthlyReleaseService.resetarEscalaSecao({
+      lojaId: 10, mesRef: '2026-10-01', escsecaoId: 20, hojeIso: '2026-10-05'
+    });
+    assert.equal(result.resetada, true);
+    assert.deepEqual(savedPayload.funcionarios.map((item) => item.escfuncId), [701]);
+    assert.equal(savedPayload.funcionarios[0].escsecaoId, 20);
+  } finally {
+    Object.assign(catalogService, { listFuncionariosByLoja: originals.listFuncionariosByLoja, listTurnosByLoja: originals.listTurnosByLoja, listAusenciasByLojaMes: originals.listAusenciasByLojaMes });
+    Object.assign(escalaService, { isEscalaSecaoOficializada: originals.isEscalaSecaoOficializada, listDiasSecaoAtual: originals.listDiasSecaoAtual, listFixosEscala: originals.listFixosEscala, saveEscalasBatch: originals.saveEscalasBatch });
+    pendenciaFuncionarioService.listarIntervalosSuspensos = originals.listarIntervalosSuspensos;
+  }
+});
+
 test('monthly release defaults to operational sections led by Frente de Caixa', async () => {
   const originals = {
     listSecoesByLoja: catalogService.listSecoesByLoja,

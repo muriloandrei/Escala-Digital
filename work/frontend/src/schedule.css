@@ -231,6 +231,9 @@
 .monthly-grid thead tr:nth-child(4) th {
   top: 78px;
 }
+.monthly-grid thead tr:nth-child(5) th {
+  top: 104px;
+}
 .monthly-grid .monthly-coverage-row th,
 .monthly-grid .monthly-count-row th {
   height: 26px;
@@ -390,6 +393,24 @@
 .daily-schedule td {
   padding: 10px 11px;
 }
+.daily-schedule table { min-width: 690px; }
+.daily-schedule .daily-employee { width: 270px; }
+.daily-employee strong, .daily-employee small { display: block; }
+.daily-employee small { margin-top: 4px; color: #60758c; }
+.daily-distribution-head { width: 70%; }
+.daily-distribution {
+  width: 100%;
+  min-width: 320px;
+  display: grid;
+  gap: 6px;
+  padding: 5px 2px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.daily-distribution:focus-visible { outline: 2px solid #2358c6; outline-offset: 2px; }
+.daily-shift-times { color: #425c74; font-size: 11px; min-height: 16px; }
 .daily-summary {
   display: flex;
   flex-wrap: wrap;
@@ -402,14 +423,14 @@
 .daily-summary strong { color: #17283e; font-size: 14px; }
 .daily-shift-track {
   position: relative;
-  width: 220px;
+  width: 100%;
   height: 13px;
   border-radius: 3px;
   background: repeating-linear-gradient(to right, #e5ecf4 0 1px, #f2f5f9 1px 25%);
   overflow: hidden;
 }
 .daily-time-axis {
-  width: 220px;
+  width: 100%;
   display: flex;
   justify-content: space-between;
   color: #73859a;

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '../api';
+import { createOperationId } from '../operationId';
 
 type Shift = { hrEnt1: string; hrSai1: string; hrEnt2: string; hrSai2: string };
 export type PayloadDay = {
@@ -110,17 +111,16 @@ export function EditarDiaEscala({
       setError('Nenhuma alteração neste dia.');
       return;
     }
-    if (!crypto.randomUUID) {
-      setError('Este navegador não oferece identificador seguro para confirmar o rascunho.');
-      return;
-    }
+    let operacaoId: string;
+    try { operacaoId = createOperationId(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Identificador indisponível.'); return; }
     setBusy(true);
     setIssues([]);
     setError('');
     const payload = {
       lojaId: Number(lojaId),
       mesRef,
-      operacaoId: crypto.randomUUID(),
+      operacaoId,
       funcionarios: [
         {
           escfuncId: Number(employee.ESCFUNC_ID),

@@ -1394,6 +1394,10 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
         COD_SECAO: preservarAlocacao && atual.ESCSECAO_ID ? atual.COD_SECAO : pick(funcionario, 'COD_SECAO', 'cod_secao') || atual.COD_SECAO,
         SECAO_DESCR: preservarAlocacao && atual.ESCSECAO_ID ? atual.SECAO_DESCR : pick(funcionario, 'SECAO_DESCR', 'secao_descr') || atual.SECAO_DESCR,
         FUNCAO_DESCR: pick(funcionario, 'FUNCAO_DESCR', 'funcao_descr') || atual.FUNCAO_DESCR,
+        HR_ENT1: pick(funcionario, 'HR_ENT1', 'hr_ent1') || atual.HR_ENT1,
+        HR_SAI1: pick(funcionario, 'HR_SAI1', 'hr_sai1') || atual.HR_SAI1,
+        HR_ENT2: pick(funcionario, 'HR_ENT2', 'hr_ent2') || atual.HR_ENT2,
+        HR_SAI2: pick(funcionario, 'HR_SAI2', 'hr_sai2') || atual.HR_SAI2,
         GERADA: gerada || atual.GERADA || 0
       });
     };

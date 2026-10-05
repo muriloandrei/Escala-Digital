@@ -1319,7 +1319,7 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = nul
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
   const [funcionarios, turnos, ausencias, fixos, suspensoes] = await Promise.all([
-    catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
+    catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)], includeInactive: true }),
     catalogService.listTurnosByLoja(lojaId),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId }),
@@ -1329,6 +1329,23 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = nul
   const expectedSnapshots = escalaService.buildEscalaSnapshots(diasAtuaisSecao);
   const expectedFixoSnapshots = escalaService.buildFixoSnapshots(fixos);
   const idsComDiasAtuais = new Set(diasAtuaisSecao.map((dia) => Number(pick(dia, 'ESCFUNC_ID', 'escfunc_id'))));
+  const idsFaltantes = [...idsComDiasAtuais].filter((id) => id
+    && (!Array.isArray(escfuncIds) || !escfuncIds.length || escfuncIds.map(Number).includes(id))
+    && !funcionarios.some((item) => Number(item.ESCFUNC_ID) === id));
+  if (idsFaltantes.length) {
+    const todos = await catalogService.listFuncionariosByLoja(lojaId, { includeInactive: true, includeInactiveSecoes: true });
+    for (const funcionario of todos) {
+      if (idsFaltantes.includes(Number(funcionario.ESCFUNC_ID))) {
+        funcionarios.push({ ...funcionario, ESCSECAO_ID: Number(escsecaoId) });
+      }
+    }
+    const aindaFaltantes = idsFaltantes.filter((id) => !funcionarios.some((item) => Number(item.ESCFUNC_ID) === id));
+    if (aindaFaltantes.length) {
+      const error = new Error(`Funcionarios com escala gravada nao encontrados no cadastro: ${aindaFaltantes.join(', ')}. Nenhuma escala foi resetada.`);
+      error.statusCode = 422;
+      throw error;
+    }
+  }
   const filtroFuncionarios = Array.isArray(escfuncIds) && escfuncIds.length
     ? new Set(escfuncIds.map(Number).filter(Boolean))
     : null;
