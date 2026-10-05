@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
-test('executor accepts only the nine mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 9);
+test('executor accepts only the ten mirrored single-block migrations', () => {
+  assert.equal(migrationNames.length, 10);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
@@ -22,7 +22,7 @@ test('executor requires explicit apply flag, operator and approved filename', ()
   const name = migrationNames[0];
   assert.deepEqual(parseArgs(['node', 'script', '--name', name]), { name, apply: false });
   assert.deepEqual(parseArgs(['node', 'script', '--name', name, '--apply', '--by', 'opc']), { name, apply: true, by: 'opc' });
-  assert.throws(() => parseArgs(['node', 'script', '--name', 'qualquer.sql', '--apply', '--by', 'opc']), /nove arquivos/);
+  assert.throws(() => parseArgs(['node', 'script', '--name', 'qualquer.sql', '--apply', '--by', 'opc']), /arquivos aprovados/);
   assert.throws(() => parseArgs(['node', 'script', '--name', name, '--apply']), /--by OPERADOR/);
 });
 

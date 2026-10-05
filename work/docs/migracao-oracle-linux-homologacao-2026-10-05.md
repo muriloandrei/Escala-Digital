@@ -191,6 +191,26 @@ ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run migrations:status
 
 **Obrigatorio:** `db:check-schema` deve terminar com `Contrato Oracle essencial presente`. Se listar objeto/coluna/indice ausente, **pare**. `migrations:status` deve mostrar `CONFIRMADA` para os nove arquivos novos; linhas `SEM_REGISTRO` antigas precisam ser conciliadas individualmente, e `DIVERGENTE` exige investigacao. O check de schema confirma estrutura essencial, nao dados completos nem a execucao de todas as migrations. Sem a tabela de treinamento, o login da nova versao retorna 503.
 
+### 6.4 Schema legado com auditoria sem MES_REF e REVISAO
+
+No schema de integracao ESCALAINT, as 24 migrations antigas foram aplicadas diretamente no banco antes da criacao do ledger. `SEM_REGISTRO` significa falta de comprovante no ledger, nao prova que o SQL esta pendente. **Nao reaplique essas migrations em lote.** Confira o historico de implantacao e a estrutura correspondente antes de registrar cada uma individualmente.
+
+Se `db:check-schema` listar **somente** `SGN_ESC_AUDITORIA.MES_REF` e `SGN_ESC_AUDITORIA.REVISAO`, use o commit de `homologacao` que contem `20261005_auditoria_mes_revisao.sql` em um stage separado. A migration adiciona apenas as colunas ausentes, sem modificar linhas historicas. Apos `git fetch origin`, confira o SHA remoto e prepare/valide o novo stage seguindo as etapas 3 a 5; nao troque o codigo servido ainda. No novo stage, execute primeiro o preflight:
+
+```bash
+cd "$STAGE/work"
+ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run migrations:apply -- --name 20261005_auditoria_mes_revisao.sql
+```
+
+Somente se o schema informado for ESCALAINT, o preflight aprovar e o backup continuar valido, execute:
+
+```bash
+ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run migrations:apply -- --name 20261005_auditoria_mes_revisao.sql --apply --by opc
+ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run db:check-schema
+```
+
+Espere `Aplicada e registrada` e `Contrato Oracle essencial presente`. Se houver qualquer outro objeto ausente ou erro, pare antes do restart. O ledger das migrations antigas deve ser reconciliado separadamente, apos conferir evidencia individual; o resultado `SEM_REGISTRO` nao autoriza marcar uma migration como aplicada sem essa verificacao.
+
 ## 7. Preflight do React e das duas contas
 
 Ainda com o servico antigo ativo, valide a build no stage, a allowlist e os usuarios no **Oracle do servidor**:

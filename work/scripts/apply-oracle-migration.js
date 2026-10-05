@@ -13,7 +13,8 @@ const migrationNames = [
   '20260930_treinamento_progresso.sql',
   '20261001_evento_subsecao.sql',
   '20261001_treinamento_tour_v2.sql',
-  '20261001_transferencia_subsecao_agendada.sql'
+  '20261001_transferencia_subsecao_agendada.sql',
+  '20261005_auditoria_mes_revisao.sql'
 ];
 
 function parseSinglePlsqlBlock(source) {
@@ -42,7 +43,7 @@ function readMigration(name) {
 function parseArgs(argv) {
   const args = argv.slice(2);
   if (args.length < 2 || args[0] !== '--name' || !migrationNames.includes(args[1])) {
-    throw new Error('Use --name NOME.sql [--apply --by OPERADOR], com um dos nove arquivos aprovados.');
+    throw new Error('Use --name NOME.sql [--apply --by OPERADOR], com um dos arquivos aprovados.');
   }
   const tail = args.slice(2);
   if (!tail.length) return { name: args[1], apply: false };
