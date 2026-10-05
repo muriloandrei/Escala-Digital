@@ -1,6 +1,6 @@
 # Implantacao da versao nova no Oracle Linux
 
-Este roteiro e para o servidor **sem Docker**. Ele supoe que o repositorio Git esta em `/opt/escala-app`, que o `package.json` fica em `/opt/escala-app/work`, que a configuracao fica em `/opt/escala-app/.env` e que o servico systemd se chama `escala-app`. **Confirme esses quatro dados antes de executar qualquer alteracao.** Todos os blocos de comando deste roteiro sao para Bash; a execucao dos SQLs e feita pelo Node.
+Este roteiro e para o servidor **sem Docker**. Ele considera o repositorio Git em `/opt/escala-app`, o `package.json` em `/opt/escala-app/work`, a configuracao real do host `srv-lnx-escint` em `/opt/escala-app/work/.env` e o servico systemd `escala-app`. **Confirme esses quatro dados antes de executar qualquer alteracao.** Em outro host, descubra o caminho da `.env` com `systemctl show escala-app -p EnvironmentFiles` e substitua-o nos comandos. Todos os blocos de comando deste roteiro sao para Bash; a execucao dos SQLs e feita pelo Node.
 
 Na conferencia inicial de 05/10/2026, as mudancas de codigo foram publicadas em `homologacao` a partir do commit `01dfbe9`; `main` ainda estava em `2b8b402`. O SHA final da `homologacao` pode avancar quando este documento for atualizado. **O servidor de producao deve receber apenas o SHA aprovado e promovido para `main`.** Nao interprete a existencia do commit na `homologacao` como implantacao concluida.
 
@@ -38,11 +38,13 @@ git status --short --branch
 SHA_ANTERIOR=$(git rev-parse HEAD)
 printf 'Versao atual: %s\n' "$SHA_ANTERIOR"
 systemctl cat escala-app
+systemctl show escala-app -p EnvironmentFiles -p User -p Group
+ls -l /opt/escala-app/work/.env
 node -v
 npm -v
 ```
 
-**Confirme antes de continuar:** `pwd` termina em `/opt/escala-app/work`; `APP_ROOT` e `/opt/escala-app`; `git status` nao mostra alteracoes no checkout servido; o servico aponta para `work` (`WorkingDirectory=/opt/escala-app/work` e `ExecStart` para `npm start` ou `work/src/server.js`); Node e npm estao disponiveis. **`sqlplus: command not found` nao bloqueia este roteiro:** use o executor Node do passo 6, presente na versao nova. O Vite deste pacote exige Node `^20.19.0` ou `>=22.12.0`; se a versao instalada for anterior, atualize o runtime de forma controlada antes do passo 4. Se algum ponto nao corresponder, ajuste o roteiro ao layout real antes de rodar Git ou SQL. Nao use `git reset --hard` para limpar o checkout. Guarde `SHA_ANTERIOR` no registro da mudanca, pois a variavel some ao fechar o SSH.
+**Confirme antes de continuar:** `pwd` termina em `/opt/escala-app/work`; `APP_ROOT` e `/opt/escala-app`; `git status` nao mostra alteracoes no checkout servido; o servico aponta para `work` (`WorkingDirectory=/opt/escala-app/work` e `ExecStart` para `npm start` ou `work/src/server.js`); `EnvironmentFiles` aponta para a `.env` que voce esta usando; Node e npm estao disponiveis. **`sqlplus: command not found` nao bloqueia este roteiro:** use o executor Node do passo 6, presente na versao nova. O Vite deste pacote exige Node `^20.19.0` ou `>=22.12.0`; se a versao instalada for anterior, atualize o runtime de forma controlada antes do passo 4. Se algum ponto nao corresponder, ajuste o roteiro ao layout real antes de rodar Git ou SQL. Nao use `git reset --hard` para limpar o checkout. Guarde `SHA_ANTERIOR` no registro da mudanca, pois a variavel some ao fechar o SSH. A `.env` do `srv-lnx-escint` foi encontrada com permissao `644`, legivel por outros usuarios; planeje restringi-la apos confirmar `User`/`Group` do servico, sem expor seu conteudo.
 
 **Backup obrigatorio:** o DBA deve confirmar um snapshot/backup recuperavel do schema Oracle, com procedimento de restauracao e horario registrados. A forma de backup depende da instalacao Oracle, por isso nao ha um comando RMAN universal aqui. Preserve tambem uma copia restrita da `.env` e confirme a reversao do servico. **Nao aplique migrations sem backup confirmado.** DDL Oracle pode fazer commit implicito; um `rollback` da conexao nao desfaz uma migration estrutural.
 
@@ -100,7 +102,7 @@ npm run migrations:check
 
 ## 5. Configurar o acesso antes de trocar o codigo
 
-Edite **somente** a `.env` do servidor, mantendo os valores existentes de Oracle, JWT, cookie, proxy e RM. Use o editor autorizado para o usuario dono do arquivo (por exemplo `vi /opt/escala-app/.env`); nao imprima a `.env` inteira em logs ou tickets. Deixe exatamente estas entradas, sem duplicatas:
+Edite **somente** a `.env` usada pelo servico, mantendo os valores existentes de Oracle, JWT, cookie, proxy e RM. No `srv-lnx-escint`, o caminho confirmado e `/opt/escala-app/work/.env` (por exemplo `vi /opt/escala-app/work/.env`); nao imprima a `.env` inteira em logs ou tickets. Deixe exatamente estas entradas, sem duplicatas:
 
 ```env
 REACT_DEFAULT_UI=true
@@ -111,7 +113,7 @@ ESCALA_TRANSFER_SCHEDULER_ENABLED=false
 Confira apenas as tres chaves nao secretas:
 
 ```bash
-grep -E '^(REACT_DEFAULT_UI|REACT_ALLOWED_LOGINS|ESCALA_TRANSFER_SCHEDULER_ENABLED)=' /opt/escala-app/.env
+grep -E '^(REACT_DEFAULT_UI|REACT_ALLOWED_LOGINS|ESCALA_TRANSFER_SCHEDULER_ENABLED)=' /opt/escala-app/work/.env
 ```
 
 **Resultado esperado:** tres linhas, com esses valores. O worker de transferencias fica desligado nesta primeira publicacao; habilite-o apenas em outra janela, depois de validar a fila. Nao altere `RM_API_ENABLED` so para este deploy e nao faca envio de teste ao RM real: nao existe RM de homologacao com escrita. A `.env` sera relida no reinicio do servico. Se systemd carrega as variaveis por `EnvironmentFile`, confirme que ele aponta para a mesma configuracao; para os comandos manuais abaixo usamos `ESCALA_ENV_FILE` explicitamente.
@@ -126,13 +128,13 @@ O executor aceita **somente** estes nove arquivos, um por vez, na ordem abaixo. 
 
 ```bash
 cd "$STAGE/work"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name 20260929_registro_migrations.sql
+ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run migrations:apply -- --name 20260929_registro_migrations.sql
 ```
 
 **Resultado esperado:** nome do schema, arquivo, checksum e `Preflight aprovado. Nenhuma alteracao executada`. Se disser `Missing script`, o worktree ainda e da `main` antiga: volte ao passo 3. Se acusar schema errado ou tabelas base ausentes, pare. Depois do backup confirmado e do preflight aprovado, execute:
 
 ```bash
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name 20260929_registro_migrations.sql --apply --by opc
+ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run migrations:apply -- --name 20260929_registro_migrations.sql --apply --by opc
 ```
 
 **Resultado esperado:** `Aplicada e registrada`. O primeiro arquivo cria `SGN_ESC_MIGRACAO`. Se der erro, **pare** e investigue antes de repetir: DDL Oracle pode ter sido confirmado mesmo que o registro tenha falhado.
@@ -153,7 +155,7 @@ for arquivo in \
   20261001_treinamento_tour_v2.sql \
   20261001_transferencia_subsecao_agendada.sql
 do
-  if ! ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name "$arquivo"; then
+  if ! ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run migrations:apply -- --name "$arquivo"; then
     printf 'PARE: preflight falhou para %s\n' "$arquivo"
     break
   fi
@@ -162,7 +164,7 @@ do
     printf 'Interrompido antes de %s\n' "$arquivo"
     break
   fi
-  if ! ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name "$arquivo" --apply --by opc; then
+  if ! ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run migrations:apply -- --name "$arquivo" --apply --by opc; then
     printf 'PARE: execucao falhou para %s\n' "$arquivo"
     break
   fi
@@ -174,7 +176,7 @@ done
 Para consultar manualmente um arquivo sem aplicar, por exemplo a migration 5, use:
 
 ```bash
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name 20260930_rm_envio_escopo_unique.sql
+ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run migrations:apply -- --name 20260930_rm_envio_escopo_unique.sql
 ```
 
 `Ja registrada com checksum identico` significa que aquele arquivo nao foi reaplicado. Migration antiga `SEM_REGISTRO` nao e autorizacao para reaplicar todo o diretorio.
@@ -183,8 +185,8 @@ ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name 20260930
 
 ```bash
 cd "$STAGE/work"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run db:check-schema
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:status
+ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run db:check-schema
+ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run migrations:status
 ```
 
 **Obrigatorio:** `db:check-schema` deve terminar com `Contrato Oracle essencial presente`. Se listar objeto/coluna/indice ausente, **pare**. `migrations:status` deve mostrar `CONFIRMADA` para os nove arquivos novos; linhas `SEM_REGISTRO` antigas precisam ser conciliadas individualmente, e `DIVERGENTE` exige investigacao. O check de schema confirma estrutura essencial, nao dados completos nem a execucao de todas as migrations. Sem a tabela de treinamento, o login da nova versao retorna 503.
@@ -195,7 +197,7 @@ Ainda com o servico antigo ativo, valide a build no stage, a allowlist e os usua
 
 ```bash
 cd "$STAGE/work"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run rollout:check-ui -- murilo.jesus,admin
+ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run rollout:check-ui -- murilo.jesus,admin
 ```
 
 **Resultado esperado:** `Canario React pronto: murilo.jesus, admin ativos, build presente e allowlist exclusiva.` Se falhar, **nao reinicie a aplicacao com o codigo novo**. Em um banco Docker local anterior, `murilo.jesus` nao existia; isso nao comprova que o usuario esteja ausente no Oracle do servidor. Corrija apenas a causa real encontrada no ambiente de destino.
