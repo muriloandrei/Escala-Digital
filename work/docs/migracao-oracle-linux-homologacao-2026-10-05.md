@@ -4,11 +4,11 @@ Data da conferencia: 05/10/2026. Este roteiro considera o repositorio em `/opt/e
 
 ## Estado da entrega
 
-**Ainda nao esta tudo publicado em `origin/homologacao`.** Na conferencia, `origin/homologacao` estava em `a0c181d`, a frente de `origin/main` (`2b8b402`), sem commits exclusivos na `main`. Entretanto, o checkout local da `homologacao` tinha modificacoes e arquivos novos nao commitados. Entre eles estao o destaque do tour com Driver.js, treinamento obrigatorio no primeiro acesso, feriados nacionais na escala, logos transparentes e a liberacao React para `murilo.jesus` e `admin`. Um `git pull` no servidor **nao** entrega esse ultimo lote.
+**O ultimo lote foi publicado em `origin/homologacao` no commit `01dfbe9`**, incluindo o destaque do tour com Driver.js, treinamento obrigatorio no primeiro acesso, feriados nacionais na escala, logos transparentes e a liberacao React para `murilo.jesus` e `admin`. Na conferencia, `origin/main` ainda estava em `2b8b402`: um `git pull` da `main` no servidor **nao** entrega esse lote.
 
-Antes da janela de migracao, revisar, testar, commitar e enviar o lote desejado para `origin/homologacao`. Registrar o SHA aprovado. Depois de homologar, promover **esse mesmo SHA** para `main` pelo fluxo Git da equipe e confirmar que `origin/main` aponta para ele. Nao implantar uma mistura de SQL de um commit e codigo de outro. Este documento, criado agora no checkout local, tambem precisa ser publicado para aparecer no servidor.
+Antes da janela de migracao, homologar o commit candidato e registrar o SHA aprovado. Depois, promover **esse mesmo SHA** para `main` pelo fluxo Git da equipe e confirmar que `origin/main` aponta para ele. Nao implantar uma mistura de SQL de um commit e codigo de outro. Este documento acompanha a `homologacao`.
 
-O allowlist restringe **as telas React**, nao as APIs, migrations ou regras de escala. O treinamento obrigatorio, no lote local, atinge todos os usuarios autenticados uma vez no primeiro acesso, inclusive os que depois voltam para `/app`. Planeje a comunicacao antes de publicar.
+O allowlist restringe **as telas React**, nao as APIs, migrations ou regras de escala. O treinamento obrigatorio atinge todos os usuarios autenticados uma vez no primeiro acesso, inclusive os que depois voltam para `/app`. Planeje a comunicacao antes de publicar na `main`.
 
 ## 1. Preparacao e seguranca
 
@@ -99,7 +99,7 @@ ESCALA_ENV_FILE=/opt/escala-app/.env npm run db:check-schema
 ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:status
 ```
 
-`db:check-schema` verifica o contrato estrutural essencial; nao valida todos os dados nem substitui a conferencia de cada SQL. Nao inicie o codigo novo antes de ele passar. As migrations de treinamento sao obrigatorias para o login do lote local: sem `SGN_ESC_TREINAMENTO` o login retorna 503.
+`db:check-schema` verifica o contrato estrutural essencial; nao valida todos os dados nem substitui a conferencia de cada SQL. Nao inicie o codigo novo antes de ele passar. As migrations de treinamento sao obrigatorias para o login desta versao: sem `SGN_ESC_TREINAMENTO` o login retorna 503.
 
 ## 3. Configuracao da aplicacao
 
