@@ -1,6 +1,6 @@
 # Publicacao em Linux via PuTTY
 
-> Para o deploy atual da `main` com React restrito a `murilo.jesus`, use [deploy-main-canario-react.md](deploy-main-canario-react.md). Este guia antigo descreve outro layout de checkout e inclui comandos de instalacao que nao compilam o React.
+> Para o deploy atual da `main` com React restrito a `murilo.jesus` e `admin`, use [deploy-main-canario-react.md](deploy-main-canario-react.md). Este guia antigo descreve outro layout de checkout e inclui comandos de instalacao que nao compilam o React.
 
 ## Visao geral
 

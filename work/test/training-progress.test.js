@@ -45,3 +45,8 @@ test('treinamento aceita a conclusao da etapa 12 e rejeita etapa 13', async () =
   assert.equal(progress.stage, 12);
   await assert.rejects(service.saveProgress(42, 13), /Etapa de treinamento invalida/);
 });
+
+test('treinamento nao permite pular etapas por chamada direta', async () => {
+  const service = loadService({ execute: async () => ({ rows: [{ VERSAO: 2, ETAPA: 0 }] }) });
+  await assert.rejects(service.saveProgress(42, 12), /Conclua a etapa atual/);
+});

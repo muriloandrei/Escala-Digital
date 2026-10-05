@@ -1,6 +1,6 @@
 # Deploy da main com interface React restrita
 
-Este procedimento publica o codigo da `homologacao` na `main`, mas libera as telas `/nova` apenas para `murilo.jesus`. Os demais usuarios continuam em `/app`. **O allowlist isola somente a interface**: novas APIs, regras de escala e migrations passam a valer para todos apos a publicacao. Programe a janela e o backup como uma mudanca de backend, nao apenas visual.
+Este procedimento publica o codigo da `homologacao` na `main`, mas libera as telas novas `/nova` apenas para `murilo.jesus` e `admin`. Os demais usuarios continuam em `/app` apos concluir o treinamento obrigatorio em `/nova/treinamento`. **O allowlist isola somente a interface**: novas APIs, regras de escala e migrations passam a valer para todos apos a publicacao. Programe a janela e o backup como uma mudanca de backend, nao apenas visual.
 
 ## 1. Antes de promover a branch
 
@@ -38,13 +38,13 @@ Na `.env` do servidor, adicione:
 
 ```env
 REACT_DEFAULT_UI=true
-REACT_ALLOWED_LOGINS=murilo.jesus
+REACT_ALLOWED_LOGINS=murilo.jesus,admin
 ESCALA_TRANSFER_SCHEDULER_ENABLED=false
 ```
 
 Mantenha as demais configuracoes existentes, sobretudo Oracle, JWT, cookie e RM. O worker de transferencias deve continuar desligado ate a validacao operacional da fila. Nao ative escrita RM para teste: nao existe RM de homologacao com escrita habilitada.
 
-Se o ambiente usar Docker Compose, `REACT_ALLOWED_LOGINS` aceita override pela variavel do host e usa `murilo.jesus` por padrao. Para testar com o usuario `admin` no Oracle local, defina `REACT_ALLOWED_LOGINS=admin` explicitamente antes de recriar o container; nao leve esse override para producao.
+Se o ambiente usar Docker Compose, `REACT_ALLOWED_LOGINS` aceita override pela variavel do host e usa `murilo.jesus,admin` por padrao. Confirme que nao ha override antigo no host que mantenha apenas uma das contas.
 
 No checkout de staging do commit que sera promovido, entre no subdiretorio `work` e execute:
 
@@ -56,14 +56,14 @@ npm test
 npm run migrations:check
 ```
 
-`vite` e `typescript` sao dependencias de desenvolvimento: nao use `npm ci --omit=dev` antes do build. Se for reduzir a instalacao depois, faca isso somente apos compilar/testar. Sem `EnvironmentFile` carregado no shell, rode as checagens de banco como o usuario do servico com `ESCALA_ENV_FILE=/opt/escala-app/.env npm run db:check-schema` e `ESCALA_ENV_FILE=/opt/escala-app/.env npm run rollout:check-ui -- murilo.jesus`. O preflight exige uma unica conta ativa no allowlist e o build React presente.
+`vite` e `typescript` sao dependencias de desenvolvimento: nao use `npm ci --omit=dev` antes do build. Se for reduzir a instalacao depois, faca isso somente apos compilar/testar. Sem `EnvironmentFile` carregado no shell, rode as checagens de banco como o usuario do servico com `ESCALA_ENV_FILE=/opt/escala-app/.env npm run db:check-schema` e `ESCALA_ENV_FILE=/opt/escala-app/.env npm run rollout:check-ui -- murilo.jesus,admin`. O preflight exige as duas contas ativas no allowlist e o build React presente.
 
 So depois dessas verificacoes, promova o commit testado para `main`. Na janela de publicacao, pare o servico, implante no diretorio de producao o mesmo SHA e o build aprovado, confira o ambiente e reinicie `escala-app`. Nao force push nem use `git reset --hard` em checkout com alteracoes locais; resolva o estado do repositorio antes. Confirme `/health` e `/ready` apos o restart.
 
 ## 4. Aceite e reversao
 
-- Com `murilo.jesus`, o login deve abrir `/nova`; `/nova/escalas-liberadas` deve carregar diretamente, e `/app` deve continuar acessivel.
-- Com uma conta de teste fora do allowlist, o login deve abrir `/app#/escalas-geradas`; acesso direto a `/nova/...` deve redirecionar para `/app` e `/nova/assets/...` deve retornar 403.
+- Com `murilo.jesus` e `admin`, apos concluir o treinamento, o login deve abrir `/nova`; `/nova/escalas-liberadas` deve carregar diretamente, e `/app` deve continuar acessivel.
+- Com uma conta de teste fora do allowlist, apos concluir o treinamento, o login deve abrir `/app#/escalas-geradas`; acesso direto as demais telas `/nova/...` deve redirecionar para `/app`. Antes da conclusao, `/nova/treinamento` e os assets necessarios permanecem acessiveis.
 - `npm run smoke:react-allowlist` faz esse teste sem gravar escalas, mas exige duas contas de teste e senhas configuradas em `SMOKE_REACT_ALLOWED_LOGIN`, `SMOKE_REACT_DENIED_LOGIN` e `SMOKE_PASSWORD`. Se as senhas forem diferentes, teste os logins manualmente em sessoes separadas.
 - Confira a edicao e a leitura de uma escala existente no fluxo antigo antes de liberar a janela. Registre qualquer erro com `requestId` e logs do servico.
 

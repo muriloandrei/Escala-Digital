@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Check, MoreVertical, Pencil, Play, Printer, RotateCcw, Search, ShieldCheck } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { driver } from 'driver.js';
+import 'driver.js/dist/driver.css';
 import { Link } from 'react-router-dom';
 import { deleteJson, getJson, putJson, type User } from '../api';
 
@@ -57,7 +59,7 @@ function cell(person: Person, date: string, stage: number) {
   return { value: person === 'Maria Souza' && stage >= 9 ? '10:00' : people.find((item) => item.name === person)!.start, type: 'work' };
 }
 
-export function Treinamento({ user }: { user: User }) {
+export function Treinamento({ user, onComplete }: { user: User; onComplete?: () => void }) {
   const key = `escala:treinamento:v${VERSION}:${user.sub}`;
   const [stage, setStage] = useState(() => readProgress(key).stage);
   const [loading, setLoading] = useState(true);
@@ -75,20 +77,39 @@ export function Treinamento({ user }: { user: User }) {
   const completed = stage >= steps.length;
 
   useEffect(() => {
+    if (loading || completed || modal) return;
+    let tour: ReturnType<typeof driver> | null = null;
+    const timer = window.setTimeout(() => {
+      const element = menu
+        ? document.querySelector<HTMLElement>('.person-menu-popover button:not(:disabled)')
+        : document.querySelector<HTMLElement>('.training-tour [data-tour="active"]');
+      if (!element) return;
+      element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      tour = driver({
+        allowClose: false,
+        showButtons: [],
+        disableActiveInteraction: false,
+        stagePadding: 6,
+        stageRadius: 5,
+        overlayOpacity: 0.68,
+        popoverClass: 'escala-training-popover',
+      });
+      tour.highlight({ element, popover: {
+        title: `Etapa ${stage + 1} de ${steps.length} · ${steps[stage].title}`,
+        description: steps[stage].hint,
+        side: 'bottom',
+        align: 'start',
+      } });
+    }, 80);
+    return () => { window.clearTimeout(timer); tour?.destroy(); };
+  }, [loading, completed, modal, menu, stage]);
+
+  useEffect(() => {
     const controller = new AbortController();
     getJson<ServerProgress>('/api/auth/treinamento', controller.signal).then(async (result) => {
       if (controller.signal.aborted) return;
-      const local = readProgress(key).stage;
       if (!result.persisted) {
-        setStage(local);
-        setProgressError('O progresso está apenas neste navegador até a migration do treinamento ser aplicada.');
-      } else if (!result.found && local > 0) {
-        try {
-          const imported = await putJson<ServerProgress>('/api/auth/treinamento', { stage: local });
-          if (!controller.signal.aborted) { setStage(imported.stage); setPersisted(true); }
-        } catch {
-          if (!controller.signal.aborted) { setStage(local); setProgressError('A sincronização do progresso falhou; ele permanece neste navegador.'); }
-        }
+        setProgressError('A migration do treinamento precisa ser aplicada para salvar o progresso.');
       } else {
         setStage(result.stage);
         setPersisted(true);
@@ -96,19 +117,20 @@ export function Treinamento({ user }: { user: User }) {
       }
       if (!controller.signal.aborted) setLoading(false);
     }).catch((reason) => {
-      if (reason.name !== 'AbortError') { setProgressError('Não foi possível consultar o progresso. O tour continuará neste navegador.'); setLoading(false); }
+      if (reason.name !== 'AbortError') { setProgressError('Não foi possível consultar o progresso. Tente recarregar a página.'); setLoading(false); }
     });
     return () => controller.abort();
   }, [key]);
 
   async function advance() {
     if (busy) return;
+    if (!persisted) { setProgressError('Sem conexão com o progresso do servidor. Recarregue a página antes de continuar.'); return; }
     const next = Math.min(stage + 1, steps.length);
     setBusy(true);
     setProgressError('');
     try {
-      const confirmed = persisted ? await putJson<ServerProgress>('/api/auth/treinamento', { stage: next }) : null;
-      const current = confirmed?.stage ?? next;
+      const confirmed = await putJson<ServerProgress>('/api/auth/treinamento', { stage: next });
+      const current = confirmed.stage;
       setStage(current);
       setModal(null);
       setMenu(null);
@@ -180,7 +202,7 @@ export function Treinamento({ user }: { user: User }) {
       <div className="page-heading"><div><Link className="back-link" to="/escalas-liberadas"><ArrowLeft size={15} /> Escalas liberadas</Link><h1>Escala · Loja Escola 10</h1><p>Outubro de 2026 · 05/10/2026 a 01/11/2026 · AGENDADA</p></div><div className="heading-actions"><button className="button secondary" type="button" disabled><Printer size={16} /> Imprimir</button><button className="button secondary" type="button" disabled={busy} onClick={restart}><RotateCcw size={16} /> Reiniciar tour</button></div></div>
       <div className="simulation-banner"><ShieldCheck size={18} /><span><strong>Treinamento · Loja Escola 10</strong> · Dados fictícios. Nenhuma escala, funcionário ou vínculo real será alterado.</span></div>
       {progressError && <div className="notice warning" role="status">{progressError}</div>}
-      <section className="tour-guide" aria-live="polite">{completed ? <><div><span className="eyebrow">Tour concluído</span><h2>Pronto para trabalhar na escala</h2><p>Você praticou fixos, geração, correção, horário-base, transferência e rascunho em uma escala simulada.</p></div><Link className="button primary" to="/escalas-liberadas">Abrir escalas reais</Link></> : <><div><span className="eyebrow">Etapa {stage + 1} de {steps.length}</span><h2>{steps[stage].title}</h2><p>{steps[stage].hint}</p></div><div className="tour-progress" aria-label={`${stage} de ${steps.length} etapas concluídas`}><span>{stage}/{steps.length}</span><div><i style={{ width: `${stage / steps.length * 100}%` }} /></div></div></>}</section>
+      <section className="tour-guide" aria-live="polite">{completed ? <><div><span className="eyebrow">Tour concluído</span><h2>Pronto para trabalhar na escala</h2><p>Você praticou fixos, geração, correção, horário-base, transferência e rascunho em uma escala simulada.</p></div>{onComplete ? <button className="button primary" type="button" onClick={onComplete}>Abrir escalas reais</button> : <Link className="button primary" to="/escalas-liberadas">Abrir escalas reais</Link>}</> : <><div><span className="eyebrow">Etapa {stage + 1} de {steps.length}</span><h2>{steps[stage].title}</h2><p>{steps[stage].hint}</p></div><div className="tour-progress" aria-label={`${stage} de ${steps.length} etapas concluídas`}><span>{stage}/{steps.length}</span><div><i style={{ width: `${stage / steps.length * 100}%` }} /></div></div></>}</section>
       <div className="schedule-summary"><span><strong>28</strong> dias</span><span><strong>1</strong> seção</span><span><strong>3</strong> funcionários</span><span>Revisão <strong>{stage >= 11 ? '2' : '1'}</strong></span></div>
       <div className="tour-filters"><label data-tour={stage === 0 ? 'active' : undefined}>Loja<select value={stage > 0 ? '10' : store} disabled={stage !== 0 || busy} onChange={(event) => { setStore(event.target.value); if (event.target.value === '10') void advance(); }}><option value="">Selecione</option><option value="10">Loja Escola 10</option></select></label><label data-tour={stage === 1 ? 'active' : undefined}>Período<select value={stage > 1 ? '2026-10' : period} disabled={stage !== 1 || busy} onChange={(event) => { setPeriod(event.target.value); if (event.target.value === '2026-10') void advance(); }}><option value="">Selecione</option><option value="2026-10">Outubro 2026 · 05/10 a 01/11</option></select></label></div>
       <div className="scope-tabs" role="tablist" aria-label="Seções da escala"><button type="button" role="tab" aria-selected={stage >= 3} className={stage >= 3 ? 'selected' : ''} data-tour={stage === 2 ? 'active' : undefined} disabled={stage !== 2 || busy} onClick={() => void advance()}>03.02.002 · Frente de Caixa <small>3</small></button></div>

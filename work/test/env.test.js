@@ -37,11 +37,13 @@ test('React login destination requires an explicit environment flag', () => {
 });
 
 test('React access fails closed and normalizes the allowlist', () => {
-  const ui = { reactDefault: true, reactAllowedLogins: parseAllowedLogins(' MURILO.JESUS, murilo.jesus ') };
-  assert.deepEqual(ui.reactAllowedLogins, ['murilo.jesus']);
+  const ui = { reactDefault: true, reactAllowedLogins: parseAllowedLogins(' MURILO.JESUS, murilo.jesus, ADMIN ') };
+  assert.deepEqual(ui.reactAllowedLogins, ['murilo.jesus', 'admin']);
   assert.equal(isReactUiAllowed({ login: 'Murilo.Jesus' }, ui), true);
+  assert.equal(isReactUiAllowed({ login: 'admin' }, ui), true);
   assert.equal(isReactUiAllowed({ login: 'outro.usuario' }, ui), false);
   assert.equal(getLoginStartPath({ login: 'MURILO.JESUS' }, ui), '/nova');
+  assert.equal(getLoginStartPath({ login: 'admin' }, ui), '/nova');
   assert.equal(getLoginStartPath({ login: 'outro.usuario' }, ui), '/app#/escalas-geradas');
   assert.equal(isReactUiAllowed({ login: 'murilo.jesus' }, { reactDefault: true, reactAllowedLogins: [] }), false);
   assert.equal(getLoginStartPath({ login: 'murilo.jesus' }, { ...ui, reactDefault: false }), '/app#/escalas-geradas');

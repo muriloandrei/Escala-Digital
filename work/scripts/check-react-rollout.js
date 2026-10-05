@@ -4,10 +4,12 @@ const { getEnv } = require('../src/config/env');
 const { initOraclePool, closeOraclePool, withConnection, oracledb } = require('../src/db/oracle');
 
 async function main() {
-  const expectedLogin = String(process.argv[2] || 'murilo.jesus').trim().toLowerCase();
+  const expectedLogins = [...new Set(String(process.argv[2] || 'murilo.jesus,admin')
+    .split(',').map((login) => login.trim().toLowerCase()).filter(Boolean))];
   const { ui } = getEnv();
-  if (!expectedLogin || !ui.reactDefault || ui.reactAllowedLogins.length !== 1 || ui.reactAllowedLogins[0] !== expectedLogin) {
-    throw new Error(`Configure REACT_DEFAULT_UI=true e REACT_ALLOWED_LOGINS=${expectedLogin} (sem outros usuarios).`);
+  if (!expectedLogins.length || !ui.reactDefault || ui.reactAllowedLogins.length !== expectedLogins.length
+      || expectedLogins.some((login) => !ui.reactAllowedLogins.includes(login))) {
+    throw new Error(`Configure REACT_DEFAULT_UI=true e REACT_ALLOWED_LOGINS=${expectedLogins.join(',')} (sem outros usuarios).`);
   }
 
   const dist = path.join(__dirname, '..', 'dist', 'react');
@@ -19,15 +21,17 @@ async function main() {
 
   await initOraclePool();
   try {
-    const result = await withConnection((connection) => connection.execute(
-      `select login, status from sgn_esc_usuario where upper(login) = upper(:login)`,
-      { login: expectedLogin }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    ));
-    const user = result.rows?.[0];
-    if (!user || String(user.STATUS).trim().toUpperCase() !== 'A') {
-      throw new Error(`Usuario ${expectedLogin} inexistente ou inativo no Oracle.`);
+    for (const login of expectedLogins) {
+      const result = await withConnection((connection) => connection.execute(
+        `select login, status from sgn_esc_usuario where upper(login) = upper(:login)`,
+        { login }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      ));
+      const user = result.rows?.[0];
+      if (!user || String(user.STATUS).trim().toUpperCase() !== 'A') {
+        throw new Error(`Usuario ${login} inexistente ou inativo no Oracle.`);
+      }
     }
-    console.log(`Canario React pronto: ${user.LOGIN} ativo, build presente e allowlist exclusiva.`);
+    console.log(`Canario React pronto: ${expectedLogins.join(', ')} ativos, build presente e allowlist exclusiva.`);
   } finally {
     await closeOraclePool();
   }

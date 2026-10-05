@@ -30,6 +30,9 @@ router.post('/login', async (req, res, next) => {
       throw error;
     }
 
+    const progress = await trainingProgressService.getProgress(Number(user.sub));
+    if (!progress.persisted) return res.status(503).json({ error: 'A migration do treinamento precisa ser aplicada antes de liberar o acesso.' });
+
     res.cookie('access_token', token, {
       httpOnly: true,
       secure: auth.cookieSecure,
@@ -37,7 +40,7 @@ router.post('/login', async (req, res, next) => {
       maxAge: auth.sessionMaxAgeMs
     });
 
-    res.json({ user, startPath: getLoginStartPath(user, ui) });
+    res.json({ user, startPath: progress.stage < 12 ? '/nova/treinamento' : getLoginStartPath(user, ui) });
   } catch (error) {
     if (error.name === 'ZodError') {
       error.statusCode = 400;

@@ -183,7 +183,7 @@ function PrintSheet({
             Status: {status || '–'} · Impresso em {printedAt}
           </span>
         </div>
-        <img src="/assets/escala-inteligente-logo.png" alt="Escala Inteligente" />
+        <img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" />
       </header>
       {sheet.individual ? (
         <div className="print-individual-list">

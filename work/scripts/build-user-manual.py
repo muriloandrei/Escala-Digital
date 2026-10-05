@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / 'docs'
 ASSETS = DOCS / 'manual-usuario-assets'
 OUT = DOCS / 'manual-usuario-escala-inteligente.docx'
-LOGO = ROOT / 'public' / 'assets' / 'escala-inteligente-logo.png'
+LOGO = ROOT / 'public' / 'assets' / 'escala-inteligente-logo-transparent.png'
 
 NAVY = '0B2545'
 BLUE = '2563EB'

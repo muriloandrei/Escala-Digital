@@ -12,7 +12,7 @@
 
     try {
       const result = await api.login(login, password);
-      window.location.href = result.startPath === '/nova' ? '/nova' : '/app#/escalas-geradas';
+      window.location.href = result.startPath || '/app#/escalas-geradas';
     } catch (error) {
       message.textContent = error.message;
     }

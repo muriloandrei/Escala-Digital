@@ -17,6 +17,7 @@ const stateRoutes = require('./routes/stateRoutes');
 const accessRoutes = require('./routes/accessRoutes');
 const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
 const monthlyReleaseService = require('./services/monthlyReleaseService');
+const trainingProgressService = require('./services/trainingProgressService');
 const subsectionTransferService = require('./services/subsectionTransferService');
 const { getAppVersion } = require('./utils/appVersion');
 
@@ -124,7 +125,19 @@ function redirectToLoginWhenMissingSession(req, res, next) {
   return next();
 }
 
-app.get('/app', redirectToLoginWhenMissingSession, requireAuth, (req, res) => {
+async function requireCompletedTraining(req, res, next) {
+  try {
+    const progress = await trainingProgressService.getProgress(Number(req.user.sub));
+    if (!progress.persisted) return res.status(503).json({ error: 'A migration do treinamento precisa ser aplicada antes de liberar o acesso.' });
+    if (progress.stage < 12) {
+      if (req.originalUrl.startsWith('/api/')) return res.status(428).json({ error: 'Conclua o treinamento antes de usar o sistema.', startPath: '/nova/treinamento' });
+      return res.redirect('/nova/treinamento');
+    }
+    return next();
+  } catch (error) { return next(error); }
+}
+
+app.get('/app', redirectToLoginWhenMissingSession, requireAuth, requireCompletedTraining, (req, res) => {
   setNoStore(res);
   res.sendFile(path.join(__dirname, '..', 'views', 'app-original.html'));
 });
@@ -132,7 +145,7 @@ app.get('/app', redirectToLoginWhenMissingSession, requireAuth, (req, res) => {
 const reactDist = path.join(__dirname, '..', 'dist', 'react');
 function requireReactUiAccess(req, res, next) {
   if (isReactUiAllowed(req.user, env.ui)) return next();
-  if (req.baseUrl === '/nova/assets') return res.status(403).end();
+  if (req.baseUrl === '/nova/assets' || req.path === '/treinamento') return next();
   return res.redirect('/app#/escalas-geradas');
 }
 
@@ -140,7 +153,10 @@ app.use('/nova/assets', redirectToLoginWhenMissingSession, requireAuth, requireR
   immutable: true,
   maxAge: '1y'
 }));
-app.get(/^\/nova(?:\/.*)?$/, redirectToLoginWhenMissingSession, requireAuth, requireReactUiAccess, (req, res) => {
+app.get(/^\/nova(?:\/.*)?$/, redirectToLoginWhenMissingSession, requireAuth, requireReactUiAccess, async (req, res, next) => {
+  if (req.path !== '/nova/treinamento') return requireCompletedTraining(req, res, next);
+  return next();
+}, (req, res) => {
   setNoStore(res);
   res.sendFile(path.join(reactDist, 'index.html'), (error) => {
     if (error && !res.headersSent) res.status(503).json({ error: 'Interface React ainda nao compilada.' });
@@ -151,6 +167,7 @@ app.use('/api/auth/login', loginLimiter);
 app.use('/api', apiLimiter);
 app.use('/api', csrfSameOriginGuard);
 app.use('/api/auth', authRoutes);
+app.use('/api', requireAuth, requireCompletedTraining);
 app.use('/api/catalog', catalogRoutes);
 app.use('/api/escalas', escalaRoutes);
 app.use('/api/state', stateRoutes);

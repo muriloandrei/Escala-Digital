@@ -32,6 +32,17 @@ async function saveProgress(usuarioId, stage) {
   }
   return withConnection(async (connection) => {
     try {
+      const currentResult = await connection.execute(
+        'select versao, etapa from sgn_esc_treinamento where usuario_id = :usuarioId for update',
+        { usuarioId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const current = currentResult.rows[0];
+      const currentStage = Number(current?.VERSAO) === VERSION ? Number(current.ETAPA) : 0;
+      if (stage > currentStage + 1) {
+        const invalid = new Error('Conclua a etapa atual antes de avancar no treinamento.');
+        invalid.statusCode = 422;
+        throw invalid;
+      }
       await connection.execute(
         `merge into sgn_esc_treinamento t
          using (select :usuarioId usuario_id from dual) src on (t.usuario_id = src.usuario_id)

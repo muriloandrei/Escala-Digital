@@ -92,6 +92,7 @@ export function EscalaMensal({ user }: { user: User }) {
   const [params, setParams] = useSearchParams();
   const [escala, setEscala] = useState<EscalaMensal | null>(null);
   const [periodo, setPeriodo] = useState<PeriodoOperacional | null>(null);
+  const [holidays, setHolidays] = useState<Record<string, string>>({});
   const [catalogSections, setCatalogSections] = useState<Secao[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -146,6 +147,15 @@ export function EscalaMensal({ user }: { user: User }) {
       });
     return () => controller.abort();
   }, [lojaId, mesRef, reload]);
+
+  useEffect(() => {
+    if (!periodo) return;
+    const controller = new AbortController();
+    getJson<{ feriados: { data: string; nome: string }[] }>(`/api/escalas/feriados?${new URLSearchParams({ inicio: periodo.inicio, fim: periodo.fim })}`, controller.signal)
+      .then(({ feriados }) => setHolidays(Object.fromEntries(feriados.map((item) => [item.data, item.nome]))))
+      .catch((reason) => { if (reason.name !== 'AbortError') setHolidays({}); });
+    return () => controller.abort();
+  }, [periodo]);
 
   const sections = useMemo(
     () =>
@@ -499,7 +509,7 @@ export function EscalaMensal({ user }: { user: User }) {
                     >
                       {dates.map((date) => (
                         <option key={date} value={date}>
-                          {weekday(date)} {formatDate(date)}
+                          {weekday(date)} {formatDate(date)}{holidays[date] ? ` · ${holidays[date]}` : ''}
                         </option>
                       ))}
                     </select>
@@ -567,14 +577,14 @@ export function EscalaMensal({ user }: { user: User }) {
                           Funcionário
                         </th>
                         {dates.map((date, index) => (
-                          <th key={date} className={index % 7 === 0 ? 'week-start' : ''}>
-                            {weekday(date)}
+                          <th key={date} className={`${index % 7 === 0 ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>
+                            {weekday(date)}{holidays[date] ? ' *' : ''}
                           </th>
                         ))}
                       </tr>
                       <tr>
                         {dates.map((date, index) => (
-                          <th key={date} className={index % 7 === 0 ? 'week-start' : ''}>
+                          <th key={date} className={`${index % 7 === 0 ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>
                             {date.slice(8, 10)}
                             {date.slice(5, 7) !== mesRef?.slice(5, 7) ? `/${date.slice(5, 7)}` : ''}
                           </th>
@@ -602,7 +612,7 @@ export function EscalaMensal({ user }: { user: User }) {
                               >
                                 <button
                                   type="button"
-                                  title={`${person.NOME} · ${formatDate(date)} · ${shiftLabel(day)}`}
+                                  title={`${person.NOME} · ${formatDate(date)}${holidays[date] ? ` · Feriado: ${holidays[date]}` : ''} · ${shiftLabel(day)}`}
                                   aria-label={`${person.NOME}, ${formatDate(date)}, ${shiftLabel(day)}`}
                                   disabled={Boolean(scheduled && !day)}
                                   onClick={() => setSelectedCell({ employee: person, date, day })}
@@ -660,6 +670,7 @@ export function EscalaMensal({ user }: { user: User }) {
               )}
               {selectedCell && (
                 <div className="cell-detail">
+                  {holidays[selectedCell.date] && <span className="holiday-warning" role="status">Feriado nacional: {holidays[selectedCell.date]}. Não use folga semanal para esse dia; trabalho e descanso de feriado seguem regras próprias.</span>}
                   <div>
                     <strong>{selectedCell.employee.NOME}</strong>
                     <span>
@@ -770,6 +781,7 @@ export function EscalaMensal({ user }: { user: User }) {
           mesRef={mesRef}
           employee={editingCell.employee}
           day={editingCell.day}
+          holidayName={holidays[iso(editingCell.day.DT)]}
           days={(escala?.dias || []).filter(
             (item) => Number(item.ESCFUNC_ID) === Number(editingCell.employee.ESCFUNC_ID),
           )}
@@ -783,12 +795,13 @@ export function EscalaMensal({ user }: { user: User }) {
         />
       )}
       {bulkEditing && lojaId && mesRef && <EditarDiasEmMassa
-        lojaId={lojaId} mesRef={mesRef} dates={dates} people={scopePeople} allDays={escala?.dias || []}
+        lojaId={lojaId} mesRef={mesRef} dates={dates} people={scopePeople} allDays={escala?.dias || []} holidays={holidays}
         initialDate={selectedDate} onClose={() => setBulkEditing(false)}
         onSaved={(count) => { setBulkEditing(false); setSelectedCell(null); setActionMessage(`${count} colaborador(es) atualizados; revisão confirmada pela leitura da escala.`); setReload((value) => value + 1); }}
       />}
       {fixedCell && lojaId && mesRef && <EditarFixoEscala
         lojaId={lojaId} mesRef={mesRef} employee={fixedCell.employee} date={fixedCell.date}
+        holidayName={holidays[fixedCell.date]}
         existing={escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(fixedCell.employee.ESCFUNC_ID) && iso(item.DT) === fixedCell.date)}
         reference={(escala?.dias || []).find((item) => Number(item.ESCFUNC_ID) === Number(fixedCell.employee.ESCFUNC_ID) && hasShift(item))}
         onClose={() => setFixedCell(null)}

@@ -78,7 +78,7 @@ npm start
 
 A listagem React fica em `/nova/escalas-liberadas`. O treinamento em `/nova/treinamento` usa dados ficticios: nao altera escalas reais nem chama a integracao RM, mas salva o progresso do exercicio no Oracle quando a migration correspondente esta presente. A edicao de escalas continua em `/app` ate sua migracao. O `Dockerfile` compila o React automaticamente. Para instalacao Linux sem Docker, execute `npm ci` e `npm run build:client` no diretorio `/opt/escala-app/work` antes de iniciar o servidor; nao use `npm ci --omit=dev` antes do build.
 
-Para publicar a `main` mantendo `/nova` restrita a `murilo.jesus`, siga [o roteiro de deploy com allowlist](docs/deploy-main-canario-react.md). Configure `REACT_ALLOWED_LOGINS=murilo.jesus` no servidor e `REACT_DEFAULT_UI=true` para abrir a nova interface no login desse usuario. Sem allowlist, ninguem acessa `/nova`. O allowlist nao isola mudancas de backend ou banco.
+Para publicar a `main` mantendo as telas novas restritas a `murilo.jesus` e `admin`, siga [o roteiro de deploy com allowlist](docs/deploy-main-canario-react.md). Configure `REACT_ALLOWED_LOGINS=murilo.jesus,admin` no servidor e `REACT_DEFAULT_UI=true` para abrir a nova interface no login dessas contas. A rota de treinamento obrigatorio permanece disponivel para todos os usuarios autenticados ate a conclusao. Sem allowlist, ninguem acessa as demais telas `/nova`. O allowlist nao isola mudancas de backend ou banco.
 
 6. Abrir:
 
@@ -158,6 +158,10 @@ Acesse http://localhost:3000/login.html com admin / admin123.
 Mais detalhes em docs/docker-local.md.
 
 ## Atualizacao de banco
+
+O treinamento guiado e obrigatorio uma vez por usuario no primeiro acesso. Antes de publicar esta versao, aplique `20260930_treinamento_progresso.sql` e `20261001_treinamento_tour_v2.sql` e confirme a tabela `SGN_ESC_TREINAMENTO` com `npm run db:check-schema`. Sem ela, o login retorna 503 para evitar que o progresso seja perdido. Usuarios fora da allowlist React acessam apenas `/nova/treinamento` ate concluir o tour e voltam para a interface anterior.
+
+O calendario da escala sinaliza feriados nacionais fixos. Novas folgas semanais (`F`/`FXF`) nessas datas sao recusadas; trabalho, ferias, afastamentos e folgas ja gravadas nao sao alterados pela publicacao, embora uma geracao ou reset posterior siga suas regras normais. Feriados estaduais, municipais e religiosos dependem de um cadastro de UF/municipio por loja e da respectiva norma local; nao sao inferidos automaticamente. O marcador de feriado nao substitui a analise da convencao coletiva nem define pagamento ou compensacao no RM.
 
 Antes de subir a versao Linux em um banco ja existente, execute as migrations em `docker/oracle/migrations`, especialmente:
 

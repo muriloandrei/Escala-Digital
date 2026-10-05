@@ -12,6 +12,7 @@ const { validateStandardShift } = require('../domain/shiftValidation');
 const monthlyReleaseService = require('../services/monthlyReleaseService');
 const { REGRAS_VIGENTES, validateEscalaPayload } = require('../rules/escalaRules');
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
+const { getNationalHoliday, listNationalHolidays, isWeeklyRest, newHolidayRestErrors } = require('../domain/nationalHolidays');
 
 const router = express.Router();
 
@@ -87,6 +88,32 @@ const fixoEscalaSchema = z.object({
 });
 
 router.use(requireAuth);
+
+router.get('/feriados', requirePermission('escalas', 'visualizar'), (req, res) => {
+  const { inicio, fim } = req.query;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(inicio || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(fim || '')) || String(fim) < String(inicio)) {
+    return res.status(400).json({ error: 'Informe um periodo valido para consultar feriados.' });
+  }
+  return res.json({ feriados: listNationalHolidays(inicio, fim) });
+});
+
+async function getHolidayRestErrors(payload) {
+  if (!payload.funcionarios.some((funcionario) => (funcionario.dias || []).some((dia) =>
+    getNationalHoliday(dia.data) && isWeeklyRest(dia.programacao)))) return [];
+  const secoes = [...new Set(payload.funcionarios.map((funcionario) =>
+    Number(funcionario.escsecaoId || funcionario.ESCSECAO_ID)).filter(Boolean))];
+  const atuais = (await Promise.all(secoes.map((escsecaoId) => escalaService.listDiasSecaoAtual({
+    lojaId: payload.lojaId, mesRef: payload.mesRef, escsecaoId
+  })))).flat();
+  const semSecao = payload.funcionarios.filter((funcionario) => !Number(funcionario.escsecaoId || funcionario.ESCSECAO_ID));
+  for (const funcionario of semSecao) {
+    const existente = await escalaService.getEscalaFuncionarioAtual({
+      lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: funcionario.escfuncId
+    });
+    atuais.push(...(existente?.dias || []).map((dia) => ({ ...dia, ESCFUNC_ID: funcionario.escfuncId })));
+  }
+  return newHolidayRestErrors(payload.funcionarios, atuais);
+}
 
 router.get('/regras', requirePermission('regras', 'visualizar'), async (req, res) => {
   res.json({ regras: REGRAS_VIGENTES });
@@ -174,6 +201,9 @@ router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest
   try {
     const payload = fixoEscalaSchema.parse(req.body);
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+    if (getNationalHoliday(payload.DT) && isWeeklyRest(payload.PROGRAMACAO)) {
+      return res.status(422).json({ error: 'Feriado nacional: nao cadastre folga semanal ou fixa nesta data. O colaborador pode trabalhar ou ter descanso de feriado tratado separadamente.' });
+    }
     if (String(payload.PROGRAMACAO).toUpperCase() === 'TRB') {
       const errors = validateStandardShift(payload);
       if (errors.length) return res.status(422).json({ error: 'Horario fixo invalido.', details: errors });
@@ -546,7 +576,7 @@ router.post('/validar', requirePermission('escalas', 'editar'), resolveLojaReque
       lojaId: payload.lojaId,
       funcionarios: payload.funcionarios
     });
-    const errors = [...ruleErrors, ...ausenciaErrors];
+    const errors = [...ruleErrors, ...ausenciaErrors, ...await getHolidayRestErrors(payload)];
     return res.json({ ok: errors.length === 0, errors });
   } catch (error) {
     if (error.name === 'ZodError') {
@@ -563,6 +593,8 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
       return res.status(400).json({ error: 'Informe de 1 a 500 funcionarios alterados.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
+    const holidayErrors = await getHolidayRestErrors(payload);
+    if (holidayErrors.length) return res.status(422).json({ errors: holidayErrors });
     const errors = validateEscalaPayload(payload);
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
     if (errors.length || ausenciaErrors.length) return res.status(422).json({ errors: [...errors, ...ausenciaErrors] });
@@ -621,6 +653,8 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
       return res.status(400).json({ error: 'Informe exatamente um funcionario para a revisao individual.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
+    const holidayErrors = await getHolidayRestErrors(payload);
+    if (holidayErrors.length) return res.status(422).json({ errors: holidayErrors });
     const ruleErrors = validateEscalaPayload(payload);
     if (ruleErrors.length > 0) return res.status(422).json({ errors: ruleErrors });
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
@@ -852,6 +886,9 @@ router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'edi
     const data = diaSchema.parse(req.body);
     const diasAntes = await escalaService.getEscalaDias(Number(req.params.escprogId));
     const diaAnterior = diasAntes.find((item) => Number(item.ESCPROGDIA_ID || item.escprogdia_id) === Number(req.params.escprogdiaId));
+    if (diaAnterior && getNationalHoliday(diaAnterior.DT) && isWeeklyRest(data.PROGRAMACAO) && !isWeeklyRest(diaAnterior.PROGRAMACAO)) {
+      return res.status(422).json({ error: 'Feriado nacional: nao marque folga semanal nesta data. Use trabalho ou o tratamento proprio do feriado.' });
+    }
     const dia = await escalaService.updateEscalaDia({
       escprogId: Number(req.params.escprogId),
       escprogdiaId: Number(req.params.escprogdiaId),
@@ -897,6 +934,8 @@ router.post('/', requirePermission('escalas', 'criar'), resolveLojaRequest, requ
       return res.status(403).json({ error: 'Perfil Lider nao pode criar novas escalas.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
+    const holidayErrors = await getHolidayRestErrors(payload);
+    if (holidayErrors.length) return res.status(422).json({ errors: holidayErrors });
     const ruleErrors = validateEscalaPayload(payload);
     if (ruleErrors.length > 0) {
       return res.status(422).json({ errors: ruleErrors });

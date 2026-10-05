@@ -35,8 +35,9 @@ function sameHours(day: DiaEscala | undefined, hours: StandardHours) {
     && day.HR_ENT2 === hours.HR_ENT2 && day.HR_SAI2 === hours.HR_SAI2;
 }
 
-export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, initialDate, onClose, onSaved }: {
+export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, initialDate, holidays, onClose, onSaved }: {
   lojaId: string; mesRef: string; dates: string[]; people: Funcionario[]; allDays: DiaEscala[];
+  holidays: Record<string, string>;
   initialDate: string; onClose: () => void; onSaved: (count: number) => void;
 }) {
   const futureDates = dates.filter((date) => date >= today());
@@ -69,6 +70,7 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
     const needsChange = targetDays.some((day) => mode === 'HORARIO'
       ? !sameHours(day, hours) : String(day?.PROGRAMACAO || '').toUpperCase() !== mode);
     const reason = !selectedDates.length ? 'Selecione um dia'
+      : mode === 'F' && selectedDates.some((date) => holidays[date] && !targetDays.some((day) => onlyDate(day?.DT || '') === date && String(day?.PROGRAMACAO || '').toUpperCase() === 'F')) ? 'Feriado nacional na seleção'
       : targetDays.some((day) => !day) ? 'Dia sem escala gerada'
         : targetDays.some((day) => isProtected(day!)) ? 'Dia protegido na seleção'
           : revisions.size !== 1 || !Number.isInteger(Number(targetDays[0]?.REVISAO)) ? 'Revisões divergentes'

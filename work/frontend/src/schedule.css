@@ -438,8 +438,39 @@
   color: #155f3d;
   border: 1px solid #b9e5c9;
 }
+.monthly-grid th.holiday-date {
+  background: #fff0c2;
+  color: #654400;
+}
+.holiday-warning {
+  display: block;
+  width: 100%;
+  color: #664600;
+  font-size: 12px;
+  font-weight: 650;
+}
 .training-tour .simulation-banner {
   margin-bottom: 12px;
+}
+.escala-training-popover.driver-popover {
+  max-width: min(320px, calc(100vw - 24px));
+  border: 1px solid #a9c5e9;
+  border-radius: 6px;
+  padding: 14px 16px;
+  box-shadow: 0 16px 44px rgb(10 31 62 / 26%);
+}
+.escala-training-popover .driver-popover-title {
+  color: #173969;
+  font-size: 15px;
+  font-weight: 700;
+}
+.escala-training-popover .driver-popover-description {
+  color: #40546c;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.escala-training-popover .driver-popover-close-btn {
+  display: none;
 }
 .tour-guide {
   position: sticky;

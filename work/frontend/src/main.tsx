@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   CalendarDays,
@@ -39,13 +39,23 @@ import './directory.css';
 import './print.css';
 
 function App() {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState('');
+  const [trainingStage, setTrainingStage] = useState<number | null>(null);
+  const [reactUiAllowed, setReactUiAllowed] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
-    getJson<{ user: User }>('/api/auth/me', controller.signal)
-      .then(({ user: current }) => setUser(current))
+    Promise.all([
+      getJson<{ user: User; reactUiAllowed: boolean }>('/api/auth/me', controller.signal),
+      getJson<{ stage: number; persisted: boolean }>('/api/auth/treinamento', controller.signal),
+    ]).then(([auth, progress]) => {
+      if (!progress.persisted) throw new Error('A migration do treinamento precisa ser aplicada antes de liberar o acesso.');
+      setUser(auth.user);
+      setReactUiAllowed(auth.reactUiAllowed);
+      setTrainingStage(progress.stage);
+    })
       .catch((reason) => {
         if (reason.name !== 'AbortError') setError(reason.message);
       });
@@ -57,18 +67,31 @@ function App() {
     window.location.assign('/');
   }
 
+  useEffect(() => {
+    if (user && trainingStage === 12 && !reactUiAllowed) window.location.replace('/app#/escalas-geradas');
+  }, [user, trainingStage, reactUiAllowed]);
+
   if (error)
     return (
       <main className="bootstrap-message" role="alert">
         {error} <a href="/">Entrar</a>
       </main>
     );
-  if (!user)
+  if (!user || trainingStage === null)
     return (
       <main className="bootstrap-message" role="status">
         Carregando sessao...
       </main>
     );
+
+  if (trainingStage < 12) return (
+    <div className="shell training-required-shell">
+      <aside className="sidebar"><div className="brand"><img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" /></div><nav aria-label="Menu principal"><NavLink to="/treinamento"><GraduationCap size={18} /> Treinamento obrigatório</NavLink></nav><div className="sidebar-user"><span>{user.nome || user.login}</span><button type="button" onClick={logout}><LogOut size={16} /> Sair</button></div></aside>
+      <div className="workspace"><Routes><Route path="/treinamento" element={<Treinamento user={user} onComplete={() => { setTrainingStage(12); if (reactUiAllowed) navigate('/escalas-liberadas', { replace: true }); else window.location.assign('/app#/escalas-geradas'); }} />} /><Route path="*" element={<Navigate to="/treinamento" replace />} /></Routes></div>
+    </div>
+  );
+
+  if (!reactUiAllowed) return <main className="bootstrap-message" role="status">Abrindo suas escalas...</main>;
 
   const canSeeEscalas = canView(user, 'escalas');
   const canSeeFuncionarios = canView(user, 'funcionarios');
@@ -85,7 +108,7 @@ function App() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <img src="/assets/escala-inteligente-logo.png" alt="Escala Inteligente" />
+          <img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" />
         </div>
         <nav aria-label="Menu principal">
           {canSeeEscalas && (
@@ -164,7 +187,6 @@ function App() {
           <span>Escala Inteligente</span>
           <span className="topbar-user">{user.nome || user.login}</span>
         </header>
-        {canSeeEscalas && <TrainingPrompt user={user} />}
         <Routes>
           {canSeeEscalas && <Route path="/escalas-liberadas" element={<EscalasLiberadas user={user} />} />}
           {canSeeEscalas && <Route path="/escalas/:lojaId/:mesRef" element={<EscalaMensal user={user} />} />}
@@ -199,42 +221,6 @@ function App() {
           <Route path="*" element={<Navigate to={start} replace />} />
         </Routes>
       </div>
-    </div>
-  );
-}
-
-function TrainingPrompt({ user }: { user: User }) {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [stage, setStage] = useState<number | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setStage(null);
-    getJson<{ stage: number; persisted: boolean }>('/api/auth/treinamento', controller.signal)
-      .then((progress) => {
-        if (progress.persisted) {
-          setStage(progress.stage);
-          if (progress.stage === 0 && location.pathname !== '/treinamento') {
-            navigate('/treinamento', { replace: true });
-          }
-          return;
-        }
-        try {
-          const cached = JSON.parse(localStorage.getItem(`escala:treinamento:v2:${user.sub}`) || '{}');
-          setStage(cached.version === 2 && Number.isInteger(cached.stage) && cached.stage >= 0 && cached.stage <= 12 ? cached.stage : 0);
-        } catch { setStage(0); }
-      })
-      .catch((reason) => { if (reason.name !== 'AbortError') setStage(null); });
-    return () => controller.abort();
-  }, [location.pathname, navigate, user.sub]);
-
-  if (location.pathname === '/treinamento' || stage === null || stage >= 12) return null;
-  return (
-    <div className="training-prompt" role="status">
-      <GraduationCap size={20} aria-hidden="true" />
-      <span>{stage === 0 ? 'Comece pelo treinamento de escala.' : 'Seu treinamento está em andamento.'}</span>
-      <NavLink to="/treinamento">{stage === 0 ? 'Iniciar treinamento' : 'Continuar treinamento'}</NavLink>
     </div>
   );
 }

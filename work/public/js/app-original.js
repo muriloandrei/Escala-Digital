@@ -8419,7 +8419,7 @@
                 '<div><strong>Empresa:</strong> ' + escapeHtml(String(escalaDetalheAtual.lojaId || '-').padStart(4, '0')) + ' | LOJA ' + escapeHtml(escalaDetalheAtual.lojaId || '-') + '<br><strong>Seção:</strong> ' + escapeHtml(secao?.nome || '-') + '</div>' +
                 '<div><strong>Período:</strong> ' + escapeHtml(periodoTexto) + ' | ' + escapeHtml(escalaDetalheAtual.status || '-') + '<br><strong>Gerada por:</strong> ' + escapeHtml(usuario) + '</div>' +
                 '<div><strong>Impresso em:</strong> ' + escapeHtml(impressoEm) + '<br><strong>Qualidade do planejamento:</strong> ' + escapeHtml(getQualidadeImpressao()) + '</div>' +
-                '<img src="/assets/escala-inteligente-logo.png" alt="Escala Inteligente">' +
+                '<img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente">' +
                 '</header>';
         };
 
