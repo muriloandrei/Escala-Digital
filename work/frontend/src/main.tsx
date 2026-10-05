@@ -111,6 +111,7 @@ function App() {
           <img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" />
         </div>
         <nav aria-label="Menu principal">
+          <div className="sidebar-nav-group"><span className="sidebar-nav-heading">Escalas</span>
           {canSeeEscalas && (
             <NavLink to="/escalas-liberadas">
               <List size={18} /> Escalas liberadas
@@ -131,6 +132,8 @@ function App() {
               <History size={18} /> Histórico administrativo
             </NavLink>
           )}
+          </div>
+          <div className="sidebar-nav-group"><span className="sidebar-nav-heading">Equipe</span>
           {canSeeFuncionarios && (
             <NavLink to="/funcionarios">
               <Users size={18} /> Funcionários
@@ -146,6 +149,8 @@ function App() {
               <Clock3 size={18} /> Turnos por seção
             </NavLink>
           )}
+          </div>
+          <div className="sidebar-nav-group"><span className="sidebar-nav-heading">Configuração</span>
           {canView(user, 'regras') && <NavLink to="/regras"><Settings2 size={18} /> Regras da escala</NavLink>}
           {canView(user, 'tipos-descanso') && <NavLink to="/tipos-descanso"><CalendarDays size={18} /> Tipos de descanso</NavLink>}
           {canView(user, 'horarios-padrao') && <NavLink to="/horarios-padrao"><Clock3 size={18} /> Horários padrão</NavLink>}
@@ -164,6 +169,8 @@ function App() {
               <LayoutGrid size={18} /> Liberação de seções
             </NavLink>
           )}
+          </div>
+          <div className="sidebar-nav-group"><span className="sidebar-nav-heading">Ajuda</span>
           {canSeeEscalas && (
             <NavLink to="/treinamento">
               <GraduationCap size={18} /> Treinamento
@@ -172,6 +179,7 @@ function App() {
           <a href="/app#/escalas-geradas">
             <ArrowLeft size={18} /> Interface anterior
           </a>
+          </div>
         </nav>
         <div className="sidebar-user">
           <span>{user.nome || user.login}</span>

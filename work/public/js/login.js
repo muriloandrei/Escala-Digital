@@ -14,7 +14,7 @@
       const result = await api.login(login, password);
       window.location.href = result.startPath || '/app#/escalas-geradas';
     } catch (error) {
-      message.textContent = error.message;
+      message.textContent = error.status === 401 ? 'Usuário ou senha incorretos.' : error.message;
     }
   });
 })();

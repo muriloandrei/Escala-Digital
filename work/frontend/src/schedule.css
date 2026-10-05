@@ -225,6 +225,28 @@
 .monthly-grid thead tr:nth-child(2) th {
   top: 26px;
 }
+.monthly-grid thead tr:nth-child(3) th {
+  top: 52px;
+}
+.monthly-grid thead tr:nth-child(4) th {
+  top: 78px;
+}
+.monthly-grid .monthly-coverage-row th,
+.monthly-grid .monthly-count-row th {
+  height: 26px;
+  background: #eef4fb;
+  font-size: 10px;
+}
+.monthly-grid .monthly-count-row th {
+  white-space: nowrap;
+}
+.monthly-count-row .work-count,
+.monthly-count-row .rest-count {
+  display: inline-block;
+  padding: 1px 2px;
+}
+.monthly-count-row .work-count { color: #16624b; }
+.monthly-count-row .rest-count { color: #095f8b; }
 .monthly-grid th.employee-col {
   min-width: 205px;
   width: 205px;
@@ -367,6 +389,40 @@
 .daily-schedule th,
 .daily-schedule td {
   padding: 10px 11px;
+}
+.daily-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  color: #425c74;
+  font-size: 12px;
+}
+.daily-summary strong { color: #17283e; font-size: 14px; }
+.daily-shift-track {
+  position: relative;
+  width: 220px;
+  height: 13px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(to right, #e5ecf4 0 1px, #f2f5f9 1px 25%);
+  overflow: hidden;
+}
+.daily-time-axis {
+  width: 220px;
+  display: flex;
+  justify-content: space-between;
+  color: #73859a;
+  font-size: 10px;
+  font-weight: 400;
+  margin-top: 5px;
+}
+.daily-shift-track span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  max-width: 100%;
+  background: #1a8a77;
 }
 .cell-detail {
   display: flex;
@@ -737,6 +793,31 @@
 .bulk-dates input {
   accent-color: #2459b9;
 }
+.bulk-dates > .bulk-calendar {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  max-height: none;
+  gap: 4px;
+}
+.bulk-calendar button {
+  min-width: 0;
+  min-height: 54px;
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  border: 1px solid #d7e2ed;
+  border-radius: 4px;
+  background: #fff;
+  color: #2b445f;
+  font-size: 11px;
+}
+.bulk-calendar button.rest { background: #e3f3fa; }
+.bulk-calendar button.selected { outline: 2px solid #2459d5; outline-offset: -2px; }
+.bulk-calendar button:disabled { opacity: .42; }
+.bulk-calendar button small { font-size: 9px; }
+@media (max-width: 600px) {
+  .bulk-calendar button { font-size: 9px; }
+  .bulk-calendar button small { display: none; }
+}
 .bulk-select-bar {
   display: flex;
   align-items: center;
@@ -774,3 +855,22 @@
 .bulk-people-list input { width: 16px; height: 16px; flex: 0 0 auto; accent-color: #2459b9; }
 .bulk-people-list small { display: block; margin-top: 2px; }
 .bulk-issues { max-height: 180px; overflow-y: auto; margin-top: 12px; }
+.tour-print-preview {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 18px;
+  border: 1px solid #d7e2ed;
+  background: #fff;
+  color: #17283e;
+  font-size: 12px;
+}
+.tour-print-preview > span { color: #61748a; }
+.tour-print-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 2fr) repeat(3, minmax(42px, 1fr));
+  gap: 6px;
+  border-top: 1px solid #e1e8ef;
+  padding-top: 7px;
+}
+.tour-print-row span { text-align: center; }

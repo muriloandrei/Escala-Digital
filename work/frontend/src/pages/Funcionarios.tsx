@@ -4,24 +4,14 @@ import { useSearchParams } from 'react-router-dom';
 import {
   canEdit,
   getJson,
-  patchJson,
   postJson,
   preferredStore,
   type Funcionario,
   type Loja,
   type User,
 } from '../api';
+import { EditarHorarioBase } from './EditarHorarioBase';
 
-type ShiftForm = {
-  employee: Funcionario;
-  month: string;
-  HR_ENT1: string;
-  HR_SAI1: string;
-  HR_ENT2: string;
-  HR_SAI2: string;
-};
-
-type ShiftImpact = { diasAlterados: number; diasManuais: number; possuiEscala: boolean; mesesImpactados: string[]; mesesParaReoficializar: string[] };
 type Suspension = { ESCPEND_ID: number; ESCFUNC_ID: number; DT_INICIO: string; DT_FIM?: string | null; TIPO?: string; STATUS: string; JUSTIFICATIVA?: string };
 
 function currentMonth() {
@@ -41,10 +31,7 @@ export function Funcionarios({ user }: { user: User }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
-  const [shiftForm, setShiftForm] = useState<ShiftForm | null>(null);
-  const [shiftImpact, setShiftImpact] = useState<ShiftImpact | null>(null);
-  const [shiftError, setShiftError] = useState('');
-  const [shiftBusy, setShiftBusy] = useState(false);
+  const [shiftTarget, setShiftTarget] = useState<{ employee: Funcionario; month: string } | null>(null);
   const [message, setMessage] = useState('');
   const [suspendTarget, setSuspendTarget] = useState<Funcionario | null>(null);
   const [closeTarget, setCloseTarget] = useState<Suspension | null>(null);
@@ -163,87 +150,12 @@ export function Funcionarios({ user }: { user: User }) {
     setSearch(employee.CHAPA);
     setSelected(employee.ESCFUNC_ID);
     if (canEdit(user, 'escalas') && !employee.DT_DEMISS && !/APRENDIZ/i.test(employee.FUNCAO_DESCR || '')) {
-      setShiftForm({
-        employee,
-        month: /^\d{4}-\d{2}$/.test(params.get('mes') || '') ? params.get('mes')! : currentMonth(),
-        HR_ENT1: employee.HR_ENT1 || '',
-        HR_SAI1: employee.HR_SAI1 || '',
-        HR_ENT2: employee.HR_ENT2 || '',
-        HR_SAI2: employee.HR_SAI2 || '',
-      });
+      setShiftTarget({ employee, month: /^\d{4}-\d{2}$/.test(params.get('mes') || '') ? params.get('mes')! : currentMonth() });
     }
   }, [funcionarios, loja, params, user]);
 
   function openShift(employee: Funcionario) {
-    setShiftForm({
-      employee,
-      month: currentMonth(),
-      HR_ENT1: employee.HR_ENT1 || '',
-      HR_SAI1: employee.HR_SAI1 || '',
-      HR_ENT2: employee.HR_ENT2 || '',
-      HR_SAI2: employee.HR_SAI2 || '',
-    });
-    setShiftImpact(null);
-    setShiftError('');
-  }
-
-  function updateShift(patch: Partial<ShiftForm>) {
-    setShiftForm((current) => (current ? { ...current, ...patch } : current));
-    setShiftImpact(null);
-    setShiftError('');
-  }
-
-  function shiftPayload(form: ShiftForm) {
-    return {
-      lojaId: Number(loja),
-      escfuncId: Number(form.employee.ESCFUNC_ID),
-      mesRef: `${form.month}-01`,
-      aplicarNaEscala: true,
-      HR_ENT1: form.HR_ENT1,
-      HR_SAI1: form.HR_SAI1,
-      HR_ENT2: form.HR_ENT2,
-      HR_SAI2: form.HR_SAI2,
-    };
-  }
-
-  async function previewShift() {
-    if (!shiftForm) return;
-    setShiftBusy(true);
-    setShiftError('');
-    try {
-      const data = await postJson<{ impacto: ShiftImpact }>(
-        '/api/escalas/funcionario/horario/preview',
-        shiftPayload(shiftForm),
-      );
-      setShiftImpact(data.impacto);
-    } catch (reason) {
-      setShiftError(reason instanceof Error ? reason.message : 'Não foi possível validar o horário.');
-    } finally {
-      setShiftBusy(false);
-    }
-  }
-
-  async function saveShift() {
-    if (!shiftForm || !shiftImpact) return;
-    setShiftBusy(true);
-    setShiftError('');
-    try {
-      const result = await patchJson<{ diasAlterados: number; mesesAtualizados: string[]; mesesParaReoficializar: string[] }>(
-        '/api/escalas/funcionario/horario',
-        shiftPayload(shiftForm),
-      );
-      setMessage(
-        `Horário-base de ${shiftForm.employee.NOME} atualizado${result.diasAlterados ? ` · ${result.diasAlterados} dia(s) em ${result.mesesAtualizados.length} mês(es) ajustado(s)` : ''}.${result.mesesParaReoficializar?.length ? ` Reoficialize a escala em ${result.mesesParaReoficializar.join(', ')} para criar novas pendências RM.` : ''}`,
-      );
-      setShiftForm(null);
-      setShiftImpact(null);
-      setReload((value) => value + 1);
-    } catch (reason) {
-      setShiftError(reason instanceof Error ? reason.message : 'Não foi possível salvar o horário.');
-      setShiftImpact(null);
-    } finally {
-      setShiftBusy(false);
-    }
+    setShiftTarget({ employee, month: currentMonth() });
   }
 
   return (
@@ -461,94 +373,7 @@ export function Funcionarios({ user }: { user: User }) {
         {suspendError && <div className="notice error" role="alert">{suspendError}</div>}
         <div className="confirm-actions"><button className="button secondary" type="button" disabled={suspendBusy} onClick={() => setCloseTarget(null)}>Cancelar</button><button className="button primary" type="button" disabled={suspendBusy} onClick={closeSuspension}>{suspendBusy ? 'Encerrando...' : 'Confirmar encerramento'}</button></div>
       </div></div>}
-      {shiftForm && (
-        <div
-          className="confirm-backdrop"
-          role="presentation"
-          onKeyDown={(event) => {
-            if (event.key === 'Escape' && !shiftBusy) setShiftForm(null);
-          }}
-        >
-          <div
-            className="confirm-dialog shift-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="shift-title"
-          >
-            <h2 id="shift-title">Editar horário · {shiftForm.employee.NOME}</h2>
-            <p>
-              {shiftForm.employee.CHAPA} · {shiftForm.employee.FUNCAO_DESCR || 'Cargo não informado'}
-            </p>
-            <div className="shift-fields">
-              {(['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'] as const).map((field, index) => (
-                <label key={field}>
-                  {['Entrada', 'Saída intervalo', 'Retorno', 'Saída'][index]}
-                  <input
-                    type="time"
-                    value={shiftForm[field]}
-                    onChange={(event) => updateShift({ [field]: event.target.value })}
-                    required
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="shift-options">
-              <label>
-                Mês de referência
-                <input
-                  type="month"
-                  value={shiftForm.month}
-                  onChange={(event) => updateShift({ month: event.target.value })}
-                  required
-                />
-              </label>
-            </div>
-            <p>O cadastro e os dias editáveis de todas as escalas futuras serão atualizados juntos. Folgas, fixos e ajustes manuais permanecem como estão.</p>
-            {shiftImpact && (
-              <div className="shift-impact">
-                <strong>Prévia</strong>
-                <span>
-                  {shiftImpact.possuiEscala
-                    ? `${shiftImpact.diasAlterados} dia(s) ajustável(is) em ${shiftImpact.mesesImpactados.length} mês(es).`
-                    : 'Nenhuma escala futura existente.'}
-                </span>
-                <span>{shiftImpact.diasManuais} dia(s) com ajuste manual preservado(s).</span>
-                {shiftImpact.mesesParaReoficializar?.length > 0 && <span>Será necessário oficializar novamente em {shiftImpact.mesesParaReoficializar.join(', ')} para enviar ao RM.</span>}
-              </div>
-            )}
-            {shiftError && (
-              <div className="notice error" role="alert">
-                {shiftError}
-              </div>
-            )}
-            <div className="confirm-actions">
-              <button
-                autoFocus
-                className="button secondary"
-                type="button"
-                disabled={shiftBusy}
-                onClick={() => setShiftForm(null)}
-              >
-                Cancelar
-              </button>
-              {shiftImpact ? (
-                <button className="button primary" type="button" disabled={shiftBusy} onClick={saveShift}>
-                  {shiftBusy ? 'Salvando...' : 'Salvar horário'}
-                </button>
-              ) : (
-                <button
-                  className="button primary"
-                  type="button"
-                  disabled={shiftBusy || !shiftForm.month}
-                  onClick={previewShift}
-                >
-                  {shiftBusy ? 'Validando...' : 'Ver prévia'}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {shiftTarget && <EditarHorarioBase key={`${shiftTarget.employee.ESCFUNC_ID}-${shiftTarget.month}`} employee={shiftTarget.employee} lojaId={loja} initialMonth={shiftTarget.month} onClose={() => setShiftTarget(null)} onSaved={(text) => { setMessage(text); setShiftTarget(null); setReload((value) => value + 1); }} />}
     </main>
   );
 }

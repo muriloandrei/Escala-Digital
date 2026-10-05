@@ -40,7 +40,8 @@ a {
 }
 .brand {
   padding: 20px 18px;
-  border-bottom: 1px solid #354760;
+  background: #fff;
+  border-bottom: 1px solid #d7e1ea;
 }
 .brand img {
   display: block;
@@ -52,6 +53,22 @@ a {
   display: grid;
   gap: 4px;
   padding: 18px 10px;
+}
+.sidebar-nav-group {
+  display: grid;
+  gap: 4px;
+}
+.sidebar-nav-group + .sidebar-nav-group {
+  border-top: 1px solid #354760;
+  margin-top: 8px;
+  padding-top: 12px;
+}
+.sidebar-nav-heading {
+  padding: 0 12px 5px;
+  color: #afc0d6;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 .sidebar nav a {
   display: flex;

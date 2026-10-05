@@ -22,6 +22,23 @@ body {
     padding: 8px 10px 12px;
   }
 
+  .sidebar-nav-group {
+    display: flex;
+    align-items: center;
+    flex: none;
+  }
+
+  .sidebar-nav-group + .sidebar-nav-group {
+    border-top: 0;
+    border-left: 1px solid #354760;
+    margin: 0 0 0 8px;
+    padding: 0 0 0 8px;
+  }
+
+  .sidebar-nav-heading {
+    display: none;
+  }
+
   .sidebar nav a {
     flex: none;
     white-space: nowrap;

@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   canEdit,
+  ApiError,
   getJson,
   postJson,
   type DiaEscala,
@@ -14,10 +15,11 @@ import {
   type Subsecao,
   type User,
 } from '../api';
-import { EditarDiaEscala } from './EditarDiaEscala';
+import { EditarDiaEscala, toPayloadDay } from './EditarDiaEscala';
 import { TransferirSubsecao } from './TransferirSubsecao';
 import { EditarFixoEscala } from './EditarFixoEscala';
 import { EditarDiasEmMassa } from './EditarDiasEmMassa';
+import { EditarHorarioBase } from './EditarHorarioBase';
 
 function iso(value: string | null | undefined) {
   return String(value || '').slice(0, 10);
@@ -55,6 +57,17 @@ function weekday(value: string) {
   return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', timeZone: 'UTC' })
     .format(new Date(`${value}T00:00:00Z`))
     .replace('.', '');
+}
+
+function timeSegment(start?: string | null, end?: string | null) {
+  const minutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+  if (!start || !end || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return null;
+  const from = minutes(start);
+  const to = minutes(end);
+  if (to <= from) return null;
+  const left = Math.max(0, Math.min(100, (from - 300) / 1140 * 100));
+  const right = Math.max(left, Math.min(100, (to - 300) / 1140 * 100));
+  return { left: `${left}%`, width: `${right - left}%` };
 }
 
 function kind(dia?: DiaEscala) {
@@ -101,6 +114,7 @@ export function EscalaMensal({ user }: { user: User }) {
   const [pendingAction, setPendingAction] = useState<'gerar' | 'resetar' | 'oficializar' | null>(null);
   const [individualTarget, setIndividualTarget] = useState<Funcionario | null>(null);
   const [transferTarget, setTransferTarget] = useState<Funcionario | null>(null);
+  const [shiftTarget, setShiftTarget] = useState<Funcionario | null>(null);
   const [personMenu, setPersonMenu] = useState<{ employee: Funcionario; left: number; top: number } | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
@@ -113,8 +127,13 @@ export function EscalaMensal({ user }: { user: User }) {
   const [editingCell, setEditingCell] = useState<{ employee: Funcionario; day: DiaEscala } | null>(null);
   const [fixedCell, setFixedCell] = useState<{ employee: Funcionario; date: string } | null>(null);
   const [bulkEditing, setBulkEditing] = useState(false);
+  const [quickBusy, setQuickBusy] = useState(false);
+  const quickBusyRef = useRef(false);
+  const clickTimer = useRef<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const gridPosition = useRef({ left: 0, top: 0 });
+
+  useEffect(() => () => { if (clickTimer.current !== null) window.clearTimeout(clickTimer.current); }, []);
 
   useEffect(() => {
     if (!lojaId || !mesRef) return;
@@ -250,6 +269,22 @@ export function EscalaMensal({ user }: { user: User }) {
         }),
     [employees, subsection, personFilter, search, daysByEmployee, dates, selectedDate, view, subsectionIds],
   );
+  const coverage = useMemo(() => dates.map((date) => {
+    let working = 0;
+    let rests = 0;
+    for (const person of visibleEmployees) {
+      const day = daysByEmployee.get(String(person.ESCFUNC_ID))?.get(date);
+      if (day && (subsection === 'all' || daySubKey(day) === subsection)) {
+        if (hasShift(day)) working += 1;
+        else if (kind(day) === 'rest' || kind(day) === 'fixed') rests += 1;
+      } else if (!day) {
+        const fixed = escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(person.ESCFUNC_ID) && iso(item.DT) === date);
+        if (fixed?.PROGRAMACAO === 'TRB') working += 1;
+        else if (fixed) rests += 1;
+      }
+    }
+    return { working, rests, quality: visibleEmployees.length ? Math.round(working / visibleEmployees.length * 100) : null };
+  }), [dates, visibleEmployees, daysByEmployee, subsection, subsectionIds, escala]);
 
   useLayoutEffect(() => {
     if (!loading && view === 'mensal' && gridRef.current) {
@@ -342,6 +377,93 @@ export function EscalaMensal({ user }: { user: User }) {
       left: Math.max(8, Math.min(rect.right - 8, window.innerWidth - 225)),
       top: rect.bottom + 154 > window.innerHeight ? Math.max(8, rect.top - 154) : rect.bottom + 4,
     });
+  }
+
+  async function quickToggle(employee: Funcionario, date: string, day?: DiaEscala) {
+    if (!lojaId || !mesRef || quickBusyRef.current || !canEdit(user, 'escalas') || !canEdit(user, 'escalas-funcionarios') || date < localToday() || escala?.status === 'FINALIZADA') return;
+    if (day?.AUSENCIA_OBRIGATORIA || Number(day?.OFICIALIZADA) === 1 || ['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) return;
+    const existingFixed = escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && iso(item.DT) === date);
+    if (day?.FIXO_ESCALA && day) { setFixedCell({ employee, date }); return; }
+    const nextRest = day ? hasShift(day) : existingFixed?.PROGRAMACAO !== 'FXF';
+    if (nextRest && holidays[date]) { setActionError(`Feriado nacional (${holidays[date]}): folga semanal não pode ser lançada nesta data.`); return; }
+    quickBusyRef.current = true; setQuickBusy(true); setActionError('');
+    try {
+      if (!day) {
+        const base = { lojaId: Number(lojaId), mesRef, escfuncId: Number(employee.ESCFUNC_ID), escsecaoId: Number(employee.ESCSECAO_ID), DT: date };
+        if (existingFixed?.PROGRAMACAO === 'FXF') {
+          if (/APRENDIZ/i.test(employee.FUNCAO_DESCR || '')) {
+            const result = await postJson<{ result: { removed: boolean } }>('/api/escalas/fixos/remover', base);
+            if (!result.result?.removed) throw new Error('O fixo não foi encontrado. Atualize a escala.');
+          } else {
+            const hours = { HR_ENT1: employee.HR_ENT1 || '', HR_SAI1: employee.HR_SAI1 || '',
+              HR_ENT2: employee.HR_ENT2 || '', HR_SAI2: employee.HR_SAI2 || '' };
+            if (Object.values(hours).some((value) => !value)) throw new Error('Horário-base incompleto. Abra o editor de fixo para definir o trabalho.');
+            await postJson('/api/escalas/fixos', { ...base, PROGRAMACAO: 'TRB', ...hours, JUSTIFICATIVA: 'Distribuição rápida na grade' });
+          }
+        } else await postJson('/api/escalas/fixos', { ...base, PROGRAMACAO: 'FXF', JUSTIFICATIVA: 'Distribuição rápida na grade' });
+        const readback = await getJson<{ escala: EscalaMensal }>(`/api/escalas/mensal?${new URLSearchParams({ lojaId, mesRef })}`).catch(() => null);
+        const recorded = readback?.escala.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && iso(item.DT) === date);
+        if (!readback || (nextRest ? recorded?.PROGRAMACAO !== 'FXF' : /APRENDIZ/i.test(employee.FUNCAO_DESCR || '') ? Boolean(recorded) : recorded?.PROGRAMACAO !== 'TRB')) {
+          throw new Error('A leitura de volta não confirmou o fixo. Atualize a escala antes de tentar novamente.');
+        }
+      } else {
+        if (!Number.isInteger(Number(day.REVISAO))) throw new Error('Revisão do funcionário indisponível. Atualize a escala.');
+        const personDays = (escala?.dias || []).filter((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID));
+        const reference = personDays.find(hasShift);
+        const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
+        const hours = [employee.HR_ENT1 || reference?.HR_ENT1, employee.HR_SAI1 || reference?.HR_SAI1,
+          employee.HR_ENT2 || reference?.HR_ENT2, employee.HR_SAI2 || reference?.HR_SAI2];
+        if (!nextRest && (!hours[0] || !hours[1] || (!apprentice && (!hours[2] || !hours[3])))) {
+          throw new Error('Horário-base incompleto. Edite o horário antes de transformar a folga em trabalho.');
+        }
+        const changed = { data: date, programacao: nextRest ? 'F' : 'TRB',
+          hrEnt1: nextRest ? null : hours[0]!, hrSai1: nextRest ? null : hours[1]!,
+          hrEnt2: nextRest || apprentice ? null : hours[2] || null, hrSai2: nextRest || apprentice ? null : hours[3] || null,
+          justificativa: 'Alteração rápida na grade' };
+        const payload = { lojaId: Number(lojaId), mesRef, operacaoId: crypto.randomUUID(), oficializada: 0,
+          funcionarios: [{ escfuncId: Number(employee.ESCFUNC_ID), revisaoBase: Number(day.REVISAO),
+            chapa: employee.CHAPA, nome: employee.NOME, funcao: employee.FUNCAO_DESCR || null,
+            escsecaoId: employee.ESCSECAO_ID, escfuncaoId: employee.ESCFUNCAO_ID,
+            aprendiz: apprentice,
+            dias: personDays.map((item) => iso(item.DT) === date ? changed : toPayloadDay(item)) }] };
+        const validation = await postJson<{ ok: boolean; errors: unknown[] }>('/api/escalas/validar', payload);
+        if (!validation.ok) throw new Error((validation.errors || []).map((item) => typeof item === 'string' ? item : JSON.stringify(item)).join(' · ') || 'A alteração não atende às regras da escala.');
+        let saved: { saved?: { revisao: number }[] } | null = null;
+        try { saved = await postJson('/api/escalas/funcionarios/revisao', payload); }
+        catch (reason) {
+          if (reason instanceof ApiError && reason.status < 500) throw reason;
+          const confirmation = await getJson<{ confirmada: boolean }>(`/api/escalas/operacoes/${payload.operacaoId}?${new URLSearchParams({ lojaId, mesRef })}`).catch(() => null);
+          if (!confirmation?.confirmada) throw new Error('Não foi possível confirmar a gravação. Atualize a escala antes de tentar novamente.');
+        }
+        if (saved && saved.saved?.length !== 1) throw new Error('A revisão não foi confirmada. Atualize a escala antes de tentar novamente.');
+        const readback = await getJson<{ escala: { dias: DiaEscala[] } }>(`/api/escalas/mensal?${new URLSearchParams({ lojaId, mesRef })}`).catch(() => null);
+        const recorded = readback?.escala.dias.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && iso(item.DT) === date);
+        if (!recorded || String(recorded.PROGRAMACAO || '').toUpperCase() !== changed.programacao || (saved && Number(recorded.REVISAO) !== Number(saved.saved?.[0]?.revisao))) {
+          throw new Error('A leitura de volta não confirmou o dia. Atualize a escala antes de tentar novamente.');
+        }
+      }
+      setActionMessage(`${employee.NOME}: ${nextRest ? 'folga' : 'trabalho'} atualizado.`);
+      setReload((value) => value + 1);
+    } catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Não foi possível alterar o dia.'); }
+    finally { quickBusyRef.current = false; setQuickBusy(false); }
+  }
+
+  function clickDay(employee: Funcionario, date: string, day?: DiaEscala) {
+    if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+    clickTimer.current = window.setTimeout(() => {
+      clickTimer.current = null;
+      if (canEdit(user, 'escalas') && canEdit(user, 'escalas-funcionarios')) void quickToggle(employee, date, day);
+      else setSelectedCell({ employee, date, day });
+    }, 260);
+  }
+
+  function doubleClickDay(employee: Funcionario, date: string, day?: DiaEscala) {
+    if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+    clickTimer.current = null;
+    if (!canEdit(user, 'escalas') || !canEdit(user, 'escalas-funcionarios') || escala?.status === 'FINALIZADA') { setSelectedCell({ employee, date, day }); return; }
+    if (day && !day.FIXO_ESCALA && !day.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase()) && Number(day.OFICIALIZADA) !== 1) setEditingCell({ employee, day });
+    else if (date >= localToday() && Number(day?.OFICIALIZADA) !== 1 && !day?.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) setFixedCell({ employee, date });
+    else setSelectedCell({ employee, date, day });
   }
 
   const monthlyTitle = mesRef
@@ -522,7 +644,7 @@ export function EscalaMensal({ user }: { user: User }) {
                     Escopo: <strong>{scopeName}</strong> · {scopePeople.length} funcionário(s)
                   </span>
                   {mixedSubsectionScope && <span title="Operações por subseção com transferência no mês exigem recorte por data.">Transferência no mês: operações em lote disponíveis na seção inteira</span>}
-                  {canEdit(user, 'escalas-funcionarios') && <button className="button secondary" type="button" disabled={!scopePeople.length || loading || mixedSubsectionScope || escala?.status === 'FINALIZADA'} onClick={() => setBulkEditing(true)}><Pencil size={15} /> Editar vários</button>}
+                  {canEdit(user, 'escalas-funcionarios') && <button className="button secondary" type="button" disabled={!scopePeople.length || loading || mixedSubsectionScope || escala?.status === 'FINALIZADA'} onClick={() => setBulkEditing(true)}><Pencil size={15} /> Editar</button>}
                   <button
                     className="button secondary"
                     type="button"
@@ -572,6 +694,8 @@ export function EscalaMensal({ user }: { user: User }) {
                 >
                   <table className="monthly-grid">
                     <thead>
+                      <tr className="monthly-coverage-row"><th className="employee-col">Qualidade (%)</th>{coverage.map((item, index) => <th key={dates[index]} className={index % 7 === 0 ? 'week-start' : ''} title={`${item.working} trabalhando, ${item.rests} em folga`}>{item.quality === null ? '–' : `${item.quality}%`}</th>)}</tr>
+                      <tr className="monthly-count-row"><th className="employee-col">Trabalho / folga</th>{coverage.map((item, index) => <th key={dates[index]} className={index % 7 === 0 ? 'week-start' : ''}><span className="work-count">{item.working} T</span><span className="rest-count">{item.rests} F</span></th>)}</tr>
                       <tr>
                         <th rowSpan={2} className="employee-col">
                           Funcionário
@@ -605,19 +729,21 @@ export function EscalaMensal({ user }: { user: User }) {
                             const scheduled = daysByEmployee.get(String(person.ESCFUNC_ID))?.get(date);
                             const day = scheduled && (subsection === 'all' || daySubKey(scheduled) === subsection)
                               ? scheduled : undefined;
+                            const fixed = !day && escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(person.ESCFUNC_ID) && iso(item.DT) === date);
                             return (
                               <td
                                 key={date}
-                                className={`${kind(day)} ${index % 7 === 0 ? 'week-start' : ''}`}
+                                className={`${fixed ? 'fixed' : kind(day)} ${index % 7 === 0 ? 'week-start' : ''}`}
                               >
                                 <button
                                   type="button"
-                                  title={`${person.NOME} · ${formatDate(date)}${holidays[date] ? ` · Feriado: ${holidays[date]}` : ''} · ${shiftLabel(day)}`}
-                                  aria-label={`${person.NOME}, ${formatDate(date)}, ${shiftLabel(day)}`}
-                                  disabled={Boolean(scheduled && !day)}
-                                  onClick={() => setSelectedCell({ employee: person, date, day })}
+                                  title={`${person.NOME} · ${formatDate(date)}${holidays[date] ? ` · Feriado: ${holidays[date]}` : ''} · ${fixed ? `Fixo ${fixed.PROGRAMACAO}` : shiftLabel(day)}`}
+                                  aria-label={`${person.NOME}, ${formatDate(date)}, ${fixed ? `Fixo ${fixed.PROGRAMACAO}` : shiftLabel(day)}`}
+                                  disabled={quickBusy || Boolean(scheduled && !day)}
+                                  onClick={() => clickDay(person, date, day)}
+                                  onDoubleClick={() => doubleClickDay(person, date, day)}
                                 >
-                                  {cellText(day)}
+                                  {fixed ? fixed.PROGRAMACAO === 'TRB' ? fixed.HR_ENT1 || 'TRB' : 'F' : cellText(day)}
                                 </button>
                               </td>
                             );
@@ -629,6 +755,7 @@ export function EscalaMensal({ user }: { user: User }) {
                 </div>
               ) : (
                 <div className="table-scroll daily-schedule">
+                  <div className="daily-summary"><strong>{weekday(selectedDate)} · {formatDate(selectedDate)}</strong><span>{coverage[dates.indexOf(selectedDate)]?.working || 0} trabalhando</span><span>{coverage[dates.indexOf(selectedDate)]?.rests || 0} em folga</span>{holidays[selectedDate] && <span>Feriado: {holidays[selectedDate]}</span>}</div>
                   <table>
                     <thead>
                       <tr>
@@ -640,6 +767,7 @@ export function EscalaMensal({ user }: { user: User }) {
                         <th>Saída intervalo</th>
                         <th>Retorno</th>
                         <th>Saída</th>
+                        <th><span>Distribuição do dia</span><div className="daily-time-axis" aria-hidden="true"><span>05h</span><span>11h</span><span>17h</span><span>23h</span></div></th>
                         <th><span className="sr-only">Ações</span></th>
                       </tr>
                     </thead>
@@ -660,6 +788,7 @@ export function EscalaMensal({ user }: { user: User }) {
                             <td>{hasShift(day) ? day?.HR_SAI1 || '–' : '–'}</td>
                             <td>{hasShift(day) ? day?.HR_ENT2 || '–' : '–'}</td>
                             <td>{hasShift(day) ? day?.HR_SAI2 || '–' : '–'}</td>
+                            <td><div className="daily-shift-track" aria-label={hasShift(day) ? `Turno ${shiftLabel(day)}` : shiftLabel(day)}>{hasShift(day) && <>{timeSegment(day?.HR_ENT1, day?.HR_SAI1) && <span style={timeSegment(day?.HR_ENT1, day?.HR_SAI1)!} />}{timeSegment(day?.HR_ENT2, day?.HR_SAI2) && <span style={timeSegment(day?.HR_ENT2, day?.HR_SAI2)!} />}</>}</div></td>
                             <td><button type="button" className="icon-action" title={`Ações de ${person.NOME}`} aria-label={`Ações de ${person.NOME}`} onClick={(event) => openPersonMenu(event, person)}><MoreVertical size={16} /></button></td>
                           </tr>
                         );
@@ -742,7 +871,7 @@ export function EscalaMensal({ user }: { user: User }) {
               if (day) setSelectedCell({ employee: personMenu.employee, date: iso(day.DT), day });
               setPersonMenu(null);
             }}>Ver detalhes</button>
-            {!/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && <Link role="menuitem" to={`/funcionarios?loja=${lojaId}&funcionario=${personMenu.employee.ESCFUNC_ID}&mes=${mesRef?.slice(0, 7)}`} onClick={() => setPersonMenu(null)}>Editar horário-base</Link>}
+            {canEdit(user, 'escalas-funcionarios') && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && <button type="button" role="menuitem" onClick={() => { setShiftTarget(personMenu.employee); setPersonMenu(null); }}>Editar horário-base</button>}
             {canEdit(user, 'escalas') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
               setIndividualTarget(personMenu.employee);
               setPersonMenu(null);
@@ -766,6 +895,7 @@ export function EscalaMensal({ user }: { user: User }) {
           setActionMessage(warning || (scheduled ? `Transferência agendada para ${scheduled}. A escala atual não foi alterada.` : 'Funcionário transferido e escala individual regenerada.'));
         }}
       />}
+      {shiftTarget && lojaId && mesRef && <EditarHorarioBase key={`${shiftTarget.ESCFUNC_ID}-${mesRef}`} employee={shiftTarget} lojaId={lojaId} initialMonth={mesRef.slice(0, 7)} onClose={() => setShiftTarget(null)} onSaved={(message) => { setShiftTarget(null); setActionMessage(message); setReload((value) => value + 1); }} />}
       {individualTarget && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
         if (event.key === 'Escape' && !actionBusy) setIndividualTarget(null);
       }}><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="individual-title">
