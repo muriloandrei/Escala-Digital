@@ -13,6 +13,7 @@
     "migrations:check": "node scripts/check-migrations.js",
     "migrations:status": "node scripts/migration-ledger.js status",
     "migrations:record": "node scripts/migration-ledger.js record",
+    "migrations:apply": "node scripts/apply-oracle-migration.js",
     "db:check-schema": "node scripts/check-schema.js",
     "rollout:check-ui": "node scripts/check-react-rollout.js",
     "test": "node test/run-tests.js",

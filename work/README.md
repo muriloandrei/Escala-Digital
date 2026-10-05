@@ -78,7 +78,7 @@ npm start
 
 A listagem React fica em `/nova/escalas-liberadas`. O treinamento em `/nova/treinamento` usa dados ficticios: nao altera escalas reais nem chama a integracao RM, mas salva o progresso do exercicio no Oracle quando a migration correspondente esta presente. A edicao de escalas continua em `/app` ate sua migracao. O `Dockerfile` compila o React automaticamente. Para instalacao Linux sem Docker, execute `npm ci` e `npm run build:client` no diretorio `/opt/escala-app/work` antes de iniciar o servidor; nao use `npm ci --omit=dev` antes do build.
 
-Para publicar a `main` mantendo as telas novas restritas a `murilo.jesus` e `admin`, siga [o roteiro de deploy com allowlist](docs/deploy-main-canario-react.md). Configure `REACT_ALLOWED_LOGINS=murilo.jesus,admin` no servidor e `REACT_DEFAULT_UI=true` para abrir a nova interface no login dessas contas. A rota de treinamento obrigatorio permanece disponivel para todos os usuarios autenticados ate a conclusao. Sem allowlist, ninguem acessa as demais telas `/nova`. O allowlist nao isola mudancas de backend ou banco.
+Para publicar a `main` mantendo as telas novas restritas a `murilo.jesus` e `admin`, siga [o roteiro operacional de migracao no Oracle Linux](docs/migracao-oracle-linux-homologacao-2026-10-05.md). Configure `REACT_ALLOWED_LOGINS=murilo.jesus,admin` no servidor e `REACT_DEFAULT_UI=true` para abrir a nova interface no login dessas contas. A rota de treinamento obrigatorio permanece disponivel para todos os usuarios autenticados ate a conclusao. Sem allowlist, ninguem acessa as demais telas `/nova`. O allowlist nao isola mudancas de backend ou banco.
 
 6. Abrir:
 

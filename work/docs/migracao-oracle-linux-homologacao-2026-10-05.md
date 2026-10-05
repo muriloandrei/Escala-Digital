@@ -1,10 +1,12 @@
 # Implantacao da versao nova no Oracle Linux
 
-Este roteiro e para o servidor **sem Docker**. Ele supoe que o repositorio Git esta em `/opt/escala-app`, que o `package.json` fica em `/opt/escala-app/work`, que a configuracao fica em `/opt/escala-app/.env` e que o servico systemd se chama `escala-app`. **Confirme esses quatro dados antes de executar qualquer alteracao.** Os comandos de shell sao para Bash; os blocos marcados `sql` sao digitados dentro do SQL*Plus, nunca no shell.
+Este roteiro e para o servidor **sem Docker**. Ele supoe que o repositorio Git esta em `/opt/escala-app`, que o `package.json` fica em `/opt/escala-app/work`, que a configuracao fica em `/opt/escala-app/.env` e que o servico systemd se chama `escala-app`. **Confirme esses quatro dados antes de executar qualquer alteracao.** Todos os blocos de comando deste roteiro sao para Bash; a execucao dos SQLs e feita pelo Node.
 
 Na conferencia inicial de 05/10/2026, as mudancas de codigo foram publicadas em `homologacao` a partir do commit `01dfbe9`; `main` ainda estava em `2b8b402`. O SHA final da `homologacao` pode avancar quando este documento for atualizado. **O servidor de producao deve receber apenas o SHA aprovado e promovido para `main`.** Nao interprete a existencia do commit na `homologacao` como implantacao concluida.
 
 O pacote inclui interface React, tour guiado com Driver.js, treinamento obrigatorio uma vez por usuario, logos transparentes, tratamento de feriados nacionais fixos e as demais alteracoes acumuladas na `homologacao`. O allowlist limita **somente as telas React** a `murilo.jesus` e `admin`; APIs, banco e regras novas afetam todos. Usuarios fora da lista tambem precisam terminar o treinamento antes de usar `/app`. Avise as lojas antes da janela. Feriados estaduais, municipais e moveis nao fazem parte da lista nacional fixa desta entrega.
+
+**Como copiar os exemplos:** copie somente as linhas dentro dos blocos, sem as linhas de tres crases que marcam inicio e fim. `cd`, atribuicoes como `SHA=...` e `test` normalmente nao imprimem nada quando funcionam. `sudo cd` nao muda o diretorio do seu terminal: use `cd` normalmente. Este roteiro nao exige SQL*Plus; a aplicacao usa sua propria conexao Oracle para aplicar, um arquivo por vez, as nove migrations aprovadas.
 
 ## 1. Aprovar a versao no Git
 
@@ -38,27 +40,45 @@ printf 'Versao atual: %s\n' "$SHA_ANTERIOR"
 systemctl cat escala-app
 node -v
 npm -v
-sqlplus -v
 ```
 
-**Confirme antes de continuar:** `pwd` termina em `/opt/escala-app/work`; `APP_ROOT` e `/opt/escala-app`; `git status` nao mostra alteracoes no checkout servido; o servico aponta para `work` (`WorkingDirectory=/opt/escala-app/work` e `ExecStart` para `npm start` ou `work/src/server.js`); SQL*Plus e Node estao disponiveis. O Vite deste pacote exige Node `^20.19.0` ou `>=22.12.0`; se a versao instalada for anterior, atualize o runtime de forma controlada antes do passo 4. Se algum ponto nao corresponder, ajuste o roteiro ao layout real antes de rodar Git ou SQL. Nao use `git reset --hard` para limpar o checkout. Guarde `SHA_ANTERIOR` no registro da mudanca, pois a variavel some ao fechar o SSH.
+**Confirme antes de continuar:** `pwd` termina em `/opt/escala-app/work`; `APP_ROOT` e `/opt/escala-app`; `git status` nao mostra alteracoes no checkout servido; o servico aponta para `work` (`WorkingDirectory=/opt/escala-app/work` e `ExecStart` para `npm start` ou `work/src/server.js`); Node e npm estao disponiveis. **`sqlplus: command not found` nao bloqueia este roteiro:** use o executor Node do passo 6, presente na versao nova. O Vite deste pacote exige Node `^20.19.0` ou `>=22.12.0`; se a versao instalada for anterior, atualize o runtime de forma controlada antes do passo 4. Se algum ponto nao corresponder, ajuste o roteiro ao layout real antes de rodar Git ou SQL. Nao use `git reset --hard` para limpar o checkout. Guarde `SHA_ANTERIOR` no registro da mudanca, pois a variavel some ao fechar o SSH.
 
-**Backup obrigatorio:** o DBA deve confirmar um snapshot/backup recuperavel do schema Oracle, com procedimento de restauracao e horario registrados. A forma de backup depende da instalacao Oracle, por isso nao ha um comando RMAN universal aqui. Preserve tambem uma copia restrita da `.env` e confirme a reversao do servico. **Nao aplique migrations sem backup confirmado.** DDL Oracle pode fazer commit implicito; `rollback` no SQL*Plus nao desfaz uma migration estrutural.
+**Backup obrigatorio:** o DBA deve confirmar um snapshot/backup recuperavel do schema Oracle, com procedimento de restauracao e horario registrados. A forma de backup depende da instalacao Oracle, por isso nao ha um comando RMAN universal aqui. Preserve tambem uma copia restrita da `.env` e confirme a reversao do servico. **Nao aplique migrations sem backup confirmado.** DDL Oracle pode fazer commit implicito; um `rollback` da conexao nao desfaz uma migration estrutural.
 
 ## 3. Buscar e conferir o SHA aprovado
 
-**Onde:** mesmo SSH, ainda sem interromper a aplicacao. Substitua o valor da primeira linha pelo SHA completo aprovado no passo 1.
+**Onde:** mesmo SSH, ainda sem interromper a aplicacao. Substitua o valor da primeira linha pelo SHA completo aprovado no passo 1. Nao deixe o texto `COLE_AQUI...`: ele e apenas um marcador.
 
 ```bash
 SHA_ESPERADO=COLE_AQUI_O_SHA_COMPLETO_APROVADO
 git -C "$APP_ROOT" fetch origin
 SHA=$(git -C "$APP_ROOT" rev-parse origin/main)
 printf 'main no servidor: %s\nSHA aprovado: %s\n' "$SHA" "$SHA_ESPERADO"
-test "$SHA" = "$SHA_ESPERADO"
+if test "$SHA" = "$SHA_ESPERADO"; then printf 'SHA aprovado encontrado na main\n'; else printf 'PARE: main ainda nao contem o SHA aprovado\n'; fi
 git -C "$APP_ROOT" status --short
 ```
 
-**Resultado esperado:** `test` retorna codigo 0 e `git status --short` nao mostra arquivos. Se o SHA nao bater, ou houver arquivos modificados/nao rastreados no checkout de producao, **pare** e investigue. `git fetch` nao instala a versao; apenas atualiza as referencias remotas.
+**Resultado esperado:** `SHA aprovado encontrado na main`; `git status --short` nao mostra arquivos. Se aparecer `PARE`, **nao execute o passo 4**: a `main` ainda esta antiga. No incidente de 05/10, `origin/main` era `2b8b402`; criar um worktree desse SHA resulta corretamente em `Missing script: check:client`/`build:client`/`migrations:check`. Isso nao e defeito do npm. `git fetch` nao instala a versao; apenas atualiza as referencias remotas.
+
+**Apenas para testar o codigo da `homologacao` sem instalar no servico**, enquanto a promocao para `main` nao ocorreu, use um worktree diferente. Nao aplique migrations no Oracle operacional com esse teste preliminar:
+
+```bash
+cd /opt/escala-app/work
+APP_ROOT=$(git rev-parse --show-toplevel)
+git -C "$APP_ROOT" fetch origin
+SHA_HOMOLOG=$(git -C "$APP_ROOT" rev-parse origin/homologacao)
+STAGE_HOMOLOG=/tmp/escala-homolog-${SHA_HOMOLOG:0:12}
+git -C "$APP_ROOT" worktree add --detach "$STAGE_HOMOLOG" "$SHA_HOMOLOG"
+cd "$STAGE_HOMOLOG/work"
+npm ci
+npm run check:client
+npm run build:client
+npm test
+npm run migrations:check
+```
+
+O worktree antigo que voce criou de `2b8b402` pode ficar parado por enquanto; nao e necessario apaga-lo para fazer este teste. O SHA aprovado para a implantacao definitiva continua sendo o que for promovido para `main`.
 
 ## 4. Preparar e testar sem tocar no servico
 
@@ -98,105 +118,68 @@ grep -E '^(REACT_DEFAULT_UI|REACT_ALLOWED_LOGINS|ESCALA_TRANSFER_SCHEDULER_ENABL
 
 ## 6. Aplicar as migrations Oracle
 
-**Onde:** o mesmo SSH, dentro de `$STAGE/work`. Use no SQL*Plus o **usuario dono do schema que a aplicacao acessa**. Nao passe senha em argumento de shell (`usuario/senha@servico`): `connect USUARIO@HOST:PORTA/SERVICO` solicita a senha sem registra-la no historico. Ajuste host, porta e servico para os valores da sua conexao.
+**Onde:** Bash em `$STAGE/work`, depois do backup do passo 2 e da aprovacao do SHA. **Nao precisa instalar SQL*Plus.** O script usa `ORACLE_USER`, `ORACLE_PASSWORD` e `ORACLE_CONNECT_STRING` da `.env` pelo driver `oracledb` ja usado pela aplicacao. A conta precisa ser dona do schema e ter permissao para criar/alterar os objetos. Nenhuma senha aparece na linha de comando.
 
-Estas nove migrations estao na versao nova e nao estavam na `main` da conferencia. Se o servidor estiver em revisao anterior ou tiver SQLs aplicados manualmente, confronte o inventario real do schema com o historico antes de prosseguir. Migration sem registro **nao** significa automaticamente objeto ausente; nao execute o diretorio inteiro cegamente.
+O executor aceita **somente** estes nove arquivos, um por vez, na ordem abaixo. Confere o schema, as tabelas base, o checksum nas duas pastas, o registro da migration anterior e duplicatas antes da restricao da fila RM. Sem `--apply`, ele apenas consulta e imprime o plano. Com `--apply --by opc`, executa o bloco PL/SQL e grava o ledger. Nao rode `migrations:record` depois: o executor ja registra o SQL aplicado.
 
-### 6.1 Executar SQLs 1 a 4
-
-No **shell**, confirme o diretorio e abra o SQL*Plus:
+### 6.1 Primeiro arquivo: consultar e aplicar
 
 ```bash
 cd "$STAGE/work"
-ls db/migrations/20260929*.sql
-sqlplus -L /nolog
+ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name 20260929_registro_migrations.sql
 ```
 
-Agora, no prompt do **SQL*Plus**, digite as linhas abaixo. O `connect` pedira a senha. `select user` deve mostrar o dono do schema esperado e `select table_name` deve encontrar as tabelas base; caso contrario, pare. Configure a saida em erro antes dos arquivos:
+**Resultado esperado:** nome do schema, arquivo, checksum e `Preflight aprovado. Nenhuma alteracao executada`. Se disser `Missing script`, o worktree ainda e da `main` antiga: volte ao passo 3. Se acusar schema errado ou tabelas base ausentes, pare. Depois do backup confirmado e do preflight aprovado, execute:
 
-```sql
-connect USUARIO@HOST:PORTA/SERVICO
-whenever oserror exit failure
-whenever sqlerror exit sql.sqlcode
-select user from dual;
-select table_name from user_tables where table_name in ('SGN_ESC_PROG', 'SGN_ESC_FUNCIONARIO');
-@db/migrations/20260929_registro_migrations.sql
-@db/migrations/20260929_pendencia_operacional_funcionario.sql
-@db/migrations/20260929_eventos_escala.sql
-@db/migrations/20260929_pendencias_envio_rm.sql
-exit
+```bash
+ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name 20260929_registro_migrations.sql --apply --by opc
 ```
 
-**Resultado esperado:** cada bloco PL/SQL termina com sucesso; nenhum `ORA-`, `PLS-` ou `SP2-` aparece. O `whenever sqlerror` encerra a sessao em erro SQL, mas examine a saida tambem para erros do cliente SQL*Plus. Se falhar no arquivo N, **nao** rode N+1; investigue o estado parcial com o DBA. Registre somente arquivos comprovadamente aplicados.
+**Resultado esperado:** `Aplicada e registrada`. O primeiro arquivo cria `SGN_ESC_MIGRACAO`. Se der erro, **pare** e investigue antes de repetir: DDL Oracle pode ter sido confirmado mesmo que o registro tenha falhado.
 
-### 6.2 Conferir duplicatas antes do SQL 5
+### 6.2 Demais arquivos, em ordem
 
-Abra outra sessao a partir do **mesmo** `$STAGE/work`:
+O bloco abaixo consulta **um arquivo por vez**, para se ocorrer erro, e pergunta `Aplicar NOME no Oracle?`. Para executar aquele SQL, digite exatamente `APLICAR` e pressione Enter. Qualquer outra resposta interrompe o bloco. Em caso de erro no preflight ou na execucao, ele tambem para antes do arquivo seguinte. **Este bloco executa DDL real apos cada confirmacao; nao o use antes do backup.** Copie somente as linhas dentro da caixa, de `for` ate `done`:
 
 ```bash
 cd "$STAGE/work"
-sqlplus -L /nolog
+for arquivo in \
+  20260929_pendencia_operacional_funcionario.sql \
+  20260929_eventos_escala.sql \
+  20260929_pendencias_envio_rm.sql \
+  20260930_rm_envio_escopo_unique.sql \
+  20260930_treinamento_progresso.sql \
+  20261001_evento_subsecao.sql \
+  20261001_treinamento_tour_v2.sql \
+  20261001_transferencia_subsecao_agendada.sql
+do
+  if ! ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name "$arquivo"; then
+    printf 'PARE: preflight falhou para %s\n' "$arquivo"
+    break
+  fi
+  read -r -p "Aplicar $arquivo no Oracle? Digite APLICAR: " resposta
+  if [ "$resposta" != APLICAR ]; then
+    printf 'Interrompido antes de %s\n' "$arquivo"
+    break
+  fi
+  if ! ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name "$arquivo" --apply --by opc; then
+    printf 'PARE: execucao falhou para %s\n' "$arquivo"
+    break
+  fi
+done
 ```
 
-No SQL*Plus:
+**Resultado esperado:** cada arquivo mostra `Preflight aprovado` e depois `Aplicada e registrada`, antes da pergunta seguinte. Se houver duplicatas na chave da migration 5, o executor bloqueia a aplicacao. Nao remova dados automaticamente; o DBA e a equipe funcional devem analisar. Se o bloco parar antes do ultimo arquivo, **nao** siga para o passo 6.3. Investigue o erro e retome a partir do arquivo que faltou, respeitando a ordem.
 
-```sql
-connect USUARIO@HOST:PORTA/SERVICO
-select loja, mes_ref, escsecao_id, escfunc_id, revisao, count(*) as total
-  from sgn_esc_rm_envio
- group by loja, mes_ref, escsecao_id, escfunc_id, revisao
-having count(*) > 1;
-exit
-```
-
-**Resultado esperado:** `no rows selected`. Se houver linhas, **pare**. A migration 5 adiciona unicidade nessa chave; nao apague registros automaticamente. O DBA e a equipe funcional devem investigar tentativas/envios existentes e aprovar qualquer saneamento.
-
-### 6.3 Executar SQLs 5 a 9
-
-No shell:
+Para consultar manualmente um arquivo sem aplicar, por exemplo a migration 5, use:
 
 ```bash
-cd "$STAGE/work"
-sqlplus -L /nolog
+ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:apply -- --name 20260930_rm_envio_escopo_unique.sql
 ```
 
-No SQL*Plus:
+`Ja registrada com checksum identico` significa que aquele arquivo nao foi reaplicado. Migration antiga `SEM_REGISTRO` nao e autorizacao para reaplicar todo o diretorio.
 
-```sql
-connect USUARIO@HOST:PORTA/SERVICO
-whenever oserror exit failure
-whenever sqlerror exit sql.sqlcode
-@db/migrations/20260930_rm_envio_escopo_unique.sql
-@db/migrations/20260930_treinamento_progresso.sql
-@db/migrations/20261001_evento_subsecao.sql
-@db/migrations/20261001_treinamento_tour_v2.sql
-@db/migrations/20261001_transferencia_subsecao_agendada.sql
-exit
-```
-
-**Resultado esperado:** os cinco arquivos terminam sem erro. Em falha, pare antes de instalar o codigo novo; nao tente `rollback` como substituto do backup.
-
-### 6.4 Registrar o que realmente foi aplicado
-
-**Onde:** shell em `$STAGE/work`, depois de conferir a saida de cada arquivo. `migrations:record` **so grava arquivo, checksum e operador no ledger**; ele nao executa SQL. Troque `OPERADOR` pelo seu identificador. Nao rode a linha de um arquivo que falhou ou que nao foi executado.
-
-```bash
-cd "$STAGE/work"
-OPERADOR=opc
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:record -- --name 20260929_registro_migrations.sql --confirm-applied --by "$OPERADOR"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:record -- --name 20260929_pendencia_operacional_funcionario.sql --confirm-applied --by "$OPERADOR"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:record -- --name 20260929_eventos_escala.sql --confirm-applied --by "$OPERADOR"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:record -- --name 20260929_pendencias_envio_rm.sql --confirm-applied --by "$OPERADOR"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:record -- --name 20260930_rm_envio_escopo_unique.sql --confirm-applied --by "$OPERADOR"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:record -- --name 20260930_treinamento_progresso.sql --confirm-applied --by "$OPERADOR"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:record -- --name 20261001_evento_subsecao.sql --confirm-applied --by "$OPERADOR"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:record -- --name 20261001_treinamento_tour_v2.sql --confirm-applied --by "$OPERADOR"
-ESCALA_ENV_FILE=/opt/escala-app/.env npm run migrations:record -- --name 20261001_transferencia_subsecao_agendada.sql --confirm-applied --by "$OPERADOR"
-```
-
-**Resultado esperado:** cada comando confirma o arquivo registrado. Se algum disser que a chave ja existe, confira o ledger/checksum antes de repetir. Nao reconcilie migrations antigas sem conferir seus objetos. `migrations:status` pode terminar com codigo 1 por arquivos **antigos sem registro**, mesmo que o schema ja os contenha; trate isso como pendencia documental, nao como ordem para reaplicar o SQL.
-
-### 6.5 Verificar o contrato do banco
+### 6.3 Verificar o contrato do banco
 
 ```bash
 cd "$STAGE/work"
