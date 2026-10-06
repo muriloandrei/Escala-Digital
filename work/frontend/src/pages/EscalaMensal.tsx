@@ -21,6 +21,8 @@ import { EditarFixoEscala } from './EditarFixoEscala';
 import { EditarDiasEmMassa } from './EditarDiasEmMassa';
 import { EditarHorarioBase } from './EditarHorarioBase';
 import { createOperationId } from '../operationId';
+import { quickShift } from '../quickShift';
+import { nextFixedState } from '../quickFixedCycle';
 
 function iso(value: string | null | undefined) {
   return String(value || '').slice(0, 10);
@@ -121,6 +123,7 @@ export function EscalaMensal({ user }: { user: User }) {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [actionError, setActionError] = useState('');
+  const [quickCritiques, setQuickCritiques] = useState<Record<string, string[]>>({});
   const [selectedCell, setSelectedCell] = useState<{
     employee: Funcionario;
     date: string;
@@ -136,6 +139,8 @@ export function EscalaMensal({ user }: { user: User }) {
   const gridPosition = useRef({ left: 0, top: 0 });
 
   useEffect(() => () => { if (clickTimer.current !== null) window.clearTimeout(clickTimer.current); }, []);
+
+  useEffect(() => { setQuickCritiques({}); }, [lojaId, mesRef]);
 
   useEffect(() => {
     if (!lojaId || !mesRef) return;
@@ -386,26 +391,21 @@ export function EscalaMensal({ user }: { user: User }) {
     if (day?.AUSENCIA_OBRIGATORIA || Number(day?.OFICIALIZADA) === 1 || ['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) return;
     const existingFixed = escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && iso(item.DT) === date);
     if (day?.FIXO_ESCALA && day) { setFixedCell({ employee, date }); return; }
-    const nextRest = day ? hasShift(day) : existingFixed?.PROGRAMACAO !== 'FXF';
-    if (nextRest && holidays[date]) { setActionError(`Feriado nacional (${holidays[date]}): folga semanal não pode ser lançada nesta data.`); return; }
+    const nextFixed = day ? null : nextFixedState(existingFixed?.PROGRAMACAO);
+    const nextRest = day ? hasShift(day) : nextFixed === 'FXF';
     quickBusyRef.current = true; setQuickBusy(true); setActionError('');
     try {
       if (!day) {
         const base = { lojaId: Number(lojaId), mesRef, escfuncId: Number(employee.ESCFUNC_ID), escsecaoId: Number(employee.ESCSECAO_ID), DT: date };
-        if (existingFixed?.PROGRAMACAO === 'FXF') {
-          if (/APRENDIZ/i.test(employee.FUNCAO_DESCR || '')) {
-            const result = await postJson<{ result: { removed: boolean } }>('/api/escalas/fixos/remover', base);
-            if (!result.result?.removed) throw new Error('O fixo não foi encontrado. Atualize a escala.');
-          } else {
-            const hours = { HR_ENT1: employee.HR_ENT1 || '', HR_SAI1: employee.HR_SAI1 || '',
-              HR_ENT2: employee.HR_ENT2 || '', HR_SAI2: employee.HR_SAI2 || '' };
-            if (Object.values(hours).some((value) => !value)) throw new Error('Horário-base incompleto. Abra o editor de fixo para definir o trabalho.');
-            await postJson('/api/escalas/fixos', { ...base, PROGRAMACAO: 'TRB', ...hours, JUSTIFICATIVA: 'Distribuição rápida na grade' });
-          }
+        if (nextFixed === 'TRB') {
+          await postJson('/api/escalas/fixos', { ...base, PROGRAMACAO: 'TRB', ...quickShift(employee), JUSTIFICATIVA: 'Distribuição rápida na grade' });
+        } else if (!nextFixed) {
+          const result = await postJson<{ result: { removed: boolean } }>('/api/escalas/fixos/remover', base);
+          if (!result.result?.removed) throw new Error('O fixo não foi encontrado. Atualize a escala.');
         } else await postJson('/api/escalas/fixos', { ...base, PROGRAMACAO: 'FXF', JUSTIFICATIVA: 'Distribuição rápida na grade' });
         const readback = await getJson<{ escala: EscalaMensal }>(`/api/escalas/mensal?${new URLSearchParams({ lojaId, mesRef })}`).catch(() => null);
         const recorded = readback?.escala.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && iso(item.DT) === date);
-        if (!readback || (nextRest ? recorded?.PROGRAMACAO !== 'FXF' : /APRENDIZ/i.test(employee.FUNCAO_DESCR || '') ? Boolean(recorded) : recorded?.PROGRAMACAO !== 'TRB')) {
+        if (!readback || (nextFixed ? recorded?.PROGRAMACAO !== nextFixed : Boolean(recorded))) {
           throw new Error('A leitura de volta não confirmou o fixo. Atualize a escala antes de tentar novamente.');
         }
         setEscala(readback.escala);
@@ -414,24 +414,18 @@ export function EscalaMensal({ user }: { user: User }) {
         const personDays = (escala?.dias || []).filter((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID));
         const reference = personDays.find(hasShift);
         const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
-        const hours = [employee.HR_ENT1 || reference?.HR_ENT1, employee.HR_SAI1 || reference?.HR_SAI1,
-          employee.HR_ENT2 || reference?.HR_ENT2, employee.HR_SAI2 || reference?.HR_SAI2];
-        if (!nextRest && (!hours[0] || !hours[1] || (!apprentice && (!hours[2] || !hours[3])))) {
-          throw new Error('Horário-base incompleto. Edite o horário antes de transformar a folga em trabalho.');
-        }
+        const hours = quickShift(employee, reference);
         const changed = { data: date, programacao: nextRest ? 'F' : 'TRB',
-          hrEnt1: nextRest ? null : hours[0]!, hrSai1: nextRest ? null : hours[1]!,
-          hrEnt2: nextRest || apprentice ? null : hours[2] || null, hrSai2: nextRest || apprentice ? null : hours[3] || null,
+          hrEnt1: nextRest ? null : hours.HR_ENT1, hrSai1: nextRest ? null : hours.HR_SAI1,
+          hrEnt2: nextRest ? null : hours.HR_ENT2, hrSai2: nextRest ? null : hours.HR_SAI2,
           justificativa: 'Alteração rápida na grade' };
-        const payload = { lojaId: Number(lojaId), mesRef, operacaoId: createOperationId(), oficializada: 0,
+        const payload = { lojaId: Number(lojaId), mesRef, operacaoId: createOperationId(), oficializada: 0, edicaoRapida: true,
           funcionarios: [{ escfuncId: Number(employee.ESCFUNC_ID), revisaoBase: Number(day.REVISAO),
             chapa: employee.CHAPA, nome: employee.NOME, funcao: employee.FUNCAO_DESCR || null,
             escsecaoId: employee.ESCSECAO_ID, escfuncaoId: employee.ESCFUNCAO_ID,
             aprendiz: apprentice,
             dias: personDays.map((item) => iso(item.DT) === date ? changed : toPayloadDay(item)) }] };
-        const validation = await postJson<{ ok: boolean; errors: unknown[] }>('/api/escalas/validar', payload);
-        if (!validation.ok) throw new Error((validation.errors || []).map((item) => typeof item === 'string' ? item : JSON.stringify(item)).join(' · ') || 'A alteração não atende às regras da escala.');
-        let saved: { saved?: { revisao: number }[] } | null = null;
+        let saved: { saved?: { revisao: number }[]; criticas?: string[] } | null = null;
         try { saved = await postJson('/api/escalas/funcionarios/revisao', payload); }
         catch (reason) {
           if (reason instanceof ApiError && reason.status < 500) throw reason;
@@ -445,8 +439,13 @@ export function EscalaMensal({ user }: { user: User }) {
           throw new Error('A leitura de volta não confirmou o dia. Atualize a escala antes de tentar novamente.');
         }
         setEscala(readback!.escala);
+        const criticas = saved?.criticas || (await postJson<{ errors: string[] }>('/api/escalas/validar', {
+          ...payload, funcionarios: [{ ...payload.funcionarios[0], dias: readback!.escala.dias
+            .filter((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID)).map(toPayloadDay) }],
+        }).then((result) => result.errors).catch(() => []));
+        setQuickCritiques((current) => ({ ...current, [String(employee.ESCFUNC_ID)]: criticas }));
       }
-      setActionMessage(`${employee.NOME}: ${nextRest ? 'folga' : 'trabalho'} atualizado.`);
+      setActionMessage(`${employee.NOME}: ${day ? nextRest ? 'folga' : 'trabalho' : nextFixed === 'FXF' ? 'folga fixa' : nextFixed === 'TRB' ? 'horário fixo' : 'dia vazio'} atualizado.`);
     } catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Não foi possível alterar o dia.'); }
     finally { quickBusyRef.current = false; setQuickBusy(false); }
   }
@@ -532,6 +531,7 @@ export function EscalaMensal({ user }: { user: User }) {
           {actionError}
         </div>
       )}
+      {Object.values(quickCritiques).some((items) => items.length > 0) && <div className="notice warning" role="status"><strong>Críticas dos colaboradores editados</strong><ul>{Object.values(quickCritiques).flat().map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}
       {!loading && !error && (
         <>
           <div className="schedule-summary">
@@ -789,7 +789,7 @@ export function EscalaMensal({ user }: { user: User }) {
               )}
               {selectedCell && (
                 <div className="cell-detail">
-                  {holidays[selectedCell.date] && <span className="holiday-warning" role="status">Feriado nacional: {holidays[selectedCell.date]}. Não use folga semanal para esse dia; trabalho e descanso de feriado seguem regras próprias.</span>}
+                  {holidays[selectedCell.date] && <span className="holiday-warning" role="status">Feriado nacional: {holidays[selectedCell.date]}.</span>}
                   <div>
                     <strong>{selectedCell.employee.NOME}</strong>
                     <span>

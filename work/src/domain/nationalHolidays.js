@@ -36,26 +36,4 @@ function listNationalHolidays(inicio, fim) {
   return result.sort((left, right) => left.data.localeCompare(right.data));
 }
 
-function isWeeklyRest(programacao) {
-  return ['F', 'FXF', 'FOLGA', 'FOLGA_FIXA'].includes(String(programacao || '').toUpperCase());
-}
-
-function newHolidayRestErrors(funcionarios = [], existingDays = []) {
-  const previous = new Map(existingDays.map((day) => [
-    `${day.ESCFUNC_ID || day.escfuncId}|${dateOnly(day.DT || day.data)}`,
-    String(day.PROGRAMACAO || day.programacao || '').toUpperCase()
-  ]));
-  const errors = [];
-  for (const funcionario of funcionarios) {
-    for (const dia of funcionario.dias || []) {
-      const holiday = getNationalHoliday(dia.data || dia.DT);
-      if (!holiday || !isWeeklyRest(dia.programacao || dia.PROGRAMACAO)) continue;
-      const key = `${funcionario.escfuncId || funcionario.ESCFUNC_ID}|${holiday.data}`;
-      if (isWeeklyRest(previous.get(key))) continue;
-      errors.push(`${funcionario.nome || funcionario.NOME || funcionario.chapa || funcionario.CHAPA}: ${holiday.data} e feriado nacional (${holiday.nome}); nao use folga semanal. Programe trabalho ou trate o descanso do feriado separadamente.`);
-    }
-  }
-  return errors;
-}
-
-module.exports = { getNationalHoliday, listNationalHolidays, isWeeklyRest, newHolidayRestErrors };
+module.exports = { getNationalHoliday, listNationalHolidays };

@@ -11,8 +11,9 @@ const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { validateStandardShift } = require('../domain/shiftValidation');
 const monthlyReleaseService = require('../services/monthlyReleaseService');
 const { REGRAS_VIGENTES, validateEscalaPayload } = require('../rules/escalaRules');
-const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
-const { getNationalHoliday, listNationalHolidays, isWeeklyRest, newHolidayRestErrors } = require('../domain/nationalHolidays');
+const { buildDiaAlteracoes, normalizeScheduleDay } = require('../utils/scheduleDiff');
+const { listNationalHolidays } = require('../domain/nationalHolidays');
+const { validateQuickRestWorkEdit } = require('../domain/quickEdit');
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ const saveSchema = z.object({
   lojaId: z.number().int().positive(),
   mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   operacaoId: z.string().uuid().optional(),
+  edicaoRapida: z.boolean().optional(),
   escalaOrigemId: z.number().int().positive().optional(),
   funcionarios: z.array(z.object({
     escfuncId: z.number().int().positive(),
@@ -96,24 +98,6 @@ router.get('/feriados', requirePermission('escalas', 'visualizar'), (req, res) =
   }
   return res.json({ feriados: listNationalHolidays(inicio, fim) });
 });
-
-async function getHolidayRestErrors(payload) {
-  if (!payload.funcionarios.some((funcionario) => (funcionario.dias || []).some((dia) =>
-    getNationalHoliday(dia.data) && isWeeklyRest(dia.programacao)))) return [];
-  const secoes = [...new Set(payload.funcionarios.map((funcionario) =>
-    Number(funcionario.escsecaoId || funcionario.ESCSECAO_ID)).filter(Boolean))];
-  const atuais = (await Promise.all(secoes.map((escsecaoId) => escalaService.listDiasSecaoAtual({
-    lojaId: payload.lojaId, mesRef: payload.mesRef, escsecaoId
-  })))).flat();
-  const semSecao = payload.funcionarios.filter((funcionario) => !Number(funcionario.escsecaoId || funcionario.ESCSECAO_ID));
-  for (const funcionario of semSecao) {
-    const existente = await escalaService.getEscalaFuncionarioAtual({
-      lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: funcionario.escfuncId
-    });
-    atuais.push(...(existente?.dias || []).map((dia) => ({ ...dia, ESCFUNC_ID: funcionario.escfuncId })));
-  }
-  return newHolidayRestErrors(payload.funcionarios, atuais);
-}
 
 router.get('/regras', requirePermission('regras', 'visualizar'), async (req, res) => {
   res.json({ regras: REGRAS_VIGENTES });
@@ -201,13 +185,23 @@ router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest
   try {
     const payload = fixoEscalaSchema.parse(req.body);
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
-    if (getNationalHoliday(payload.DT) && isWeeklyRest(payload.PROGRAMACAO)) {
-      return res.status(422).json({ error: 'Feriado nacional: nao cadastre folga semanal ou fixa nesta data. O colaborador pode trabalhar ou ter descanso de feriado tratado separadamente.' });
-    }
     if (String(payload.PROGRAMACAO).toUpperCase() === 'TRB') {
-      const errors = validateStandardShift(payload);
-      if (errors.length) return res.status(422).json({ error: 'Horario fixo invalido.', details: errors });
-      await getFuncionarioParaEdicaoHorario(req, payload);
+      const funcionario = await getFuncionarioParaEdicaoHorario(req, payload, { permitirAprendiz: true });
+      if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) {
+        const horarioCadastro = String(funcionario.HR_ENT1 || '08:00');
+        const horarioValido = /^\d{2}:\d{2}$/.test(horarioCadastro)
+          && Number(horarioCadastro.slice(0, 2)) < 24 && Number(horarioCadastro.slice(3)) < 60;
+        const esperado = horarioValido ? horarioCadastro : '08:00';
+        const inicio = Number(esperado.slice(0, 2)) * 60 + Number(esperado.slice(3));
+        const fim = /^\d{2}:\d{2}$/.test(String(payload.HR_SAI1 || ''))
+          ? Number(payload.HR_SAI1.slice(0, 2)) * 60 + Number(payload.HR_SAI1.slice(3)) : null;
+        if (payload.HR_ENT1 !== esperado || fim - inicio !== 315 || payload.HR_ENT2 || payload.HR_SAI2) {
+          return res.status(422).json({ error: 'Horario fixo do aprendiz deve manter 05:15 sem segundo periodo.' });
+        }
+      } else {
+        const errors = validateStandardShift(payload);
+        if (errors.length) return res.status(422).json({ error: 'Horario fixo invalido.', details: errors });
+      }
     }
     const fixo = await escalaService.saveFixoEscala({
       lojaId: payload.lojaId,
@@ -576,7 +570,7 @@ router.post('/validar', requirePermission('escalas', 'editar'), resolveLojaReque
       lojaId: payload.lojaId,
       funcionarios: payload.funcionarios
     });
-    const errors = [...ruleErrors, ...ausenciaErrors, ...await getHolidayRestErrors(payload)];
+    const errors = [...ruleErrors, ...ausenciaErrors];
     return res.json({ ok: errors.length === 0, errors });
   } catch (error) {
     if (error.name === 'ZodError') {
@@ -593,17 +587,29 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
       return res.status(400).json({ error: 'Informe de 1 a 500 funcionarios alterados.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
-    const holidayErrors = await getHolidayRestErrors(payload);
-    if (holidayErrors.length) return res.status(422).json({ errors: holidayErrors });
     const errors = validateEscalaPayload(payload);
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
-    if (errors.length || ausenciaErrors.length) return res.status(422).json({ errors: [...errors, ...ausenciaErrors] });
+    if (ausenciaErrors.length || (!payload.edicaoRapida && errors.length)) return res.status(422).json({ errors: [...errors, ...ausenciaErrors] });
 
     const anteriores = await Promise.all(payload.funcionarios.map((funcionario) =>
       escalaService.getEscalaFuncionarioAtual({
         lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: funcionario.escfuncId
       })
     ));
+    if (payload.edicaoRapida) {
+      if (payload.funcionarios.length !== 1 || !anteriores[0]) {
+        return res.status(422).json({ error: 'A edicao rapida exige uma escala existente para um funcionario.' });
+      }
+      const quickError = validateQuickRestWorkEdit(payload.funcionarios[0], anteriores[0].dias);
+      if (quickError) return res.status(422).json({ error: quickError });
+      const alteracao = buildDiaAlteracoes(anteriores[0].dias, payload.funcionarios[0].dias)[0];
+      const fixos = await escalaService.listFixosEscala({ lojaId: payload.lojaId, mesRef: payload.mesRef,
+        escsecaoId: Number(payload.funcionarios[0].escsecaoId) });
+      if (fixos.some((fixo) => Number(fixo.ESCFUNC_ID) === payload.funcionarios[0].escfuncId
+        && normalizeScheduleDay(fixo).data === alteracao.data)) {
+        return res.status(422).json({ error: 'Dia com fixo deve ser alterado pelo editor de fixos.' });
+      }
+    }
     const operacaoId = payload.operacaoId || escalaEventService.createOperationId();
     const saved = await escalaService.saveEscalasFuncionariosRevision({ ...payload, operacaoId, actor: req.user });
     await Promise.all(saved.map((item, index) => auditService.registerAudit({
@@ -622,7 +628,7 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
         alteracoes: buildDiaAlteracoes(anteriores[index]?.dias || [], payload.funcionarios[index].dias)
       }
     })));
-    return res.status(201).json({ saved, operacaoId });
+    return res.status(201).json({ saved, operacaoId, criticas: payload.edicaoRapida ? errors : [] });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Formato da escala invalido.', details: error.errors });
     return next(error);
@@ -653,8 +659,6 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
       return res.status(400).json({ error: 'Informe exatamente um funcionario para a revisao individual.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
-    const holidayErrors = await getHolidayRestErrors(payload);
-    if (holidayErrors.length) return res.status(422).json({ errors: holidayErrors });
     const ruleErrors = validateEscalaPayload(payload);
     if (ruleErrors.length > 0) return res.status(422).json({ errors: ruleErrors });
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
@@ -701,7 +705,7 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
   }
 });
 
-async function getFuncionarioParaEdicaoHorario(req, payload) {
+async function getFuncionarioParaEdicaoHorario(req, payload, { permitirAprendiz = false } = {}) {
   const secoesPermitidas = await getSecoesPermitidas(req, payload.lojaId);
   const funcionarios = await catalogService.listFuncionariosByLoja(payload.lojaId, {
     mesRef: payload.mesRef, secoesPermitidas
@@ -713,7 +717,7 @@ async function getFuncionarioParaEdicaoHorario(req, payload) {
     throw error;
   }
   await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [Number(funcionario.ESCSECAO_ID)]);
-  if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) {
+  if (!permitirAprendiz && /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) {
     const error = new Error('O horario do aprendiz e fixo e nao pode ser alterado.');
     error.statusCode = 422;
     throw error;
@@ -886,9 +890,6 @@ router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'edi
     const data = diaSchema.parse(req.body);
     const diasAntes = await escalaService.getEscalaDias(Number(req.params.escprogId));
     const diaAnterior = diasAntes.find((item) => Number(item.ESCPROGDIA_ID || item.escprogdia_id) === Number(req.params.escprogdiaId));
-    if (diaAnterior && getNationalHoliday(diaAnterior.DT) && isWeeklyRest(data.PROGRAMACAO) && !isWeeklyRest(diaAnterior.PROGRAMACAO)) {
-      return res.status(422).json({ error: 'Feriado nacional: nao marque folga semanal nesta data. Use trabalho ou o tratamento proprio do feriado.' });
-    }
     const dia = await escalaService.updateEscalaDia({
       escprogId: Number(req.params.escprogId),
       escprogdiaId: Number(req.params.escprogdiaId),
@@ -934,8 +935,6 @@ router.post('/', requirePermission('escalas', 'criar'), resolveLojaRequest, requ
       return res.status(403).json({ error: 'Perfil Lider nao pode criar novas escalas.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
-    const holidayErrors = await getHolidayRestErrors(payload);
-    if (holidayErrors.length) return res.status(422).json({ errors: holidayErrors });
     const ruleErrors = validateEscalaPayload(payload);
     if (ruleErrors.length > 0) {
       return res.status(422).json({ errors: ruleErrors });

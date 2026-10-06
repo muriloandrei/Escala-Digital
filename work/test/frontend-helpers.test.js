@@ -30,3 +30,10 @@ test('editing any shift time keeps 08:48 work and 01:10 break', async () => {
   }
   assert.equal(autofillStandardHours(base, 'HR_ENT1', '20:00'), null);
 });
+
+test('fixed schedule click cycle returns to empty after rest and work', async () => {
+  const { nextFixedState } = await loadFrontendHelper('quickFixedCycle.ts');
+  assert.equal(nextFixedState(null), 'FXF');
+  assert.equal(nextFixedState('FXF'), 'TRB');
+  assert.equal(nextFixedState('TRB'), null);
+});

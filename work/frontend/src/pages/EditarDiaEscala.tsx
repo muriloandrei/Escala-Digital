@@ -95,7 +95,6 @@ export function EditarDiaEscala({
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editable || busy || uncertain) return;
-    if (holidayName && mode === 'F' && !isRest(day)) { setError(`Feriado nacional (${holidayName}): folga semanal não pode ser lançada nesta data.`); return; }
     const form = new FormData(event.currentTarget);
     const submitted = (key: keyof Shift) => (apprentice ? shift[key] : String(form.get(key) || ''));
     const changed: PayloadDay = {
@@ -217,7 +216,7 @@ export function EditarDiaEscala({
         <p>
           <strong>{employee.NOME}</strong> · {employee.CHAPA}
         </p>
-        {holidayName && <div className="notice warning" role="status">Feriado nacional: {holidayName}. Não lance folga semanal neste dia.</div>}
+        {holidayName && <div className="notice warning" role="status">Feriado nacional: {holidayName}.</div>}
         {!editable ? (
           <div className="notice error" role="alert">
             Este dia é anterior a hoje, protegido ou não tem revisão disponível para edição.
@@ -239,7 +238,6 @@ export function EditarDiaEscala({
               <button
                 type="button"
                 className={mode === 'F' ? 'selected' : ''}
-                disabled={Boolean(holidayName && !isRest(day))}
                 onClick={() => {
                   setMode('F');
                   setIssues([]);

@@ -34,7 +34,6 @@ export function EditarFixoEscala({
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    if (holidayName && mode === 'FXF') { setError(`Feriado nacional (${holidayName}): folga fixa não pode ser lançada nesta data.`); return; }
     const invalid = mode === 'TRB' ? validateStandardHours(hours) : '';
     if (invalid) { setError(invalid); return; }
     setBusy(true);
@@ -73,9 +72,9 @@ export function EditarFixoEscala({
   }}><form className="confirm-dialog day-editor" role="dialog" aria-modal="true" aria-labelledby="fixed-title" onSubmit={save}>
     <h2 id="fixed-title">{existing ? 'Editar fixo' : 'Adicionar fixo'} · {new Date(`${date}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</h2>
     <p><strong>{employee.NOME}</strong> · {employee.CHAPA}</p>
-    {holidayName && <div className="notice warning" role="status">Feriado nacional: {holidayName}. Não lance folga fixa neste dia.</div>}
+    {holidayName && <div className="notice warning" role="status">Feriado nacional: {holidayName}.</div>}
     <div className="segmented day-editor-mode" role="group" aria-label="Tipo de fixo">
-      <button type="button" className={mode === 'FXF' ? 'selected' : ''} disabled={Boolean(holidayName)} onClick={() => { setMode('FXF'); setError(''); }}>Folga fixa</button>
+      <button type="button" className={mode === 'FXF' ? 'selected' : ''} onClick={() => { setMode('FXF'); setError(''); }}>Folga fixa</button>
       {!apprentice && <button type="button" className={mode === 'TRB' ? 'selected' : ''} onClick={() => { setMode('TRB'); setError(''); }}>Horário fixo</button>}
     </div>
     {mode === 'TRB' && <div className="day-editor-times">

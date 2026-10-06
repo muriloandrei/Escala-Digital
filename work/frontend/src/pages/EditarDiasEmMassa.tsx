@@ -74,8 +74,6 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
       && targetDays.filter((day) => String(day?.PROGRAMACAO || '').toUpperCase() === 'F').length === 1;
     const reason = !selectedDates.length ? 'Selecione um dia'
       : mode === 'TROCA' && !swapReady ? 'Escolha uma folga e um dia de trabalho'
-      : mode === 'F' && selectedDates.some((date) => holidays[date] && !targetDays.some((day) => onlyDate(day?.DT || '') === date && String(day?.PROGRAMACAO || '').toUpperCase() === 'F')) ? 'Feriado nacional na seleção'
-      : mode === 'TROCA' && selectedDates.some((date, index) => holidays[date] && String(targetDays[index]?.PROGRAMACAO || '').toUpperCase() === 'TRB') ? 'Não mova folga para feriado'
       : targetDays.some((day) => !day) ? 'Dia sem escala gerada'
         : targetDays.some((day) => isProtected(day!)) ? 'Dia protegido na seleção'
           : revisions.size !== 1 || !Number.isInteger(Number(targetDays[0]?.REVISAO)) ? 'Revisões divergentes'

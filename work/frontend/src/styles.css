@@ -39,14 +39,18 @@ a {
   min-height: 100vh;
 }
 .brand {
-  padding: 20px 18px;
+  height: 58px;
+  flex: 0 0 58px;
+  display: flex;
+  align-items: center;
+  padding: 4px 18px;
   background: #fff;
   border-bottom: 1px solid #d7e1ea;
 }
 .brand img {
   display: block;
   max-width: 158px;
-  max-height: 54px;
+  max-height: 48px;
   object-fit: contain;
 }
 .sidebar nav {
@@ -556,6 +560,8 @@ tbody tr:hover {
     min-height: 0;
   }
   .brand {
+    height: 44px;
+    flex-basis: 44px;
     padding: 8px 16px;
   }
   .brand img {

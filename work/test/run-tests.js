@@ -27,4 +27,6 @@ require('./escala-eventos.test');
 require('./subsection-transfer.test');
 require('./training-progress.test');
 require('./national-holidays.test');
+require('./quick-edit.test');
+require('./quick-edit-routes.test');
 require('./apply-oracle-migration.test');

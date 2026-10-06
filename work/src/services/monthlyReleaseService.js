@@ -3,7 +3,6 @@ const escalaService = require('./escalaService');
 const pendenciaFuncionarioService = require('./pendenciaFuncionarioService');
 const { validateEscalaPayload } = require('../rules/escalaRules');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
-const { getNationalHoliday } = require('../domain/nationalHolidays');
 
 function formatDateValue(value) {
   if (value instanceof Date) {
@@ -298,7 +297,7 @@ function montarFuncionarioRascunho(funcionario, turno, dias, horario) {
 
 function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), folgasDatas = [], opcoes = {}) {
   const horario = getHorarioBaseFuncionario(funcionario, turno);
-  const folgas = new Set((folgasDatas || []).map(formatDateValue).filter((data) => data && !getNationalHoliday(data)));
+  const folgas = new Set((folgasDatas || []).map(formatDateValue).filter(Boolean));
   const indiceAusencias = opcoes.indiceAusencias || criarIndiceAusencias(opcoes.ausencias || []);
   const diasFixos = opcoes.diasFixos || criarIndiceFixos(opcoes.fixos || []);
   const intervaloSuspensao = opcoes.intervaloSuspensao;
@@ -358,7 +357,7 @@ function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDa
     .map(formatDateValue);
   const folgasDatas = datasGeradas
     .map((data) => new Date(`${data}T00:00:00`))
-    .filter((date) => folgasCiclo.has(getCycleIndex(date)) && !getNationalHoliday(formatDateValue(date)))
+    .filter((date) => folgasCiclo.has(getCycleIndex(date)))
     .map(formatDateValue);
 
   return buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, completarFolgasMinimasSemanais(datasGeradas, folgasDatas), opcoes);
@@ -446,7 +445,7 @@ function getPlanosFolgaCandidatos(diasMes, hojeIso) {
         const date = new Date(`${data}T00:00:00`);
         const bloco = Math.floor(indexGerado / 14);
         const padraoBloco = padroes[(padraoIndex + (variacao * bloco)) % padroes.length] || padrao;
-        return padraoBloco.includes(getCycleIndex(date)) && !getNationalHoliday(data);
+        return padraoBloco.includes(getCycleIndex(date));
       });
       const key = folgas.join('|');
       if (!planos.has(key)) planos.set(key, { padrao, folgas, repeticaoExata: variacao === 0 });
@@ -482,10 +481,9 @@ function getWeekGroups(datasGeradas) {
 }
 
 function completarFolgasMinimasSemanais(datasGeradas = [], folgasDatas = [], opcoes = {}) {
-  const folgas = new Set((folgasDatas || []).map(formatDateValue).filter((data) => data && !getNationalHoliday(data)));
+  const folgas = new Set((folgasDatas || []).map(formatDateValue).filter(Boolean));
   const descansosObrigatorios = new Set((opcoes.descansosObrigatorios || []).map(formatDateValue).filter(Boolean));
   const bloqueados = new Set((opcoes.bloqueados || []).map(formatDateValue).filter(Boolean));
-  datasGeradas.forEach((data) => { if (getNationalHoliday(data)) bloqueados.add(data); });
   const maxFolgasSemana = opcoes.maxFolgasSemana || 2;
   const considerarDescansos = (data) => folgas.has(data) || descansosObrigatorios.has(data);
   getWeekGroups(datasGeradas).forEach((semana) => {
@@ -581,7 +579,7 @@ function getDatasBloqueadasFolgaAutomatica(diasFixos, indiceAusencias, funcionar
   const bloqueados = new Set((extras || []).map(formatDateValue).filter(Boolean));
   (datasGeradas || []).forEach((data) => {
     const dataIso = formatDateValue(data);
-    if (getNationalHoliday(dataIso) || diasFixos.has(`${escfuncId}|${dataIso}`) || encontrarAusencia(indiceAusencias, funcionario, dataIso)) {
+    if (diasFixos.has(`${escfuncId}|${dataIso}`) || encontrarAusencia(indiceAusencias, funcionario, dataIso)) {
       bloqueados.add(dataIso);
     }
   });
@@ -635,7 +633,7 @@ function getPlanoSemanalGreedy({
   domingosTrabalhoSet,
   seed = 0
 }) {
-  const folgas = new Set([...domingosFolgaSet].filter((data) => !getNationalHoliday(data)));
+  const folgas = new Set(domingosFolgaSet);
   const localSecao = new Map(contagemFolgasSecao);
   const localTurno = new Map(contagemFolgasTurno);
   const localSemana = new Map(contagemFolgasSemanaSecao);
@@ -651,7 +649,7 @@ function getPlanoSemanalGreedy({
     while (restantes > 0) {
       const opcoes = candidatos
         .filter((data) => {
-          if (folgas.has(data) || domingosTrabalhoSet.has(data) || isDomingoIso(data) || getNationalHoliday(data) || isFolgaVizinha(folgas, data)) return false;
+          if (folgas.has(data) || domingosTrabalhoSet.has(data) || isDomingoIso(data) || isFolgaVizinha(folgas, data)) return false;
           const weekKey = getWeekKeyFromIso(data);
           return [...folgas].filter((folga) => getWeekKeyFromIso(folga) === weekKey).length < 2;
         })
@@ -741,7 +739,7 @@ function escolherPadraoBalanceado({
   let melhorIdeal = null;
   let melhorComCobertura = null;
   planos.forEach(({ padrao, folgas, repeticaoExata }, planoIndex) => {
-    const folgasPossiveis = folgas.filter((data) => datasGeradas.includes(data) && !getNationalHoliday(data) && !encontrarAusencia(indiceAusencias, funcionario, data)
+    const folgasPossiveis = folgas.filter((data) => datasGeradas.includes(data) && !encontrarAusencia(indiceAusencias, funcionario, data)
       && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${data}`));
     const folgasLimitadas = limitarFolgasAutomaticasPorFixos(folgasPossiveis, descansosObrigatoriosFuncionario, maxFolgasSemanaFuncionario);
     const folgasEfetivas = completarFolgasMinimasSemanais(datasGeradas, folgasLimitadas, {
@@ -886,7 +884,7 @@ function hasFolgaVizinhaAposTroca(funcionario, origem, destino) {
 
 function podeMoverFolgaAutomatica(funcionario, origemDia, destinoDia) {
   if (!isFolgaAutomaticaMovivel(origemDia) || !isTrabalhoAutomaticoMovivel(destinoDia)) return false;
-  if (isDomingoIso(origemDia.data) || isDomingoIso(destinoDia.data) || getNationalHoliday(destinoDia.data)) return false;
+  if (isDomingoIso(origemDia.data) || isDomingoIso(destinoDia.data)) return false;
   if (hasFolgaVizinhaAposTroca(funcionario, origemDia.data, destinoDia.data)) return false;
   const origemWeek = getWeekKeyFromIso(origemDia.data);
   const destinoWeek = getWeekKeyFromIso(destinoDia.data);
