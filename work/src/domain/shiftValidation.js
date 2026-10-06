@@ -14,7 +14,7 @@ function minutesToTime(totalMinutes) {
   return `${hours}:${minutes}`;
 }
 
-function validateStandardShift(data) {
+function validateStandardShift(data, { exactInterval = false } = {}) {
   const ent1 = timeToMinutes(data.HR_ENT1);
   const sai1 = timeToMinutes(data.HR_SAI1);
   const ent2 = timeToMinutes(data.HR_ENT2);
@@ -34,7 +34,8 @@ function validateStandardShift(data) {
   if (primeiraJornada > 360) errors.push(`Primeiro periodo nao pode passar de 06:00. Atual: ${minutesToTime(primeiraJornada)}.`);
   if (segundaJornada > 360) errors.push(`Segundo periodo nao pode passar de 06:00. Atual: ${minutesToTime(segundaJornada)}.`);
   if (jornadaTotal !== 528) errors.push(`Jornada total deve ser exatamente 08:48. Atual: ${minutesToTime(jornadaTotal)}.`);
-  if (intervalo < 70) errors.push(`Intervalo entre as jornadas deve ter no minimo 01:10. Atual: ${minutesToTime(intervalo)}.`);
+  if (exactInterval && intervalo !== 70) errors.push(`Intervalo entre as jornadas deve ser exatamente 01:10. Atual: ${minutesToTime(intervalo)}.`);
+  else if (!exactInterval && intervalo < 70) errors.push(`Intervalo entre as jornadas deve ter no minimo 01:10. Atual: ${minutesToTime(intervalo)}.`);
   return errors;
 }
 

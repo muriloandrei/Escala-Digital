@@ -669,7 +669,7 @@ export function EscalaMensal({ user }: { user: User }) {
                     Escopo: <strong>{scopeName}</strong> · {scopePeople.length} funcionário(s)
                   </span>
                   {mixedSubsectionScope && <span title="Operações por subseção com transferência no mês exigem recorte por data.">Transferência no mês: operações em lote disponíveis na seção inteira</span>}
-                  {canEdit(user, 'escalas-funcionarios') && <button className="button secondary" type="button" disabled={!scopePeople.length || loading || mixedSubsectionScope || escala?.status === 'FINALIZADA'} onClick={() => setBulkEditing(true)}><Pencil size={15} /> Editar</button>}
+                  {canEdit(user, 'escalas-funcionarios') && <button className="button secondary" type="button" disabled={!scopePeople.length || loading || mixedSubsectionScope || escala?.status === 'FINALIZADA'} onClick={() => setBulkEditing(true)}><Pencil size={15} /> Editar vários</button>}
                   <button
                     className="button secondary"
                     type="button"

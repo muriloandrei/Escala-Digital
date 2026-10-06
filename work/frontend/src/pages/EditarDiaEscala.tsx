@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { createOperationId } from '../operationId';
+import { autofillStandardHours } from '../shiftAutofill';
+import { validateStandardHours } from '../shiftValidation';
 
 type Shift = { hrEnt1: string; hrSai1: string; hrEnt2: string; hrSai2: string };
 export type PayloadDay = {
@@ -88,13 +90,23 @@ export function EditarDiaEscala({
   const editable = date >= localToday() && !protectedDay && Number.isInteger(Number(day.REVISAO));
 
   function setHour(key: keyof Shift, value: string) {
-    setShift((current) => ({ ...current, [key]: value }));
+    const field = ({ hrEnt1: 'HR_ENT1', hrSai1: 'HR_SAI1', hrEnt2: 'HR_ENT2', hrSai2: 'HR_SAI2' } as const)[key];
+    const next = autofillStandardHours({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
+      HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, field, value);
+    if (!next) { setError('O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.'); return; }
+    setShift({ hrEnt1: next.HR_ENT1, hrSai1: next.HR_SAI1, hrEnt2: next.HR_ENT2, hrSai2: next.HR_SAI2 });
+    setError('');
     setIssues([]);
   }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editable || busy || uncertain) return;
+    if (mode === 'TRB' && !apprentice) {
+      const invalid = validateStandardHours({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
+        HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 });
+      if (invalid) { setError(invalid); return; }
+    }
     const form = new FormData(event.currentTarget);
     const submitted = (key: keyof Shift) => (apprentice ? shift[key] : String(form.get(key) || ''));
     const changed: PayloadDay = {

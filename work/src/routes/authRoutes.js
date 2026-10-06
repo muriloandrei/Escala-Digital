@@ -4,6 +4,7 @@ const { getEnv } = require('../config/env');
 const { getLoginStartPath, isReactUiAllowed, requiresTraining } = require('../config/reactUiAccess');
 const authService = require('../services/authService');
 const trainingProgressService = require('../services/trainingProgressService');
+const { LAST_STAGE } = require('../config/trainingStages');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -30,7 +31,7 @@ router.post('/login', async (req, res, next) => {
       throw error;
     }
 
-    let trainingStage = 12;
+    let trainingStage = LAST_STAGE;
     if (requiresTraining(user, ui)) {
       const progress = await trainingProgressService.getProgress(Number(user.sub));
       if (!progress.persisted) return res.status(503).json({ error: 'A migration do treinamento precisa ser aplicada antes de liberar o acesso.' });
@@ -76,7 +77,7 @@ router.get('/treinamento', requireAuth, requireTrainingAccess, async (req, res, 
 
 router.put('/treinamento', requireAuth, requireTrainingAccess, async (req, res, next) => {
   try {
-    const { stage } = z.object({ stage: z.number().int().min(0).max(12) }).strict().parse(req.body);
+    const { stage } = z.object({ stage: z.number().int().min(0).max(LAST_STAGE) }).strict().parse(req.body);
     return res.json(await trainingProgressService.saveProgress(Number(req.user.sub), stage));
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Etapa de treinamento invalida.' });

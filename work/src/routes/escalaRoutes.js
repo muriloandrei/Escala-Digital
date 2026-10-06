@@ -14,6 +14,7 @@ const { REGRAS_VIGENTES, validateEscalaPayload, validarCriticasEscopo } = requir
 const { buildDiaAlteracoes, normalizeScheduleDay } = require('../utils/scheduleDiff');
 const { listNationalHolidays } = require('../domain/nationalHolidays');
 const { validateQuickRestWorkEdit } = require('../domain/quickEdit');
+const { isEditableMonth } = require('../domain/editableMonth');
 
 const router = express.Router();
 
@@ -771,7 +772,8 @@ router.post('/funcionario/horario/preview', requirePermission('escalas', 'editar
       return res.status(422).json({ error: 'Informe o mes da escala. O horario-base e os dias editaveis devem ser atualizados juntos.' });
     }
     const payload = horarioFuncionarioSchema.parse(req.body);
-    const errors = validateStandardShift(payload);
+    if (!isEditableMonth(payload.mesRef)) return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
+    const errors = validateStandardShift(payload, { exactInterval: true });
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
     await getFuncionarioParaEdicaoHorario(req, payload);
     const impacto = await escalaService.previewHorarioFuncionarioEscala({
@@ -791,7 +793,8 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
       return res.status(422).json({ error: 'Informe o mes da escala. O horario-base e os dias editaveis devem ser atualizados juntos.' });
     }
     const payload = horarioFuncionarioSchema.parse(req.body);
-    const errors = validateStandardShift(payload);
+    if (!isEditableMonth(payload.mesRef)) return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
+    const errors = validateStandardShift(payload, { exactInterval: true });
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
     const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
 

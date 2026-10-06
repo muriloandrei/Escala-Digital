@@ -5,6 +5,11 @@ import { validateStandardHours } from '../shiftValidation';
 
 type Impact = { diasAlterados: number; diasManuais: number; possuiEscala: boolean; mesesImpactados: string[]; mesesParaReoficializar: string[] };
 
+function currentMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, onClose, onSaved }: {
   employee: Funcionario;
   lojaId: string;
@@ -13,7 +18,8 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
-  const [month, setMonth] = useState(initialMonth);
+  const minimumMonth = currentMonth();
+  const [month, setMonth] = useState(initialMonth < minimumMonth ? minimumMonth : initialMonth);
   const [hours, setHours] = useState({
     HR_ENT1: employee.HR_ENT1 || currentDay?.HR_ENT1 || '', HR_SAI1: employee.HR_SAI1 || currentDay?.HR_SAI1 || '',
     HR_ENT2: employee.HR_ENT2 || currentDay?.HR_ENT2 || '', HR_SAI2: employee.HR_SAI2 || currentDay?.HR_SAI2 || '',
@@ -25,6 +31,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
     mesRef: `${month}-01`, aplicarNaEscala: true, ...hours });
 
   async function preview() {
+    if (month < currentMonth()) { setError('Horários de meses anteriores não podem ser alterados.'); return; }
     const invalid = validateStandardHours(hours);
     if (invalid) { setError(invalid); return; }
     setBusy(true); setError('');
@@ -37,6 +44,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
 
   async function save() {
     if (!impact) return;
+    if (month < currentMonth()) { setError('Horários de meses anteriores não podem ser alterados.'); return; }
     setBusy(true); setError('');
     try {
       const result = await patchJson<{ diasAlterados: number; mesesAtualizados: string[]; mesesParaReoficializar: string[] }>(
@@ -60,7 +68,8 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
             setImpact(null);
           }} required />
         </label>)}</div>
-      <div className="shift-options"><label>Mês de referência<input type="month" value={month} onChange={(event) => { setMonth(event.target.value); setImpact(null); }} required /></label></div>
+      <div className="shift-options"><label>Mês de referência<input type="month" min={minimumMonth} value={month} onChange={(event) => { setMonth(event.target.value); setImpact(null); }} required /></label></div>
+      {initialMonth < minimumMonth && <p>A escala aberta é de um mês anterior. A alteração começará no mês vigente.</p>}
       <p>O horário-base e os dias futuros editáveis serão atualizados juntos. Folgas, fixos e ajustes manuais permanecem.</p>
       {impact && <div className="shift-impact"><strong>Prévia</strong><span>{impact.possuiEscala ? `${impact.diasAlterados} dia(s) em ${impact.mesesImpactados.length} mês(es).` : 'Nenhuma escala futura existente.'}</span><span>{impact.diasManuais} dia(s) com ajuste manual preservado(s).</span>{impact.mesesParaReoficializar?.length > 0 && <span>Reoficialização necessária em {impact.mesesParaReoficializar.join(', ')}.</span>}</div>}
       {error && <div className="notice error" role="alert">{error}</div>}

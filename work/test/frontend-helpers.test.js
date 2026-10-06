@@ -31,6 +31,12 @@ test('editing any shift time keeps 08:48 work and 01:10 break', async () => {
   assert.equal(autofillStandardHours(base, 'HR_ENT1', '20:00'), null);
 });
 
+test('interactive editor accepts only a 01:10 interval', async () => {
+  const { validateStandardHours } = await loadFrontendHelper('shiftValidation.ts');
+  assert.equal(validateStandardHours({ HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' }), '');
+  assert.match(validateStandardHours({ HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:20', HR_SAI2: '18:08' }), /exatamente 01:10/);
+});
+
 test('fixed schedule click cycle returns to empty after rest and work', async () => {
   const { nextFixedState } = await loadFrontendHelper('quickFixedCycle.ts');
   assert.equal(nextFixedState(null), 'FXF');

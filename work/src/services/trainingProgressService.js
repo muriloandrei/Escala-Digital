@@ -1,7 +1,11 @@
 const { withConnection, oracledb } = require('../db/oracle');
+const { TRAINING_VERSION: VERSION, LAST_STAGE } = require('../config/trainingStages');
 
-const VERSION = 2;
-const LAST_STAGE = 12;
+function stageOf(row) {
+  if (Number(row?.VERSAO) === VERSION) return Number(row.ETAPA);
+  if (Number(row?.VERSAO) === 2 && Number(row.ETAPA) >= 12) return LAST_STAGE;
+  return 0;
+}
 
 function missingTable(error) {
   return Number(error?.errorNum) === 942 || /ORA-00942/.test(String(error?.message || ''));
@@ -15,7 +19,7 @@ async function getProgress(usuarioId) {
         { usuarioId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
       const row = result.rows[0];
-      return { version: VERSION, stage: Number(row?.VERSAO) === VERSION ? Number(row.ETAPA) : 0,
+      return { version: VERSION, stage: stageOf(row),
         found: Boolean(row), persisted: true };
     } catch (error) {
       if (missingTable(error)) return { version: VERSION, stage: 0, found: false, persisted: false };
@@ -37,7 +41,7 @@ async function saveProgress(usuarioId, stage) {
         { usuarioId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
       const current = currentResult.rows[0];
-      const currentStage = Number(current?.VERSAO) === VERSION ? Number(current.ETAPA) : 0;
+      const currentStage = stageOf(current);
       if (stage > currentStage + 1) {
         const invalid = new Error('Conclua a etapa atual antes de avancar no treinamento.');
         invalid.statusCode = 422;

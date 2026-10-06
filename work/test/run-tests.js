@@ -26,6 +26,7 @@ require('./escala-sync-rm.test');
 require('./escala-eventos.test');
 require('./subsection-transfer.test');
 require('./training-progress.test');
+require('./editable-month.test');
 require('./auth-training-access.test');
 require('./national-holidays.test');
 require('./quick-edit.test');

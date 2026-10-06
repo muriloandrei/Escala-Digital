@@ -15,6 +15,7 @@ test('login comum ignora treinamento e acesso direto ao tour e negado', async ()
     zod: require('zod'),
     '../config/env': { getEnv: () => ({ ui, auth: { cookieSecure: false, sessionMaxAgeMs: 3600000 }, nodeEnv: 'test' }) },
     '../config/reactUiAccess': require('../src/config/reactUiAccess'),
+    '../config/trainingStages': require('../src/config/trainingStages'),
     '../services/authService': { login: async ({ login }) => ({ token: 'test-token', user: { sub: login === 'admin' ? 1 : 2, login } }) },
     '../services/trainingProgressService': { getProgress: async (id) => {
       progressCalls.push(id);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { postJson, type DiaEscala, type FixoEscala, type Funcionario } from '../api';
 import { validateStandardHours, type StandardHours } from '../shiftValidation';
+import { autofillStandardHours } from '../shiftAutofill';
 
 export function EditarFixoEscala({
   lojaId, mesRef, employee, date, existing, reference, holidayName, onClose, onSaved,
@@ -78,7 +79,7 @@ export function EditarFixoEscala({
       {!apprentice && <button type="button" className={mode === 'TRB' ? 'selected' : ''} onClick={() => { setMode('TRB'); setError(''); }}>Horário fixo</button>}
     </div>
     {mode === 'TRB' && <div className="day-editor-times">
-      {([['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída intervalo'], ['HR_ENT2', 'Retorno'], ['HR_SAI2', 'Saída']] as const).map(([key, label]) => <label key={key}>{label}<input type="time" required value={hours[key]} onChange={(event) => { setHours((current) => ({ ...current, [key]: event.target.value })); setError(''); }} /></label>)}
+      {([['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída intervalo'], ['HR_ENT2', 'Retorno'], ['HR_SAI2', 'Saída']] as const).map(([key, label]) => <label key={key}>{label}<input type="time" required value={hours[key]} onChange={(event) => { const next = autofillStandardHours(hours, key, event.target.value); if (next) { setHours(next); setError(''); } else setError('O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.'); }} /></label>)}
     </div>}
     <label className="day-editor-justification">Justificativa<input maxLength={500} value={justification} onChange={(event) => setJustification(event.target.value)} placeholder="Opcional" /></label>
     {error && <div className="notice error" role="alert">{error}</div>}

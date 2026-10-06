@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { createOperationId } from '../operationId';
 import { validateStandardHours, type StandardHours } from '../shiftValidation';
+import { autofillStandardHours } from '../shiftAutofill';
 import { toPayloadDay, type PayloadDay } from './EditarDiaEscala';
 
 function today() {
@@ -182,7 +183,7 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
         <button className={mode === 'TROCA' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('TROCA'); setSelectedDates([]); setIssues([]); }}>Trocar folga</button></div></div>
     {mode === 'HORARIO' && <div className="bulk-hours">
       {([['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída intervalo'], ['HR_ENT2', 'Retorno'], ['HR_SAI2', 'Saída']] as const).map(([key, label]) =>
-        <label key={key}>{label}<input type="time" value={hours[key]} disabled={busy || uncertain} onChange={(event) => { setHours((current) => ({ ...current, [key]: event.target.value })); setError(''); setIssues([]); }} /></label>)}
+        <label key={key}>{label}<input type="time" value={hours[key]} disabled={busy || uncertain} onChange={(event) => { const next = autofillStandardHours(hours, key, event.target.value); if (next) { setHours(next); setError(''); setIssues([]); } else setError('O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.'); }} /></label>)}
       <span>Jornada do dia: 08:48. O horário-base do funcionário não muda.</span>
     </div>}
     {!futureDates.length && <div className="notice error">Não há dias futuros neste período.</div>}

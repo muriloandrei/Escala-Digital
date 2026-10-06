@@ -18,6 +18,7 @@ const accessRoutes = require('./routes/accessRoutes');
 const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
 const monthlyReleaseService = require('./services/monthlyReleaseService');
 const trainingProgressService = require('./services/trainingProgressService');
+const { LAST_STAGE } = require('./config/trainingStages');
 const subsectionTransferService = require('./services/subsectionTransferService');
 const { getAppVersion } = require('./utils/appVersion');
 
@@ -130,7 +131,7 @@ async function requireCompletedTraining(req, res, next) {
   try {
     const progress = await trainingProgressService.getProgress(Number(req.user.sub));
     if (!progress.persisted) return res.status(503).json({ error: 'A migration do treinamento precisa ser aplicada antes de liberar o acesso.' });
-    if (progress.stage < 12) {
+    if (progress.stage < LAST_STAGE) {
       if (req.originalUrl.startsWith('/api/')) return res.status(428).json({ error: 'Conclua o treinamento antes de usar o sistema.', startPath: '/nova/treinamento' });
       return res.redirect('/nova/treinamento');
     }

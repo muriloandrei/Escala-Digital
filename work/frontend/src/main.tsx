@@ -38,6 +38,8 @@ import './schedule.css';
 import './directory.css';
 import './print.css';
 
+const LAST_TRAINING_STAGE = 16;
+
 function App() {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
@@ -70,7 +72,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (user && trainingStage === 12 && !reactUiAllowed) window.location.replace('/app#/escalas-geradas');
+    if (user && trainingStage === LAST_TRAINING_STAGE && !reactUiAllowed) window.location.replace('/app#/escalas-geradas');
   }, [user, trainingStage, reactUiAllowed]);
 
   if (error)
@@ -86,10 +88,10 @@ function App() {
       </main>
     );
 
-  if (trainingStage < 12) return (
+  if (trainingStage < LAST_TRAINING_STAGE) return (
     <div className="shell training-required-shell">
       <aside className="sidebar"><div className="brand"><img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" /></div><nav aria-label="Menu principal"><NavLink to="/treinamento"><GraduationCap size={18} /> Treinamento obrigatório</NavLink></nav><div className="sidebar-user"><span>{user.nome || user.login}</span><button type="button" onClick={logout}><LogOut size={16} /> Sair</button></div></aside>
-      <div className="workspace"><Routes><Route path="/treinamento" element={<Treinamento user={user} onComplete={() => { setTrainingStage(12); if (reactUiAllowed) navigate('/escalas-liberadas', { replace: true }); else window.location.assign('/app#/escalas-geradas'); }} />} /><Route path="*" element={<Navigate to="/treinamento" replace />} /></Routes></div>
+      <div className="workspace"><Routes><Route path="/treinamento" element={<Treinamento user={user} onComplete={() => { setTrainingStage(LAST_TRAINING_STAGE); if (reactUiAllowed) navigate('/escalas-liberadas', { replace: true }); else window.location.assign('/app#/escalas-geradas'); }} />} /><Route path="*" element={<Navigate to="/treinamento" replace />} /></Routes></div>
     </div>
   );
 

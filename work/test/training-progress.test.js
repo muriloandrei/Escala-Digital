@@ -13,6 +13,7 @@ function loadService(connection) {
         withConnection: async (work) => work(connection),
         oracledb: { OUT_FORMAT_OBJECT: 1 }
       };
+      if (name === '../config/trainingStages') return require('../src/config/trainingStages');
       throw new Error(`Dependencia inesperada: ${name}`);
     }
   });
@@ -23,12 +24,12 @@ function loadService(connection) {
 test('treinamento novo reinicia progresso da versao anterior', async () => {
   const service = loadService({ execute: async () => ({ rows: [{ VERSAO: 1, ETAPA: 7 }] }) });
   const progress = await service.getProgress(42);
-  assert.equal(progress.version, 2);
+  assert.equal(progress.version, 3);
   assert.equal(progress.stage, 0);
   assert.equal(progress.found, true);
 });
 
-test('treinamento aceita a conclusao da etapa 12 e rejeita etapa 13', async () => {
+test('treinamento aceita a conclusao da etapa 16 e rejeita etapa 17', async () => {
   let saved;
   const service = loadService({
     async execute(sql, binds) {
@@ -36,17 +37,24 @@ test('treinamento aceita a conclusao da etapa 12 e rejeita etapa 13', async () =
         saved = binds;
         return { rows: [] };
       }
-      return { rows: [{ VERSAO: 2, ETAPA: 12 }] };
+      return { rows: [{ VERSAO: 3, ETAPA: saved?.etapa ?? 15 }] };
     }
   });
-  const progress = await service.saveProgress(42, 12);
-  assert.equal(saved.versao, 2);
-  assert.equal(saved.etapa, 12);
-  assert.equal(progress.stage, 12);
-  await assert.rejects(service.saveProgress(42, 13), /Etapa de treinamento invalida/);
+  const progress = await service.saveProgress(42, 16);
+  assert.equal(saved.versao, 3);
+  assert.equal(saved.etapa, 16);
+  assert.equal(progress.stage, 16);
+  await assert.rejects(service.saveProgress(42, 17), /Etapa de treinamento invalida/);
 });
 
 test('treinamento nao permite pular etapas por chamada direta', async () => {
-  const service = loadService({ execute: async () => ({ rows: [{ VERSAO: 2, ETAPA: 0 }] }) });
-  await assert.rejects(service.saveProgress(42, 12), /Conclua a etapa atual/);
+  const service = loadService({ execute: async () => ({ rows: [{ VERSAO: 3, ETAPA: 0 }] }) });
+  await assert.rejects(service.saveProgress(42, 16), /Conclua a etapa atual/);
+});
+
+test('treinamento v2 concluido continua liberado sem repeticao obrigatoria', async () => {
+  const service = loadService({ execute: async () => ({ rows: [{ VERSAO: 2, ETAPA: 12 }] }) });
+  const progress = await service.getProgress(42);
+  assert.equal(progress.version, 3);
+  assert.equal(progress.stage, 16);
 });

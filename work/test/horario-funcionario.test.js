@@ -60,4 +60,16 @@ for (const method of ['post', 'patch']) {
       assert.match(response.error, /atualizados juntos/i);
     }
   });
+
+  test(`${method} de horario-base bloqueia mes anterior`, async () => {
+    const route = '/funcionario/horario' + (method === 'post' ? '/preview' : '');
+    const layer = escalaRouter.stack.find((item) => item.route?.path === route && item.route.methods[method]);
+    const handler = layer.route.stack.at(-1).handle;
+    let status;
+    let response;
+    const res = { status(code) { status = code; return this; }, json(value) { response = value; return this; } };
+    await handler({ body: { lojaId: 10, escfuncId: 1, mesRef: '2020-01-01', aplicarNaEscala: true, ...horario } }, res, (error) => { throw error; });
+    assert.equal(status, 422);
+    assert.match(response.error, /meses anteriores/i);
+  });
 }
