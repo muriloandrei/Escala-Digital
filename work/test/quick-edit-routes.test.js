@@ -64,6 +64,72 @@ test('quick route saves a holiday rest while returning critiques; regular draft 
   }
 });
 
+test('quick route moves a rest across two saves despite a temporary 5x2 critique', async () => {
+  const originals = {
+    assertFuncionariosPermitidos: accessService.assertFuncionariosPermitidos,
+    validateAusencias: escalaService.validateAusencias,
+    getEscalaFuncionarioAtual: escalaService.getEscalaFuncionarioAtual,
+    listFixosEscala: escalaService.listFixosEscala,
+    saveEscalasFuncionariosRevision: escalaService.saveEscalasFuncionariosRevision,
+    registerAudit: auditService.registerAudit
+  };
+  let revision = 1;
+  let storedDays = Array.from({ length: 7 }, (_, index) => ({
+    DT: `2026-11-${String(index + 16).padStart(2, '0')}`,
+    PROGRAMACAO: index === 1 || index === 6 ? 'F' : 'TRB',
+    HR_ENT1: index === 1 || index === 6 ? null : '08:00',
+    HR_SAI1: index === 1 || index === 6 ? null : '12:00',
+    HR_ENT2: index === 1 || index === 6 ? null : '13:10',
+    HR_SAI2: index === 1 || index === 6 ? null : '17:58'
+  }));
+  const asPayloadDay = (day) => ({ data: day.DT, programacao: day.PROGRAMACAO,
+    hrEnt1: day.HR_ENT1, hrSai1: day.HR_SAI1, hrEnt2: day.HR_ENT2, hrSai2: day.HR_SAI2 });
+  accessService.assertFuncionariosPermitidos = async () => {};
+  escalaService.validateAusencias = async () => [];
+  escalaService.getEscalaFuncionarioAtual = async () => ({ revisao: revision, dias: storedDays });
+  escalaService.listFixosEscala = async () => [];
+  escalaService.saveEscalasFuncionariosRevision = async ({ funcionarios }) => {
+    revision += 1;
+    storedDays = funcionarios[0].dias.map((day) => ({ DT: day.data, PROGRAMACAO: day.programacao,
+      HR_ENT1: day.hrEnt1, HR_SAI1: day.hrSai1, HR_ENT2: day.hrEnt2, HR_SAI2: day.hrSai2 }));
+    return [{ revisao: revision, escprogId: 3 }];
+  };
+  auditService.registerAudit = async () => {};
+  try {
+    const call = async (date, programacao) => {
+      const days = storedDays.map(asPayloadDay);
+      const day = days.find((item) => item.data === date);
+      day.programacao = programacao;
+      day.hrEnt1 = programacao === 'F' ? null : '08:00';
+      day.hrSai1 = programacao === 'F' ? null : '12:00';
+      day.hrEnt2 = programacao === 'F' ? null : '13:10';
+      day.hrSai2 = programacao === 'F' ? null : '17:58';
+      const res = response();
+      await handler('/funcionarios/revisao')({ body: { lojaId: 10, mesRef: '2026-11-01',
+        edicaoRapida: true, oficializada: 0, funcionarios: [{ escfuncId: 10,
+          revisaoBase: revision, chapa: '000010', nome: 'Teste', funcao: 'OPERADOR DE CAIXA',
+          escsecaoId: 20, escfuncaoId: 30, dias: days }] }, user: { sub: 1 } }, res,
+      (error) => { throw error; });
+      return res;
+    };
+    const first = await call('2026-11-17', 'TRB');
+    assert.equal(first.code, 201);
+    assert.match(first.body.criticas.join(' '), /6 dias consecutivos/);
+    assert.equal(storedDays[1].PROGRAMACAO, 'TRB');
+    const second = await call('2026-11-18', 'F');
+    assert.equal(second.code, 201);
+    assert.equal(storedDays[2].PROGRAMACAO, 'F');
+    assert.equal(revision, 3);
+  } finally {
+    accessService.assertFuncionariosPermitidos = originals.assertFuncionariosPermitidos;
+    Object.assign(escalaService, {
+      validateAusencias: originals.validateAusencias, getEscalaFuncionarioAtual: originals.getEscalaFuncionarioAtual,
+      listFixosEscala: originals.listFixosEscala, saveEscalasFuncionariosRevision: originals.saveEscalasFuncionariosRevision
+    });
+    auditService.registerAudit = originals.registerAudit;
+  }
+});
+
 test('fixed rest can be saved on a holiday', async () => {
   const originals = {
     assertSecoesPermitidas: accessService.assertSecoesPermitidas,
