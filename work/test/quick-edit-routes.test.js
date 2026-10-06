@@ -50,7 +50,8 @@ test('quick route saves a holiday rest while returning critiques; regular draft 
     assert.equal(regular.code, 422);
     assert.equal(saved, 0);
     const quick = response();
-    await handler('/funcionarios/revisao')({ body: { ...body, edicaoRapida: true }, user: { sub: 1 } }, quick, (error) => { throw error; });
+    await handler('/funcionarios/revisao')({ body: { ...body, edicaoRapida: true,
+      funcionarios: [{ ...body.funcionarios[0], dias: [days[7]] }] }, user: { sub: 1 } }, quick, (error) => { throw error; });
     assert.equal(quick.code, 201);
     assert.equal(saved, 1);
     assert.ok(quick.body.criticas.length > 0);
@@ -108,7 +109,7 @@ test('quick route moves a rest across two saves despite a temporary 5x2 critique
       await handler('/funcionarios/revisao')({ body: { lojaId: 10, mesRef: '2026-11-01',
         edicaoRapida: true, oficializada: 0, funcionarios: [{ escfuncId: 10,
           revisaoBase: revision, chapa: '000010', nome: 'Teste', funcao: 'OPERADOR DE CAIXA',
-          escsecaoId: 20, escfuncaoId: 30, dias: days }] }, user: { sub: 1 } }, res,
+          escsecaoId: 20, escfuncaoId: 30, dias: [day] }] }, user: { sub: 1 } }, res,
       (error) => { throw error; });
       return res;
     };
@@ -120,6 +121,57 @@ test('quick route moves a rest across two saves despite a temporary 5x2 critique
     assert.equal(second.code, 201);
     assert.equal(storedDays[2].PROGRAMACAO, 'F');
     assert.equal(revision, 3);
+  } finally {
+    accessService.assertFuncionariosPermitidos = originals.assertFuncionariosPermitidos;
+    Object.assign(escalaService, {
+      validateAusencias: originals.validateAusencias, getEscalaFuncionarioAtual: originals.getEscalaFuncionarioAtual,
+      listFixosEscala: originals.listFixosEscala, saveEscalasFuncionariosRevision: originals.saveEscalasFuncionariosRevision
+    });
+    auditService.registerAudit = originals.registerAudit;
+  }
+});
+
+test('quick route preserves database rest hours and rejects a multi-day request', async () => {
+  const originals = {
+    assertFuncionariosPermitidos: accessService.assertFuncionariosPermitidos,
+    validateAusencias: escalaService.validateAusencias,
+    getEscalaFuncionarioAtual: escalaService.getEscalaFuncionarioAtual,
+    listFixosEscala: escalaService.listFixosEscala,
+    saveEscalasFuncionariosRevision: escalaService.saveEscalasFuncionariosRevision,
+    registerAudit: auditService.registerAudit
+  };
+  const oldDays = [
+    { DT: '2026-11-16', PROGRAMACAO: 'F', HR_ENT1: 'F', HR_SAI1: 'F', HR_ENT2: 'F', HR_SAI2: 'F' },
+    { DT: '2026-11-17', PROGRAMACAO: 'F', HR_ENT1: 'F', HR_SAI1: 'F', HR_ENT2: 'F', HR_SAI2: 'F' },
+    { DT: '2026-11-18', PROGRAMACAO: 'TRB', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' }
+  ];
+  let savedDays;
+  accessService.assertFuncionariosPermitidos = async () => {};
+  escalaService.validateAusencias = async () => [];
+  escalaService.getEscalaFuncionarioAtual = async () => ({ revisao: 1, dias: oldDays });
+  escalaService.listFixosEscala = async () => [];
+  escalaService.saveEscalasFuncionariosRevision = async ({ funcionarios }) => {
+    savedDays = funcionarios[0].dias;
+    return [{ revisao: 2, escprogId: 3 }];
+  };
+  auditService.registerAudit = async () => {};
+  const changed = { data: '2026-11-17', programacao: 'TRB', hrEnt1: '08:00',
+    hrSai1: '12:00', hrEnt2: '13:10', hrSai2: '17:58' };
+  const body = { lojaId: 10, mesRef: '2026-11-01', edicaoRapida: true, oficializada: 0,
+    funcionarios: [{ escfuncId: 10, revisaoBase: 1, chapa: '000010', nome: 'Teste',
+      funcao: 'OPERADOR DE CAIXA', escsecaoId: 20, escfuncaoId: 30, dias: [changed] }] };
+  try {
+    const res = response();
+    await handler('/funcionarios/revisao')({ body, user: { sub: 1 } }, res, (error) => { throw error; });
+    assert.equal(res.code, 201);
+    assert.equal(savedDays.length, 3);
+    assert.equal(savedDays[0].hrEnt1, 'F');
+    assert.equal(savedDays[1].programacao, 'TRB');
+    const invalid = response();
+    await handler('/funcionarios/revisao')({ body: { ...body, funcionarios: [{ ...body.funcionarios[0],
+      dias: [changed, { ...changed, data: '2026-11-18', programacao: 'F' }] }] }, user: { sub: 1 } },
+    invalid, (error) => { throw error; });
+    assert.equal(invalid.code, 422);
   } finally {
     accessService.assertFuncionariosPermitidos = originals.assertFuncionariosPermitidos;
     Object.assign(escalaService, {

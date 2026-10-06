@@ -424,7 +424,7 @@ export function EscalaMensal({ user }: { user: User }) {
             chapa: employee.CHAPA, nome: employee.NOME, funcao: employee.FUNCAO_DESCR || null,
             escsecaoId: employee.ESCSECAO_ID, escfuncaoId: employee.ESCFUNCAO_ID,
             aprendiz: apprentice,
-            dias: personDays.map((item) => iso(item.DT) === date ? changed : toPayloadDay(item)) }] };
+            dias: [changed] }] };
         let saved: { saved?: { revisao: number }[]; criticas?: string[] } | null = null;
         try { saved = await postJson('/api/escalas/funcionarios/revisao', payload); }
         catch (reason) {

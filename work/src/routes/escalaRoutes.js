@@ -587,19 +587,15 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
       return res.status(400).json({ error: 'Informe de 1 a 500 funcionarios alterados.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
-    const errors = validateEscalaPayload(payload);
-    const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
-    if (ausenciaErrors.length || (!payload.edicaoRapida && errors.length)) return res.status(422).json({ errors: [...errors, ...ausenciaErrors] });
-
-    const anteriores = await Promise.all(payload.funcionarios.map((funcionario) =>
-      escalaService.getEscalaFuncionarioAtual({
-        lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: funcionario.escfuncId
-      })
-    ));
+    let anteriores;
     if (payload.edicaoRapida) {
-      if (payload.funcionarios.length !== 1 || !anteriores[0]) {
-        return res.status(422).json({ error: 'A edicao rapida exige uma escala existente para um funcionario.' });
+      if (payload.funcionarios.length !== 1 || payload.funcionarios[0].dias.length !== 1) {
+        return res.status(422).json({ error: 'A edicao rapida exige exatamente um funcionario e um dia.' });
       }
+      anteriores = [await escalaService.getEscalaFuncionarioAtual({
+        lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: payload.funcionarios[0].escfuncId
+      })];
+      if (!anteriores[0]) return res.status(422).json({ error: 'A edicao rapida exige uma escala existente para um funcionario.' });
       const quickError = validateQuickRestWorkEdit(payload.funcionarios[0], anteriores[0].dias);
       if (quickError) return res.status(422).json({ error: quickError });
       const alteracao = buildDiaAlteracoes(anteriores[0].dias, payload.funcionarios[0].dias)[0];
@@ -609,7 +605,18 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
         && normalizeScheduleDay(fixo).data === alteracao.data)) {
         return res.status(422).json({ error: 'Dia com fixo deve ser alterado pelo editor de fixos.' });
       }
+      const dias = anteriores[0].dias.map(normalizeScheduleDay).map((dia) =>
+        dia.data === alteracao.data ? payload.funcionarios[0].dias[0] : dia);
+      payload.funcionarios[0].dias = dias;
     }
+    const errors = validateEscalaPayload(payload);
+    const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
+    if (ausenciaErrors.length || (!payload.edicaoRapida && errors.length)) return res.status(422).json({ errors: [...errors, ...ausenciaErrors] });
+    if (!anteriores) anteriores = await Promise.all(payload.funcionarios.map((funcionario) =>
+      escalaService.getEscalaFuncionarioAtual({
+        lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: funcionario.escfuncId
+      })
+    ));
     const operacaoId = payload.operacaoId || escalaEventService.createOperationId();
     const saved = await escalaService.saveEscalasFuncionariosRevision({ ...payload, operacaoId, actor: req.user });
     await Promise.all(saved.map((item, index) => auditService.registerAudit({
