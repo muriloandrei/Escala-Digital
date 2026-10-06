@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateEscalaPayload, validarCriticasEscopo, getCriticasCoberturaMinima } = require('../src/rules/escalaRules');
+const { validateEscalaPayload, validarCriticasEscopo, agruparCriticasPorSubsecao, getCriticasCoberturaMinima } = require('../src/rules/escalaRules');
 
 function buildPayload(dias, funcionarioOverrides = {}) {
   return {
@@ -55,6 +55,27 @@ test('oficializacao identifica funcionario sem dias gerados', () => {
   const criticas = validarCriticasEscopo({ lojaId: 1, mesRef: '2026-09-01',
     funcionarios: [{ escfuncId: 10, nome: 'Teste', dias: [] }] });
   assert.match(criticas[0], /escala sem dias gerados/);
+});
+
+test('painel mostra criticas de outras subsecoes sem repetir funcionarios ou secoes inacessiveis', () => {
+  const grupos = agruparCriticasPorSubsecao({
+    lojaId: 10, mesRef: '2026-11-01',
+    escala: {
+      secoes: [{ ESCSECAO_ID: 1, DESCR: 'Frente de Caixa' }],
+      funcionarios: [
+        { ESCFUNC_ID: 1, NOME: 'Ana', ESCSECAO_ID: 1, ESCSUBSECAO_ID: 11, SUBSECAO_DESCR: 'Caixa' },
+        { ESCFUNC_ID: 2, NOME: 'Bia', ESCSECAO_ID: 1, ESCSUBSECAO_ID: 11, SUBSECAO_DESCR: 'Caixa' },
+        { ESCFUNC_ID: 3, NOME: 'Caio', ESCSECAO_ID: 1, ESCSUBSECAO_ID: 12, SUBSECAO_DESCR: 'Aprendiz' },
+        { ESCFUNC_ID: 4, NOME: 'Fora', ESCSECAO_ID: 2, ESCSUBSECAO_ID: 21 }
+      ],
+      dias: []
+    }
+  });
+  assert.equal(grupos.length, 2);
+  assert.deepEqual(grupos.map((grupo) => grupo.subsecao), ['Caixa', 'Aprendiz']);
+  assert.equal(grupos[0].criticas.length, 2);
+  assert.equal(grupos[1].criticas.length, 1);
+  assert.ok(grupos.every((grupo) => grupo.secao === 'Frente de Caixa'));
 });
 
 test('criticas calculam semanas com datas Oracle sem produzir NaN', () => {

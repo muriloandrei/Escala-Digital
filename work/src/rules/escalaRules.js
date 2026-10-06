@@ -296,5 +296,40 @@ function validarCriticasEscopo({ lojaId, mesRef, funcionarios }) {
   ];
 }
 
+function agruparCriticasPorSubsecao({ lojaId, mesRef, escala }) {
+  const secoes = new Map((escala.secoes || []).map((secao) => [Number(secao.ESCSECAO_ID), secao]));
+  const diasPorFuncionario = new Map();
+  for (const dia of escala.dias || []) {
+    const id = Number(dia.ESCFUNC_ID);
+    if (!diasPorFuncionario.has(id)) diasPorFuncionario.set(id, []);
+    diasPorFuncionario.get(id).push(dia);
+  }
+  const grupos = new Map();
+  for (const funcionario of escala.funcionarios || []) {
+    const escsecaoId = Number(funcionario.ESCSECAO_ID);
+    if (!secoes.has(escsecaoId)) continue;
+    const escsubsecaoId = Number(funcionario.ESCSUBSECAO_ID) || null;
+    const key = `${escsecaoId}:${escsubsecaoId || 'sem'}`;
+    if (!grupos.has(key)) {
+      grupos.set(key, {
+        escsecaoId,
+        escsubsecaoId,
+        secao: secoes.get(escsecaoId).DESCR || `Seção ${escsecaoId}`,
+        subsecao: funcionario.SUBSECAO_DESCR || (escsubsecaoId ? `Subseção ${escsubsecaoId}` : 'Sem subseção'),
+        funcionarios: []
+      });
+    }
+    grupos.get(key).funcionarios.push({
+      escfuncId: Number(funcionario.ESCFUNC_ID), chapa: funcionario.CHAPA,
+      nome: funcionario.NOME, funcao: funcionario.FUNCAO_DESCR,
+      dias: diasPorFuncionario.get(Number(funcionario.ESCFUNC_ID)) || []
+    });
+  }
+  return [...grupos.values()].map(({ funcionarios, ...grupo }) => ({
+    ...grupo,
+    criticas: validarCriticasEscopo({ lojaId, mesRef, funcionarios })
+  })).filter((grupo) => grupo.criticas.length > 0);
+}
+
 module.exports = { REGRAS_VIGENTES, validateEscalaPayload, validarRegrasFuncionario,
-  getCriticasCoberturaMinima, validarCriticasEscopo, timeToMinutes, minutesToTime };
+  getCriticasCoberturaMinima, validarCriticasEscopo, agruparCriticasPorSubsecao, timeToMinutes, minutesToTime };

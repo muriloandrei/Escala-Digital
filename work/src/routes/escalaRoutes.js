@@ -10,7 +10,7 @@ const rmIntegrationService = require('../services/rmIntegrationService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { validateStandardShift } = require('../domain/shiftValidation');
 const monthlyReleaseService = require('../services/monthlyReleaseService');
-const { REGRAS_VIGENTES, validateEscalaPayload, validarCriticasEscopo } = require('../rules/escalaRules');
+const { REGRAS_VIGENTES, validateEscalaPayload, validarCriticasEscopo, agruparCriticasPorSubsecao } = require('../rules/escalaRules');
 const { buildDiaAlteracoes, normalizeScheduleDay } = require('../utils/scheduleDiff');
 const { listNationalHolidays } = require('../domain/nationalHolidays');
 const { validateQuickRestWorkEdit } = require('../domain/quickEdit');
@@ -430,7 +430,8 @@ router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaR
         dias: (escala.dias || []).filter((dia) => Number(dia.ESCFUNC_ID) === Number(funcionario.ESCFUNC_ID))
       }));
     const criticas = validarCriticasEscopo({ lojaId: query.lojaId, mesRef: query.mesRef, funcionarios });
-    return res.json({ criticas });
+    const grupos = agruparCriticasPorSubsecao({ lojaId: query.lojaId, mesRef: query.mesRef, escala });
+    return res.json({ criticas, grupos });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Filtros de criticas invalidos.' });
     return next(error);

@@ -104,6 +104,14 @@ function sectionLabel(section: Secao) {
   return [section.COD_SECAO, section.DESCR].filter(Boolean).join(' · ');
 }
 
+type CritiqueGroup = {
+  escsecaoId: number;
+  escsubsecaoId: number | null;
+  secao: string;
+  subsecao: string;
+  criticas: string[];
+};
+
 export function EscalaMensal({ user }: { user: User }) {
   const { lojaId, mesRef } = useParams();
   const [params, setParams] = useSearchParams();
@@ -124,6 +132,7 @@ export function EscalaMensal({ user }: { user: User }) {
   const [actionMessage, setActionMessage] = useState('');
   const [actionError, setActionError] = useState('');
   const [scopeCritiques, setScopeCritiques] = useState<string[]>([]);
+  const [critiqueGroups, setCritiqueGroups] = useState<CritiqueGroup[]>([]);
   const [scopeCritiquesLoading, setScopeCritiquesLoading] = useState(false);
   const [scopeCritiquesError, setScopeCritiquesError] = useState('');
   const [selectedCell, setSelectedCell] = useState<{
@@ -247,9 +256,11 @@ export function EscalaMensal({ user }: { user: User }) {
     memberOfSubsection(item, subsection) &&
     (!personFilter || String(item.ESCFUNC_ID) === personFilter));
   const scopeIdsKey = scopePeople.map((person) => Number(person.ESCFUNC_ID)).sort((a, b) => a - b).join(',');
+  useEffect(() => setCritiqueGroups([]), [lojaId, mesRef]);
   useEffect(() => {
-    if (!lojaId || !mesRef || !sectionId || !scopeIdsKey || !escala) {
+    if (!lojaId || !mesRef || !sectionId || !escala) {
       setScopeCritiques([]);
+      setCritiqueGroups([]);
       setScopeCritiquesLoading(false);
       setScopeCritiquesError('');
       return;
@@ -258,12 +269,17 @@ export function EscalaMensal({ user }: { user: User }) {
     setScopeCritiques([]);
     setScopeCritiquesLoading(true);
     setScopeCritiquesError('');
-    getJson<{ criticas: string[] }>(`/api/escalas/criticas?${new URLSearchParams({
-      lojaId, mesRef, escsecaoId: String(sectionId), escfuncIds: scopeIdsKey,
+    getJson<{ criticas: string[]; grupos: CritiqueGroup[] }>(`/api/escalas/criticas?${new URLSearchParams({
+      lojaId, mesRef, escsecaoId: String(sectionId), ...(scopeIdsKey ? { escfuncIds: scopeIdsKey } : {}),
     })}`, controller.signal)
-      .then(({ criticas }) => { setScopeCritiques(criticas); setScopeCritiquesLoading(false); })
+      .then(({ criticas, grupos }) => {
+        setScopeCritiques(scopeIdsKey ? criticas : []);
+        setCritiqueGroups(grupos || []);
+        setScopeCritiquesLoading(false);
+      })
       .catch((reason) => {
         if (reason.name === 'AbortError') return;
+        setCritiqueGroups([]);
         setScopeCritiquesError(reason instanceof Error ? reason.message : 'Não foi possível verificar as críticas.');
         setScopeCritiquesLoading(false);
       });
@@ -553,7 +569,13 @@ export function EscalaMensal({ user }: { user: User }) {
         </div>
       )}
       {scopeCritiquesError && <div className="notice error" role="alert">Não foi possível verificar as críticas: {scopeCritiquesError}</div>}
-      {scopeCritiques.length > 0 && <div className="notice error" role="alert"><strong>Críticas da escala · {scopeCritiques.length}</strong><ul>{scopeCritiques.slice(0, 10).map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul>{scopeCritiques.length > 10 && <span>Mais {scopeCritiques.length - 10} crítica(s).</span>}</div>}
+      {!loading && !error && critiqueGroups.map((group) => (
+        <div className="notice error" role="alert" key={`${group.escsecaoId}-${group.escsubsecaoId ?? 'sem'}`}>
+          <strong>Críticas da {group.secao} - {group.subsecao} · {group.criticas.length}</strong>
+          <ul>{group.criticas.slice(0, 10).map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul>
+          {group.criticas.length > 10 && <span>Mais {group.criticas.length - 10} crítica(s).</span>}
+        </div>
+      ))}
       {!loading && !error && (
         <>
           <div className="schedule-summary">
