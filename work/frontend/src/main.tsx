@@ -47,10 +47,12 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      getJson<{ user: User; reactUiAllowed: boolean }>('/api/auth/me', controller.signal),
-      getJson<{ stage: number; persisted: boolean }>('/api/auth/treinamento', controller.signal),
-    ]).then(([auth, progress]) => {
+    getJson<{ user: User; reactUiAllowed: boolean }>('/api/auth/me', controller.signal).then(async (auth) => {
+      if (!auth.reactUiAllowed) {
+        window.location.replace('/app#/escalas-geradas');
+        return;
+      }
+      const progress = await getJson<{ stage: number; persisted: boolean }>('/api/auth/treinamento', controller.signal);
       if (!progress.persisted) throw new Error('A migration do treinamento precisa ser aplicada antes de liberar o acesso.');
       setUser(auth.user);
       setReactUiAllowed(auth.reactUiAllowed);

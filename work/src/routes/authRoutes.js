@@ -1,7 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 const { getEnv } = require('../config/env');
-const { getLoginStartPath, isReactUiAllowed } = require('../config/reactUiAccess');
+const { getLoginStartPath, isReactUiAllowed, requiresTraining } = require('../config/reactUiAccess');
 const authService = require('../services/authService');
 const trainingProgressService = require('../services/trainingProgressService');
 const { requireAuth } = require('../middleware/auth');
@@ -30,8 +30,12 @@ router.post('/login', async (req, res, next) => {
       throw error;
     }
 
-    const progress = await trainingProgressService.getProgress(Number(user.sub));
-    if (!progress.persisted) return res.status(503).json({ error: 'A migration do treinamento precisa ser aplicada antes de liberar o acesso.' });
+    let trainingStage = 12;
+    if (requiresTraining(user, ui)) {
+      const progress = await trainingProgressService.getProgress(Number(user.sub));
+      if (!progress.persisted) return res.status(503).json({ error: 'A migration do treinamento precisa ser aplicada antes de liberar o acesso.' });
+      trainingStage = progress.stage;
+    }
 
     res.cookie('access_token', token, {
       httpOnly: true,
@@ -40,7 +44,7 @@ router.post('/login', async (req, res, next) => {
       maxAge: auth.sessionMaxAgeMs
     });
 
-    res.json({ user, startPath: progress.stage < 12 ? '/nova/treinamento' : getLoginStartPath(user, ui) });
+    res.json({ user, startPath: getLoginStartPath(user, ui, trainingStage) });
   } catch (error) {
     if (error.name === 'ZodError') {
       error.statusCode = 400;
@@ -59,13 +63,18 @@ router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user, reactUiAllowed: isReactUiAllowed(req.user, getEnv().ui) });
 });
 
-router.get('/treinamento', requireAuth, async (req, res, next) => {
+function requireTrainingAccess(req, res, next) {
+  if (!requiresTraining(req.user, getEnv().ui)) return res.status(403).json({ error: 'Treinamento indisponivel para este usuario.' });
+  return next();
+}
+
+router.get('/treinamento', requireAuth, requireTrainingAccess, async (req, res, next) => {
   try {
     return res.json(await trainingProgressService.getProgress(Number(req.user.sub)));
   } catch (error) { return next(error); }
 });
 
-router.put('/treinamento', requireAuth, async (req, res, next) => {
+router.put('/treinamento', requireAuth, requireTrainingAccess, async (req, res, next) => {
   try {
     const { stage } = z.object({ stage: z.number().int().min(0).max(12) }).strict().parse(req.body);
     return res.json(await trainingProgressService.saveProgress(Number(req.user.sub), stage));
@@ -75,7 +84,7 @@ router.put('/treinamento', requireAuth, async (req, res, next) => {
   }
 });
 
-router.delete('/treinamento', requireAuth, async (req, res, next) => {
+router.delete('/treinamento', requireAuth, requireTrainingAccess, async (req, res, next) => {
   try {
     return res.json(await trainingProgressService.resetProgress(Number(req.user.sub)));
   } catch (error) { return next(error); }

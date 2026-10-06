@@ -5,7 +5,7 @@ const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { getEnv } = require('./config/env');
-const { isReactUiAllowed } = require('./config/reactUiAccess');
+const { isReactUiAllowed, requiresTraining } = require('./config/reactUiAccess');
 const { initOraclePool, closeOraclePool, withConnection } = require('./db/oracle');
 const { csrfSameOriginGuard } = require('./middleware/csrf');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
@@ -126,6 +126,7 @@ function redirectToLoginWhenMissingSession(req, res, next) {
 }
 
 async function requireCompletedTraining(req, res, next) {
+  if (!requiresTraining(req.user, env.ui)) return next();
   try {
     const progress = await trainingProgressService.getProgress(Number(req.user.sub));
     if (!progress.persisted) return res.status(503).json({ error: 'A migration do treinamento precisa ser aplicada antes de liberar o acesso.' });
@@ -145,7 +146,7 @@ app.get('/app', redirectToLoginWhenMissingSession, requireAuth, requireCompleted
 const reactDist = path.join(__dirname, '..', 'dist', 'react');
 function requireReactUiAccess(req, res, next) {
   if (isReactUiAllowed(req.user, env.ui)) return next();
-  if (req.baseUrl === '/nova/assets' || req.path === '/treinamento') return next();
+  if (req.baseUrl === '/nova/assets') return res.status(403).end();
   return res.redirect('/app#/escalas-geradas');
 }
 

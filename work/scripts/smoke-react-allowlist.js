@@ -17,7 +17,8 @@ async function check(login, allowed) {
   const cookie = auth.headers.get('set-cookie')?.split(';')[0];
   assert(cookie, `Login ${login} nao retornou cookie de sessao.`);
   const body = await auth.json();
-  assert(body.startPath === (allowed ? '/nova' : '/app#/escalas-geradas'), `Destino incorreto para ${login}.`);
+  assert(allowed ? ['/nova', '/nova/treinamento'].includes(body.startPath)
+    : body.startPath === '/app#/escalas-geradas', `Destino incorreto para ${login}.`);
 
   const headers = { Cookie: cookie };
   const me = await fetch(`${baseUrl}/api/auth/me`, { headers });
@@ -26,6 +27,13 @@ async function check(login, allowed) {
   assert(page.status === (allowed ? 200 : 302), `Acesso direto incorreto para ${login}: ${page.status}.`);
   if (!allowed) {
     assert(page.headers.get('location') === '/app#/escalas-geradas', `Redirecionamento incorreto para ${login}.`);
+    const training = await fetch(`${baseUrl}/nova/treinamento`, { headers, redirect: 'manual' });
+    assert(training.status === 302 && training.headers.get('location') === '/app#/escalas-geradas',
+      `Treinamento acessivel por ${login}: ${training.status}.`);
+    const legacy = await fetch(`${baseUrl}/app`, { headers, redirect: 'manual' });
+    assert(legacy.status === 200, `Interface antiga nao acessivel por ${login}: ${legacy.status}.`);
+    const progress = await fetch(`${baseUrl}/api/auth/treinamento`, { headers });
+    assert(progress.status === 403, `API de treinamento acessivel por ${login}: ${progress.status}.`);
     const asset = await fetch(`${baseUrl}/nova/assets/teste.js`, { headers, redirect: 'manual' });
     assert(asset.status === 403, `Assets React acessiveis por ${login}: ${asset.status}.`);
   }
