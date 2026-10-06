@@ -57,6 +57,18 @@ test('oficializacao identifica funcionario sem dias gerados', () => {
   assert.match(criticas[0], /escala sem dias gerados/);
 });
 
+test('criticas calculam semanas com datas Oracle sem produzir NaN', () => {
+  const dias = [
+    descanso(new Date(2026, 10, 2)),
+    descanso(new Date(2026, 10, 3)),
+    descanso(new Date(2026, 10, 4))
+  ];
+  const criticas = validarCriticasEscopo({ lojaId: 10, mesRef: '2026-11-01',
+    funcionarios: [{ escfuncId: 10, nome: 'Teste', dias }] });
+  assert.ok(criticas.some((critica) => critica.includes('2026-11-02')));
+  assert.ok(criticas.every((critica) => !critica.includes('NaN')));
+});
+
 test('backend rejects two consecutive worked Sundays', () => {
   const errors = validateEscalaPayload(buildPayload([
     trabalho('2026-09-06'),

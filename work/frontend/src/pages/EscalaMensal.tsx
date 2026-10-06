@@ -498,6 +498,7 @@ export function EscalaMensal({ user }: { user: User }) {
   const scopedDays = (escala?.dias || []).filter((day) =>
     scopeIds.has(Number(day.ESCFUNC_ID)) && (subsection === 'all' || daySubKey(day) === subsection));
   const scopeOfficial = scopedDays.length > 0 && scopedDays.every((day) => Number(day.OFICIALIZADA) === 1);
+  const scopeHasOfficial = scopedDays.some((day) => Number(day.OFICIALIZADA) === 1);
 
   return (
     <main className="content schedule-page">
@@ -672,7 +673,8 @@ export function EscalaMensal({ user }: { user: User }) {
                   <button
                     className="button secondary"
                     type="button"
-                    disabled={!scopePeople.length || loading || mixedSubsectionScope}
+                    disabled={!scopePeople.length || loading || mixedSubsectionScope || scopeHasOfficial}
+                    title={scopeHasOfficial ? 'Escopo com dias oficializados não pode ser resetado. Edite os dias e oficialize novamente.' : undefined}
                     onClick={() => {
                       setActionError('');
                       setPendingAction('resetar');
@@ -683,7 +685,8 @@ export function EscalaMensal({ user }: { user: User }) {
                   <button
                     className="button primary"
                     type="button"
-                    disabled={!scopePeople.length || loading || mixedSubsectionScope}
+                    disabled={!scopePeople.length || loading || mixedSubsectionScope || scopeHasOfficial}
+                    title={scopeHasOfficial ? 'Escopo com dias oficializados não pode ser gerado novamente. Edite os dias e oficialize novamente.' : undefined}
                     onClick={() => {
                       setActionError('');
                       setPendingAction('gerar');
