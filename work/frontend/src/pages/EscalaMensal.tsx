@@ -110,6 +110,7 @@ type CritiqueGroup = {
   secao: string;
   subsecao: string;
   criticas: string[];
+  marcadores: { escfuncId: number; datas: string[]; mensagem: string }[];
 };
 
 export function EscalaMensal({ user }: { user: User }) {
@@ -227,6 +228,22 @@ export function EscalaMensal({ user }: { user: User }) {
         ? 'Sem subseção'
         : subsections.find(([id]) => id === subsection)?.[1] || 'Subseção';
   const dates = useMemo(() => (periodo ? datesBetween(periodo) : []), [periodo]);
+  const periodHolidays = useMemo(() => dates.filter((date) => holidays[date]).map((date) => ({ date, name: holidays[date] })), [dates, holidays]);
+  const critiqueMarkers = useMemo(() => {
+    const byEmployee = new Map<number, { row: string[]; dates: Map<string, string[]> }>();
+    for (const group of critiqueGroups) {
+      for (const marker of group.marcadores || []) {
+        if (!byEmployee.has(marker.escfuncId)) byEmployee.set(marker.escfuncId, { row: [], dates: new Map() });
+        const entry = byEmployee.get(marker.escfuncId)!;
+        if (!marker.datas.length) entry.row.push(marker.mensagem);
+        for (const date of marker.datas) {
+          if (!entry.dates.has(date)) entry.dates.set(date, []);
+          entry.dates.get(date)!.push(marker.mensagem);
+        }
+      }
+    }
+    return byEmployee;
+  }, [critiqueGroups]);
   const view = params.get('visao') === 'diaria' ? 'diaria' : 'mensal';
   const selectedDate = dates.includes(params.get('dia') || '') ? params.get('dia')! : dates[0];
   const daysByEmployee = useMemo(() => {
@@ -576,6 +593,12 @@ export function EscalaMensal({ user }: { user: User }) {
           {group.criticas.length > 10 && <span>Mais {group.criticas.length - 10} crítica(s).</span>}
         </div>
       ))}
+      {!loading && !error && periodHolidays.length > 0 && (
+        <div className="notice warning schedule-holidays" role="note">
+          <strong>Feriados do período</strong>
+          <ul>{periodHolidays.map(({ date, name }) => <li key={date}><time dateTime={date}>{weekday(date)} · {formatDate(date)}</time><span>{name}</span></li>)}</ul>
+        </div>
+      )}
       {!loading && !error && (
         <>
           <div className="schedule-summary">
@@ -768,7 +791,7 @@ export function EscalaMensal({ user }: { user: User }) {
                     <tbody>
                       {visibleEmployees.map((person) => (
                         <tr key={person.ESCFUNC_ID}>
-                          <th className="employee-col">
+                          <th className={`employee-col${critiqueMarkers.get(Number(person.ESCFUNC_ID))?.row.length ? ' critical' : ''}`} title={critiqueMarkers.get(Number(person.ESCFUNC_ID))?.row.join('\n') || undefined}>
                             <strong>
                               {person.CHAPA} · {person.NOME}
                             </strong>
@@ -776,6 +799,7 @@ export function EscalaMensal({ user }: { user: User }) {
                             <button type="button" className="person-menu-trigger" title={`Ações de ${person.NOME}`} aria-label={`Ações de ${person.NOME}`} onClick={(event) => openPersonMenu(event, person)}><MoreVertical size={16} /></button>
                           </th>
                           {dates.map((date, index) => {
+                            const dayCritiques = critiqueMarkers.get(Number(person.ESCFUNC_ID))?.dates.get(date) || [];
                             const scheduled = daysByEmployee.get(String(person.ESCFUNC_ID))?.get(date);
                             const day = scheduled && (subsection === 'all' || daySubKey(scheduled) === subsection)
                               ? scheduled : undefined;
@@ -783,12 +807,12 @@ export function EscalaMensal({ user }: { user: User }) {
                             return (
                               <td
                                 key={date}
-                                className={`${fixed ? 'fixed' : kind(day)} ${index % 7 === 0 ? 'week-start' : ''}`}
+                                className={`${fixed ? 'fixed' : kind(day)} ${index % 7 === 0 ? 'week-start' : ''} ${dayCritiques.length ? 'critical' : ''}`}
                               >
                                 <button
                                   type="button"
-                                  title={`${person.NOME} · ${formatDate(date)}${holidays[date] ? ` · Feriado: ${holidays[date]}` : ''} · ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}`}
-                                  aria-label={`${person.NOME}, ${formatDate(date)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}`}
+                                  title={`${person.NOME} · ${formatDate(date)}${holidays[date] ? ` · Feriado: ${holidays[date]}` : ''} · ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `\nCríticas: ${dayCritiques.join('\n')}` : ''}`}
+                                  aria-label={`${person.NOME}, ${formatDate(date)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `, ${dayCritiques.length} crítica(s)` : ''}`}
                                   disabled={quickBusy || Boolean(scheduled && !day)}
                                   onClick={() => clickDay(person, date, day)}
                                   onDoubleClick={() => doubleClickDay(person, date, day)}
@@ -816,12 +840,14 @@ export function EscalaMensal({ user }: { user: User }) {
                     </thead>
                     <tbody>
                       {visibleEmployees.map((person) => {
+                        const dayCritiques = critiqueMarkers.get(Number(person.ESCFUNC_ID))?.dates.get(selectedDate) || [];
+                        const rowCritiques = critiqueMarkers.get(Number(person.ESCFUNC_ID))?.row || [];
                         const day = daysByEmployee.get(String(person.ESCFUNC_ID))?.get(selectedDate);
                         const fixed = !day && escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(person.ESCFUNC_ID) && iso(item.DT) === selectedDate);
                         return (
-                          <tr key={person.ESCFUNC_ID}>
+                          <tr key={person.ESCFUNC_ID} className={dayCritiques.length || rowCritiques.length ? 'critical' : ''} title={[...rowCritiques, ...dayCritiques].join('\n') || undefined}>
                             <td className="daily-employee"><strong>{person.NOME}</strong><small>{person.CHAPA} · {person.FUNCAO_DESCR || 'Cargo não informado'}</small></td>
-                            <td><button className="daily-distribution" type="button" disabled={quickBusy} onClick={() => clickDay(person, selectedDate, day)} onDoubleClick={() => doubleClickDay(person, selectedDate, day)} aria-label={`${person.NOME}, ${formatDate(selectedDate)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}`}>
+                            <td><button className="daily-distribution" type="button" disabled={quickBusy} onClick={() => clickDay(person, selectedDate, day)} onDoubleClick={() => doubleClickDay(person, selectedDate, day)} aria-label={`${person.NOME}, ${formatDate(selectedDate)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `, ${dayCritiques.length} crítica(s)` : ''}`}>
                               <div className="daily-shift-track" aria-hidden="true">{hasShift(day) && <>{timeSegment(day?.HR_ENT1, day?.HR_SAI1) && <span style={timeSegment(day?.HR_ENT1, day?.HR_SAI1)!} />}{timeSegment(day?.HR_ENT2, day?.HR_SAI2) && <span style={timeSegment(day?.HR_ENT2, day?.HR_SAI2)!} />}</>}</div>
                               <span className="daily-shift-times">{hasShift(day) ? shiftLabel(day) : fixed ? fixed.PROGRAMACAO === 'TRB' ? fixed.HR_ENT1 || 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}</span>
                             </button></td>
@@ -836,6 +862,12 @@ export function EscalaMensal({ user }: { user: User }) {
               {selectedCell && (
                 <div className="cell-detail">
                   {holidays[selectedCell.date] && <span className="holiday-warning" role="status">Feriado nacional: {holidays[selectedCell.date]}.</span>}
+                  {Boolean(critiqueMarkers.get(Number(selectedCell.employee.ESCFUNC_ID))?.dates.get(selectedCell.date)?.length) && (
+                    <div className="cell-critiques" role="alert">
+                      <strong>Críticas deste dia</strong>
+                      <ul>{critiqueMarkers.get(Number(selectedCell.employee.ESCFUNC_ID))!.dates.get(selectedCell.date)!.map((message, index) => <li key={`${index}-${message}`}>{message}</li>)}</ul>
+                    </div>
+                  )}
                   <div>
                     <strong>{selectedCell.employee.NOME}</strong>
                     <span>
@@ -876,6 +908,9 @@ export function EscalaMensal({ user }: { user: User }) {
                 </div>
               )}
               <div className="schedule-legend">
+                <span>
+                  <i className="critical" /> Crítica
+                </span>
                 <span>
                   <i className="work" /> Trabalho
                 </span>

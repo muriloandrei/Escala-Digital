@@ -168,10 +168,14 @@ function validarTurnoAprendiz(funcionarioLabel, dia) {
   return errors;
 }
 
-function validarRegrasFuncionario(funcionario) {
+function validarRegrasFuncionario(funcionario, onCritica) {
   const label = funcionario.nome || funcionario.NOME || funcionario.chapa || funcionario.CHAPA || funcionario.escfuncId || 'Funcionario';
   const dias = [...(funcionario.dias || [])].sort((a, b) => formatDate(a.data || a.DT).localeCompare(formatDate(b.data || b.DT)));
   const errors = [];
+  const addCritica = (mensagem, datas) => {
+    errors.push(mensagem);
+    if (onCritica) onCritica({ mensagem, datas });
+  };
   let ultimoTrabalho = null;
   let ultimoDomingoTrabalhado = null;
   let diasTrabalhadosConsecutivos = 0;
@@ -189,14 +193,15 @@ function validarRegrasFuncionario(funcionario) {
     const weekKey = getWeekKey(dataIso);
     diasPorSemana.set(weekKey, (diasPorSemana.get(weekKey) || 0) + 1);
     if (descanso) descansosPorSemana.set(weekKey, (descansosPorSemana.get(weekKey) || 0) + 1);
-    errors.push(...(isFuncionarioAprendiz(funcionario) ? validarTurnoAprendiz(label, dia) : validarTurnoDia(label, dia)));
+    (isFuncionarioAprendiz(funcionario) ? validarTurnoAprendiz(label, dia) : validarTurnoDia(label, dia))
+      .forEach((mensagem) => addCritica(mensagem, [dataIso]));
 
     if (isFolgaSemanalAutomatica(dia)) {
       const totalFolgasSemana = (folgasPorSemana.get(weekKey) || 0) + 1;
       folgasPorSemana.set(weekKey, totalFolgasSemana);
       const limiteFolgasSemana = semanasExcecaoPosFerias.has(weekKey) ? 3 : 2;
       if (totalFolgasSemana > limiteFolgasSemana) {
-        errors.push(`${label}: Dia ${Number(dataIso.slice(8, 10))}: possui ${totalFolgasSemana} folgas na semana iniciada em ${weekKey}; limite permitido: ${limiteFolgasSemana}, contando domingo.`);
+        addCritica(`${label}: Dia ${Number(dataIso.slice(8, 10))}: possui ${totalFolgasSemana} folgas na semana iniciada em ${weekKey}; limite permitido: ${limiteFolgasSemana}, contando domingo.`, [dataIso]);
       }
     }
 
@@ -207,7 +212,7 @@ function validarRegrasFuncionario(funcionario) {
 
     diasTrabalhadosConsecutivos += 1;
     if (diasTrabalhadosConsecutivos > maxDiasConsecutivos) {
-      errors.push(`${label}: trabalhou ${diasTrabalhadosConsecutivos} dias consecutivos ate ${dataIso}; limite permitido no 5x2: ${maxDiasConsecutivos}.`);
+      addCritica(`${label}: trabalhou ${diasTrabalhadosConsecutivos} dias consecutivos ate ${dataIso}; limite permitido no 5x2: ${maxDiasConsecutivos}.`, [dataIso]);
     }
 
     const horario = getHorarioDia(dia);
@@ -215,10 +220,10 @@ function validarRegrasFuncionario(funcionario) {
       const diffDias = Math.round((data - ultimoTrabalho.data) / 86400000);
       const descansoMin = ((diffDias - 1) * 1440) + (1440 - ultimoTrabalho.saida) + horario.entrada;
       if (diffDias === 1 && descansoMin < 660) {
-        errors.push(`${label}: interjornada menor que 11h entre ${ultimoTrabalho.dataIso} e ${dataIso}.`);
+        addCritica(`${label}: interjornada menor que 11h entre ${ultimoTrabalho.dataIso} e ${dataIso}.`, [ultimoTrabalho.dataIso, dataIso]);
       }
       if (diffDias > 1 && descansoMin < 2100) {
-        errors.push(`${label}: descanso apos folga menor que 35h entre ${ultimoTrabalho.dataIso} e ${dataIso}.`);
+        addCritica(`${label}: descanso apos folga menor que 35h entre ${ultimoTrabalho.dataIso} e ${dataIso}.`, [ultimoTrabalho.dataIso, dataIso]);
       }
     }
 
@@ -226,7 +231,7 @@ function validarRegrasFuncionario(funcionario) {
       if (ultimoDomingoTrabalhado) {
         const diffDomingos = Math.round((data - ultimoDomingoTrabalhado) / 86400000);
         if (diffDomingos === 7) {
-          errors.push(`${label}: trabalhou dois domingos consecutivos (${formatDate(ultimoDomingoTrabalhado.toISOString())} e ${dataIso}).`);
+          addCritica(`${label}: trabalhou dois domingos consecutivos (${formatDate(ultimoDomingoTrabalhado.toISOString())} e ${dataIso}).`, [formatDate(ultimoDomingoTrabalhado.toISOString()), dataIso]);
         }
       }
       ultimoDomingoTrabalhado = data;
@@ -244,7 +249,8 @@ function validarRegrasFuncionario(funcionario) {
     const minimoDescansosSemana = Math.min(2, Math.round((Number(totalDiasSemana) || 0) * 2 / 7));
     const totalDescansosSemana = descansosPorSemana.get(weekKey) || 0;
     if (minimoDescansosSemana > 0 && totalDescansosSemana < minimoDescansosSemana) {
-      errors.push(`${label}: possui ${totalDescansosSemana} descanso(s) na semana iniciada em ${weekKey}; minimo esperado no 5x2: ${minimoDescansosSemana}.`);
+      addCritica(`${label}: possui ${totalDescansosSemana} descanso(s) na semana iniciada em ${weekKey}; minimo esperado no 5x2: ${minimoDescansosSemana}.`,
+        Array.from({ length: 7 }, (_, index) => addDaysIso(weekKey, index)));
     }
   });
 
@@ -296,7 +302,7 @@ function validarCriticasEscopo({ lojaId, mesRef, funcionarios }) {
   ];
 }
 
-function agruparCriticasPorSubsecao({ lojaId, mesRef, escala }) {
+function agruparCriticasPorSubsecao({ escala }) {
   const secoes = new Map((escala.secoes || []).map((secao) => [Number(secao.ESCSECAO_ID), secao]));
   const diasPorFuncionario = new Map();
   for (const dia of escala.dias || []) {
@@ -325,10 +331,22 @@ function agruparCriticasPorSubsecao({ lojaId, mesRef, escala }) {
       dias: diasPorFuncionario.get(Number(funcionario.ESCFUNC_ID)) || []
     });
   }
-  return [...grupos.values()].map(({ funcionarios, ...grupo }) => ({
-    ...grupo,
-    criticas: validarCriticasEscopo({ lojaId, mesRef, funcionarios })
-  })).filter((grupo) => grupo.criticas.length > 0);
+  return [...grupos.values()].map(({ funcionarios, ...grupo }) => {
+    const criticas = [];
+    const marcadores = [];
+    for (const funcionario of funcionarios) {
+      if (!funcionario.dias.length) {
+        const mensagem = `${funcionario.nome || funcionario.chapa || funcionario.escfuncId}: escala sem dias gerados.`;
+        criticas.push(mensagem);
+        marcadores.push({ escfuncId: funcionario.escfuncId, datas: [], mensagem });
+        continue;
+      }
+      criticas.push(...validarRegrasFuncionario(funcionario, ({ mensagem, datas }) => {
+        marcadores.push({ escfuncId: funcionario.escfuncId, datas, mensagem });
+      }));
+    }
+    return { ...grupo, criticas, marcadores };
+  }).filter((grupo) => grupo.criticas.length > 0);
 }
 
 module.exports = { REGRAS_VIGENTES, validateEscalaPayload, validarRegrasFuncionario,

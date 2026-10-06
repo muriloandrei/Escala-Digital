@@ -76,6 +76,26 @@ test('painel mostra criticas de outras subsecoes sem repetir funcionarios ou sec
   assert.equal(grupos[0].criticas.length, 2);
   assert.equal(grupos[1].criticas.length, 1);
   assert.ok(grupos.every((grupo) => grupo.secao === 'Frente de Caixa'));
+  assert.deepEqual(grupos[0].marcadores.map((marker) => marker.escfuncId), [1, 2]);
+  assert.ok(grupos[0].marcadores.every((marker) => marker.datas.length === 0));
+});
+
+test('criticas marcam dia invalido e todos os dias da semana com falta de folga', () => {
+  const dias = Array.from({ length: 7 }, (_, index) => ({
+    ESCFUNC_ID: 1,
+    DT: `2026-11-0${index + 2}`,
+    PROGRAMACAO: 'TRB',
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  }));
+  dias[0].HR_ENT2 = null;
+  const [grupo] = agruparCriticasPorSubsecao({ escala: {
+    secoes: [{ ESCSECAO_ID: 1, DESCR: 'Frente de Caixa' }],
+    funcionarios: [{ ESCFUNC_ID: 1, NOME: 'Ana', ESCSECAO_ID: 1, ESCSUBSECAO_ID: 11, SUBSECAO_DESCR: 'Caixa' }],
+    dias
+  } });
+  assert.ok(grupo.marcadores.some((marker) => marker.mensagem.includes('horario incompleto') && marker.datas.join() === '2026-11-02'));
+  assert.ok(grupo.marcadores.some((marker) => marker.mensagem.includes('minimo esperado') && marker.datas.length === 7));
+  assert.deepEqual(grupo.criticas, validarCriticasEscopo({ lojaId: 10, mesRef: '2026-11-01', funcionarios: [{ escfuncId: 1, nome: 'Ana', dias }] }));
 });
 
 test('criticas calculam semanas com datas Oracle sem produzir NaN', () => {

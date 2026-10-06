@@ -430,7 +430,7 @@ router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaR
         dias: (escala.dias || []).filter((dia) => Number(dia.ESCFUNC_ID) === Number(funcionario.ESCFUNC_ID))
       }));
     const criticas = validarCriticasEscopo({ lojaId: query.lojaId, mesRef: query.mesRef, funcionarios });
-    const grupos = agruparCriticasPorSubsecao({ lojaId: query.lojaId, mesRef: query.mesRef, escala });
+    const grupos = agruparCriticasPorSubsecao({ escala });
     return res.json({ criticas, grupos });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Filtros de criticas invalidos.' });

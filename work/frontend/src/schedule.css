@@ -367,6 +367,20 @@
   background: #f6f8fb;
   color: #8c9aad;
 }
+.monthly-grid td.critical {
+  background: #ffe7e7;
+  color: #8a2626;
+  box-shadow: inset 0 0 0 2px #d74848;
+}
+.monthly-grid tbody th.employee-col.critical {
+  background: #fff0f0;
+  border-left: 3px solid #d74848;
+  color: #8a2626;
+}
+.schedule-legend i.critical {
+  background: #ffe7e7;
+  border: 2px solid #d74848;
+}
 .day-badge {
   display: inline-block;
   min-width: 48px;
@@ -384,6 +398,16 @@
   padding: 10px 11px;
 }
 .daily-schedule table { min-width: 690px; }
+.daily-schedule tr.critical td {
+  background: #fff0f0;
+}
+.daily-schedule tr.critical .daily-distribution {
+  border-left: 3px solid #d74848;
+  color: #8a2626;
+}
+.daily-schedule tr.critical .daily-shift-times {
+  color: #8a2626;
+}
 .daily-schedule .daily-employee { width: 270px; }
 .daily-employee strong, .daily-employee small { display: block; }
 .daily-employee small { margin-top: 4px; color: #60758c; }
@@ -446,6 +470,18 @@
   padding: 10px 13px;
   font-size: 13px;
 }
+.cell-detail .cell-critiques {
+  flex: 1 0 100%;
+  display: block;
+  padding: 8px 10px;
+  border-left: 3px solid #d74848;
+  background: #fff0f0;
+  color: #8a2626;
+}
+.cell-critiques ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
 .cell-detail > div {
   display: grid;
   gap: 3px;
@@ -504,6 +540,23 @@
   background: #e9f7ef;
   color: #155f3d;
   border: 1px solid #b9e5c9;
+}
+.schedule-holidays ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 6px 18px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.schedule-holidays li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.schedule-holidays time {
+  white-space: nowrap;
+  font-weight: 700;
 }
 .monthly-grid th.holiday-date {
   background: #fff0c2;
