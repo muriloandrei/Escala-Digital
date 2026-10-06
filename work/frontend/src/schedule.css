@@ -213,26 +213,16 @@
   text-align: center;
   border: 1px solid #e1e7ef;
 }
-.monthly-grid thead th {
+.monthly-grid thead {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 4;
+}
+.monthly-grid thead th {
   background: #f3f6fa;
   font-weight: 650;
   color: #475f7a;
   height: 26px;
-}
-.monthly-grid thead tr:nth-child(2) th {
-  top: 26px;
-}
-.monthly-grid thead tr:nth-child(3) th {
-  top: 52px;
-}
-.monthly-grid thead tr:nth-child(4) th {
-  top: 78px;
-}
-.monthly-grid thead tr:nth-child(5) th {
-  top: 104px;
 }
 .monthly-grid .monthly-coverage-row th,
 .monthly-grid .monthly-count-row th {
