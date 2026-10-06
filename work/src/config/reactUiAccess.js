@@ -10,10 +10,15 @@ function isReactUiAllowed(user, ui) {
   return Boolean(login && ui?.reactAllowedLogins?.includes(login));
 }
 
-function getLoginStartPath(user, ui) {
+function requiresTraining(user, ui) {
+  return isReactUiAllowed(user, ui);
+}
+
+function getLoginStartPath(user, ui, trainingStage = 12) {
+  if (requiresTraining(user, ui) && trainingStage < 12) return '/nova/treinamento';
   return ui?.reactDefault && isReactUiAllowed(user, ui)
     ? '/nova'
     : '/app#/escalas-geradas';
 }
 
-module.exports = { parseAllowedLogins, isReactUiAllowed, getLoginStartPath };
+module.exports = { parseAllowedLogins, isReactUiAllowed, requiresTraining, getLoginStartPath };
