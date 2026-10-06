@@ -1158,7 +1158,8 @@ async function liberarEscalaLojaMes({
   lojaId,
   mesRef,
   hojeIso = formatDateValue(new Date()),
-  somenteFrenteCaixa = true
+  somenteFrenteCaixa = true,
+  dryRun = false
 }) {
   const secoesLiberacao = somenteFrenteCaixa ? await listSecoesEscopoOperacionalIds(lojaId) : null;
   const incluiFiscalRemoto = Number(lojaId) === 999;
@@ -1197,6 +1198,18 @@ async function liberarEscalaLojaMes({
       motivo: somenteFrenteCaixa
         ? `Nenhum funcionario de ${escopoOperacionalTexto} apto para liberacao.`
         : 'Nenhum funcionario apto para liberacao.'
+    };
+  }
+
+  if (dryRun) {
+    return {
+      lojaId,
+      mesRef,
+      criada: false,
+      prevista: true,
+      funcionarios: funcionariosPayload.length,
+      escopo: somenteFrenteCaixa ? escopoOperacionalTexto : 'Todos os setores',
+      pendenteGeracao: true
     };
   }
 
@@ -1373,13 +1386,14 @@ async function liberarEscalasMensais({
   mesRef = formatDateValue(getMonthStart()),
   lojas = null,
   hojeIso = formatDateValue(new Date()),
-  somenteFrenteCaixa = true
+  somenteFrenteCaixa = true,
+  dryRun = false
 } = {}) {
   const lojasBase = lojas || (await catalogService.listLojas()).map((loja) => Number(loja.LOJA)).filter(Boolean);
   const resultados = [];
   for (const lojaId of [...new Set(lojasBase.map(Number).filter(Boolean))]) {
     try {
-      resultados.push(await liberarEscalaLojaMes({ lojaId, mesRef, hojeIso, somenteFrenteCaixa }));
+      resultados.push(await liberarEscalaLojaMes({ lojaId, mesRef, hojeIso, somenteFrenteCaixa, dryRun }));
     } catch (error) {
       resultados.push({
         lojaId,

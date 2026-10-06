@@ -1351,6 +1351,16 @@ test('monthly release defaults to operational sections led by Frente de Caixa', 
   };
 
   try {
+    const preview = await monthlyReleaseService.liberarEscalaLojaMes({
+      lojaId: 35,
+      mesRef: '2026-09-01',
+      hojeIso: '2026-09-01',
+      dryRun: true
+    });
+    assert.equal(preview.prevista, true);
+    assert.equal(preview.funcionarios, 1);
+    assert.equal(savedPayload, null);
+
     const result = await monthlyReleaseService.liberarEscalaLojaMes({
       lojaId: 35,
       mesRef: '2026-09-01',
