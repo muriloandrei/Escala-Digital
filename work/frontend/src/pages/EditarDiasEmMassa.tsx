@@ -12,7 +12,7 @@ function today() {
 function onlyDate(value: string) { return String(value || '').slice(0, 10); }
 
 function isProtected(day: DiaEscala) {
-  return Boolean(day.FIXO_ESCALA || day.AUSENCIA_OBRIGATORIA || Number(day.OFICIALIZADA) === 1
+  return Boolean(day.FIXO_ESCALA || day.AUSENCIA_OBRIGATORIA
     || ['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase()));
 }
 

@@ -10,7 +10,7 @@ const rmIntegrationService = require('../services/rmIntegrationService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { validateStandardShift } = require('../domain/shiftValidation');
 const monthlyReleaseService = require('../services/monthlyReleaseService');
-const { REGRAS_VIGENTES, validateEscalaPayload } = require('../rules/escalaRules');
+const { REGRAS_VIGENTES, validateEscalaPayload, validarCriticasEscopo } = require('../rules/escalaRules');
 const { buildDiaAlteracoes, normalizeScheduleDay } = require('../utils/scheduleDiff');
 const { listNationalHolidays } = require('../domain/nationalHolidays');
 const { validateQuickRestWorkEdit } = require('../domain/quickEdit');
@@ -406,6 +406,36 @@ router.get('/mensal', requirePermission('escalas', 'visualizar'), resolveLojaReq
   }
 });
 
+router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const query = z.object({
+      lojaId: z.coerce.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      escsecaoId: z.coerce.number().int().positive(),
+      escfuncIds: z.string().regex(/^\d+(,\d+)*$/).optional()
+    }).parse(req.query);
+    const secoesPermitidas = await getSecoesPermitidas(req, query.lojaId);
+    const escala = await escalaService.getEscalaMensal({ lojaId: query.lojaId, mesRef: query.mesRef, secoesPermitidas });
+    if (!(escala.secoes || []).some((secao) => Number(secao.ESCSECAO_ID) === query.escsecaoId)) {
+      return res.status(404).json({ error: 'Secao nao encontrada na escala acessivel.' });
+    }
+    const ids = query.escfuncIds ? new Set(query.escfuncIds.split(',').map(Number)) : null;
+    const funcionarios = (escala.funcionarios || [])
+      .filter((funcionario) => Number(funcionario.ESCSECAO_ID) === query.escsecaoId
+        && (!ids || ids.has(Number(funcionario.ESCFUNC_ID))))
+      .map((funcionario) => ({
+        escfuncId: Number(funcionario.ESCFUNC_ID), chapa: funcionario.CHAPA,
+        nome: funcionario.NOME, funcao: funcionario.FUNCAO_DESCR,
+        dias: (escala.dias || []).filter((dia) => Number(dia.ESCFUNC_ID) === Number(funcionario.ESCFUNC_ID))
+      }));
+    const criticas = validarCriticasEscopo({ lojaId: query.lojaId, mesRef: query.mesRef, funcionarios });
+    return res.json({ criticas });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Filtros de criticas invalidos.' });
+    return next(error);
+  }
+});
+
 router.get('/mensal-lote', requirePermission('escalas', 'visualizar'), async (req, res, next) => {
   try {
     const mesRef = req.query.mesRef;
@@ -515,6 +545,9 @@ router.post('/oficializar', requireAdmin, requirePermission('escalas', 'oficiali
     return res.json({ ok: true, revisao: result.revisao, affectedRows: result.affectedRows, operacaoId: result.operacaoId, rm });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de oficializacao invalidos.', details: error.errors });
+    if (error.statusCode === 422 && Array.isArray(error.details)) {
+      return res.status(422).json({ error: error.message, errors: error.details });
+    }
     return next(error);
   }
 });

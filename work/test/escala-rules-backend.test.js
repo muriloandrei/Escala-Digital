@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateEscalaPayload } = require('../src/rules/escalaRules');
+const { validateEscalaPayload, validarCriticasEscopo, getCriticasCoberturaMinima } = require('../src/rules/escalaRules');
 
 function buildPayload(dias, funcionarioOverrides = {}) {
   return {
@@ -38,6 +38,24 @@ function descanso(data, programacao = 'F') {
     programacao
   };
 }
+
+test('oficializacao bloqueia critica individual mas nao alerta de cobertura', () => {
+  const funcionarios = [{ escfuncId: 10, nome: 'Teste', dias: [
+    trabalho('2026-09-01'), trabalho('2026-09-02'), descanso('2026-09-03'),
+    trabalho('2026-09-04'), trabalho('2026-09-05'), descanso('2026-09-06')
+  ] }];
+  assert.deepEqual(validarCriticasEscopo({ lojaId: 1, mesRef: '2026-09-01', funcionarios }), []);
+  assert.ok(getCriticasCoberturaMinima(funcionarios, 60, '2026-09-01').length > 0);
+  funcionarios[0].dias = Array.from({ length: 6 }, (_, index) => trabalho(`2026-09-0${index + 1}`));
+  assert.ok(validarCriticasEscopo({ lojaId: 1, mesRef: '2026-09-01', funcionarios })
+    .some((critica) => critica.includes('dias consecutivos')));
+});
+
+test('oficializacao identifica funcionario sem dias gerados', () => {
+  const criticas = validarCriticasEscopo({ lojaId: 1, mesRef: '2026-09-01',
+    funcionarios: [{ escfuncId: 10, nome: 'Teste', dias: [] }] });
+  assert.match(criticas[0], /escala sem dias gerados/);
+});
 
 test('backend rejects two consecutive worked Sundays', () => {
   const errors = validateEscalaPayload(buildPayload([

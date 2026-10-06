@@ -1,7 +1,7 @@
 const catalogService = require('./catalogService');
 const escalaService = require('./escalaService');
 const pendenciaFuncionarioService = require('./pendenciaFuncionarioService');
-const { validateEscalaPayload } = require('../rules/escalaRules');
+const { validateEscalaPayload, getCriticasCoberturaMinima } = require('../rules/escalaRules');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 
 function formatDateValue(value) {
@@ -1138,25 +1138,6 @@ function anexarDiasPassados(funcionariosPayload = [], diasAtuais = [], hojeIso =
       dias: [...passados, ...diasFuturos].sort((left, right) => left.data.localeCompare(right.data))
     };
   });
-}
-
-function getCriticasCoberturaMinima(funcionariosPayload = [], percentualMinimo = 60, hojeIso = formatDateValue(new Date())) {
-  const dias = new Map();
-  (funcionariosPayload || []).forEach((funcionario) => {
-    (funcionario.dias || []).forEach((dia) => {
-      const data = formatDateValue(dia.data || dia.DT);
-      if (!data || data < hojeIso) return;
-      if (!dias.has(data)) dias.set(data, { total: 0, trabalhando: 0 });
-      const item = dias.get(data);
-      item.total += 1;
-      if (String(dia.programacao || dia.PROGRAMACAO || 'TRB').toUpperCase() === 'TRB') item.trabalhando += 1;
-    });
-  });
-
-  return [...dias.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .filter(([, item]) => item.total > 0 && (item.trabalhando / item.total) * 100 < percentualMinimo)
-    .map(([data, item]) => `Cobertura minima da secao abaixo de ${percentualMinimo}% em ${data}. Trabalhando: ${item.trabalhando}/${item.total}.`);
 }
 
 async function listSecoesEscopoOperacionalIds(lojaId) {

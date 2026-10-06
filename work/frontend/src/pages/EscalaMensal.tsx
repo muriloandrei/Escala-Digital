@@ -15,7 +15,7 @@ import {
   type Subsecao,
   type User,
 } from '../api';
-import { EditarDiaEscala, toPayloadDay } from './EditarDiaEscala';
+import { EditarDiaEscala } from './EditarDiaEscala';
 import { TransferirSubsecao } from './TransferirSubsecao';
 import { EditarFixoEscala } from './EditarFixoEscala';
 import { EditarDiasEmMassa } from './EditarDiasEmMassa';
@@ -123,7 +123,9 @@ export function EscalaMensal({ user }: { user: User }) {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [actionError, setActionError] = useState('');
-  const [quickCritiques, setQuickCritiques] = useState<Record<string, string[]>>({});
+  const [scopeCritiques, setScopeCritiques] = useState<string[]>([]);
+  const [scopeCritiquesLoading, setScopeCritiquesLoading] = useState(false);
+  const [scopeCritiquesError, setScopeCritiquesError] = useState('');
   const [selectedCell, setSelectedCell] = useState<{
     employee: Funcionario;
     date: string;
@@ -139,8 +141,6 @@ export function EscalaMensal({ user }: { user: User }) {
   const gridPosition = useRef({ left: 0, top: 0 });
 
   useEffect(() => () => { if (clickTimer.current !== null) window.clearTimeout(clickTimer.current); }, []);
-
-  useEffect(() => { setQuickCritiques({}); }, [lojaId, mesRef]);
 
   useEffect(() => {
     if (!lojaId || !mesRef) return;
@@ -246,6 +246,29 @@ export function EscalaMensal({ user }: { user: User }) {
   const scopePeople = employees.filter((item) =>
     memberOfSubsection(item, subsection) &&
     (!personFilter || String(item.ESCFUNC_ID) === personFilter));
+  const scopeIdsKey = scopePeople.map((person) => Number(person.ESCFUNC_ID)).sort((a, b) => a - b).join(',');
+  useEffect(() => {
+    if (!lojaId || !mesRef || !sectionId || !scopeIdsKey || !escala) {
+      setScopeCritiques([]);
+      setScopeCritiquesLoading(false);
+      setScopeCritiquesError('');
+      return;
+    }
+    const controller = new AbortController();
+    setScopeCritiques([]);
+    setScopeCritiquesLoading(true);
+    setScopeCritiquesError('');
+    getJson<{ criticas: string[] }>(`/api/escalas/criticas?${new URLSearchParams({
+      lojaId, mesRef, escsecaoId: String(sectionId), escfuncIds: scopeIdsKey,
+    })}`, controller.signal)
+      .then(({ criticas }) => { setScopeCritiques(criticas); setScopeCritiquesLoading(false); })
+      .catch((reason) => {
+        if (reason.name === 'AbortError') return;
+        setScopeCritiquesError(reason instanceof Error ? reason.message : 'Não foi possível verificar as críticas.');
+        setScopeCritiquesLoading(false);
+      });
+    return () => controller.abort();
+  }, [lojaId, mesRef, sectionId, scopeIdsKey, escala]);
   const mixedSubsectionScope = subsection !== 'all' && scopePeople.some((person) => {
     const personDays = daysByEmployee.get(String(person.ESCFUNC_ID));
     return personDays && [...personDays.values()].some((day) => daySubKey(day) !== subsection);
@@ -327,9 +350,7 @@ export function EscalaMensal({ user }: { user: User }) {
         lojaId: Number(lojaId),
         mesRef,
         escsecaoId: Number(sectionId),
-        ...(subsection !== 'all' || personFilter
-          ? { escfuncIds: scopePeople.map((person) => Number(person.ESCFUNC_ID)) }
-          : {}),
+        escfuncIds: scopePeople.map((person) => Number(person.ESCFUNC_ID)),
       };
       if (action === 'oficializar') {
         const response = await postJson<{ affectedRows: number; rm?: { status?: string } }>(
@@ -388,9 +409,13 @@ export function EscalaMensal({ user }: { user: User }) {
 
   async function quickToggle(employee: Funcionario, date: string, day?: DiaEscala) {
     if (!lojaId || !mesRef || quickBusyRef.current || !canEdit(user, 'escalas') || !canEdit(user, 'escalas-funcionarios') || date < localToday() || escala?.status === 'FINALIZADA') return;
-    if (day?.AUSENCIA_OBRIGATORIA || Number(day?.OFICIALIZADA) === 1 || ['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) return;
+    if (day?.AUSENCIA_OBRIGATORIA || ['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) return;
     const existingFixed = escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && iso(item.DT) === date);
-    if (day?.FIXO_ESCALA && day) { setFixedCell({ employee, date }); return; }
+    if (day?.FIXO_ESCALA && day) {
+      if (Number(day.OFICIALIZADA) === 1) setActionError('O dia fixo oficializado precisa ser revisado antes de alterar o fixo.');
+      else setFixedCell({ employee, date });
+      return;
+    }
     const nextFixed = day ? null : nextFixedState(existingFixed?.PROGRAMACAO);
     const nextRest = day ? hasShift(day) : nextFixed === 'FXF';
     quickBusyRef.current = true; setQuickBusy(true); setActionError('');
@@ -439,13 +464,8 @@ export function EscalaMensal({ user }: { user: User }) {
           throw new Error('A leitura de volta não confirmou o dia. Atualize a escala antes de tentar novamente.');
         }
         setEscala(readback!.escala);
-        const criticas = saved?.criticas || (await postJson<{ errors: string[] }>('/api/escalas/validar', {
-          ...payload, funcionarios: [{ ...payload.funcionarios[0], dias: readback!.escala.dias
-            .filter((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID)).map(toPayloadDay) }],
-        }).then((result) => result.errors).catch(() => []));
-        setQuickCritiques((current) => ({ ...current, [String(employee.ESCFUNC_ID)]: criticas }));
       }
-      setActionMessage(`${employee.NOME}: ${day ? nextRest ? 'folga' : 'trabalho' : nextFixed === 'FXF' ? 'folga fixa' : nextFixed === 'TRB' ? 'horário fixo' : 'dia vazio'} atualizado.`);
+      setActionMessage(`${employee.NOME}: ${day ? nextRest ? 'folga' : 'trabalho' : nextFixed === 'FXF' ? 'folga fixa' : nextFixed === 'TRB' ? 'horário fixo' : 'dia vazio'} atualizado.${Number(day?.OFICIALIZADA) === 1 ? ' Reoficialização necessária.' : ''}`);
     } catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Não foi possível alterar o dia.'); }
     finally { quickBusyRef.current = false; setQuickBusy(false); }
   }
@@ -463,7 +483,7 @@ export function EscalaMensal({ user }: { user: User }) {
     if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
     clickTimer.current = null;
     if (!canEdit(user, 'escalas') || !canEdit(user, 'escalas-funcionarios') || escala?.status === 'FINALIZADA') { setSelectedCell({ employee, date, day }); return; }
-    if (day && !day.FIXO_ESCALA && !day.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase()) && Number(day.OFICIALIZADA) !== 1) setEditingCell({ employee, day });
+    if (day && !day.FIXO_ESCALA && !day.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase())) setEditingCell({ employee, day });
     else if (date >= localToday() && Number(day?.OFICIALIZADA) !== 1 && !day?.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) setFixedCell({ employee, date });
     else setSelectedCell({ employee, date, day });
   }
@@ -531,7 +551,8 @@ export function EscalaMensal({ user }: { user: User }) {
           {actionError}
         </div>
       )}
-      {Object.values(quickCritiques).some((items) => items.length > 0) && <div className="notice warning" role="status"><strong>Críticas dos colaboradores editados</strong><ul>{Object.values(quickCritiques).flat().map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></div>}
+      {scopeCritiquesError && <div className="notice error" role="alert">Não foi possível verificar as críticas: {scopeCritiquesError}</div>}
+      {scopeCritiques.length > 0 && <div className="notice error" role="alert"><strong>Críticas da escala · {scopeCritiques.length}</strong><ul>{scopeCritiques.slice(0, 10).map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul>{scopeCritiques.length > 10 && <span>Mais {scopeCritiques.length - 10} crítica(s).</span>}</div>}
       {!loading && !error && (
         <>
           <div className="schedule-summary">
@@ -671,7 +692,7 @@ export function EscalaMensal({ user }: { user: User }) {
                     <Play size={15} /> Gerar escala
                   </button>
                   {user.perfil === 'ADMIN' && !scopeOfficial && scopedDays.length > 0 && (
-                    <button className="button secondary" type="button" disabled={loading || mixedSubsectionScope} onClick={() => {
+                    <button className="button secondary" type="button" disabled={loading || mixedSubsectionScope || scopeCritiquesLoading || !!scopeCritiquesError || scopeCritiques.length > 0} title={scopeCritiques.length ? 'Resolva as críticas deste escopo antes de oficializar' : undefined} onClick={() => {
                       setActionError('');
                       setPendingAction('oficializar');
                     }}><ShieldCheck size={15} /> Oficializar</button>
@@ -806,7 +827,6 @@ export function EscalaMensal({ user }: { user: User }) {
                     !selectedCell.day.FIXO_ESCALA &&
                     !selectedCell.day.AUSENCIA_OBRIGATORIA &&
                     !['FER', 'AFA'].includes(String(selectedCell.day.PROGRAMACAO || '').toUpperCase()) &&
-                    Number(selectedCell.day.OFICIALIZADA) !== 1 &&
                     escala?.status !== 'FINALIZADA' && (
                       <button
                         type="button"
@@ -909,7 +929,7 @@ export function EscalaMensal({ user }: { user: User }) {
           onSaved={() => {
             setEditingCell(null);
             setSelectedCell(null);
-            setActionMessage('Rascunho do funcionário salvo e confirmado pela leitura da escala.');
+            setActionMessage(`Rascunho do funcionário salvo e confirmado pela leitura da escala.${Number(editingCell.day.OFICIALIZADA) === 1 ? ' Reoficialização necessária.' : ''}`);
             setReload((value) => value + 1);
           }}
         />

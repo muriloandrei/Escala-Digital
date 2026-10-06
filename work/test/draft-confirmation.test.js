@@ -16,6 +16,7 @@ function loadService(connection, appendEvent) {
       if (name === './catalogService') return {};
       if (name === '../domain/operationalPeriod') return {};
       if (name === '../utils/scheduleDiff') return {};
+      if (name === '../rules/escalaRules') return {};
       throw new Error(`Dependencia inesperada: ${name}`);
     }
   });

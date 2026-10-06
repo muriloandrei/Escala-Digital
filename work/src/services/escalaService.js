@@ -3,6 +3,7 @@ const catalogService = require('./catalogService');
 const escalaEventService = require('./escalaEventService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
+const { validarCriticasEscopo } = require('../rules/escalaRules');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -639,6 +640,17 @@ async function appendMudancaEscala(connection, {
 }) {
   const alteracoes = buildDiaAlteracoes(anteriores, novos);
   if (!alteracoes.length) return;
+  if (situacao === 'POS_OFICIALIZACAO' && revisaoAnterior !== null) {
+    await connection.execute(
+      `update sgn_esc_rm_envio
+          set status = 'SUPERADO', erro = 'Escala editada apos oficializacao; nova aprovacao necessaria.',
+              dt_hr_alter = sysdate
+        where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          and escfunc_id = :escfuncId and revisao <= :revisaoAnterior and status = 'PENDENTE'`,
+      { lojaId, mesRef, escfuncId: Number(funcionario.escfuncId || funcionario.ESCFUNC_ID), revisaoAnterior },
+      { autoCommit: false }
+    );
+  }
   await escalaEventService.appendEvent(connection, {
     operacaoId, lojaId, mesRef,
     escsecaoId: Number(funcionario.escsecaoId || funcionario.ESCSECAO_ID) || null,
@@ -2538,14 +2550,12 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
       );
       await lockFuncionariosEscala(connection, lojaId, candidatos.rows || []);
       const selecionadas = await connection.execute(
-        `select p.escprog_id, p.escfunc_id, p.revisao
+        `select p.escprog_id, p.escfunc_id, p.revisao, p.oficializada
            from sgn_esc_prog p
           where p.loja = :lojaId
             and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
             and p.escsecao_id = :escsecaoId
             ${filtroIds}
-            and nvl(p.oficializada, 0) = 0
-            and exists (select 1 from sgn_esc_prog_dia d where d.escprog_id = p.escprog_id)
             and p.revisao = (
               select max(px.revisao) from sgn_esc_prog px
                where px.loja = p.loja and px.mes_ref = p.mes_ref
@@ -2557,10 +2567,55 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
         binds,
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
-      const programacoes = selecionadas.rows || [];
+      const escopo = selecionadas.rows || [];
+      if (ids) {
+        const encontrados = new Set(escopo.map((row) => Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'))));
+        const ausentes = ids.filter((id) => !encontrados.has(id));
+        if (ausentes.length) {
+          const error = new Error('Ha funcionarios sem escala ativa neste escopo. Gere a escala antes de oficializar.');
+          error.statusCode = 422;
+          error.details = ausentes.map((id) => `Funcionario ${id}: escala sem dias gerados.`);
+          throw error;
+        }
+      }
+      const programacoes = escopo.filter((row) => Number(pick(row, 'OFICIALIZADA', 'oficializada') || 0) !== 1);
       if (!programacoes.length) {
         await connection.rollback();
         return { affectedRows: 0, revisao: latestRevision };
+      }
+      const progBinds = Object.fromEntries(escopo.map((row, index) =>
+        [`prog${index}`, Number(pick(row, 'ESCPROG_ID', 'escprog_id'))]));
+      const diasEscopo = await connection.execute(
+        `select p.escfunc_id, p.chapa, f.nome, fn.descr as funcao_descr,
+                d.dt, d.hr_ent1, d.hr_sai1, d.hr_ent2, d.hr_sai2, d.programacao
+           from sgn_esc_prog p
+           left join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
+           left join sgn_esc_funcao fn on fn.escfuncao_id = p.escfuncao_id
+           left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
+          where p.escprog_id in (${Object.keys(progBinds).map((key) => `:${key}`).join(', ')})
+          order by p.escfunc_id, d.dt`,
+        progBinds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const funcionarios = new Map();
+      for (const row of diasEscopo.rows || []) {
+        const escfuncId = Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'));
+        if (!funcionarios.has(escfuncId)) funcionarios.set(escfuncId, {
+          escfuncId, chapa: pick(row, 'CHAPA', 'chapa'), nome: pick(row, 'NOME', 'nome'),
+          funcao: pick(row, 'FUNCAO_DESCR', 'funcao_descr'), dias: []
+        });
+        if (pick(row, 'DT', 'dt')) funcionarios.get(escfuncId).dias.push({
+          data: formatDateValue(pick(row, 'DT', 'dt')),
+          hrEnt1: pick(row, 'HR_ENT1', 'hr_ent1'), hrSai1: pick(row, 'HR_SAI1', 'hr_sai1'),
+          hrEnt2: pick(row, 'HR_ENT2', 'hr_ent2'), hrSai2: pick(row, 'HR_SAI2', 'hr_sai2'),
+          programacao: pick(row, 'PROGRAMACAO', 'programacao')
+        });
+      }
+      const criticas = validarCriticasEscopo({ lojaId, mesRef, funcionarios: [...funcionarios.values()] });
+      if (criticas.length) {
+        const error = new Error('Resolva as criticas da secao/subsecao antes de oficializar.');
+        error.statusCode = 422;
+        error.details = criticas.slice(0, 100);
+        throw error;
       }
       const operacaoId = escalaEventService.createOperationId();
       for (const programacao of programacoes) {
@@ -2729,6 +2784,7 @@ module.exports = {
     assertRevisaoBase,
     assertEscalaSnapshot,
     assertFixoSnapshot,
+    appendMudancaEscala,
     situacaoDaAlteracao,
     encontrarErrosAusencias,
     aplicarHistoricoSubsecoes,

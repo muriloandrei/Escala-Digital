@@ -74,7 +74,7 @@ test('revisao aprovada ausente fica incerta e nao e marcada como enviada', async
   assert.match(updates[1].binds.erro, /Programacao oficializada nao encontrada/);
 });
 
-function loadEscalaService({ failQueue = false } = {}) {
+function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90] } = {}) {
   const operations = [];
   const connection = {
     async execute(sql, binds) {
@@ -86,7 +86,12 @@ function loadEscalaService({ failQueue = false } = {}) {
       if (/select distinct p\.escfunc_id/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90 }] };
       if (/select escfunc_id from sgn_esc_funcionario/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90 }] };
       if (/select p\.escprog_id, p\.escfunc_id, p\.revisao/i.test(sql)) {
-        return { rows: [{ ESCPROG_ID: 100, ESCFUNC_ID: 90, REVISAO: 7 }] };
+        return { rows: selectedIds.map((id) => ({ ESCPROG_ID: 100 + id, ESCFUNC_ID: id, REVISAO: 7 })) };
+      }
+      if (/from sgn_esc_prog p\s+left join sgn_esc_funcionario f/i.test(sql)) {
+        return { rows: [{ ESCFUNC_ID: 90, CHAPA: '000090', NOME: 'Teste',
+          FUNCAO_DESCR: 'OPERADOR DE CAIXA', DT: new Date('2026-10-05T00:00:00Z'),
+          PROGRAMACAO: 'TRB', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' }] };
       }
       if (/update sgn_esc_prog set oficializada/i.test(sql)) {
         operations.push('approve');
@@ -111,7 +116,8 @@ function loadEscalaService({ failQueue = false } = {}) {
       appendEvent: async () => { operations.push('event'); }
     },
     '../domain/operationalPeriod': { getOperationalPeriodIso: () => ({ inicio: '2026-10-05', fim: '2026-11-01' }) },
-    '../utils/scheduleDiff': { buildDiaAlteracoes: () => [] }
+    '../utils/scheduleDiff': { buildDiaAlteracoes: () => [] },
+    '../rules/escalaRules': { validarCriticasEscopo: () => criticas }
   };
   const source = fs.readFileSync(path.join(__dirname, '../src/services/escalaService.js'), 'utf8');
   vm.runInNewContext(source, { module, require: (name) => dependencies[name], console });
@@ -133,4 +139,50 @@ test('falha ao registrar pendencia reverte a oficializacao', async () => {
     /outbox unavailable/
   );
   assert.deepEqual(operations, ['approve', 'queue', 'rollback']);
+});
+
+test('criticas bloqueiam oficializacao sem enfileirar envio ao RM', async () => {
+  const { service, operations } = loadEscalaService({ criticas: ['Teste: seis dias consecutivos.'] });
+  await assert.rejects(
+    service.oficializarEscala({ lojaId: 35, mesRef: '2026-10-01', escsecaoId: 2003 }),
+    (error) => error.statusCode === 422 && error.details?.[0] === 'Teste: seis dias consecutivos.'
+  );
+  assert.deepEqual(operations, ['rollback']);
+});
+
+test('funcionario solicitado sem escala ativa bloqueia oficializacao', async () => {
+  const { service, operations } = loadEscalaService();
+  await assert.rejects(
+    service.oficializarEscala({ lojaId: 35, mesRef: '2026-10-01', escsecaoId: 2003, escfuncIds: [90, 91] }),
+    (error) => error.statusCode === 422 && error.details?.[0]?.includes('91')
+  );
+  assert.deepEqual(operations, ['rollback']);
+});
+
+test('edicao apos oficializacao supera envio pendente na mesma transacao', async () => {
+  const statements = [];
+  const module = { exports: {} };
+  const dependencies = {
+    '../db/oracle': { withConnection: async () => {}, oracledb: { OUT_FORMAT_OBJECT: 1 } },
+    './catalogService': {},
+    './escalaEventService': { appendEvent: async () => statements.push('event') },
+    '../domain/operationalPeriod': {},
+    '../utils/scheduleDiff': { buildDiaAlteracoes: () => [{ data: '2026-10-05' }] },
+    '../rules/escalaRules': { validarCriticasEscopo: () => [] }
+  };
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/escalaService.js'), 'utf8');
+  vm.runInNewContext(source, { module, require: (name) => dependencies[name], console });
+  await module.exports._private.appendMudancaEscala({
+    async execute(sql, binds) {
+      assert.match(sql, /set status = 'SUPERADO'/);
+      assert.match(sql, /status = 'PENDENTE'/);
+      assert.equal(binds.revisaoAnterior, 7);
+      statements.push('outbox');
+    }
+  }, {
+    lojaId: 35, mesRef: '2026-10-01', funcionario: { escfuncId: 90 },
+    anteriores: [{}], novos: [{}], revisaoAnterior: 7, revisaoNova: 8,
+    situacao: 'POS_OFICIALIZACAO'
+  });
+  assert.deepEqual(statements, ['outbox', 'event']);
 });
