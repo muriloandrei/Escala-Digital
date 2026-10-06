@@ -52,3 +52,15 @@ test('React access fails closed and normalizes the allowlist', () => {
   assert.equal(isReactUiAllowed({ login: 'murilo.jesus' }, { reactDefault: true, reactAllowedLogins: [] }), false);
   assert.equal(getLoginStartPath({ login: 'murilo.jesus' }, { ...ui, reactDefault: false }), '/app#/escalas-geradas');
 });
+
+test('wildcard libera a interface para todos sem aceitar configuracao mista', () => {
+  const all = { reactDefault: true, reactAllowedLogins: parseAllowedLogins('*') };
+  assert.equal(isReactUiAllowed({ login: 'lider.frente35' }, all), true);
+  assert.equal(isReactUiAllowed({ login: 'ADMIN' }, all), true);
+  assert.equal(requiresTraining({ login: 'lider.frente35' }, all), true);
+  assert.equal(getLoginStartPath({ login: 'lider.frente35' }, all, 0), '/nova/treinamento');
+  assert.equal(getLoginStartPath({ login: 'lider.frente35' }, all), '/nova');
+  assert.equal(isReactUiAllowed(null, all), false);
+  assert.equal(isReactUiAllowed({ login: 'lider.frente35' }, { ...all, reactAllowedLogins: ['*', 'admin'] }), false);
+  assert.equal(isReactUiAllowed({ login: 'admin' }, { ...all, reactAllowedLogins: [] }), false);
+});

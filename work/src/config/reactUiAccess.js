@@ -9,7 +9,9 @@ function parseAllowedLogins(value) {
 
 function isReactUiAllowed(user, ui) {
   const login = String(user?.login || '').trim().toLowerCase();
-  return Boolean(login && ui?.reactAllowedLogins?.includes(login));
+  const allowedLogins = ui?.reactAllowedLogins || [];
+  return Boolean(login && (allowedLogins.includes(login)
+    || (allowedLogins.length === 1 && allowedLogins[0] === '*')));
 }
 
 function requiresTraining(user, ui) {

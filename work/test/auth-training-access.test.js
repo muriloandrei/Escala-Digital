@@ -51,6 +51,13 @@ test('login comum ignora treinamento e acesso direto ao tour e negado', async ()
     assert.equal(deniedTour.status, 403);
     const adminTour = await fetch(`${base}/api/auth/treinamento`, { headers: { 'x-test-login': 'admin' } });
     assert.equal(adminTour.status, 200);
+    ui.reactAllowedLogins = ['*'];
+    const released = await login('lider.frente35');
+    assert.equal(released.status, 200);
+    assert.equal((await released.json()).startPath, '/nova/treinamento');
+    assert.deepEqual(progressCalls, [1, 1, 2]);
+    const releasedTour = await fetch(`${base}/api/auth/treinamento`, { headers: { 'x-test-login': 'lider.frente35' } });
+    assert.equal(releasedTour.status, 200);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

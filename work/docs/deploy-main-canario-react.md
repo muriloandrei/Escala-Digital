@@ -1,5 +1,7 @@
 # Deploy da main com interface React restrita
 
+> Este roteiro descreve o canario antigo. Para liberar a interface React a todos os usuarios, use [o roteiro de acesso geral](rollout-react-todos-oracle-linux.md).
+
 > Para a implantacao atual no Oracle Linux sem SQL*Plus, siga o [roteiro operacional atualizado](migracao-oracle-linux-homologacao-2026-10-05.md). Os comandos SQL*Plus abaixo sao uma alternativa antiga e nao devem ser misturados com o executor Node do roteiro novo.
 
 Este procedimento publica o codigo da `homologacao` na `main`, mas libera as telas novas `/nova` apenas para `murilo.jesus` e `admin`. Os demais usuarios continuam em `/app` apos concluir o treinamento obrigatorio em `/nova/treinamento`. **O allowlist isola somente a interface**: novas APIs, regras de escala e migrations passam a valer para todos apos a publicacao. Programe a janela e o backup como uma mudanca de backend, nao apenas visual.
