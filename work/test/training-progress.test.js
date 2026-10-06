@@ -58,3 +58,21 @@ test('treinamento v2 concluido continua liberado sem repeticao obrigatoria', asy
   assert.equal(progress.version, 3);
   assert.equal(progress.stage, 16);
 });
+
+test('constraint antiga de etapas informa a migration pendente', async () => {
+  const service = loadService({
+    async execute(sql) {
+      if (sql.includes('merge into')) {
+        const error = new Error('ORA-02290: check constraint (ESCALAINT.SGN_ESC_TREINAMENTO_ETAPA_CK) violated');
+        error.errorNum = 2290;
+        throw error;
+      }
+      return { rows: [{ VERSAO: 3, ETAPA: 12 }] };
+    }
+  });
+  await assert.rejects(service.saveProgress(42, 13), (error) => {
+    assert.equal(error.statusCode, 503);
+    assert.match(error.message, /20261006_treinamento_tour_v3/);
+    return true;
+  });
+});

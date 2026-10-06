@@ -11,6 +11,11 @@ function missingTable(error) {
   return Number(error?.errorNum) === 942 || /ORA-00942/.test(String(error?.message || ''));
 }
 
+function outdatedStageConstraint(error) {
+  return Number(error?.errorNum) === 2290
+    && /SGN_ESC_TREINAMENTO_ETAPA_CK/i.test(String(error?.message || ''));
+}
+
 async function getProgress(usuarioId) {
   return withConnection(async (connection) => {
     try {
@@ -65,6 +70,11 @@ async function saveProgress(usuarioId, stage) {
         unavailable.statusCode = 503;
         throw unavailable;
       }
+      if (outdatedStageConstraint(error)) {
+        const unavailable = new Error('Migration 20261006_treinamento_tour_v3.sql pendente no Oracle.');
+        unavailable.statusCode = 503;
+        throw unavailable;
+      }
       throw error;
     }
   });
@@ -88,4 +98,4 @@ async function resetProgress(usuarioId) {
   });
 }
 
-module.exports = { getProgress, saveProgress, resetProgress, _private: { missingTable } };
+module.exports = { getProgress, saveProgress, resetProgress, _private: { missingTable, outdatedStageConstraint } };

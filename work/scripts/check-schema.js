@@ -58,8 +58,8 @@ async function main() {
           .map((field) => `${table}.${field}`)),
         ...sequences.filter((name) => !availableSequences.has(name)),
         ...constraints.filter((name) => !availableConstraints.has(name)),
-        ...(trainingConstraint && !/ETAPA\s+BETWEEN\s+0\s+AND\s+12/i.test(String(trainingConstraint.SEARCH_CONDITION_VC || ''))
-          ? ['SGN_ESC_TREINAMENTO_ETAPA_CK(0..12)'] : []),
+        ...(trainingConstraint && !/ETAPA\s+BETWEEN\s+0\s+AND\s+16/i.test(String(trainingConstraint.SEARCH_CONDITION_VC || ''))
+          ? ['SGN_ESC_TREINAMENTO_ETAPA_CK(0..16)'] : []),
         ...indexes.filter((name) => !availableIndexes.has(name))
       ];
     });
