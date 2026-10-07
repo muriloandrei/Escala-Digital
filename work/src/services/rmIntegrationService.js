@@ -395,7 +395,9 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId
     : apenasNaoOficializada ? 'and nvl(p.oficializada, 0) = 0' : '';
   const result = await connection.execute(
     `select p.loja, p.mes_ref, p.revisao, p.escfunc_id, p.chapa, f.nome, f.codcoligada, ${cpfSelect},
-            d.dt, d.programacao
+            d.dt, d.programacao,
+            case when f.dt_demiss is not null and trunc(d.dt) > trunc(f.dt_demiss)
+              then 1 else 0 end as apos_demissao
      from sgn_esc_prog p
      left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
      join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
@@ -513,6 +515,9 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
     const rows = await getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId, escfuncIds, apenasOficializada: true });
     if (exigirEscala && !rows.length) {
       throw new Error('Programacao oficializada nao encontrada para a pendencia RM. Verifique a revisao antes de reprocessar.');
+    }
+    if (rows.some((row) => Number(pick(row, 'APOS_DEMISSAO', 'apos_demissao') || 0) === 1)) {
+      throw new Error('Envio RM suspenso: ha dias programados apos a demissao registrada. Revise a escala e a pendencia antes de reprocessar.');
     }
     if (!rmConfig.enabled) {
       await registrarRmLog(connection, {

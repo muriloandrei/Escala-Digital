@@ -361,7 +361,10 @@ export function Funcionarios({ user }: { user: User }) {
         <label>Motivo<select value={suspendType} onChange={(event) => setSuspendType(event.target.value)}><option value="AFASTAMENTO">Afastamento</option><option value="TRANSFERENCIA">Transferência</option><option value="DESLIGAMENTO">Desligamento</option><option value="OUTRO">Outro</option></select></label>
         <label>Início<input required type="date" value={suspendStart} onChange={(event) => setSuspendStart(event.target.value)} /></label>
         <label>Fim (opcional)<input type="date" min={suspendStart} value={suspendEnd} onChange={(event) => setSuspendEnd(event.target.value)} /></label>
-        <label>Justificativa<textarea required minLength={10} maxLength={500} value={suspendReason} onChange={(event) => setSuspendReason(event.target.value)} /></label>
+        <label>Justificativa (mínimo de 10 caracteres)
+          <textarea required minLength={10} maxLength={500} aria-describedby="suspension-reason-help" value={suspendReason} onChange={(event) => setSuspendReason(event.target.value)} />
+          <small id="suspension-reason-help" className="field-help">{suspendReason.trim().length} caracteres informados · mínimo 10, máximo 500</small>
+        </label>
         {suspendError && <div className="notice error" role="alert">{suspendError}</div>}
         <div className="confirm-actions"><button className="button secondary" type="button" disabled={suspendBusy} onClick={() => setSuspendTarget(null)}>Cancelar</button><button className="button primary" type="submit" disabled={suspendBusy || suspendReason.trim().length < 10}>{suspendBusy ? 'Registrando...' : 'Confirmar suspensão'}</button></div>
       </form></div>}

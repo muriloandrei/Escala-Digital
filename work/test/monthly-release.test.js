@@ -1465,6 +1465,94 @@ test('monthly scale detail does not add catalog sections outside active schedule
   assert.deepEqual(filtrados.map((funcionario) => funcionario.ESCFUNC_ID), [1]);
 });
 
+test('monthly scale read keeps days through dismissal and flags later saved days', () => {
+  const rows = [
+    { ESCFUNC_ID: 1, DT_DEMISS: new Date(2026, 9, 18), DT: new Date(2026, 9, 17) },
+    { ESCFUNC_ID: 1, DT_DEMISS: new Date(2026, 9, 18), DT: new Date(2026, 9, 18) },
+    { ESCFUNC_ID: 1, DT_DEMISS: new Date(2026, 9, 18), DT: new Date(2026, 9, 19) },
+    { ESCFUNC_ID: 2, DT_DEMISS: null, DT: new Date(2026, 9, 19) }
+  ];
+  const projected = _private.projetarDemissoesNaEscala(rows, '2026-10-20');
+  assert.deepEqual(projected.rows.map((row) => row.ESCFUNC_ID), [1, 1, 2]);
+  assert.deepEqual(projected.pendencias, { dias: 1, funcionarios: 1, futuros: 0, passados: 1 });
+  assert.deepEqual(_private.listarDiasAposDemissao(rows).map((row) => row.ESCFUNC_ID), [1]);
+});
+
+test('edits cannot add or change days after dismissal, but can preserve stale days for cleanup', () => {
+  const atual = { DT: '2026-10-19', PROGRAMACAO: 'TRB', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };
+  const igual = { data: '2026-10-19', programacao: 'TRB', hrEnt1: '08:00', hrSai1: '12:00', hrEnt2: '13:10', hrSai2: '17:58' };
+  assert.doesNotThrow(() => _private.assertSemNovaProgramacaoAposDemissao([igual], [atual], '2026-10-18'));
+  assert.doesNotThrow(() => _private.assertSemNovaProgramacaoAposDemissao([], [atual], '2026-10-18'));
+  assert.doesNotThrow(() => _private.assertSemNovaProgramacaoAposDemissao([{ data: '2026-10-18', programacao: 'F' }], [], '2026-10-18'));
+  assert.throws(() => _private.assertSemNovaProgramacaoAposDemissao([igual], [], '2026-10-18'), /apos a demissao/);
+  assert.throws(() => _private.assertSemNovaProgramacaoAposDemissao([{ ...igual, programacao: 'F' }], [atual], '2026-10-18'), /apos a demissao/);
+});
+
+test('release and generation never create days after the RM dismissal date', () => {
+  const funcionario = {
+    ESCFUNC_ID: 701, CHAPA: '701', NOME: 'Funcionario 701', LOJA: 10,
+    ESCSECAO_ID: 20, ESCFUNCAO_ID: 30, DT_DEMISS: new Date(2026, 9, 18),
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  };
+  const options = {
+    fixos: [{ ESCFUNC_ID: 701, DT: '2026-10-20', PROGRAMACAO: 'FXF' }],
+    ausencias: [{ ESCFUNC_ID: 701, DT_INIC: '2026-10-21', DT_FIM: '2026-10-21', MOTIVO: 'FERIAS' }]
+  };
+  const liberada = buildFuncionariosLiberacao([funcionario], [], '2026-10-01', '2026-10-16', options)[0];
+  const gerada = buildFuncionarioRascunho(funcionario, null, '2026-10-01', '2026-10-16', 0, null, options);
+  assert.ok(gerada.dias.length > 0);
+  assert.ok(liberada.dias.every((dia) => dia.data <= '2026-10-18'));
+  assert.ok(gerada.dias.every((dia) => dia.data <= '2026-10-18'));
+});
+
+test('section generation clears future days of a dismissed employee but keeps past days', async () => {
+  const originals = {
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listFixosEscala: escalaService.listFixosEscala,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  let savedPayload;
+  let listOptions;
+  catalogService.listFuncionariosByLoja = async (_lojaId, options) => {
+    listOptions = options;
+    return [
+      { ESCFUNC_ID: 701, CHAPA: '701', NOME: 'Funcionario 701', LOJA: 10,
+        ESCSECAO_ID: 20, ESCFUNCAO_ID: 30, DT_DEMISS: new Date(2026, 9, 15) },
+      { ESCFUNC_ID: 702, CHAPA: '702', NOME: 'Funcionario 702', LOJA: 10,
+        ESCSECAO_ID: 20, ESCFUNCAO_ID: 30, DT_DEMISS: new Date(2026, 9, 15) }
+    ];
+  };
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.listDiasSecaoAtual = async () => [
+    { ESCFUNC_ID: 701, DT: '2026-10-14', PROGRAMACAO: 'TRB',
+      HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' },
+    { ESCFUNC_ID: 701, DT: '2026-10-17', PROGRAMACAO: 'TRB',
+      HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' }
+  ];
+  escalaService.saveEscalasBatch = async (payload) => { savedPayload = payload; return payload.funcionarios; };
+  try {
+    const result = await monthlyReleaseService.gerarEscalaSecao({
+      lojaId: 10, mesRef: '2026-10-01', escsecaoId: 20, hojeIso: '2026-10-17'
+    });
+    assert.equal(result.criada, true);
+    assert.equal(listOptions.includeInactive, true);
+    assert.deepEqual(savedPayload.funcionarios.map((item) => item.escfuncId), [701]);
+    assert.deepEqual(savedPayload.funcionarios[0].dias.map((dia) => dia.data), ['2026-10-14']);
+  } finally {
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
+    escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
+    escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+  }
+});
+
 test('date lock blocks only previous days, not current day', () => {
   assert.equal(_private.isDiaBloqueadoParaEdicao('2026-08-14', '2026-08-15'), true);
   assert.equal(_private.isDiaBloqueadoParaEdicao('2026-08-15', '2026-08-15'), false);

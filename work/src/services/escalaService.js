@@ -85,6 +85,22 @@ function assertSemAlteracaoEmDiasBloqueados(diasAtuais = [], diasNovos = [], hoj
   throw error;
 }
 
+function assertSemNovaProgramacaoAposDemissao(diasNovos = [], diasAtuais = [], demissao) {
+  const dataDemissao = formatDateValue(demissao);
+  if (!dataDemissao) return;
+  const atuaisPorData = new Map(diasAtuais.map((dia) => [normalizeDiaComparavel(dia).data, dia]));
+  const alterados = diasNovos.filter((dia) => {
+    const data = normalizeDiaComparavel(dia).data;
+    const anterior = atuaisPorData.get(data);
+    return data > dataDemissao && (!anterior || !diasSaoIguais(dia, anterior));
+  });
+  if (!alterados.length) return;
+  const error = new Error(`Nao e permitido programar dias apos a demissao registrada no RM (${dataDemissao}).`);
+  error.statusCode = 422;
+  error.details = alterados.map((dia) => normalizeDiaComparavel(dia).data);
+  throw error;
+}
+
 function assertPreservaDatasEscala(diasAtuais = [], diasNovos = []) {
   const datasNovas = (diasNovos || []).map((dia) => normalizeDiaComparavel(dia).data);
   if (datasNovas.some((data) => !/^\d{4}-\d{2}-\d{2}$/.test(data)) || new Set(datasNovas).size !== datasNovas.length) {
@@ -600,6 +616,7 @@ function situacaoDaAlteracao(atual, oficializadaNova = 0) {
 
 async function lockFuncionariosEscala(connection, lojaId, funcionarios) {
   const ids = [...new Set(funcionarios.map((funcionario) => Number(funcionario.escfuncId || funcionario.ESCFUNC_ID)).filter(Boolean))].sort((a, b) => a - b);
+  const demissoes = new Map();
   for (let offset = 0; offset < ids.length; offset += 500) {
     const lote = ids.slice(offset, offset + 500);
     const binds = { lojaId };
@@ -608,7 +625,7 @@ async function lockFuncionariosEscala(connection, lojaId, funcionarios) {
       return `:id${index}`;
     });
     const result = await connection.execute(
-      `select escfunc_id from sgn_esc_funcionario
+      `select escfunc_id, dt_demiss from sgn_esc_funcionario
         where loja = :lojaId and escfunc_id in (${placeholders.join(', ')})
         order by escfunc_id for update wait 5`,
       binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -618,7 +635,9 @@ async function lockFuncionariosEscala(connection, lojaId, funcionarios) {
       error.statusCode = 409;
       throw error;
     }
+    result.rows.forEach((row) => demissoes.set(Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')), pick(row, 'DT_DEMISS', 'dt_demiss')));
   }
+  return demissoes;
 }
 
 function assertEscalaSnapshot(snapshot, atual, funcionario) {
@@ -748,6 +767,36 @@ function filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo = [], r
   if (!secoesDaEscala.size) return funcionariosCatalogo || [];
   return (funcionariosCatalogo || [])
     .filter((funcionario) => secoesDaEscala.has(Number(pick(funcionario, 'ESCSECAO_ID', 'escsecao_id'))));
+}
+
+function projetarDemissoesNaEscala(rows = [], hojeIso = getHojeIso()) {
+  const ocultos = [];
+  const visiveis = rows.filter((row) => {
+    const demissao = formatDateValue(pick(row, 'DT_DEMISS', 'dt_demiss'));
+    if (!demissao) return true;
+    const data = formatDateValue(pick(row, 'DT', 'dt'));
+    if (!data) return demissao >= hojeIso;
+    if (data <= demissao) return true;
+    ocultos.push(row);
+    return false;
+  });
+  return {
+    rows: visiveis,
+    pendencias: {
+      dias: ocultos.length,
+      funcionarios: new Set(ocultos.map((row) => String(pick(row, 'ESCFUNC_ID', 'escfunc_id')))).size,
+      futuros: ocultos.filter((row) => formatDateValue(pick(row, 'DT', 'dt')) >= hojeIso).length,
+      passados: ocultos.filter((row) => formatDateValue(pick(row, 'DT', 'dt')) < hojeIso).length
+    }
+  };
+}
+
+function listarDiasAposDemissao(rows = []) {
+  return rows.filter((row) => {
+    const demissao = formatDateValue(pick(row, 'DT_DEMISS', 'dt_demiss'));
+    const data = formatDateValue(pick(row, 'DT', 'dt'));
+    return demissao && data && data > demissao;
+  });
 }
 
 async function getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive = false }) {
@@ -1007,7 +1056,8 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
         error.statusCode = 404;
         throw error;
       }
-      await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
+      const demissoes = await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
+      assertSemNovaProgramacaoAposDemissao([{ data: data.DT || data.dt }], [], demissoes.get(Number(escfuncId)));
 
       const programacaoInput = String(data.PROGRAMACAO || data.programacao || 'TRB').trim().toUpperCase();
       const programacao = programacaoInput === 'F' || programacaoInput === 'FOLGA' ? 'FXF' : programacaoInput;
@@ -1225,6 +1275,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     if (latestRevision === null) return { revisao: null, status: null, dias: [], funcionarios: [], secoes: [] };
     const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
     const hasFuncionarioSubsecao = funcionarioColumns.has('ESCSUBSECAO_ID');
+    const dtDemissSelect = funcionarioColumns.has('DT_DEMISS') ? 'f.dt_demiss' : 'cast(null as date) as dt_demiss';
     const subsecaoSelect = hasFuncionarioSubsecao ? 'f.escsubsecao_id' : 'cast(null as number) as escsubsecao_id';
     const subsecaoDescrSelect = hasFuncionarioSubsecao ? 'ss.descr as subsecao_descr' : 'cast(null as varchar2(100)) as subsecao_descr';
     const subsecaoJoinSql = hasFuncionarioSubsecao ? 'left join sgn_esc_subsecao ss on ss.escsubsecao_id = f.escsubsecao_id and ss.escsecao_id = p.escsecao_id' : '';
@@ -1248,6 +1299,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           p.escsecao_id,
           p.escfuncao_id,
           f.nome,
+          ${dtDemissSelect},
           ${subsecaoSelect},
           ${subsecaoDescrSelect},
           s.cod_secao,
@@ -1290,7 +1342,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    const rows = result.rows || [];
+    const { rows, pendencias: pendenciasDesligamento } = projetarDemissoesNaEscala(result.rows || []);
     const funcionariosCatalogoCompleto = await catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }).catch(() => []);
     const funcionariosCatalogo = filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogoCompleto, rows);
     const catalogoPorFuncionario = new Map((funcionariosCatalogo || [])
@@ -1338,6 +1390,13 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       });
     }
     let fixos = await listFixosEscalaComConnection(connection, { lojaId, mesRef });
+    const demissoesPorFuncionario = new Map((result.rows || [])
+      .filter((row) => pick(row, 'DT_DEMISS', 'dt_demiss'))
+      .map((row) => [String(pick(row, 'ESCFUNC_ID', 'escfunc_id')), formatDateValue(pick(row, 'DT_DEMISS', 'dt_demiss'))]));
+    fixos = fixos.filter((fixo) => {
+      const demissao = demissoesPorFuncionario.get(String(pick(fixo, 'ESCFUNC_ID', 'escfunc_id')));
+      return !demissao || formatDateValue(pick(fixo, 'DT', 'dt')) <= demissao;
+    });
     if (Array.isArray(secoesPermitidas)) {
       const permitidasSet = new Set(secoesPermitidas.map(Number).filter(Boolean));
       fixos = fixos.filter((fixo) => permitidasSet.has(Number(pick(fixo, 'ESCSECAO_ID', 'escsecao_id'))));
@@ -1406,6 +1465,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
         COD_SECAO: preservarAlocacao && atual.ESCSECAO_ID ? atual.COD_SECAO : pick(funcionario, 'COD_SECAO', 'cod_secao') || atual.COD_SECAO,
         SECAO_DESCR: preservarAlocacao && atual.ESCSECAO_ID ? atual.SECAO_DESCR : pick(funcionario, 'SECAO_DESCR', 'secao_descr') || atual.SECAO_DESCR,
         FUNCAO_DESCR: pick(funcionario, 'FUNCAO_DESCR', 'funcao_descr') || atual.FUNCAO_DESCR,
+        DT_DEMISS: pick(funcionario, 'DT_DEMISS', 'dt_demiss') ?? atual.DT_DEMISS ?? null,
         HR_ENT1: pick(funcionario, 'HR_ENT1', 'hr_ent1') || atual.HR_ENT1,
         HR_SAI1: pick(funcionario, 'HR_SAI1', 'hr_sai1') || atual.HR_SAI1,
         HR_ENT2: pick(funcionario, 'HR_ENT2', 'hr_ent2') || atual.HR_ENT2,
@@ -1435,6 +1495,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       status: getMesStatus(mesRef, latestRevision),
       oficializada: rows.some((row) => Number(pick(row, 'OFICIALIZADA', 'oficializada') || 0) === 1) ? 1 : 0,
       dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')),
+      pendenciasDesligamento,
       funcionarios: [...funcionariosMap.values()],
       fixos,
       ausencias,
@@ -1591,7 +1652,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       }
 
       const locked = await connection.execute(
-        `select escfunc_id from sgn_esc_funcionario
+        `select escfunc_id, dt_demiss from sgn_esc_funcionario
          where escfunc_id = :escfuncId and loja = :loja for update wait 5`,
         { escfuncId, loja }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
@@ -1619,6 +1680,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       const targetDay = targetDayResult.rows[0];
       if (!targetDay) return null;
       const targetDate = pick(targetDay, 'DT', 'dt');
+      assertSemNovaProgramacaoAposDemissao([{ data: targetDate }], [], pick(locked.rows[0], 'DT_DEMISS', 'dt_demiss'));
       if (isDiaBloqueadoParaEdicao(targetDate)) {
         const error = new Error('Dias ja passados nao podem ser alterados manualmente.');
         error.statusCode = 422;
@@ -1864,7 +1926,7 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
 }
 
 async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada = 0, actor, acao, operacaoId, expectedSnapshots, expectedFixoSnapshots }) {
-  await lockFuncionariosEscala(connection, lojaId, funcionarios);
+  const demissoes = await lockFuncionariosEscala(connection, lojaId, funcionarios);
   if (expectedFixoSnapshots) {
     const escsecaoId = Number(funcionarios[0]?.escsecaoId || funcionarios[0]?.ESCSECAO_ID);
     const atuais = buildFixoSnapshots(await listFixosEscalaComConnection(connection, { lojaId, mesRef, escsecaoId }));
@@ -1885,6 +1947,7 @@ async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcion
     const escalaAtualFuncionario = escfuncId
       ? await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId })
       : null;
+    assertSemNovaProgramacaoAposDemissao(funcionario.dias || [], escalaAtualFuncionario?.dias || [], demissoes.get(escfuncId));
     if (expectedSnapshots) {
       assertEscalaSnapshot(expectedSnapshots[escfuncId] ?? null, escalaAtualFuncionario, funcionario);
       if (Number(pick(escalaAtualFuncionario?.header, 'OFICIALIZADA', 'oficializada') || 0) === 1) {
@@ -2040,7 +2103,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
   const ids = funcionarios.map((funcionario) => Number(funcionario.escfuncId || funcionario.ESCFUNC_ID));
   const lockBinds = Object.fromEntries(ids.map((id, index) => [`func${index}`, id]));
   const locked = await connection.execute(
-    `select escfunc_id from sgn_esc_funcionario
+    `select escfunc_id, dt_demiss from sgn_esc_funcionario
      where loja = :lojaId and escfunc_id in (${ids.map((_, index) => `:func${index}`).join(', ')})
      order by escfunc_id
      for update wait 5`,
@@ -2052,6 +2115,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
     error.statusCode = 404;
     throw error;
   }
+  const demissoes = new Map(locked.rows.map((row) => [Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')), pick(row, 'DT_DEMISS', 'dt_demiss')]));
   const saved = [];
   for (const funcionario of funcionarios) {
     const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
@@ -2063,6 +2127,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
     }
     assertRevisaoBase(funcionario, revisaoAtual);
     const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+    assertSemNovaProgramacaoAposDemissao(funcionario.dias || [], atual?.dias || [], demissoes.get(escfuncId));
     assertPreservaDatasEscala(atual?.dias || [], funcionario.dias || []);
     assertSemAlteracaoEmDiasBloqueados(atual?.dias || [], funcionario.dias || []);
     const revisaoQualquer = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
@@ -2218,7 +2283,7 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
       const operacaoId = escalaEventService.createOperationId();
       const escfuncId = Number(pick(funcionario, 'ESCFUNC_ID', 'escfuncId'));
       const locked = await connection.execute(
-        `select escfunc_id from sgn_esc_funcionario
+        `select escfunc_id, dt_demiss from sgn_esc_funcionario
          where escfunc_id = :escfuncId and loja = :lojaId for update wait 5`,
         { escfuncId, lojaId },
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -2226,6 +2291,12 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
       if (!locked.rows.length) {
         const error = new Error('Funcionario nao encontrado para a loja.');
         error.statusCode = 404;
+        throw error;
+      }
+      const demissao = formatDateValue(pick(locked.rows[0], 'DT_DEMISS', 'dt_demiss'));
+      if (demissao && demissao <= getHojeIso()) {
+        const error = new Error('O horario-base de funcionario desligado nao pode ser alterado.');
+        error.statusCode = 422;
         throw error;
       }
 
@@ -2305,7 +2376,7 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
 
       const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
       const locked = await connection.execute(
-        `select escfunc_id from sgn_esc_funcionario
+        `select escfunc_id, dt_demiss from sgn_esc_funcionario
          where escfunc_id = :escfuncId and loja = :lojaId for update wait 5`,
         { escfuncId, lojaId },
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -2329,6 +2400,7 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
       }
       assertRevisaoBase(funcionario, latestFuncionarioRevision);
       const escalaAtualFuncionario = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+      assertSemNovaProgramacaoAposDemissao(dias || [], escalaAtualFuncionario?.dias || [], pick(locked.rows[0], 'DT_DEMISS', 'dt_demiss'));
       assertSemAlteracaoEmDiasBloqueados(escalaAtualFuncionario?.dias || [], dias || []);
       const latestAnyFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
       const nextRevision = latestAnyFuncionarioRevision === null ? latestFuncionarioRevision + 1 : latestAnyFuncionarioRevision + 1;
@@ -2453,7 +2525,7 @@ async function sincronizarEscalaFuncionarioComRm({ lojaId, mesRef, escfuncId, rm
       }
 
       const locked = await connection.execute(
-        `select escfunc_id from sgn_esc_funcionario
+        `select escfunc_id, dt_demiss from sgn_esc_funcionario
          where escfunc_id = :escfuncId and loja = :lojaId for update wait 5`,
         { escfuncId, lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
@@ -2471,6 +2543,7 @@ async function sincronizarEscalaFuncionarioComRm({ lojaId, mesRef, escfuncId, rm
       }
 
       const { dias, alteracoes } = montarDiasReconciliadosRm(escalaAtual.dias, rmFolgaDatas, getOperationalPeriod(mesRef));
+      assertSemNovaProgramacaoAposDemissao(dias, escalaAtual.dias, pick(locked.rows[0], 'DT_DEMISS', 'dt_demiss'));
       if (!alteracoes.length) {
         return {
           alterado: false,
@@ -2586,7 +2659,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
       const progBinds = Object.fromEntries(escopo.map((row, index) =>
         [`prog${index}`, Number(pick(row, 'ESCPROG_ID', 'escprog_id'))]));
       const diasEscopo = await connection.execute(
-        `select p.escfunc_id, p.chapa, f.nome, fn.descr as funcao_descr,
+        `select p.escfunc_id, p.chapa, f.nome, f.dt_demiss, fn.descr as funcao_descr,
                 d.dt, d.hr_ent1, d.hr_sai1, d.hr_ent2, d.hr_sai2, d.programacao
            from sgn_esc_prog p
            left join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
@@ -2596,6 +2669,14 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
           order by p.escfunc_id, d.dt`,
         progBinds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
+      const diasAposDemissao = listarDiasAposDemissao(diasEscopo.rows || []);
+      if (diasAposDemissao.length) {
+        const error = new Error('Ha dias programados apos a demissao registrada no RM. Reavalie a escala antes de oficializar.');
+        error.statusCode = 422;
+        error.details = [...new Set(diasAposDemissao.map((row) => String(pick(row, 'CHAPA', 'chapa'))))]
+          .map((chapa) => `Funcionario ${chapa}: programacao apos a data de demissao.`);
+        throw error;
+      }
       const funcionarios = new Map();
       for (const row of diasEscopo.rows || []) {
         const escfuncId = Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'));
@@ -2775,11 +2856,14 @@ module.exports = {
   validateAusencias,
   _private: {
     getAlteracoesDiasBloqueados,
+    assertSemNovaProgramacaoAposDemissao,
     assertPreservaDatasEscala,
     isDiaBloqueadoParaEdicao,
     escolherRevisaoParaUpsertSemNovaRevisao,
     buildHistoricoAuditoriaQuery,
     filtrarFuncionariosCatalogoPorSecoesEscala,
+    projetarDemissoesNaEscala,
+    listarDiasAposDemissao,
     montarDiasReconciliadosRm,
     assertRevisaoBase,
     assertEscalaSnapshot,

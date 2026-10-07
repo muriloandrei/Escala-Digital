@@ -119,6 +119,7 @@ export type EscalaMensal = {
   revisao: number | null;
   status: string | null;
   oficializada?: number;
+  pendenciasDesligamento?: { dias: number; funcionarios: number; futuros: number; passados: number };
   funcionarios: Funcionario[];
   secoes: Secao[];
   dias: DiaEscala[];

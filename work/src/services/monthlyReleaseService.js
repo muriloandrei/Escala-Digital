@@ -77,6 +77,8 @@ function dataSuspensa(intervalo, data) {
 }
 
 function dataIndisponivel(intervalo, funcionario, indiceAusencias, data) {
+  const demissao = formatDateValue(pick(funcionario, 'DT_DEMISS', 'dt_demiss'));
+  if (demissao && data > demissao) return true;
   return dataSuspensa(intervalo, data) && !encontrarAusencia(indiceAusencias, funcionario, data);
 }
 
@@ -1236,7 +1238,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
   const [funcionarios, turnos, ausencias, fixos, suspensoes] = await Promise.all([
-    catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)] }),
+    catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)], includeInactive: true }),
     catalogService.listTurnosByLoja(lojaId),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId }),
@@ -1250,7 +1252,9 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
     ? new Set(escfuncIds.map(Number).filter(Boolean))
     : null;
   const indiceAusencias = criarIndiceAusencias(ausencias);
-  const funcionariosSecaoTodos = funcionarios.filter((funcionario) => Number(funcionario.ESCSECAO_ID) === Number(escsecaoId));
+  const funcionariosSecaoTodos = funcionarios.filter((funcionario) =>
+    Number(funcionario.ESCSECAO_ID) === Number(escsecaoId)
+    && (!funcionario.DT_DEMISS || idsComDiasAtuais.has(Number(funcionario.ESCFUNC_ID))));
   const funcionariosGeraveis = funcionariosSecaoTodos.filter((funcionario) =>
     temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes, indiceAusencias));
   const funcionariosParaLimpar = funcionariosSecaoTodos.filter((funcionario) =>

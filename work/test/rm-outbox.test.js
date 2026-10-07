@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function loadService({ enabled, rows }) {
+function loadService({ enabled, rows, scheduleRows = [] }) {
   const statements = [];
   const connection = {
     async execute(sql, binds) {
@@ -14,7 +14,7 @@ function loadService({ enabled, rows }) {
       if (/from sgn_esc_rm_envio\s+where status = 'PENDENTE'/i.test(sql)) return { rows };
       if (/update sgn_esc_rm_envio/i.test(sql)) return { rowsAffected: 1 };
       if (/user_tab_columns/i.test(sql)) return { rows: [{ COLUMN_NAME: 'CPF' }, { COLUMN_NAME: 'ATIVA' }] };
-      if (/from sgn_esc_prog p/i.test(sql)) return { rows: [] };
+      if (/from sgn_esc_prog p/i.test(sql)) return { rows: scheduleRows };
       throw new Error(`Unexpected SQL: ${sql}`);
     },
     async commit() {}
@@ -74,7 +74,7 @@ test('revisao aprovada ausente fica incerta e nao e marcada como enviada', async
   assert.match(updates[1].binds.erro, /Programacao oficializada nao encontrada/);
 });
 
-function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90] } = {}) {
+function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], dismissalDate = null } = {}) {
   const operations = [];
   const connection = {
     async execute(sql, binds) {
@@ -84,12 +84,12 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
       }
       if (/select max\(p\.revisao\)/i.test(sql)) return { rows: [{ REVISAO: 7 }] };
       if (/select distinct p\.escfunc_id/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90 }] };
-      if (/select escfunc_id from sgn_esc_funcionario/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90 }] };
+      if (/select escfunc_id, dt_demiss from sgn_esc_funcionario/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90, DT_DEMISS: dismissalDate }] };
       if (/select p\.escprog_id, p\.escfunc_id, p\.revisao/i.test(sql)) {
         return { rows: selectedIds.map((id) => ({ ESCPROG_ID: 100 + id, ESCFUNC_ID: id, REVISAO: 7 })) };
       }
       if (/from sgn_esc_prog p\s+left join sgn_esc_funcionario f/i.test(sql)) {
-        return { rows: [{ ESCFUNC_ID: 90, CHAPA: '000090', NOME: 'Teste',
+        return { rows: [{ ESCFUNC_ID: 90, CHAPA: '000090', NOME: 'Teste', DT_DEMISS: dismissalDate,
           FUNCAO_DESCR: 'OPERADOR DE CAIXA', DT: new Date('2026-10-05T00:00:00Z'),
           PROGRAMACAO: 'TRB', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' }] };
       }
@@ -146,6 +146,29 @@ test('criticas bloqueiam oficializacao sem enfileirar envio ao RM', async () => 
   await assert.rejects(
     service.oficializarEscala({ lojaId: 35, mesRef: '2026-10-01', escsecaoId: 2003 }),
     (error) => error.statusCode === 422 && error.details?.[0] === 'Teste: seis dias consecutivos.'
+  );
+  assert.deepEqual(operations, ['rollback']);
+});
+
+test('envio RM pendente nao transmite dias posteriores a demissao', async () => {
+  const { service, statements } = loadService({
+    enabled: true,
+    rows: [envio],
+    scheduleRows: [{ ESCFUNC_ID: 90, DT: new Date('2026-10-05T00:00:00Z'), APOS_DEMISSAO: 1 }]
+  });
+  await assert.rejects(
+    service.oficializarNoRm({ lojaId: 35, mesRef: '2026-10-01', revisao: 7, escfuncIds: [90], exigirEscala: true }),
+    /Envio RM suspenso/
+  );
+  const query = statements.find(({ sql }) => /from sgn_esc_prog p/i.test(sql));
+  assert.match(query.sql, /trunc\(d\.dt\) > trunc\(f\.dt_demiss\)/i);
+});
+
+test('demissao no RM bloqueia oficializacao de dias posteriores sem enfileirar envio', async () => {
+  const { service, operations } = loadEscalaService({ dismissalDate: new Date('2026-10-04T00:00:00Z') });
+  await assert.rejects(
+    service.oficializarEscala({ lojaId: 35, mesRef: '2026-10-01', escsecaoId: 2003 }),
+    (error) => error.statusCode === 422 && /demissao registrada no RM/i.test(error.message)
   );
   assert.deepEqual(operations, ['rollback']);
 });
