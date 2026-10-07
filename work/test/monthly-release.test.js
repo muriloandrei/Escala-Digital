@@ -1505,6 +1505,116 @@ test('release and generation never create days after the RM dismissal date', () 
   assert.ok(gerada.dias.every((dia) => dia.data <= '2026-10-18'));
 });
 
+test('full-period absence excludes employee, while partial absence and vacation remain scheduled', () => {
+  const funcionario = {
+    ESCFUNC_ID: 801, CHAPA: '801', NOME: 'Funcionario 801', LOJA: 10,
+    ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  };
+  const fullPeriod = { ESCFUNC_ID: 801, DT_INIC: '2026-10-05', DT_FIM: '2026-11-01' };
+  const fullAbsence = { ...fullPeriod, MOTIVO: 'AFASTAMENTO' };
+  const partialAbsence = { ...fullAbsence, DT_FIM: '2026-10-31' };
+  const fullVacation = { ...fullPeriod, MOTIVO: 'FERIAS' };
+  const options = (ausencia) => ({ ausencias: [ausencia] });
+
+  assert.deepEqual(buildFuncionarioRascunho(funcionario, null, '2026-10-01', '2026-10-05', 0, null, options(fullAbsence)).dias, []);
+  assert.deepEqual(buildFuncionariosLiberacao([funcionario], [], '2026-10-01', '2026-10-05', options(fullAbsence))[0].dias, []);
+  assert.ok(buildFuncionarioRascunho(funcionario, null, '2026-10-01', '2026-10-05', 0, null, options(partialAbsence)).dias.length > 0);
+  assert.ok(buildFuncionarioRascunho(funcionario, null, '2026-10-01', '2026-10-05', 0, null, options(fullVacation)).dias.length > 0);
+});
+
+test('monthly release skips an employee absent for the whole operational period', async () => {
+  const originals = {
+    listSecoesByLoja: catalogService.listSecoesByLoja,
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listEscalasResumo: escalaService.listEscalasResumo,
+    listFixosEscala: escalaService.listFixosEscala,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  const funcionario = (id) => ({
+    ESCFUNC_ID: id, CHAPA: String(id), NOME: `Funcionario ${id}`, LOJA: 10,
+    ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  });
+  let savedPayload;
+  catalogService.listSecoesByLoja = async () => [{ ESCSECAO_ID: 20, DESCR: 'Frente de Caixa' }];
+  catalogService.listFuncionariosByLoja = async () => [funcionario(801), funcionario(802)];
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [{
+    ESCFUNC_ID: 801, DT_INIC: '2026-10-05', DT_FIM: '2026-11-01', MOTIVO: 'AFA'
+  }];
+  escalaService.listEscalasResumo = async () => [];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.saveEscalasBatch = async (payload) => { savedPayload = payload; return payload.funcionarios; };
+  try {
+    const result = await monthlyReleaseService.liberarEscalaLojaMes({
+      lojaId: 10, mesRef: '2026-10-01', hojeIso: '2026-10-05'
+    });
+    assert.equal(result.criada, true);
+    assert.deepEqual(savedPayload.funcionarios.map((item) => item.escfuncId), [802]);
+  } finally {
+    Object.assign(catalogService, {
+      listSecoesByLoja: originals.listSecoesByLoja,
+      listFuncionariosByLoja: originals.listFuncionariosByLoja,
+      listTurnosByLoja: originals.listTurnosByLoja,
+      listAusenciasByLojaMes: originals.listAusenciasByLojaMes
+    });
+    Object.assign(escalaService, {
+      listEscalasResumo: originals.listEscalasResumo,
+      listFixosEscala: originals.listFixosEscala,
+      saveEscalasBatch: originals.saveEscalasBatch
+    });
+  }
+});
+
+test('regeneration clears future days of a fully absent employee without deleting history', async () => {
+  const originals = {
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listFixosEscala: escalaService.listFixosEscala,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  let savedPayload;
+  catalogService.listFuncionariosByLoja = async () => [801, 802].map((id) => ({
+    ESCFUNC_ID: id, CHAPA: String(id), NOME: `Funcionario ${id}`, LOJA: 10,
+    ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  }));
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [{
+    ESCFUNC_ID: 801, DT_INIC: '2026-10-05', DT_FIM: '2026-11-01', MOTIVO: 'AFA'
+  }];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.listDiasSecaoAtual = async () => ['2026-10-09', '2026-10-12'].map((data) => ({
+    ESCFUNC_ID: 801, DT: data, PROGRAMACAO: 'AFA',
+    HR_ENT1: 'AFA', HR_SAI1: 'AFA', HR_ENT2: 'AFA', HR_SAI2: 'AFA'
+  }));
+  escalaService.saveEscalasBatch = async (payload) => { savedPayload = payload; return payload.funcionarios; };
+  try {
+    await monthlyReleaseService.gerarEscalaSecao({
+      lojaId: 10, mesRef: '2026-10-01', escsecaoId: 20, hojeIso: '2026-10-10'
+    });
+    const afastado = savedPayload.funcionarios.find((item) => item.escfuncId === 801);
+    assert.deepEqual(afastado.dias.map((dia) => dia.data), ['2026-10-09']);
+    assert.ok(savedPayload.funcionarios.some((item) => item.escfuncId === 802));
+  } finally {
+    Object.assign(catalogService, {
+      listFuncionariosByLoja: originals.listFuncionariosByLoja,
+      listTurnosByLoja: originals.listTurnosByLoja,
+      listAusenciasByLojaMes: originals.listAusenciasByLojaMes
+    });
+    Object.assign(escalaService, {
+      listFixosEscala: originals.listFixosEscala,
+      listDiasSecaoAtual: originals.listDiasSecaoAtual,
+      saveEscalasBatch: originals.saveEscalasBatch
+    });
+  }
+});
+
 test('section generation clears future days of a dismissed employee but keeps past days', async () => {
   const originals = {
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,

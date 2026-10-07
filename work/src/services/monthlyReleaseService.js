@@ -82,7 +82,16 @@ function dataIndisponivel(intervalo, funcionario, indiceAusencias, data) {
   return dataSuspensa(intervalo, data) && !encontrarAusencia(indiceAusencias, funcionario, data);
 }
 
+function temAfastamentoIntegral(funcionario, mesRef, indiceAusencias) {
+  const dias = getMonthDays(mesRef);
+  return dias.length > 0 && dias.every((dia) => {
+    const ausencia = encontrarAusencia(indiceAusencias, funcionario, formatDateValue(dia));
+    return ausencia && normalizarAusenciaSigla(getAusenciaMotivo(ausencia)) === 'AFA';
+  });
+}
+
 function temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes = new Map(), indiceAusencias = new Map()) {
+  if (temAfastamentoIntegral(funcionario, mesRef, indiceAusencias)) return false;
   const intervalo = suspensoes.get(Number(funcionario.ESCFUNC_ID));
   return getMonthDays(mesRef).some((dia) => {
     const data = formatDateValue(dia);
@@ -301,6 +310,9 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
   const horario = getHorarioBaseFuncionario(funcionario, turno);
   const folgas = new Set((folgasDatas || []).map(formatDateValue).filter(Boolean));
   const indiceAusencias = opcoes.indiceAusencias || criarIndiceAusencias(opcoes.ausencias || []);
+  if (temAfastamentoIntegral(funcionario, mesRef, indiceAusencias)) {
+    return montarFuncionarioRascunho(funcionario, turno, [], horario);
+  }
   const diasFixos = opcoes.diasFixos || criarIndiceFixos(opcoes.fixos || []);
   const intervaloSuspensao = opcoes.intervaloSuspensao;
 
@@ -1050,6 +1062,7 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
 function montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, opcoes = {}) {
   if (!mesRef) return [];
   const indiceAusencias = opcoes.indiceAusencias || criarIndiceAusencias(opcoes.ausencias || []);
+  if (temAfastamentoIntegral(funcionario, mesRef, indiceAusencias)) return [];
   const diasFixos = opcoes.diasFixos || criarIndiceFixos(opcoes.fixos || []);
   const intervaloSuspensao = opcoes.suspensoes?.get(Number(funcionario.ESCFUNC_ID));
   return getMonthDays(mesRef)
