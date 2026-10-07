@@ -541,10 +541,37 @@
   color: #155f3d;
   border: 1px solid #b9e5c9;
 }
+.schedule-critiques summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.schedule-critiques summary::-webkit-details-marker {
+  display: none;
+}
+.schedule-critiques summary svg {
+  flex: none;
+  transition: transform 150ms ease;
+}
+.schedule-critiques[open] summary svg {
+  transform: rotate(180deg);
+}
+.schedule-critiques ul {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  max-height: 360px;
+  overflow: auto;
+}
+.schedule-critiques li + li {
+  margin-top: 6px;
+}
 .schedule-holidays ul {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 6px 18px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
   margin: 8px 0 0;
   padding: 0;
   list-style: none;
@@ -553,6 +580,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .schedule-holidays time {
   white-space: nowrap;

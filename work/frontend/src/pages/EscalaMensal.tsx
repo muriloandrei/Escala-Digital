@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, MoreVertical, Pencil, Play, Printer, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ChevronDown, MoreVertical, Pencil, Play, Printer, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -587,11 +587,13 @@ export function EscalaMensal({ user }: { user: User }) {
       )}
       {scopeCritiquesError && <div className="notice error" role="alert">Não foi possível verificar as críticas: {scopeCritiquesError}</div>}
       {!loading && !error && critiqueGroups.map((group) => (
-        <div className="notice error" role="alert" key={`${group.escsecaoId}-${group.escsubsecaoId ?? 'sem'}`}>
-          <strong>Críticas da {group.secao} - {group.subsecao} · {group.criticas.length}</strong>
-          <ul>{group.criticas.slice(0, 10).map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul>
-          {group.criticas.length > 10 && <span>Mais {group.criticas.length - 10} crítica(s).</span>}
-        </div>
+        <details className="notice error schedule-critiques" key={`${group.escsecaoId}-${group.escsubsecaoId ?? 'sem'}`}>
+          <summary>
+            <strong>Críticas da {group.secao} - {group.subsecao} · {group.criticas.length}</strong>
+            <ChevronDown size={17} aria-hidden="true" />
+          </summary>
+          <ul>{group.criticas.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul>
+        </details>
       ))}
       {!loading && !error && periodHolidays.length > 0 && (
         <div className="notice warning schedule-holidays" role="note">
