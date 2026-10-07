@@ -67,7 +67,15 @@ npm run build:client
 npm test
 npm run migrations:check
 ESCALA_ENV_FILE="$env_file" npm run db:check-schema
-ESCALA_ENV_FILE="$env_file" npm run migrations:status
+if migration_status=$(ESCALA_ENV_FILE="$env_file" npm run migrations:status 2>&1); then
+  printf '%s\n' "$migration_status"
+elif printf '%s\n' "$migration_status" | grep -Eq '^[0-9]+ migrations versionadas; [0-9]+ sem registro; 0 divergentes\.$'; then
+  printf '%s\n' "$migration_status"
+  printf 'Registros historicos sem ledger; somente migrations novas serao verificadas abaixo.\n'
+else
+  printf '%s\n' "$migration_status" >&2
+  exit 1
+fi
 
 running_dir=$(systemctl show "$unit" -p WorkingDirectory --value)
 test -f "$running_dir/src/server.js" || {
