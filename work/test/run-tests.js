@@ -8,6 +8,7 @@ require('./escala-status.test');
 require('./env.test');
 require('./schedule-diff.test');
 require('./monthly-release.test');
+require('./dismissal-reconciliation.test');
 require('./liberar-escalas-novembro.test');
 require('./error-handler.test');
 require('./csrf.test');

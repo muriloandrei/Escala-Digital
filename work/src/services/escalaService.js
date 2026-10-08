@@ -1271,8 +1271,10 @@ async function listDiasSecaoAtual({ lojaId, mesRef, escsecaoId }) {
 
 async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
+    // A primeira leitura apos a sincronizacao do RM aplica o recorte pendente antes de montar a escala.
+    const ajustesDesligamento = await reconciliarDesligamentosComConnection(connection, { lojaId, mesRef, secoesPermitidas });
     const latestRevision = await getLatestRevision(connection, { lojaId, mesRef, secoesPermitidas });
-    if (latestRevision === null) return { revisao: null, status: null, dias: [], funcionarios: [], secoes: [] };
+    if (latestRevision === null) return { revisao: null, status: null, dias: [], funcionarios: [], secoes: [], ajustesDesligamento };
     const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
     const hasFuncionarioSubsecao = funcionarioColumns.has('ESCSUBSECAO_ID');
     const dtDemissSelect = funcionarioColumns.has('DT_DEMISS') ? 'f.dt_demiss' : 'cast(null as date) as dt_demiss';
@@ -1496,6 +1498,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       oficializada: rows.some((row) => Number(pick(row, 'OFICIALIZADA', 'oficializada') || 0) === 1) ? 1 : 0,
       dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')),
       pendenciasDesligamento,
+      ajustesDesligamento,
       funcionarios: [...funcionariosMap.values()],
       fixos,
       ausencias,
@@ -1861,6 +1864,126 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
   }
 
   return { escprogId, revisao, escsecaoId };
+}
+
+async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRef, secoesPermitidas = null }) {
+  const resumo = { funcionarios: 0, dias: 0, oficializadas: 0 };
+  const ativaSql = await getAtivaSql(connection, 'p');
+  const ativaSubSql = await getAtivaSql(connection, 'px');
+  const binds = { lojaId, mesRef };
+  const filters = [];
+  addSecoesPermitidasFilter(filters, binds, 'p.escsecao_id', secoesPermitidas);
+  const filtroSecoes = filters.length ? `and ${filters.join(' and ')}` : '';
+  const candidatos = await connection.execute(
+    `select distinct p.escfunc_id
+       from sgn_esc_prog p
+       join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
+      where p.loja = :lojaId and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+        and f.dt_demiss is not null
+        and ${ativaSql}
+        ${filtroSecoes}
+        and p.revisao = (
+          select max(px.revisao) from sgn_esc_prog px
+           where px.loja = p.loja and px.mes_ref = p.mes_ref
+             and px.escfunc_id = p.escfunc_id and ${ativaSubSql}
+        )
+        and exists (
+          select 1 from sgn_esc_prog_dia d
+           where d.escprog_id = p.escprog_id and trunc(d.dt) > trunc(f.dt_demiss)
+        )`,
+    binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  const ids = [...new Set((candidatos.rows || []).map((row) => Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'))).filter(Boolean))];
+  if (!ids.length) return resumo;
+
+  try {
+    const demissoes = await lockFuncionariosEscala(connection, lojaId, ids.map((escfuncId) => ({ escfuncId })));
+    const operacaoId = escalaEventService.createOperationId();
+    for (const escfuncId of ids) {
+      const dataDemissao = formatDateValue(demissoes.get(escfuncId));
+      if (!dataDemissao) continue;
+      const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+      if (!atual) continue;
+      const grupos = new Map();
+      for (const dia of atual.dias) {
+        const escprogId = Number(pick(dia, 'ESCPROG_ID', 'escprog_id'));
+        if (!grupos.has(escprogId)) grupos.set(escprogId, { header: dia, dias: [] });
+        grupos.get(escprogId).dias.push(dia);
+      }
+      const gruposComCorte = [...grupos.values()].filter(({ dias }) =>
+        dias.some((dia) => formatDateValue(pick(dia, 'DT', 'dt')) > dataDemissao));
+      if (!gruposComCorte.length) continue;
+
+      const diasMantidos = atual.dias.filter((dia) => formatDateValue(pick(dia, 'DT', 'dt')) <= dataDemissao);
+      const revisaoAnterior = atual.revisao;
+      let revisaoNova = null;
+      if (diasMantidos.length) {
+        const maiorRevisao = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
+        revisaoNova = Math.max(revisaoAnterior, maiorRevisao ?? revisaoAnterior) + 1;
+        for (const { header, dias } of grupos.values()) {
+          const mantidos = dias.filter((dia) => formatDateValue(pick(dia, 'DT', 'dt')) <= dataDemissao);
+          if (!mantidos.length) continue;
+          await insertEscalaOracle(connection, {
+            lojaId, mesRef, revisao: revisaoNova, oficializada: 0,
+            funcionario: {
+              escfuncId, chapa: pick(header, 'CHAPA', 'chapa'),
+              escsecaoId: pick(header, 'ESCSECAO_ID', 'escsecao_id'),
+              escfuncaoId: pick(header, 'ESCFUNCAO_ID', 'escfuncao_id')
+            },
+            dias: mantidos.map(normalizeDiaComparavel)
+          });
+        }
+      } else {
+        if (!(await hasProgAtivaColumn(connection))) {
+          const error = new Error('Coluna ATIVA indisponivel para retirar funcionario desligado. Execute a migration 20260630_add_prog_ativa.sql.');
+          error.statusCode = 503;
+          throw error;
+        }
+        await connection.execute(
+          `update sgn_esc_prog set ativa = 0, oficializada = 0
+            where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+              and escfunc_id = :escfuncId and nvl(ativa, 1) = 1`,
+          { lojaId, mesRef, escfuncId }, { autoCommit: false }
+        );
+      }
+
+      await connection.execute(
+        `update sgn_esc_rm_envio
+            set status = 'SUPERADO', erro = 'Escala ajustada apos demissao no RM; nova aprovacao necessaria.',
+                dt_hr_alter = sysdate
+          where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and escfunc_id = :escfuncId and revisao <= :revisaoAnterior and status = 'PENDENTE'`,
+        { lojaId, mesRef, escfuncId, revisaoAnterior }, { autoCommit: false }
+      );
+      for (const { header, dias } of gruposComCorte) {
+        const removidos = dias.filter((dia) => formatDateValue(pick(dia, 'DT', 'dt')) > dataDemissao);
+        await escalaEventService.appendEvent(connection, {
+          operacaoId, lojaId, mesRef, revisaoAnterior, revisaoNova,
+          escfuncId, escsecaoId: Number(pick(header, 'ESCSECAO_ID', 'escsecao_id')),
+          acao: 'AJUSTAR_DEMISSAO_RM', origem: 'RM',
+          situacao: Number(pick(header, 'OFICIALIZADA', 'oficializada') || 0) === 1
+            ? 'POS_OFICIALIZACAO' : 'RASCUNHO',
+          detalhe: {
+            chapa: pick(header, 'CHAPA', 'chapa'), dataDemissao,
+            alteracoes: removidos.map((dia) => {
+              const { data, ...anterior } = normalizeDiaComparavel(dia);
+              return { data, anterior, novo: null };
+            })
+          }
+        });
+      }
+      resumo.funcionarios += 1;
+      resumo.dias += atual.dias.length - diasMantidos.length;
+      if ([...grupos.values()].some(({ header }) => Number(pick(header, 'OFICIALIZADA', 'oficializada') || 0) === 1)) {
+        resumo.oficializadas += 1;
+      }
+    }
+    if (resumo.funcionarios) await connection.commit();
+    return resumo;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  }
 }
 
 async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision, nextRevision, secoesAlteradas }) {
@@ -2864,6 +2987,7 @@ module.exports = {
     filtrarFuncionariosCatalogoPorSecoesEscala,
     projetarDemissoesNaEscala,
     listarDiasAposDemissao,
+    reconciliarDesligamentosComConnection,
     montarDiasReconciliadosRm,
     assertRevisaoBase,
     assertEscalaSnapshot,

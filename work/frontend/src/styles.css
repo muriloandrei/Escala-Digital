@@ -36,7 +36,10 @@ a {
   color: #f7fbff;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  min-height: 0;
 }
 .brand {
   height: 58px;
@@ -57,6 +60,8 @@ a {
   display: grid;
   gap: 4px;
   padding: 18px 10px;
+  min-height: 0;
+  overflow-y: auto;
 }
 .sidebar-nav-group {
   display: grid;
@@ -91,6 +96,7 @@ a {
 }
 .sidebar-user {
   margin-top: auto;
+  flex-shrink: 0;
   border-top: 1px solid #354760;
   padding: 16px;
   display: grid;
@@ -557,6 +563,8 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
   .sidebar {
+    position: static;
+    height: auto;
     min-height: 0;
   }
   .brand {
@@ -569,7 +577,8 @@ tbody tr:hover {
   }
   .sidebar nav {
     display: flex;
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding: 6px 10px;
   }
   .sidebar nav a {

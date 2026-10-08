@@ -592,9 +592,14 @@ export function EscalaMensal({ user }: { user: User }) {
       {!loading && !error && !!escala?.pendenciasDesligamento?.dias && (
         <div className="notice warning" role="status">
           {escala.pendenciasDesligamento.dias} dia(s) gravado(s) após a data de demissão de {escala.pendenciasDesligamento.funcionarios} funcionário(s) não são exibidos.
-          {!!escala.pendenciasDesligamento.futuros && ` ${escala.pendenciasDesligamento.futuros} dia(s) futuro(s) podem ser retirados ao gerar novamente a seção, se ela não estiver oficializada.`}
-          {!!escala.pendenciasDesligamento.passados && ` ${escala.pendenciasDesligamento.passados} dia(s) passado(s) exigem conferência administrativa.`}
+          Esses registros exigem conferência administrativa; não gere novamente a seção para corrigi-los.
           {' '}Escalas oficializadas exigem conferência administrativa antes de novo envio ao RM.
+        </div>
+      )}
+      {!loading && !error && !!escala?.ajustesDesligamento?.dias && (
+        <div className="notice warning" role="status">
+          O desligamento registrado no RM retirou automaticamente {escala.ajustesDesligamento.dias} dia(s) da escala de {escala.ajustesDesligamento.funcionarios} funcionário(s), preservando os dias até a demissão.
+          {!!escala.ajustesDesligamento.oficializadas && ` ${escala.ajustesDesligamento.oficializadas} programação(ões) perderam a oficialização e precisam de nova aprovação. Confira também as pendências de envio ao RM.`}
         </div>
       )}
       {scopeCritiquesError && <div className="notice error" role="alert">Não foi possível verificar as críticas: {scopeCritiquesError}</div>}
