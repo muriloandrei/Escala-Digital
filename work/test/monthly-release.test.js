@@ -1310,6 +1310,7 @@ test('monthly release defaults to operational sections led by Frente de Caixa', 
     { ESCSECAO_ID: 20, DESCR: '010.02.002 - Frente de Caixa' },
     { ESCSECAO_ID: 23, DESCR: '010.03.001 - Servicos a Clientes' },
     { ESCSECAO_ID: 24, DESCR: '010.03.002 - Transportes' },
+    { ESCSECAO_ID: 25, DESCR: '010.03.003 - Portaria' },
     { ESCSECAO_ID: 21, DESCR: '010.02.001 - Deposito Lideranca' },
     { ESCSECAO_ID: 22, DESCR: '010.02.006 - Mercearia Lideranca' }
   ];
@@ -1368,10 +1369,10 @@ test('monthly release defaults to operational sections led by Frente de Caixa', 
     });
 
     assert.equal(result.criada, true);
-    assert.equal(result.escopo, 'Frente de Caixa, Servicos a Clientes e Transportes');
-    assert.deepEqual(resumoOptions.secoesPermitidas, [20, 23, 24]);
-    assert.deepEqual(funcionariosOptions.secoesPermitidas, [20, 23, 24]);
-    assert.deepEqual(turnosOptions.secoesPermitidas, [20, 23, 24]);
+    assert.equal(result.escopo, 'Frente de Caixa, Servicos a Clientes, Transportes e Portaria');
+    assert.deepEqual(resumoOptions.secoesPermitidas, [20, 23, 24, 25]);
+    assert.deepEqual(funcionariosOptions.secoesPermitidas, [20, 23, 24, 25]);
+    assert.deepEqual(turnosOptions.secoesPermitidas, [20, 23, 24, 25]);
     assert.equal(savedPayload.funcionarios.length, 1);
     assert.equal(savedPayload.funcionarios[0].escsecaoId, 20);
   } finally {
@@ -1437,7 +1438,7 @@ test('monthly release includes Fiscal Remoto only for loja 999', async () => {
     });
 
     assert.equal(result.criada, true);
-    assert.equal(result.escopo, 'Frente de Caixa, Servicos a Clientes, Transportes e Fiscal Remoto');
+    assert.equal(result.escopo, 'Frente de Caixa, Servicos a Clientes, Transportes, Portaria e Fiscal Remoto');
     assert.deepEqual(funcionariosOptions.secoesPermitidas, [90, 91]);
   } finally {
     catalogService.listSecoesByLoja = originals.listSecoesByLoja;
@@ -1450,19 +1451,20 @@ test('monthly release includes Fiscal Remoto only for loja 999', async () => {
   }
 });
 
-test('monthly scale detail does not add catalog sections outside active schedule', () => {
+test('monthly scale detail adds active Portaria to an existing scale without unrelated sections', () => {
   const rows = [
     { ESCFUNC_ID: 1, ESCSECAO_ID: 20, SECAO_DESCR: 'Frente de Caixa' }
   ];
   const funcionariosCatalogo = [
     { ESCFUNC_ID: 1, ESCSECAO_ID: 20, SECAO_DESCR: 'Frente de Caixa' },
     { ESCFUNC_ID: 2, ESCSECAO_ID: 30, SECAO_DESCR: 'Deposito Lideranca' },
-    { ESCFUNC_ID: 3, ESCSECAO_ID: 40, SECAO_DESCR: 'Mercearia Lideranca' }
+    { ESCFUNC_ID: 3, ESCSECAO_ID: 40, SECAO_DESCR: 'Mercearia Lideranca' },
+    { ESCFUNC_ID: 4, ESCSECAO_ID: 25, SECAO_DESCR: 'Portaria' }
   ];
 
   const filtrados = _private.filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo, rows);
 
-  assert.deepEqual(filtrados.map((funcionario) => funcionario.ESCFUNC_ID), [1]);
+  assert.deepEqual(filtrados.map((funcionario) => funcionario.ESCFUNC_ID), [1, 4]);
 });
 
 test('monthly scale read keeps days through dismissal and flags later saved days', () => {

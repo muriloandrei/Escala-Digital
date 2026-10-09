@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
-  ArrowUpRight,
   Check,
   Pencil,
   Plus,
@@ -259,9 +258,6 @@ export function Subsecoes({ user }: { user: User }) {
           <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}>
             <RefreshCw size={16} /> Atualizar
           </button>
-          <a className="button primary" href={`/app#/secoes/${secaoId}/subsecoes`}>
-            <ArrowUpRight size={16} /> Gerenciar na interface atual
-          </a>
         </div>
       </div>
       {loading && (

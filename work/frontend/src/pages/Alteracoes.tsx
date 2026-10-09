@@ -199,9 +199,6 @@ export function Alteracoes({ user }: { user: User }) {
           <h1>Alterações da escala</h1>
           <p>Movimentações registradas por loja, seção e colaborador.</p>
         </div>
-        <a className="button secondary" href="/app#/alteracoes">
-          <ArrowUpRight size={16} /> Interface atual
-        </a>
       </div>
       <section className="list-surface" aria-label="Alterações da escala">
         <div className="filters">

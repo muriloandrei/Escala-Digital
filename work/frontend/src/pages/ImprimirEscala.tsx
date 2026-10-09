@@ -9,6 +9,7 @@ import {
   type PeriodoOperacional,
   type User,
 } from '../api';
+import { compareEmployeesByShift } from '../scheduleOrder';
 
 type Mode = 'mensal' | 'semanal' | 'diario' | 'periodo';
 type Format = 'juntos' | 'cargos' | 'colaborador';
@@ -346,8 +347,7 @@ export function ImprimirEscala({ user }: { user: User }) {
   const people = useMemo(
     () =>
       (data?.escala.funcionarios || [])
-        .filter((person) => Number(person.ESCSECAO_ID) === Number(sectionId))
-        .sort((a, b) => a.NOME.localeCompare(b.NOME, 'pt-BR')),
+        .filter((person) => Number(person.ESCSECAO_ID) === Number(sectionId)),
     [data, sectionId],
   );
   const roles = useMemo(
@@ -361,11 +361,6 @@ export function ImprimirEscala({ user }: { user: User }) {
   const personItems = people
     .filter((person) => !excludedRoles.has(person.FUNCAO_DESCR || 'Cargo não informado'))
     .map((person) => ({ key: String(person.ESCFUNC_ID), label: `${person.CHAPA} | ${person.NOME}` }));
-  const selectedPeople = people.filter(
-    (person) =>
-      !excludedRoles.has(person.FUNCAO_DESCR || 'Cargo não informado') &&
-      !excludedPeople.has(String(person.ESCFUNC_ID)),
-  );
   const allDates = useMemo(() => (data ? dateRange(data.periodo.inicio, data.periodo.fim) : []), [data]);
   const weeks = useMemo(() => chunks(allDates, 7), [allDates]);
   const selectedDates =
@@ -385,6 +380,11 @@ export function ImprimirEscala({ user }: { user: User }) {
     });
     return result;
   }, [data]);
+  const selectedPeople = people
+    .filter((person) =>
+      !excludedRoles.has(person.FUNCAO_DESCR || 'Cargo não informado') &&
+      !excludedPeople.has(String(person.ESCFUNC_ID)))
+    .sort((a, b) => compareEmployeesByShift(a, b, daysByPerson, selectedDates));
   const sheets = useMemo(() => {
     if (!selectedDates.length || !selectedPeople.length) return [];
     const groups =

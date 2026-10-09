@@ -44,13 +44,13 @@ test('React access fails closed and normalizes the allowlist', () => {
   assert.equal(isReactUiAllowed({ login: 'outro.usuario' }, ui), false);
   assert.equal(getLoginStartPath({ login: 'MURILO.JESUS' }, ui), '/nova');
   assert.equal(getLoginStartPath({ login: 'admin' }, ui), '/nova');
-  assert.equal(getLoginStartPath({ login: 'outro.usuario' }, ui), '/app#/escalas-geradas');
+  assert.equal(getLoginStartPath({ login: 'outro.usuario' }, ui), '/nova');
   assert.equal(requiresTraining({ login: 'outro.usuario' }, ui), false);
   assert.equal(requiresTraining({ login: 'admin' }, ui), true);
-  assert.equal(getLoginStartPath({ login: 'outro.usuario' }, ui, 0), '/app#/escalas-geradas');
+  assert.equal(getLoginStartPath({ login: 'outro.usuario' }, ui, 0), '/nova');
   assert.equal(getLoginStartPath({ login: 'admin' }, ui, 0), '/nova/treinamento');
   assert.equal(isReactUiAllowed({ login: 'murilo.jesus' }, { reactDefault: true, reactAllowedLogins: [] }), false);
-  assert.equal(getLoginStartPath({ login: 'murilo.jesus' }, { ...ui, reactDefault: false }), '/app#/escalas-geradas');
+  assert.equal(getLoginStartPath({ login: 'murilo.jesus' }, { ...ui, reactDefault: false }), '/nova');
 });
 
 test('wildcard libera a interface para todos sem aceitar configuracao mista', () => {

@@ -41,7 +41,7 @@ test('login comum ignora treinamento e acesso direto ao tour e negado', async ()
     });
     const normal = await login('lider.frente35');
     assert.equal(normal.status, 200);
-    assert.equal((await normal.json()).startPath, '/app#/escalas-geradas');
+    assert.equal((await normal.json()).startPath, '/nova');
     assert.deepEqual(progressCalls, []);
     const allowed = await login('admin');
     assert.equal(allowed.status, 200);

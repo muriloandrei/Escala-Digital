@@ -20,9 +20,7 @@ function requiresTraining(user, ui) {
 
 function getLoginStartPath(user, ui, trainingStage = LAST_STAGE) {
   if (requiresTraining(user, ui) && trainingStage < LAST_STAGE) return '/nova/treinamento';
-  return ui?.reactDefault && isReactUiAllowed(user, ui)
-    ? '/nova'
-    : '/app#/escalas-geradas';
+  return '/nova';
 }
 
 module.exports = { parseAllowedLogins, isReactUiAllowed, requiresTraining, getLoginStartPath };

@@ -18,20 +18,24 @@ async function check(login, allowed) {
   assert(cookie, `Login ${login} nao retornou cookie de sessao.`);
   const body = await auth.json();
   assert(allowed ? ['/nova', '/nova/treinamento'].includes(body.startPath)
-    : body.startPath === '/app#/escalas-geradas', `Destino incorreto para ${login}.`);
+    : body.startPath === '/nova', `Destino incorreto para ${login}.`);
 
   const headers = { Cookie: cookie };
   const me = await fetch(`${baseUrl}/api/auth/me`, { headers });
   assert(me.status === 200 && (await me.json()).reactUiAllowed === allowed, `Elegibilidade incorreta para ${login}.`);
   const page = await fetch(`${baseUrl}/nova/escalas-liberadas`, { headers, redirect: 'manual' });
-  assert(page.status === (allowed ? 200 : 302), `Acesso direto incorreto para ${login}: ${page.status}.`);
+  assert(page.status === (allowed ? 200 : 403), `Acesso direto incorreto para ${login}: ${page.status}.`);
+  if (allowed) {
+    const legacy = await fetch(`${baseUrl}/app`, { headers, redirect: 'manual' });
+    assert(legacy.status === 302 && legacy.headers.get('location') === '/nova/escalas-liberadas',
+      `Interface antiga ainda acessivel por ${login}: ${legacy.status}.`);
+  }
   if (!allowed) {
-    assert(page.headers.get('location') === '/app#/escalas-geradas', `Redirecionamento incorreto para ${login}.`);
     const training = await fetch(`${baseUrl}/nova/treinamento`, { headers, redirect: 'manual' });
-    assert(training.status === 302 && training.headers.get('location') === '/app#/escalas-geradas',
+    assert(training.status === 403,
       `Treinamento acessivel por ${login}: ${training.status}.`);
     const legacy = await fetch(`${baseUrl}/app`, { headers, redirect: 'manual' });
-    assert(legacy.status === 200, `Interface antiga nao acessivel por ${login}: ${legacy.status}.`);
+    assert(legacy.status === 403, `Interface antiga acessivel por ${login}: ${legacy.status}.`);
     const progress = await fetch(`${baseUrl}/api/auth/treinamento`, { headers });
     assert(progress.status === 403, `API de treinamento acessivel por ${login}: ${progress.status}.`);
     const asset = await fetch(`${baseUrl}/nova/assets/teste.js`, { headers, redirect: 'manual' });

@@ -12,7 +12,7 @@
 
     try {
       const result = await api.login(login, password);
-      window.location.href = result.startPath || '/app#/escalas-geradas';
+      window.location.href = result.startPath || '/nova';
     } catch (error) {
       message.textContent = error.status === 401 ? 'Usuário ou senha incorretos.' : error.message;
     }

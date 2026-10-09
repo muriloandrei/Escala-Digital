@@ -43,3 +43,21 @@ test('fixed schedule click cycle returns to empty after rest and work', async ()
   assert.equal(nextFixedState('FXF'), 'TRB');
   assert.equal(nextFixedState('TRB'), null);
 });
+
+test('schedule and print order employees by the first worked start time in the visible dates', async () => {
+  const { compareEmployeesByShift } = await loadFrontendHelper('scheduleOrder.ts');
+  const people = [
+    { ESCFUNC_ID: 1, NOME: 'Ana' },
+    { ESCFUNC_ID: 2, NOME: 'Bruna' },
+    { ESCFUNC_ID: 3, NOME: 'Carla' }
+  ];
+  const days = new Map([
+    ['1', new Map([['2026-11-02', { PROGRAMACAO: 'TRB', HR_ENT1: '14:00' }]])],
+    ['2', new Map([['2026-11-02', { PROGRAMACAO: 'F', HR_ENT1: '06:00' }], ['2026-11-03', { PROGRAMACAO: 'TRB', HR_ENT1: '07:00' }]])],
+    ['3', new Map([['2026-11-02', { PROGRAMACAO: 'FER', HR_ENT1: '05:00' }]])]
+  ]);
+  const monthly = people.slice().sort((a, b) => compareEmployeesByShift(a, b, days, ['2026-11-02', '2026-11-03']));
+  assert.deepEqual(monthly.map((person) => person.NOME), ['Bruna', 'Ana', 'Carla']);
+  const daily = people.slice().sort((a, b) => compareEmployeesByShift(a, b, days, ['2026-11-02']));
+  assert.deepEqual(daily.map((person) => person.NOME), ['Ana', 'Bruna', 'Carla']);
+});

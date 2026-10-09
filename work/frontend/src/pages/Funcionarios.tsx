@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, Pencil, RefreshCw, Search, UserRound, UserRoundX } from 'lucide-react';
+import { Pencil, RefreshCw, Search, UserRound, UserRoundX } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import {
   canEdit,
@@ -165,9 +165,6 @@ export function Funcionarios({ user }: { user: User }) {
           <h1>Funcionários</h1>
           <p>Cadastro e horários disponíveis para a loja selecionada.</p>
         </div>
-        <a className="button secondary" href="/app#/funcionarios">
-          <ArrowUpRight size={16} /> Gerenciar na interface atual
-        </a>
       </div>
       {message && (
         <div className="notice success" role="status">

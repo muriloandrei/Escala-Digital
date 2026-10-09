@@ -186,6 +186,7 @@ function getEscopoOperacionalSecaoPredicate(alias = 's') {
     regexp_like(upper(nvl(${alias}.descr, '')), 'FRENTE.*CAIXA')
     or regexp_like(upper(nvl(${alias}.descr, '')), 'SERVI[CÇ]OS?.*CLIENT')
     or regexp_like(upper(nvl(${alias}.descr, '')), 'TRANSPORT')
+    or regexp_like(upper(nvl(${alias}.descr, '')), 'PORTARIA')
   )`;
 }
 
@@ -307,6 +308,10 @@ async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
     );
 
     const explicitas = result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
+    if (explicitas.length && isFrenteCaixaLeaderUser(requestUser)) {
+      const portaria = await listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId, { onlyPortaria: true });
+      return [...new Set([...explicitas, ...portaria])];
+    }
     if (explicitas.length) return explicitas;
     if (isFrenteCaixaLeaderUser(requestUser)) {
       return listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId);
@@ -318,7 +323,7 @@ async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
   });
 }
 
-async function listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId = null) {
+async function listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId = null, { onlyPortaria = false } = {}) {
   const lojas = lojaId
     ? [Number(lojaId)]
     : [...new Set((requestUser?.lojas || []).map(Number).filter(Boolean))];
@@ -329,7 +334,7 @@ async function listSecoesFrenteCaixaPermitidasInConnection(connection, requestUs
   const binds = {};
   const filters = [
     buildInClause(`s.${lojaColumn.toLowerCase()}`, lojas, binds, 'lojaFrente'),
-    getEscopoOperacionalSecaoPredicate('s')
+    onlyPortaria ? "regexp_like(upper(nvl(s.descr, '')), 'PORTARIA')" : getEscopoOperacionalSecaoPredicate('s')
   ];
   if (secaoColumns.has('STATUS')) filters.push("nvl(s.status, 'A') = 'A'");
 
@@ -859,5 +864,5 @@ module.exports = {
   saveLiberacaoSecoes,
   getPermissaoPerfil,
   getPermissoesPerfil,
-  _private: { normalizePermission, completarPermissoesPerfil }
+  _private: { normalizePermission, completarPermissoesPerfil, getEscopoOperacionalSecaoPredicate }
 };

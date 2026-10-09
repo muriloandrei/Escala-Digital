@@ -77,9 +77,6 @@ export function Secoes({ user }: { user: User }) {
           <h1>Seções</h1>
           <p>Estrutura e equipes da loja selecionada.</p>
         </div>
-        <a className="button secondary" href="/app#/secoes">
-          <ArrowUpRight size={16} /> Gerenciar na interface atual
-        </a>
       </div>
       <section className="list-surface" aria-label="Seções">
         <div className="filters">

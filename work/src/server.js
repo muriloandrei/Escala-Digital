@@ -141,14 +141,16 @@ async function requireCompletedTraining(req, res, next) {
 
 app.get('/app', redirectToLoginWhenMissingSession, requireAuth, requireCompletedTraining, (req, res) => {
   setNoStore(res);
-  res.sendFile(path.join(__dirname, '..', 'views', 'app-original.html'));
+  if (!isReactUiAllowed(req.user, env.ui)) {
+    return res.status(403).send('A interface nova precisa ser liberada para este usuario.');
+  }
+  return res.redirect('/nova/escalas-liberadas');
 });
 
 const reactDist = path.join(__dirname, '..', 'dist', 'react');
 function requireReactUiAccess(req, res, next) {
   if (isReactUiAllowed(req.user, env.ui)) return next();
-  if (req.baseUrl === '/nova/assets') return res.status(403).end();
-  return res.redirect('/app#/escalas-geradas');
+  return res.status(403).end();
 }
 
 app.use('/nova/assets', redirectToLoginWhenMissingSession, requireAuth, requireReactUiAccess, express.static(path.join(reactDist, 'assets'), {

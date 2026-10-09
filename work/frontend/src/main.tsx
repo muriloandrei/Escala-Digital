@@ -2,7 +2,6 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
   CalendarDays,
   GraduationCap,
   List,
@@ -51,7 +50,7 @@ function App() {
     const controller = new AbortController();
     getJson<{ user: User; reactUiAllowed: boolean }>('/api/auth/me', controller.signal).then(async (auth) => {
       if (!auth.reactUiAllowed) {
-        window.location.replace('/app#/escalas-geradas');
+        setError('A interface nova ainda não foi liberada para este usuário.');
         return;
       }
       const progress = await getJson<{ stage: number; persisted: boolean }>('/api/auth/treinamento', controller.signal);
@@ -72,7 +71,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (user && trainingStage === LAST_TRAINING_STAGE && !reactUiAllowed) window.location.replace('/app#/escalas-geradas');
+    if (user && trainingStage === LAST_TRAINING_STAGE && !reactUiAllowed) setError('A interface nova ainda não foi liberada para este usuário.');
   }, [user, trainingStage, reactUiAllowed]);
 
   if (error)
@@ -91,7 +90,7 @@ function App() {
   if (trainingStage < LAST_TRAINING_STAGE) return (
     <div className="shell training-required-shell">
       <aside className="sidebar"><div className="brand"><img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" /></div><nav aria-label="Menu principal"><NavLink to="/treinamento"><GraduationCap size={18} /> Treinamento obrigatório</NavLink></nav><div className="sidebar-user"><span>{user.nome || user.login}</span><button type="button" onClick={logout}><LogOut size={16} /> Sair</button></div></aside>
-      <div className="workspace"><Routes><Route path="/treinamento" element={<Treinamento user={user} onComplete={() => { setTrainingStage(LAST_TRAINING_STAGE); if (reactUiAllowed) navigate('/escalas-liberadas', { replace: true }); else window.location.assign('/app#/escalas-geradas'); }} />} /><Route path="*" element={<Navigate to="/treinamento" replace />} /></Routes></div>
+      <div className="workspace"><Routes><Route path="/treinamento" element={<Treinamento user={user} onComplete={() => { setTrainingStage(LAST_TRAINING_STAGE); navigate('/escalas-liberadas', { replace: true }); }} />} /><Route path="*" element={<Navigate to="/treinamento" replace />} /></Routes></div>
     </div>
   );
 
@@ -180,9 +179,6 @@ function App() {
               <GraduationCap size={18} /> Treinamento
             </NavLink>
           )}
-          <a href="/app#/escalas-geradas">
-            <ArrowLeft size={18} /> Interface anterior
-          </a>
           </div>
         </nav>
         <div className="sidebar-user">

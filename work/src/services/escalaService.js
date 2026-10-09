@@ -766,7 +766,8 @@ function filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo = [], r
     .filter(Boolean));
   if (!secoesDaEscala.size) return funcionariosCatalogo || [];
   return (funcionariosCatalogo || [])
-    .filter((funcionario) => secoesDaEscala.has(Number(pick(funcionario, 'ESCSECAO_ID', 'escsecao_id'))));
+    .filter((funcionario) => secoesDaEscala.has(Number(pick(funcionario, 'ESCSECAO_ID', 'escsecao_id')))
+      || /portaria/i.test(String(pick(funcionario, 'SECAO_DESCR', 'secao_descr') || '')));
 }
 
 function projetarDemissoesNaEscala(rows = [], hojeIso = getHojeIso()) {

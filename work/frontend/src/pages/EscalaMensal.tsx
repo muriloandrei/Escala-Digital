@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, ChevronDown, MoreVertical, Pencil, Play, Printer, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ChevronDown, MoreVertical, Pencil, Play, Printer, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -23,6 +23,7 @@ import { EditarHorarioBase } from './EditarHorarioBase';
 import { createOperationId } from '../operationId';
 import { quickShift } from '../quickShift';
 import { nextFixedState } from '../quickFixedCycle';
+import { compareEmployeesByShift } from '../scheduleOrder';
 
 function iso(value: string | null | undefined) {
   return String(value || '').slice(0, 10);
@@ -217,8 +218,15 @@ export function EscalaMensal({ user }: { user: User }) {
     const id = String(person.ESCSUBSECAO_ID || '');
     return subsectionIds.has(id) ? id : 'sem';
   };
-  const subsection = params.get('subsecao') || 'all';
   const personFilter = params.get('funcionario');
+  const selectedPerson = employees.find((item) => String(item.ESCFUNC_ID) === personFilter);
+  const defaultSubsection = selectedPerson
+    ? personSubKey(selectedPerson)
+    : subsections.find(([id]) => employees.some((item) => String(item.ESCSUBSECAO_ID) === id))?.[0]
+      || (employees.some((item) => personSubKey(item) === 'sem') ? 'sem' : subsections[0]?.[0] || 'all');
+  const requestedSubsection = params.get('subsecao');
+  const subsection = requestedSubsection && (subsectionIds.has(requestedSubsection) || requestedSubsection === 'sem')
+    ? requestedSubsection : defaultSubsection;
   const scopeName =
     personFilter
       ? employees.find((item) => String(item.ESCFUNC_ID) === personFilter)?.NOME || 'Funcionário'
@@ -319,18 +327,7 @@ export function EscalaMensal({ user }: { user: User }) {
               .includes(search.toLocaleLowerCase('pt-BR').trim())
           );
         })
-        .sort((a, b) => {
-          const firstShift = (person: Funcionario) => {
-            const day =
-              view === 'diaria'
-                ? daysByEmployee.get(String(person.ESCFUNC_ID))?.get(selectedDate)
-                : dates
-                    .map((date) => daysByEmployee.get(String(person.ESCFUNC_ID))?.get(date))
-                    .find((entry) => kind(entry) === 'work');
-            return hasShift(day) ? day?.HR_ENT1 || '99:99' : '99:99';
-          };
-          return firstShift(a).localeCompare(firstShift(b)) || a.NOME.localeCompare(b.NOME, 'pt-BR');
-        }),
+        .sort((a, b) => compareEmployeesByShift(a, b, daysByEmployee, view === 'diaria' ? [selectedDate] : dates)),
     [employees, subsection, personFilter, search, daysByEmployee, dates, selectedDate, view, subsectionIds],
   );
   const coverage = useMemo(() => dates.map((date) => {
@@ -373,7 +370,7 @@ export function EscalaMensal({ user }: { user: User }) {
   async function confirmOperation() {
     if (!pendingAction || !lojaId || !mesRef || !sectionId || !scopePeople.length) return;
     if (mixedSubsectionScope) {
-      setActionError('Esta subseção possui funcionário transferido durante o mês. Use a visão da seção para operações no mês inteiro.');
+      setActionError('Esta subseção possui funcionário transferido durante o mês. Revise a programação desse funcionário individualmente.');
       return;
     }
     const action = pendingAction;
@@ -530,7 +527,6 @@ export function EscalaMensal({ user }: { user: User }) {
         new Date(`${mesRef}T00:00:00Z`),
       )
     : '';
-  const editUrl = `/app#/escala-banco-mensal/${encodeURIComponent(lojaId || '')}/${encodeURIComponent(mesRef || '')}`;
   const scopeIds = new Set(scopePeople.map((person) => Number(person.ESCFUNC_ID)));
   const scopedDays = (escala?.dias || []).filter((day) =>
     scopeIds.has(Number(day.ESCFUNC_ID)) && (subsection === 'all' || daySubKey(day) === subsection));
@@ -561,9 +557,6 @@ export function EscalaMensal({ user }: { user: User }) {
           <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}>
             <RefreshCw size={16} /> Atualizar
           </button>
-          <a className="button primary" href={editUrl}>
-            <ArrowUpRight size={16} /> Editar na interface atual
-          </a>
         </div>
       </div>
       {loading && (
@@ -652,12 +645,6 @@ export function EscalaMensal({ user }: { user: User }) {
                 ))}
               </div>
               <div className="scope-subtabs" aria-label="Subseções da seção">
-                <button
-                  className={subsection === 'all' ? 'selected' : ''}
-                  onClick={() => updateFilter('subsecao', 'all')}
-                >
-                  Todos <small>{employees.length}</small>
-                </button>
                 {subsections.map(([id, name]) => (
                   <button
                     key={id}
@@ -687,7 +674,7 @@ export function EscalaMensal({ user }: { user: User }) {
                   const next = new URLSearchParams(params);
                   next.delete('funcionario');
                   setParams(next);
-                }}>Mostrar toda a seção</button>}
+                }}>Mostrar subseção</button>}
                 <label className="search-field">
                   <Search size={16} />
                   <span className="sr-only">Buscar funcionário</span>

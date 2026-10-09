@@ -34,7 +34,8 @@ function isSecaoEscopoOperacional(secao = {}) {
   const texto = normalizarTextoComparacao(descricao);
   return /frente.*caixa/.test(texto)
     || /servic.*client/.test(texto)
-    || /transport/.test(texto);
+    || /transport/.test(texto)
+    || /portaria/.test(texto);
 }
 
 function isSecaoFiscalRemoto(secao = {}) {
@@ -1179,8 +1180,8 @@ async function liberarEscalaLojaMes({
   const secoesLiberacao = somenteFrenteCaixa ? await listSecoesEscopoOperacionalIds(lojaId) : null;
   const incluiFiscalRemoto = Number(lojaId) === 999;
   const escopoOperacionalTexto = incluiFiscalRemoto
-    ? 'Frente de Caixa, Servicos a Clientes, Transportes e Fiscal Remoto'
-    : 'Frente de Caixa, Servicos a Clientes e Transportes';
+    ? 'Frente de Caixa, Servicos a Clientes, Transportes, Portaria e Fiscal Remoto'
+    : 'Frente de Caixa, Servicos a Clientes, Transportes e Portaria';
 
   if (somenteFrenteCaixa && !secoesLiberacao.length) {
     return { lojaId, mesRef, criada: false, motivo: `Nenhuma secao ativa de ${escopoOperacionalTexto} encontrada para liberacao.` };

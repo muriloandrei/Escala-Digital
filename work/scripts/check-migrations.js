@@ -8,7 +8,8 @@ const entries = directories.map((directory) => {
   const folder = path.join(root, directory);
   return new Map(fs.readdirSync(folder)
     .filter((name) => name.endsWith('.sql'))
-    .map((name) => [name, crypto.createHash('sha256').update(fs.readFileSync(path.join(folder, name))).digest('hex')]));
+    .map((name) => [name, crypto.createHash('sha256')
+      .update(fs.readFileSync(path.join(folder, name), 'utf8').replace(/\r\n?/g, '\n')).digest('hex')]));
 });
 
 const names = [...new Set(entries.flatMap((entry) => [...entry.keys()]))].sort();
