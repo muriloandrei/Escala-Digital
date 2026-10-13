@@ -3,7 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { _private } = require('../src/services/accessService');
+const { _private, isGlobalStoreAccessUser } = require('../src/services/accessService');
+
+test('admin and controladoria can see new stores even with existing store links', () => {
+  assert.equal(isGlobalStoreAccessUser({ perfil: 'ADMIN', lojas: [1, 2] }), true);
+  assert.equal(isGlobalStoreAccessUser({ perfil: 'CONTROLADORIA', lojas: [1, 2] }), true);
+  assert.equal(isGlobalStoreAccessUser({ perfil: 'LIDER', lojas: [1, 2] }), false);
+});
 
 test('explicit profile denial is not overwritten by role defaults', () => {
   const permission = _private.normalizePermission({

@@ -14,6 +14,7 @@ require('./error-handler.test');
 require('./csrf.test');
 require('./auth-md5-password.test');
 require('./access-permissions.test');
+require('./diagnosticar-loja.test');
 require('./absence-validation.test');
 require('./rm-integration.test');
 require('./rm-outbox.test');

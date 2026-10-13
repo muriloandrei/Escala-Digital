@@ -154,7 +154,7 @@ function isControladoriaUser(requestUser) {
 
 function isGlobalStoreAccessUser(requestUser) {
   const perfil = normalizePerfilName(requestUser);
-  return perfil === 'CONTROLADORIA' || (perfil === 'ADMIN' && (!requestUser?.lojas || requestUser.lojas.length === 0));
+  return perfil === 'CONTROLADORIA' || perfil === 'ADMIN';
 }
 
 function isLeaderUser(requestUser) {
