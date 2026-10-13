@@ -159,11 +159,25 @@ export type EventosResumo = {
 };
 
 export class ApiError extends Error {
+  readonly status: number;
+
   constructor(
     message: string,
-    readonly status: number,
+    status: number,
   ) {
     super(message);
+    this.status = status;
+  }
+}
+
+async function fetchMutation(path: string, options: RequestInit): Promise<Response> {
+  try {
+    return await fetch(path, options);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new ApiError('Conexão interrompida. A operação pode ter sido concluída no servidor; atualize e confira antes de repetir.', 0);
+    }
+    throw error;
   }
 }
 
@@ -179,7 +193,7 @@ export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T>
 }
 
 export async function postJson<T>(path: string, payload: unknown): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetchMutation(path, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
@@ -213,7 +227,7 @@ function responseError(data: {
 }
 
 export async function patchJson<T>(path: string, payload: unknown): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetchMutation(path, {
     method: 'PATCH',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
@@ -229,7 +243,7 @@ export async function patchJson<T>(path: string, payload: unknown): Promise<T> {
 }
 
 export async function putJson<T>(path: string, payload: unknown): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetchMutation(path, {
     method: 'PUT',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
@@ -245,7 +259,7 @@ export async function putJson<T>(path: string, payload: unknown): Promise<T> {
 }
 
 export async function deleteJson<T>(path: string): Promise<T> {
-  const response = await fetch(path, { method: 'DELETE', credentials: 'same-origin' });
+  const response = await fetchMutation(path, { method: 'DELETE', credentials: 'same-origin' });
   if (response.status === 401) {
     window.location.assign('/');
     throw new ApiError('Sessao expirada. Entre novamente.', 401);

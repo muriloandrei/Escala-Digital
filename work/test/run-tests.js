@@ -11,6 +11,7 @@ require('./monthly-release.test');
 require('./dismissal-reconciliation.test');
 require('./liberar-escalas-novembro.test');
 require('./error-handler.test');
+require('./mutation-diagnostics.test');
 require('./csrf.test');
 require('./auth-md5-password.test');
 require('./access-permissions.test');

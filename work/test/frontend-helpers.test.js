@@ -15,6 +15,23 @@ test('operation id uses secure random values when randomUUID is unavailable on H
   assert.match(createOperationId({ getRandomValues: (buffer) => buffer.fill(42) }), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
+test('a disconnected schedule write warns that the commit status is unknown', async () => {
+  const previousFetch = global.fetch;
+  global.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  try {
+    const { postJson, patchJson, ApiError } = await loadFrontendHelper('api.ts');
+    await assert.rejects(postJson('/api/escalas/gerar-secao', {}), (error) => {
+      assert.ok(error instanceof ApiError);
+      assert.equal(error.status, 0);
+      assert.match(error.message, /pode ter sido concluída/);
+      return true;
+    });
+    await assert.rejects(patchJson('/api/escalas/funcionario/horario', {}), /confira antes de repetir/);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test('editing any shift time keeps 08:48 work and 01:10 break', async () => {
   const { autofillStandardHours } = await loadFrontendHelper('shiftAutofill.ts');
   const base = { HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };

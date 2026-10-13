@@ -8,6 +8,7 @@ const { getEnv } = require('./config/env');
 const { isReactUiAllowed, requiresTraining } = require('./config/reactUiAccess');
 const { initOraclePool, closeOraclePool, withConnection } = require('./db/oracle');
 const { csrfSameOriginGuard } = require('./middleware/csrf');
+const { attachMutationDiagnostics } = require('./middleware/mutationDiagnostics');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { requireAuth } = require('./middleware/auth');
 const authRoutes = require('./routes/authRoutes');
@@ -47,6 +48,7 @@ app.use((req, res, next) => {
   const startedAt = Date.now();
   req.id = requestId;
   res.setHeader('X-Request-Id', requestId);
+  attachMutationDiagnostics(req, res);
 
   res.on('finish', () => {
     if (req.path === '/favicon.ico' || (!req.path.startsWith('/api') && req.path !== '/app' && req.path !== '/health')) {
