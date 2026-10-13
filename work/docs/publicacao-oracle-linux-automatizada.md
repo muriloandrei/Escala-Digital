@@ -22,8 +22,10 @@ bash scripts/publicar-oracle-linux.sh --ref=main --sha=SHA_COMPLETO_APROVADO --a
 
 Para publicar uma versao de homologacao, substitua `main` por `homologacao`
 nos dois comandos. Nao use `git pull` no checkout em execucao. Se uma migration
-mudou desde o release ativo, o script para: revise a migration, confirme o
-backup e aplique-a pelo executor aprovado antes de repetir o preflight.
+mudou desde o release ativo, o preflight exige que ela ja esteja `CONFIRMADA`
+no registro Oracle, com o mesmo checksum do arquivo versionado. Revise a
+migration, confirme o backup e aplique-a pelo executor aprovado antes de
+repetir o preflight. O script de publicacao nao executa SQL.
 
 O script verifica `/ready` apos reiniciar. Se falhar, restaura o drop-in anterior
 do systemd e reinicia a versao anterior. Isso nao reverte alteracoes no banco.

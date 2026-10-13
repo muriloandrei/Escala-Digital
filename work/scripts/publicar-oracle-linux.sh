@@ -85,8 +85,15 @@ test -f "$running_dir/src/server.js" || {
 running_sha=$(git -C "$running_dir" rev-parse HEAD)
 new_migrations=$(git -C "$release" diff --name-only "$running_sha" "$sha" -- work/db/migrations/)
 if [[ -n "$new_migrations" ]]; then
-  printf 'Migrations alteradas desde o release ativo; revise e aplique antes da publicacao:\n%s\n' "$new_migrations" >&2
-  exit 1
+  while IFS= read -r migration; do
+    name=${migration##*/}
+    if ! awk -v name="$name" '$1 == "CONFIRMADA" && $2 == name { found = 1 } END { exit !found }' <<< "$migration_status"; then
+      printf 'Migration do release ainda nao confirmada no Oracle: %s\n' "$name" >&2
+      printf 'Revise, aplique e registre a migration antes de repetir a publicacao.\n' >&2
+      exit 1
+    fi
+  done <<< "$new_migrations"
+  printf 'Migrations alteradas desde o release ativo: todas confirmadas no Oracle.\n'
 fi
 
 printf 'Preflight concluido. Ativo: %s. Candidato: %s.\n' "$running_sha" "$sha"
