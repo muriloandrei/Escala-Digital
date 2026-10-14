@@ -24,6 +24,7 @@ import { createOperationId } from '../operationId';
 import { quickShift } from '../quickShift';
 import { nextFixedState } from '../quickFixedCycle';
 import { compareEmployeesByShift } from '../scheduleOrder';
+import { groupScheduleSections } from '../scheduleSections';
 
 function iso(value: string | null | undefined) {
   return String(value || '').slice(0, 10);
@@ -199,10 +200,13 @@ export function EscalaMensal({ user }: { user: User }) {
       (escala?.secoes || []).slice().sort((a, b) => sectionLabel(a).localeCompare(sectionLabel(b), 'pt-BR')),
     [escala],
   );
+  const sectionGroups = useMemo(() => groupScheduleSections(sections), [sections]);
   const sectionId =
     sections.find((item) => String(item.ESCSECAO_ID) === params.get('secao'))?.ESCSECAO_ID ||
     sections[0]?.ESCSECAO_ID;
   const section = sections.find((item) => item.ESCSECAO_ID === sectionId);
+  const selectedTopLevelId = sectionGroups.portaria.some((item) => item.ESCSECAO_ID === sectionId)
+    ? sectionGroups.front?.ESCSECAO_ID : sectionId;
   const sectionCatalog = catalogSections.find((item) => Number(item.ESCSECAO_ID) === Number(sectionId));
   const employees = useMemo(
     () => (escala?.funcionarios || []).filter((item) => Number(item.ESCSECAO_ID) === Number(sectionId)),
@@ -632,18 +636,37 @@ export function EscalaMensal({ user }: { user: User }) {
           ) : (
             <>
               <div className="scope-tabs" role="tablist" aria-label="Seções da escala">
-                {sections.map((item) => (
+                {sectionGroups.topLevel.map((item) => (
                   <button
                     key={item.ESCSECAO_ID}
                     role="tab"
-                    aria-selected={Number(sectionId) === Number(item.ESCSECAO_ID)}
-                    className={Number(sectionId) === Number(item.ESCSECAO_ID) ? 'selected' : ''}
+                    aria-selected={Number(selectedTopLevelId) === Number(item.ESCSECAO_ID)}
+                    className={Number(selectedTopLevelId) === Number(item.ESCSECAO_ID) ? 'selected' : ''}
                     onClick={() => updateFilter('secao', String(item.ESCSECAO_ID), true)}
                   >
-                    {sectionLabel(item)} <small>{item.FUNCIONARIOS ?? 0}</small>
+                    {sectionLabel(item)} <small>{(item.FUNCIONARIOS ?? 0) +
+                      (item.ESCSECAO_ID === sectionGroups.front?.ESCSECAO_ID
+                        ? sectionGroups.portaria.reduce((total, portaria) => total + (portaria.FUNCIONARIOS ?? 0), 0)
+                        : 0)}</small>
                   </button>
                 ))}
               </div>
+              {sectionGroups.front && sectionGroups.portaria.length > 0 &&
+                Number(selectedTopLevelId) === Number(sectionGroups.front.ESCSECAO_ID) && (
+                  <div className="scope-subtabs scope-areas" aria-label="Áreas de Frente de Caixa">
+                    {[sectionGroups.front, ...sectionGroups.portaria].map((item) => (
+                      <button
+                        key={item.ESCSECAO_ID}
+                        className={Number(sectionId) === Number(item.ESCSECAO_ID) ? 'selected' : ''}
+                        aria-pressed={Number(sectionId) === Number(item.ESCSECAO_ID)}
+                        onClick={() => updateFilter('secao', String(item.ESCSECAO_ID), true)}
+                      >
+                        {item.ESCSECAO_ID === sectionGroups.front?.ESCSECAO_ID ? 'Frente de Caixa' : `Portaria · ${item.COD_SECAO || item.DESCR}`}
+                        {' '}<small>{item.FUNCIONARIOS ?? 0}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
               <div className="scope-subtabs" aria-label="Subseções da seção">
                 {subsections.map(([id, name]) => (
                   <button

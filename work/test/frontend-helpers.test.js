@@ -78,3 +78,17 @@ test('schedule and print order employees by the first worked start time in the v
   const daily = people.slice().sort((a, b) => compareEmployeesByShift(a, b, days, ['2026-11-02']));
   assert.deepEqual(daily.map((person) => person.NOME), ['Ana', 'Bruna', 'Carla']);
 });
+
+test('Portaria is nested under Frente de Caixa without changing section ids', async () => {
+  const { groupScheduleSections } = await loadFrontendHelper('scheduleSections.ts');
+  const sections = [
+    { ESCSECAO_ID: 20, COD_SECAO: '010.02.002', DESCR: 'Frente de Caixa', FUNCIONARIOS: 8 },
+    { ESCSECAO_ID: 25, COD_SECAO: '010.02.012', DESCR: 'Controle de Acesso', FUNCIONARIOS: 2 },
+    { ESCSECAO_ID: 30, COD_SECAO: '010.03.001', DESCR: 'Transportes', FUNCIONARIOS: 3 },
+  ];
+  const grouped = groupScheduleSections(sections);
+  assert.equal(grouped.front.ESCSECAO_ID, 20);
+  assert.deepEqual(grouped.portaria.map((section) => section.ESCSECAO_ID), [25]);
+  assert.deepEqual(grouped.topLevel.map((section) => section.ESCSECAO_ID), [20, 30]);
+  assert.deepEqual(groupScheduleSections(sections.slice(1)).topLevel.map((section) => section.ESCSECAO_ID), [25, 30]);
+});

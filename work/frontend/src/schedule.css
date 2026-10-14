@@ -113,6 +113,16 @@
   color: #1f4c93;
   font-weight: 700;
 }
+.scope-areas {
+  margin-bottom: 0;
+  background: #dce7f3;
+  border-radius: 4px 4px 0 0;
+}
+.scope-areas + .scope-subtabs {
+  margin-top: 0;
+  border-top: 1px solid #cbd8e7;
+  border-radius: 0 0 4px 4px;
+}
 .scope-tabs small,
 .scope-subtabs small {
   margin-left: 4px;
