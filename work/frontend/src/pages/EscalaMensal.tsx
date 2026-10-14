@@ -724,8 +724,8 @@ export function EscalaMensal({ user }: { user: User }) {
                   <button
                     className="button secondary"
                     type="button"
-                    disabled={!scopePeople.length || loading || mixedSubsectionScope || scopeHasOfficial}
-                    title={scopeHasOfficial ? 'Escopo com dias oficializados não pode ser resetado. Edite os dias e oficialize novamente.' : undefined}
+                    disabled={!scopePeople.length || loading || mixedSubsectionScope || scopeHasOfficial || escala?.status === 'FINALIZADA'}
+                    title={escala?.status === 'FINALIZADA' ? 'Escala finalizada não pode ser resetada.' : scopeHasOfficial ? 'Escopo com dias oficializados não pode ser resetado. Edite os dias e oficialize novamente.' : undefined}
                     onClick={() => {
                       setActionError('');
                       setPendingAction('resetar');
@@ -736,8 +736,8 @@ export function EscalaMensal({ user }: { user: User }) {
                   <button
                     className="button primary"
                     type="button"
-                    disabled={!scopePeople.length || loading || mixedSubsectionScope || scopeHasOfficial}
-                    title={scopeHasOfficial ? 'Escopo com dias oficializados não pode ser gerado novamente. Edite os dias e oficialize novamente.' : undefined}
+                    disabled={!scopePeople.length || loading || mixedSubsectionScope || scopeHasOfficial || escala?.status === 'FINALIZADA'}
+                    title={escala?.status === 'FINALIZADA' ? 'Escala finalizada não pode ser gerada novamente.' : scopeHasOfficial ? 'Escopo com dias oficializados não pode ser gerado novamente. Edite os dias e oficialize novamente.' : undefined}
                     onClick={() => {
                       setActionError('');
                       setPendingAction('gerar');
@@ -903,7 +903,7 @@ export function EscalaMensal({ user }: { user: User }) {
                         <Pencil size={15} /> Editar dia
                       </button>
                     )}
-                  {canEdit(user, 'escalas') && selectedCell.date >= localToday() &&
+                  {canEdit(user, 'escalas') && escala?.status !== 'FINALIZADA' && selectedCell.date >= localToday() &&
                     !selectedCell.day?.AUSENCIA_OBRIGATORIA &&
                     !['FER', 'AFA'].includes(String(selectedCell.day?.PROGRAMACAO || '').toUpperCase()) &&
                     Number(selectedCell.day?.OFICIALIZADA) !== 1 &&
@@ -949,12 +949,12 @@ export function EscalaMensal({ user }: { user: User }) {
               if (day) setSelectedCell({ employee: personMenu.employee, date: iso(day.DT), day });
               setPersonMenu(null);
             }}>Ver detalhes</button>
-            {canEdit(user, 'escalas-funcionarios') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && <button type="button" role="menuitem" onClick={() => { setShiftTarget(personMenu.employee); setPersonMenu(null); }}>Editar horário-base</button>}
-            {canEdit(user, 'escalas') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
+            {escala?.status !== 'FINALIZADA' && canEdit(user, 'escalas-funcionarios') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && <button type="button" role="menuitem" onClick={() => { setShiftTarget(personMenu.employee); setPersonMenu(null); }}>Editar horário-base</button>}
+            {escala?.status !== 'FINALIZADA' && canEdit(user, 'escalas') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
               setIndividualTarget(personMenu.employee);
               setPersonMenu(null);
             }}>Gerar escala individual</button>}
-            {canEdit(user, 'escalas') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
+            {escala?.status !== 'FINALIZADA' && canEdit(user, 'escalas') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
               setTransferTarget(personMenu.employee);
               setPersonMenu(null);
             }}>Transferir de subseção</button>}

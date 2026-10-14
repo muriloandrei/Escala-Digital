@@ -5,6 +5,10 @@ const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
 const { validarCriticasEscopo } = require('../rules/escalaRules');
 
+// O planejamento de novembro encerrou antecipadamente setembro e outubro de 2026.
+const PRIMEIRO_MES_ABERTO = '2026-11-01';
+const MES_FINALIZADO_SQL = `p.mes_ref < greatest(trunc(sysdate, 'MM'), date '${PRIMEIRO_MES_ABERTO}')`;
+
 function pick(row, ...keys) {
   for (const key of keys) {
     if (row?.[key] !== undefined) return row[key];
@@ -438,9 +442,8 @@ function normalizeDiaBind(escprogId, dia) {
 function getMesStatus(mesRef, revisao = 1) {
   const ref = new Date(`${formatDateValue(mesRef)}T00:00:00`);
   const hoje = new Date();
-  const fimMes = new Date(ref.getFullYear(), ref.getMonth() + 1, 0, 23, 59, 59, 999);
-  if (hoje > fimMes) return 'FINALIZADA';
   const inicioMesAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  if (ref < inicioMesAtual || formatDateValue(mesRef) < PRIMEIRO_MES_ABERTO) return 'FINALIZADA';
   if (ref > inicioMesAtual) return 'AGENDADA';
   return Number(revisao) > 0 ? 'MODIFICADA' : 'ATIVA';
 }
@@ -842,7 +845,7 @@ async function listEscalas({ lojaId, mesRef, secoesPermitidas = null }) {
           p.revisao,
           p.oficializada,
           case
-            when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when ${MES_FINALIZADO_SQL} then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
             when p.revisao > 0 then 'MODIFICADA'
             else 'ATIVA'
@@ -934,7 +937,7 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesP
           count(distinct p.escfunc_id) as funcionarios,
           ${auditJoin.selectSql}
           case
-            when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when ${MES_FINALIZADO_SQL} then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
             when max(p.revisao) > 0 then 'MODIFICADA'
             else 'ATIVA'
@@ -971,7 +974,7 @@ async function listEscalaRevisoes({ lojaId, mesRef, secoesPermitidas = null }) {
           count(distinct p.escfunc_id) as funcionarios,
           ${auditJoin.selectSql}
           case
-            when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when ${MES_FINALIZADO_SQL} then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
             when p.revisao > 0 then 'MODIFICADA'
             else 'ATIVA'
@@ -1046,6 +1049,11 @@ async function listFixosEscala({ lojaId, mesRef, escsecaoId = null }) {
 async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, actor }) {
   return withConnection(async (connection) => {
     try {
+      if (isMesFinalizado(mesRef)) {
+        const error = new Error('Escala finalizada nao pode ser editada.');
+        error.statusCode = 422;
+        throw error;
+      }
       if (isDiaBloqueadoParaEdicao(data.DT || data.dt)) {
         const error = new Error('Dias ja passados nao podem receber fixos de escala.');
         error.statusCode = 422;
@@ -1139,6 +1147,11 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
 async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, actor }) {
   return withConnection(async (connection) => {
     try {
+      if (isMesFinalizado(mesRef)) {
+        const error = new Error('Escala finalizada nao pode ser editada.');
+        error.statusCode = 422;
+        throw error;
+      }
       if (isDiaBloqueadoParaEdicao(dt)) {
         const error = new Error('Dias ja passados nao podem ter fixos de escala removidos.');
         error.statusCode = 422;
@@ -1316,7 +1329,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           d.hr_sai2,
           d.programacao,
           case
-            when last_day(p.mes_ref) < trunc(sysdate) then 'FINALIZADA'
+            when ${MES_FINALIZADO_SQL} then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
             when p.revisao > 0 then 'MODIFICADA'
             else 'ATIVA'
