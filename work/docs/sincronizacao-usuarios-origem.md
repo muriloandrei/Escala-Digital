@@ -12,8 +12,10 @@ nao le usuarios do RM e nao altera contas `ADMIN` ou `CONTROLADORIA` existentes.
 - Conta nova exige senha MD5 com 32 caracteres hexadecimais e `STATUS = 'A'` na origem.
 - Conta existente mantem o status local quando ativa na origem. Uma conta ja vinculada pelo ID
   da origem e marcada `I` perde o acesso e suas sessoes sao invalidadas.
-- Para contas existentes com bcrypt, a primeira execucao registra apenas a data da senha da origem.
-  Uma data posterior em `DT_HR_ULT_SENHA` substitui o hash local pelo MD5 novo; no login,
+- Para contas existentes com bcrypt, a primeira execucao compara a data da senha da origem
+  com a data de criacao da conta local. Se a senha da origem for posterior, ela prevalece;
+  caso contrario, a rotina registra uma linha de base sem substituir o bcrypt. Uma data
+  posterior em `DT_HR_ULT_SENHA` substitui o hash local pelo MD5 novo; no login,
   a aplicacao converte esse MD5 para bcrypt. Um MD5 local divergente e substituido imediatamente.
 - Logins duplicados, loja inexistente, lider sem secao inequivoca e conflito de ID sao ignorados e
   apresentados na previa. Nao existe concessao generica de todas as secoes a um lider.

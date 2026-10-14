@@ -39,6 +39,8 @@ function sourcePasswordAction(source, target) {
   const sourceDate = dateMs(source.DT_HR_ULT_SENHA);
   const baseline = dateMs(target.DT_HR_ULT_SENHA_ORIGEM);
   if (sourceDate !== null && baseline !== null && sourceDate > baseline) return 'replace';
+  if (sourceDate !== null && baseline === null && dateMs(target.DT_HR_INCL) !== null
+      && sourceDate > dateMs(target.DT_HR_INCL)) return 'replace';
   if (baseline === null && !isMd5(old)) return 'baseline_only';
   return 'keep';
 }
@@ -121,7 +123,7 @@ async function load(connection, sourceTable) {
     if (!targetSet.has(required)) throw new Error(`Destino sem ${required}; aplique primeiro 20261014_usuario_origem_sync.sql.`);
   }
   const source = await connection.execute(`select usuario_id, login, nome, senha, dt_hr_ult_senha, status from ${sourceTable}`, {}, OPTIONS);
-  const target = await connection.execute(`select usuario_id, login, nome, senha_hash, perfil, status, loja_principal, origem_usuario_id, dt_hr_ult_senha_origem from ${TARGET}.sgn_esc_usuario`, {}, OPTIONS);
+  const target = await connection.execute(`select usuario_id, login, nome, senha_hash, perfil, status, loja_principal, dt_hr_incl, origem_usuario_id, dt_hr_ult_senha_origem from ${TARGET}.sgn_esc_usuario`, {}, OPTIONS);
   const stores = await connection.execute(`select loja from ${TARGET}.sgn_esc_loja`, {}, OPTIONS);
   const sections = await connection.execute(`select escsecao_id, codfilial, descr from ${TARGET}.sgn_esc_secao where status = 'A'`, {}, OPTIONS);
   const links = await connection.execute(`select usuario_id, loja from ${TARGET}.sgn_esc_usuario_loja`, {}, OPTIONS);

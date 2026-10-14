@@ -21,11 +21,14 @@ test('sincronizacao exige opt-in explicito e operador para escrita', () => {
 
 test('bcrypt existente recebe linha de base sem substituicao imediata', () => {
   const source = { SENHA: MD5_A, DT_HR_ULT_SENHA: new Date('2026-10-10') };
-  const bcrypt = { SENHA_HASH: '$2a$10$' + 'a'.repeat(53), DT_HR_ULT_SENHA_ORIGEM: null };
+  const bcrypt = { SENHA_HASH: '$2a$10$' + 'a'.repeat(53), DT_HR_INCL: new Date('2026-10-12'), DT_HR_ULT_SENHA_ORIGEM: null };
   assert.equal(sourcePasswordAction(source, bcrypt), 'baseline_only');
   bcrypt.DT_HR_ULT_SENHA_ORIGEM = new Date('2026-10-10');
   assert.equal(sourcePasswordAction(source, bcrypt), 'keep');
   source.DT_HR_ULT_SENHA = new Date('2026-10-11');
+  assert.equal(sourcePasswordAction(source, bcrypt), 'replace');
+  bcrypt.DT_HR_ULT_SENHA_ORIGEM = null;
+  bcrypt.DT_HR_INCL = new Date('2026-10-01');
   assert.equal(sourcePasswordAction(source, bcrypt), 'replace');
   assert.equal(sourcePasswordAction({ ...source, SENHA: MD5_B }, { SENHA_HASH: MD5_A }), 'replace');
 });
