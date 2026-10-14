@@ -3,6 +3,7 @@ const escalaService = require('./escalaService');
 const pendenciaFuncionarioService = require('./pendenciaFuncionarioService');
 const { validateEscalaPayload, getCriticasCoberturaMinima } = require('../rules/escalaRules');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
+const { isPortariaSection } = require('../domain/portariaSection');
 
 function formatDateValue(value) {
   if (value instanceof Date) {
@@ -35,7 +36,7 @@ function isSecaoEscopoOperacional(secao = {}) {
   return /frente.*caixa/.test(texto)
     || /servic.*client/.test(texto)
     || /transport/.test(texto)
-    || /portaria/.test(texto);
+    || isPortariaSection(secao);
 }
 
 function isSecaoFiscalRemoto(secao = {}) {

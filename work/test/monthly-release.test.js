@@ -1310,7 +1310,7 @@ test('monthly release defaults to operational sections led by Frente de Caixa', 
     { ESCSECAO_ID: 20, DESCR: '010.02.002 - Frente de Caixa' },
     { ESCSECAO_ID: 23, DESCR: '010.03.001 - Servicos a Clientes' },
     { ESCSECAO_ID: 24, DESCR: '010.03.002 - Transportes' },
-    { ESCSECAO_ID: 25, DESCR: '010.03.003 - Portaria' },
+    { ESCSECAO_ID: 25, COD_SECAO: '010.02.012', DESCR: '010.02.012 - Controle de Acesso' },
     { ESCSECAO_ID: 21, DESCR: '010.02.001 - Deposito Lideranca' },
     { ESCSECAO_ID: 22, DESCR: '010.02.006 - Mercearia Lideranca' }
   ];
@@ -1459,7 +1459,7 @@ test('monthly scale detail adds active Portaria to an existing scale without unr
     { ESCFUNC_ID: 1, ESCSECAO_ID: 20, SECAO_DESCR: 'Frente de Caixa' },
     { ESCFUNC_ID: 2, ESCSECAO_ID: 30, SECAO_DESCR: 'Deposito Lideranca' },
     { ESCFUNC_ID: 3, ESCSECAO_ID: 40, SECAO_DESCR: 'Mercearia Lideranca' },
-    { ESCFUNC_ID: 4, ESCSECAO_ID: 25, SECAO_DESCR: 'Portaria' }
+    { ESCFUNC_ID: 4, ESCSECAO_ID: 25, COD_SECAO: '010.02.012', SECAO_DESCR: 'Controle de Acesso' }
   ];
 
   const filtrados = _private.filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo, rows);

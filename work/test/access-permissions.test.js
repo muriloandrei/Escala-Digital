@@ -36,6 +36,8 @@ test('missing profile row receives operational defaults but officialization rema
 test('Frente de Caixa operational scope includes Portaria', () => {
   const predicate = _private.getEscopoOperacionalSecaoPredicate('s');
   assert.match(predicate, /PORTARIA/);
+  assert.match(predicate, /s\.cod_secao/);
+  assert.match(predicate, /02\[\.\]012/);
   assert.match(predicate, /s\.descr/);
 });
 
@@ -47,6 +49,7 @@ test('Frente de Caixa leader sees Portaria even with older explicit section gran
       if (sql.includes('from sgn_esc_usuario_secao us')) return { rows: [{ ESCSECAO_ID: 20 }] };
       if (sql.includes('from sgn_esc_secao s')) {
         assert.match(sql, /PORTARIA/);
+        assert.match(sql, /s\.cod_secao/);
         assert.doesNotMatch(sql, /FRENTE\.\*CAIXA/);
         return { rows: [{ ESCSECAO_ID: 25 }] };
       }

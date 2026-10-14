@@ -44,6 +44,7 @@ function loadService({ dismissal = '2026-10-15', officialized = 1, days = ['2026
         }
       };
       if (name === '../utils/scheduleDiff') return require('../src/utils/scheduleDiff');
+      if (name === '../domain/portariaSection') return require('../src/domain/portariaSection');
       if (['./catalogService', '../domain/operationalPeriod', '../rules/escalaRules'].includes(name)) return {};
       throw new Error(`Dependencia inesperada: ${name}`);
     }

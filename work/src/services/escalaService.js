@@ -2,6 +2,7 @@ const { withConnection, oracledb } = require('../db/oracle');
 const catalogService = require('./catalogService');
 const escalaEventService = require('./escalaEventService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
+const { isPortariaSection } = require('../domain/portariaSection');
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
 const { validarCriticasEscopo } = require('../rules/escalaRules');
 
@@ -770,7 +771,7 @@ function filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo = [], r
   if (!secoesDaEscala.size) return funcionariosCatalogo || [];
   return (funcionariosCatalogo || [])
     .filter((funcionario) => secoesDaEscala.has(Number(pick(funcionario, 'ESCSECAO_ID', 'escsecao_id')))
-      || /portaria/i.test(String(pick(funcionario, 'SECAO_DESCR', 'secao_descr') || '')));
+      || isPortariaSection(funcionario));
 }
 
 function projetarDemissoesNaEscala(rows = [], hojeIso = getHojeIso()) {

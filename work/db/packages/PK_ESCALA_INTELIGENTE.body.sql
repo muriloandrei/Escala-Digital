@@ -62,7 +62,8 @@ create or replace package body PK_ESCALA_INTELIGENTE is
           select count(*) into v_secao_total
             from ESCALAINT.SGN_ESC_SECAO
            where codfilial = v_loja and status = 'A'
-             and regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA');
+             and (regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA')
+               or regexp_like(trim(cod_secao), '(^|[.])02[.]012$'));
         elsif rec.chapa is not null and rec.codcoligada is not null then
           select count(distinct f.escsecao_id), min(f.escsecao_id)
             into v_secao_total, v_secao_id
@@ -160,13 +161,15 @@ create or replace package body PK_ESCALA_INTELIGENTE is
              select escsecao_id from ESCALAINT.SGN_ESC_SECAO
               where (v_secao_id is not null and escsecao_id = v_secao_id)
                  or (v_secao_id is null and codfilial = v_loja and status = 'A'
-                     and regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA'))
+                     and (regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA')
+                       or regexp_like(trim(cod_secao), '(^|[.])02[.]012$')))
            );
         for sec in (
           select escsecao_id from ESCALAINT.SGN_ESC_SECAO
            where (v_secao_id is not null and escsecao_id = v_secao_id)
               or (v_secao_id is null and codfilial = v_loja and status = 'A'
-                  and regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA'))
+                  and (regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA')
+                    or regexp_like(trim(cod_secao), '(^|[.])02[.]012$')))
         ) loop
           merge into ESCALAINT.SGN_ESC_USUARIO_SECAO dest
           using (select v_usuario_id usuario_id, sec.escsecao_id escsecao_id from dual) src

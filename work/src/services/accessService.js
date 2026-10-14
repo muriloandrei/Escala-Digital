@@ -187,6 +187,7 @@ function getEscopoOperacionalSecaoPredicate(alias = 's') {
     or regexp_like(upper(nvl(${alias}.descr, '')), 'SERVI[CÇ]OS?.*CLIENT')
     or regexp_like(upper(nvl(${alias}.descr, '')), 'TRANSPORT')
     or regexp_like(upper(nvl(${alias}.descr, '')), 'PORTARIA')
+    or regexp_like(trim(nvl(${alias}.cod_secao, '')), '(^|[.])02[.]012$')
   )`;
 }
 
@@ -334,7 +335,9 @@ async function listSecoesFrenteCaixaPermitidasInConnection(connection, requestUs
   const binds = {};
   const filters = [
     buildInClause(`s.${lojaColumn.toLowerCase()}`, lojas, binds, 'lojaFrente'),
-    onlyPortaria ? "regexp_like(upper(nvl(s.descr, '')), 'PORTARIA')" : getEscopoOperacionalSecaoPredicate('s')
+    onlyPortaria
+      ? "(regexp_like(upper(nvl(s.descr, '')), 'PORTARIA') or regexp_like(trim(nvl(s.cod_secao, '')), '(^|[.])02[.]012$'))"
+      : getEscopoOperacionalSecaoPredicate('s')
   ];
   if (secaoColumns.has('STATUS')) filters.push("nvl(s.status, 'A') = 'A'");
 

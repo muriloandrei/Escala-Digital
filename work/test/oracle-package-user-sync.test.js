@@ -14,6 +14,7 @@ test('package existente chama a integracao de usuarios apos funcionarios sem mud
   assert.doesNotMatch(packageBody, /from SGN_USUARIO\s+where\s+status/i);
   assert.match(packageBody, /rec\.senha is null/i);
   assert.match(packageBody, /instr\(v_login, 'FISCAL'\) = 0/i);
+  assert.equal((packageBody.match(/\(\^\|\[\.\]\)02\[\.\]012\$/g) || []).length, 3);
   assert.match(packageBody, /'FÉRIAS', 'FER'/);
 });
 
