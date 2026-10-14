@@ -89,7 +89,7 @@ function analisar({ origem, destino, lojas, vinculos, secoes }) {
     resultados.push({
       login,
       existe: Boolean(target),
-      statusOrigem: source.STATUS ?? null,
+      statusDestino: target?.STATUS || null,
       nivelOrigem: source.NIVEL ?? null,
       configAbcOrigem: source.CONFIG_ABC ?? null,
       lojaIdOrigem: source.LOJA_ID ?? null,
@@ -116,20 +116,10 @@ async function diagnosticar(connection, { source, targetSchema = 'ESCALAINT' }) 
   }
   const target = /^[A-Za-z][A-Za-z0-9_$#]*$/.test(targetSchema) ? targetSchema.toUpperCase() : null;
   if (!target) throw new Error('Schema de destino invalido.');
-  const [sourceOwner, sourceName] = source.includes('.') ? source.toUpperCase().split('.') : [null, source.toUpperCase()];
-  const sourceColumns = await connection.execute(
-    sourceOwner
-      ? 'select column_name from all_tab_columns where owner = :owner and table_name = :tableName'
-      : 'select column_name from user_tab_columns where table_name = :tableName',
-    sourceOwner ? { owner: sourceOwner, tableName: sourceName } : { tableName: sourceName },
-    options
-  );
-  const sourceColumnSet = new Set(sourceColumns.rows.map((row) => row.COLUMN_NAME));
-  const statusSelect = sourceColumnSet.has('STATUS') ? 'status' : 'cast(null as varchar2(1)) as status';
   let origem;
   try {
     origem = (await connection.execute(
-      `select usuario_id, login, senha, dt_hr_ult_senha, nivel, config_abc, loja_id, loja_id2, ${statusSelect}
+      `select usuario_id, login, senha, dt_hr_ult_senha, nivel, config_abc, loja_id, loja_id2
          from ${source}`,
       {}, options
     )).rows;
@@ -139,7 +129,7 @@ async function diagnosticar(connection, { source, targetSchema = 'ESCALAINT' }) 
     }
     throw error;
   }
-  const destino = await connection.execute(`select usuario_id, login, perfil, senha_hash, dt_hr_incl from ${target}.sgn_esc_usuario`, {}, options);
+  const destino = await connection.execute(`select usuario_id, login, perfil, status, senha_hash, dt_hr_incl from ${target}.sgn_esc_usuario`, {}, options);
   const lojas = await connection.execute(`select loja from ${target}.sgn_esc_loja`, {}, options);
   const vinculos = await connection.execute(`select usuario_id, loja from ${target}.sgn_esc_usuario_loja`, {}, options);
   const secaoColumns = await connection.execute("select column_name from all_tab_columns where owner = :targetSchema and table_name = 'SGN_ESC_SECAO' and column_name in ('CODFILIAL', 'LOJA', 'STATUS')", { targetSchema: target }, options);
@@ -151,21 +141,17 @@ async function diagnosticar(connection, { source, targetSchema = 'ESCALAINT' }) 
     `select ${lojaColumn} as loja, count(*) as total from ${target}.sgn_esc_secao ${statusFilter} group by ${lojaColumn}`,
     {}, options
   );
-  return {
-    temStatusOrigem: sourceColumnSet.has('STATUS'),
-    resultados: analisar({ origem, destino: destino.rows, lojas: lojas.rows, vinculos: vinculos.rows, secoes: secoes.rows })
-  };
+  return { resultados: analisar({ origem, destino: destino.rows, lojas: lojas.rows, vinculos: vinculos.rows, secoes: secoes.rows }) };
 }
 
-function imprimir({ resultados, temStatusOrigem }, sample) {
+function imprimir({ resultados }, sample) {
   const count = (predicate) => resultados.filter(predicate).length;
   console.log('DIAGNOSTICO SOMENTE LEITURA - nenhuma senha ou hash sera exibido.');
-  console.log(`STATUS na origem: ${temStatusOrigem ? 'sim' : 'nao; criacao automatica deve permanecer bloqueada ate definir a regra de atividade'}`);
+  console.log('SGN_USUARIO nao informa atividade; novas contas elegiveis recebem STATUS A e contas existentes preservam o status local.');
   console.log(`Logins de origem: ${resultados.length}`);
-  console.log(`Status A na origem: ${count((row) => row.statusOrigem === 'A')}`);
-  console.log(`Status diferente de A: ${count((row) => row.statusOrigem && row.statusOrigem !== 'A')}`);
-  console.log(`Novos com perfil sugerido e loja cadastrada: ${count((row) => !row.existe && row.perfilSugerido && row.lojaCadastrada && row.secoesAtivas && row.senha === 'nova_conta' && !row.origemDuplicada && row.statusOrigem === 'A')}`);
-  console.log(`Novos sem mapeamento seguro: ${count((row) => !row.existe && (!row.lojaCadastrada || !row.secoesAtivas || row.origemDuplicada || row.statusOrigem !== 'A' || row.senha !== 'nova_conta'))}`);
+  console.log(`Contas existentes inativas no destino: ${count((row) => row.existe && row.statusDestino === 'I')}`);
+  console.log(`Novos com perfil sugerido e loja cadastrada: ${count((row) => !row.existe && row.perfilSugerido && row.lojaCadastrada && row.secoesAtivas && row.senha === 'nova_conta' && !row.origemDuplicada)}`);
+  console.log(`Novos sem mapeamento seguro: ${count((row) => !row.existe && (!row.lojaCadastrada || !row.secoesAtivas || row.origemDuplicada || row.senha !== 'nova_conta'))}`);
   console.log(`Existentes com loja divergente: ${count((row) => row.existe && row.lojaCadastrada && !row.lojasAtuais.includes(row.lojaSugerida))}`);
   console.log(`MD5 diferente no destino: ${count((row) => row.senha === 'md5_diferente')}`);
   console.log(`Bcrypt com troca possivel apos cadastro: ${count((row) => row.senha === 'origem_posterior_ao_cadastro')}`);

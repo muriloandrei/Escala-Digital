@@ -86,11 +86,7 @@ function plan(sourceRows, targetRows, stores, sections, links) {
     const loja = lojaSugerida(login);
     const perfil = perfilSugerido(login);
     let reason = null;
-    const inactive = String(source.STATUS || '').trim().toUpperCase() !== 'A';
     if (!login || sourceCounts.get(login) !== 1 || targetCounts.get(login) > 1 || sourceIds.get(Number(source.USUARIO_ID)) !== 1) reason = 'login_ou_id_duplicado';
-    else if (inactive && (!target || Number(target.ORIGEM_USUARIO_ID) !== Number(source.USUARIO_ID))) reason = 'origem_inativa_sem_vinculo';
-    else if (inactive && ['ADMIN', 'CONTROLADORIA'].includes(normalized(target.PERFIL))) reason = 'perfil_global_preservado';
-    else if (inactive) reason = 'inativar';
     else if (!loja || !storeSet.has(loja)) reason = 'loja_ausente';
     else if (!isMd5(source.SENHA)) reason = 'senha_invalida';
     else if (target && target.ORIGEM_USUARIO_ID != null && Number(target.ORIGEM_USUARIO_ID) !== Number(source.USUARIO_ID)) reason = 'id_origem_divergente';
@@ -112,7 +108,7 @@ async function load(connection, sourceTable) {
     { tableName: sourceTable }, OPTIONS
   );
   const sourceColumns = new Set(columns.rows.map((row) => row.COLUMN_NAME));
-  for (const required of ['USUARIO_ID', 'LOGIN', 'NOME', 'SENHA', 'DT_HR_ULT_SENHA', 'STATUS']) {
+  for (const required of ['USUARIO_ID', 'LOGIN', 'NOME', 'SENHA', 'DT_HR_ULT_SENHA']) {
     if (!sourceColumns.has(required)) throw new Error(`Origem ${sourceTable} sem ${required}; nenhuma conta foi alterada.`);
   }
   const targetColumns = await connection.execute(
@@ -122,7 +118,7 @@ async function load(connection, sourceTable) {
   for (const required of ['ORIGEM_USUARIO_ID', 'DT_HR_ULT_SENHA_ORIGEM', 'AUTH_VERSION']) {
     if (!targetSet.has(required)) throw new Error(`Destino sem ${required}; aplique primeiro 20261014_usuario_origem_sync.sql.`);
   }
-  const source = await connection.execute(`select usuario_id, login, nome, senha, dt_hr_ult_senha, status from ${sourceTable}`, {}, OPTIONS);
+  const source = await connection.execute(`select usuario_id, login, nome, senha, dt_hr_ult_senha from ${sourceTable}`, {}, OPTIONS);
   const target = await connection.execute(`select usuario_id, login, nome, senha_hash, perfil, status, loja_principal, dt_hr_incl, origem_usuario_id, dt_hr_ult_senha_origem from ${TARGET}.sgn_esc_usuario`, {}, OPTIONS);
   const stores = await connection.execute(`select loja from ${TARGET}.sgn_esc_loja`, {}, OPTIONS);
   const sections = await connection.execute(`select escsecao_id, codfilial, descr from ${TARGET}.sgn_esc_secao where status = 'A'`, {}, OPTIONS);
@@ -131,21 +127,8 @@ async function load(connection, sourceTable) {
 }
 
 async function applyPlan(connection, entries) {
-  const counts = { inserted: 0, updated: 0, deactivated: 0, passwords: 0, stores: 0, sections: 0 };
+  const counts = { inserted: 0, updated: 0, passwords: 0, stores: 0, sections: 0 };
   for (const item of entries) {
-    if (item.reason === 'inativar') {
-      if (String(item.target.STATUS).toUpperCase() === 'A') {
-        await connection.execute(
-          `update ${TARGET}.sgn_esc_usuario
-              set status = 'I', auth_version = auth_version + 1
-            where usuario_id = :id and origem_usuario_id = :sourceId and status = 'A'`,
-          { id: item.target.USUARIO_ID, sourceId: item.source.USUARIO_ID },
-          { autoCommit: false }
-        );
-        counts.deactivated++;
-      }
-      continue;
-    }
     if (item.reason) continue;
     const source = item.source;
     let id = item.target?.USUARIO_ID;
@@ -216,12 +199,12 @@ async function main() {
   });
   try {
     const entries = await load(connection, args.source);
-    const skipped = entries.filter((item) => item.reason && item.reason !== 'inativar');
+    const skipped = entries.filter((item) => item.reason);
     console.log(`${args.apply ? 'APLICACAO' : 'PREVIA'} - ${entries.length} conta(s) de origem; ${skipped.length} ignorada(s).`);
     console.log(JSON.stringify(Object.fromEntries([...new Set(skipped.map((item) => item.reason))]
       .map((reason) => [reason, skipped.filter((item) => item.reason === reason).length]))));
     if (skipped.length) console.table(skipped.slice(0, 50).map((item) => ({ login: item.login, motivo: item.reason })));
-    console.log(`Novas: ${entries.filter((item) => !item.reason && !item.target).length}; inativacoes: ${entries.filter((item) => item.reason === 'inativar' && item.target.STATUS === 'A').length}; senhas a substituir: ${entries.filter((item) => item.password === 'replace').length}; bcrypt sem linha de base: ${entries.filter((item) => item.password === 'baseline_only').length}.`);
+    console.log(`Novas: ${entries.filter((item) => !item.reason && !item.target).length}; senhas a substituir: ${entries.filter((item) => item.password === 'replace').length}; bcrypt sem linha de base: ${entries.filter((item) => item.password === 'baseline_only').length}.`);
     if (!args.apply) return;
     try {
       const counts = await applyPlan(connection, entries);

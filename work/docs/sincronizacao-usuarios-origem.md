@@ -9,9 +9,10 @@ nao le usuarios do RM e nao altera contas `ADMIN` ou `CONTROLADORIA` existentes.
 
 - `GERENTE...` vira `GERENTE`; `LIDER...` vira `LIDER`; `ADM...` vira `RH`; demais viram `OPERADOR`.
 - A loja e inferida dos ultimos 1 a 4 digitos do login. A loja deve existir em `SGN_ESC_LOJA`.
-- Conta nova exige senha MD5 com 32 caracteres hexadecimais e `STATUS = 'A'` na origem.
-- Conta existente mantem o status local quando ativa na origem. Uma conta ja vinculada pelo ID
-  da origem e marcada `I` perde o acesso e suas sessoes sao invalidadas.
+- `SGN_USUARIO` nao possui coluna de status. Conta nova elegivel recebe `STATUS = 'A'`
+  no destino. Conta existente preserva seu status local, inclusive se estiver inativa.
+- Como nao ha indicador de atividade na origem, a rotina nao inativa contas automaticamente.
+  Uma conta que nao deva acessar a Escala precisa ser inativada no destino por um administrador.
 - Para contas existentes com bcrypt, a primeira execucao compara a data da senha da origem
   com a data de criacao da conta local. Se a senha da origem for posterior, ela prevalece;
   caso contrario, a rotina registra uma linha de base sem substituir o bcrypt. Uma data
@@ -27,9 +28,7 @@ nao le usuarios do RM e nao altera contas `ADMIN` ou `CONTROLADORIA` existentes.
 3. Confirmar que o schema de origem enxerga `ESCALAINT.SGN_ESC_USUARIO`, `SGN_ESC_USUARIO_LOJA`,
    `SGN_ESC_USUARIO_SECAO`, `SGN_ESC_LOJA`, `SGN_ESC_SECAO` e a sequence `SGN_ESC_USUARIO_SEQ`,
    com os grants necessarios de consulta e escrita. A package de funcionarios ja usa parte desse acesso.
-4. Confirmar se `SGN_USUARIO` realmente possui `STATUS` com `A` para ativos. A estrutura enviada
-   inicialmente nao mostrou essa coluna. Sem ela, a rotina falha antes de qualquer escrita.
-5. Configurar um arquivo de ambiente protegido para o schema de **origem** com
+4. Configurar um arquivo de ambiente protegido para o schema de **origem** com
    `ORACLE_USER`, `ORACLE_PASSWORD` e `ORACLE_CONNECT_STRING`. Nao usar a conta `ESCALAINT`
    para ler `SGN_USUARIO` sem grant explicito. Nao passar senha na linha de comando.
 
@@ -55,7 +54,7 @@ verificar que uma mudanca de senha na origem invalida a sessao anterior.
 
 ## Job diario
 
-Depois de validar a primeira carga e confirmar o campo `STATUS`, chamar o comando de aplicacao
+Depois de validar a primeira carga, chamar o comando de aplicacao
 apos a execucao bem-sucedida de `PK_ESCALA_INTELIGENTE.PKB_INTEGRA_CADASTRO`. Nao inserir o
 comando Node dentro da package PL/SQL. Se o job for `DBMS_SCHEDULER`, criar uma etapa externa
 separada ou agendar pelo sistema operacional com dependencia explicita; monitorar codigo de saida

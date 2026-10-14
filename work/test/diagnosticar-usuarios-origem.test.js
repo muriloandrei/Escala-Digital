@@ -43,7 +43,6 @@ test('diagnostico nao executa escrita', async () => {
   const connection = {
     execute: async (sql) => {
       sqls.push(sql);
-      if (sql.includes('from user_tab_columns')) return { rows: [{ COLUMN_NAME: 'STATUS' }] };
       if (sql.includes('from SGN_USUARIO')) return { rows: [] };
       if (sql.includes('from ESCALAINT.sgn_esc_usuario_loja')) return { rows: [] };
       if (sql.includes('from ESCALAINT.sgn_esc_usuario')) return { rows: [] };
@@ -53,6 +52,7 @@ test('diagnostico nao executa escrita', async () => {
       throw new Error(`SQL inesperado: ${sql}`);
     }
   };
-  assert.deepEqual(await diagnosticar(connection, { source: 'SGN_USUARIO', targetSchema: 'ESCALAINT' }), { temStatusOrigem: true, resultados: [] });
+  assert.deepEqual(await diagnosticar(connection, { source: 'SGN_USUARIO', targetSchema: 'ESCALAINT' }), { resultados: [] });
+  assert.doesNotMatch(sqls.find((sql) => sql.includes('from SGN_USUARIO')), /\bstatus\b/i);
   assert.equal(sqls.every((sql) => /^\s*select\b/i.test(sql)), true);
 });
