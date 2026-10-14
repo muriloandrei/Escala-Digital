@@ -14,6 +14,8 @@ require('./error-handler.test');
 require('./mutation-diagnostics.test');
 require('./csrf.test');
 require('./auth-md5-password.test');
+require('./diagnosticar-usuarios-origem.test');
+require('./sincronizar-usuarios-origem.test');
 require('./access-permissions.test');
 require('./diagnosticar-loja.test');
 require('./registrar-loja.test');

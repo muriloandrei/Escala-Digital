@@ -26,6 +26,8 @@
     "turnos:padrao": "node scripts/recriar-turnos-padrao-secao.js",
     "seed:dashboard": "node scripts/seed-dashboard-test-data.js",
     "usuarios:corrigir-lojas": "node scripts/corrigir-usuarios-loja.js",
+    "usuarios:diagnosticar-origem": "node scripts/diagnosticar-usuarios-origem.js",
+    "usuarios:sincronizar-origem": "node scripts/sincronizar-usuarios-origem.js",
     "lojas:diagnosticar": "node scripts/diagnosticar-loja.js",
     "lojas:registrar": "node scripts/registrar-loja.js",
     "escalas:limpar-criadas": "node scripts/limpar-escalas-criadas.js",
