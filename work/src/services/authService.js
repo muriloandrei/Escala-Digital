@@ -77,7 +77,6 @@ async function findUserByLogin(login) {
   return withConnection(async (connection) => {
     const columns = await getTableColumns(connection, 'SGN_ESC_USUARIO');
     const lojaPrincipalSelect = columns.has('LOJA_PRINCIPAL') ? ', u.loja_principal' : ', cast(null as number) as loja_principal';
-    const authVersionSelect = columns.has('AUTH_VERSION') ? ', u.auth_version' : ', 0 as auth_version';
     const result = await connection.execute(
       `select
           u.usuario_id,
@@ -87,7 +86,6 @@ async function findUserByLogin(login) {
           u.perfil,
           u.status
           ${lojaPrincipalSelect}
-          ${authVersionSelect}
        from sgn_esc_usuario u
        where upper(u.login) = upper(:login)`,
       { login },
@@ -102,7 +100,6 @@ async function findUserById(usuarioId) {
   return withConnection(async (connection) => {
     const columns = await getTableColumns(connection, 'SGN_ESC_USUARIO');
     const lojaPrincipalSelect = columns.has('LOJA_PRINCIPAL') ? ', u.loja_principal' : ', cast(null as number) as loja_principal';
-    const authVersionSelect = columns.has('AUTH_VERSION') ? ', u.auth_version' : ', 0 as auth_version';
     const result = await connection.execute(
       `select
           u.usuario_id,
@@ -111,7 +108,6 @@ async function findUserById(usuarioId) {
           u.perfil,
           u.status
           ${lojaPrincipalSelect}
-          ${authVersionSelect}
        from sgn_esc_usuario u
        where u.usuario_id = :usuarioId`,
       { usuarioId },
@@ -237,7 +233,6 @@ async function getSessionUserById(usuarioId) {
   const lojasSessao = resolveLojasSessao(user, lojas, lojaPrincipal);
   const sessionUser = {
     sub: String(currentUsuarioId),
-    authVersion: Number(pick(user, 'AUTH_VERSION', 'auth_version') || 0),
     login: pick(user, 'LOGIN', 'login'),
     nome: pick(user, 'NOME', 'nome'),
     perfil: pick(user, 'PERFIL', 'perfil'),
@@ -279,7 +274,6 @@ async function login({ login, password }) {
   const { auth } = getEnv();
   const payload = {
     sub: String(usuarioId),
-    authVersion: Number(pick(user, 'AUTH_VERSION', 'auth_version') || 0),
     login: pick(user, 'LOGIN', 'login'),
     nome: pick(user, 'NOME', 'nome'),
     perfil: pick(user, 'PERFIL', 'perfil'),

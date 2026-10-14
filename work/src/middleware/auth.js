@@ -3,10 +3,6 @@ const { getEnv } = require('../config/env');
 const authService = require('../services/authService');
 const accessService = require('../services/accessService');
 
-function sessionVersionMatches(token, currentUser) {
-  return Number(token.authVersion || 0) === Number(currentUser.authVersion || 0);
-}
-
 async function requireAuth(req, res, next) {
   const { auth } = getEnv();
   const token = req.cookies.access_token;
@@ -18,7 +14,7 @@ async function requireAuth(req, res, next) {
   try {
     const decoded = jwt.verify(token, auth.jwtSecret);
     const sessionUser = await authService.getSessionUserById(decoded.sub);
-    if (!sessionUser || !sessionVersionMatches(decoded, sessionUser)) {
+    if (!sessionUser) {
       return res.status(401).json({ error: 'Sessao invalida ou expirada.' });
     }
 
@@ -78,4 +74,4 @@ function requirePermission(page, action = 'visualizar') {
   };
 }
 
-module.exports = { requireAuth, requireLojaAccess, requireAdmin, requirePermission, sessionVersionMatches };
+module.exports = { requireAuth, requireLojaAccess, requireAdmin, requirePermission };
