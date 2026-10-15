@@ -56,7 +56,33 @@ async function diagnosticar(connection) {
       order by s.codfilial, s.escsecao_id`,
     {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
-  return (result.rows || []).map((row) => ({ ...row, SITUACAO: classificar(row) }));
+  const funcoes = await connection.execute(
+    `select s.escsecao_id, s.codfilial, f.escfuncao_id,
+            coalesce(fn.descr, '(funcao sem cadastro)') funcao,
+            count(*) funcionarios
+       from sgn_esc_secao s
+       join sgn_esc_funcionario f on f.escsecao_id = s.escsecao_id
+       left join sgn_esc_funcao fn on fn.escfuncao_id = f.escfuncao_id
+      where regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$')
+      group by s.escsecao_id, s.codfilial, f.escfuncao_id, fn.descr
+      order by s.codfilial, s.escsecao_id, funcionarios desc, funcao`,
+    {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  const funcoesPorSecao = new Map();
+  for (const funcao of funcoes.rows || []) {
+    const id = Number(funcao.ESCSECAO_ID);
+    if (!funcoesPorSecao.has(id)) funcoesPorSecao.set(id, []);
+    funcoesPorSecao.get(id).push({
+      funcaoId: funcao.ESCFUNCAO_ID,
+      funcao: funcao.FUNCAO,
+      funcionarios: Number(funcao.FUNCIONARIOS)
+    });
+  }
+  return (result.rows || []).map((row) => ({
+    ...row,
+    SITUACAO: classificar(row),
+    FUNCOES: funcoesPorSecao.get(Number(row.ESCSECAO_ID)) || []
+  }));
 }
 
 async function main() {
@@ -69,6 +95,13 @@ async function main() {
       prontas: rows.filter((row) => row.SITUACAO === 'PRONTA').length,
       subsecoesACriar: rows.filter((row) => row.SITUACAO === 'CRIAR_SUBSECAO').length,
       preservadasLoja999: rows.filter((row) => row.SITUACAO === 'PRESERVADA_LOJA_999').length,
+      distribuicaoPorFuncao: rows.map((row) => ({
+        secaoId: row.ESCSECAO_ID,
+        filial: row.CODFILIAL,
+        secao: row.DESCR,
+        situacao: row.SITUACAO,
+        funcoes: row.FUNCOES
+      })),
       revisaoManual: pendencias
     }, null, 2));
     if (pendencias.length) process.exitCode = 1;
