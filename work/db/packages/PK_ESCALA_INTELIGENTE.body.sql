@@ -310,6 +310,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
             join ESCALAINT.SGN_ESC_SUBSECAO ss on ss.escsecao_id = s.escsecao_id
            where s.codcoligada = rec1.codcoligada and s.codfilial = rec1.codfilial
              and regexp_like(upper(s.descr), 'FRENTE.*CAIXA')
+             and regexp_like(trim(s.cod_secao), '(^|[.])02[.]002$')
              and ss.status = 'A' and upper(ss.descr) = 'PORTEIRO';
         else
           select escsecao_id into v_reg_func.escsecao_id from ESCALAINT.SGN_ESC_SECAO

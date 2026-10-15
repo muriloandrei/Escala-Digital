@@ -27,7 +27,8 @@ begin
      where frente.codcoligada = origem.codcoligada
        and frente.codfilial = origem.codfilial
        and frente.status = 'A'
-       and regexp_like(upper(frente.descr), 'FRENTE.*CAIXA');
+       and regexp_like(upper(frente.descr), 'FRENTE.*CAIXA')
+       and regexp_like(trim(frente.cod_secao), '(^|[.])02[.]002$');
     if v_frentes <> 1 then
       raise_application_error(-20001, 'Portaria ' || origem.escsecao_id ||
         ': esperado uma Frente de Caixa ativa na coligada ' || origem.codcoligada ||
@@ -65,7 +66,8 @@ begin
      where frente.codcoligada = origem.codcoligada
        and frente.codfilial = origem.codfilial
        and frente.status = 'A'
-       and regexp_like(upper(frente.descr), 'FRENTE.*CAIXA');
+       and regexp_like(upper(frente.descr), 'FRENTE.*CAIXA')
+       and regexp_like(trim(frente.cod_secao), '(^|[.])02[.]002$');
 
     select count(*) into v_porteiros
       from sgn_esc_subsecao sub

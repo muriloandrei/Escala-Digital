@@ -28,6 +28,7 @@ begin
        and frente.codfilial = origem.codfilial
        and frente.status = 'A' and sub.status = 'A'
        and regexp_like(upper(frente.descr), 'FRENTE.*CAIXA')
+       and regexp_like(trim(frente.cod_secao), '(^|[.])02[.]002$')
        and upper(sub.descr) = 'PORTEIRO';
     if v_destinos <> 1 then
       raise_application_error(-20001, 'Portaria ' || origem.escsecao_id ||
@@ -80,6 +81,7 @@ begin
        and frente.codfilial = origem.codfilial
        and frente.status = 'A' and sub.status = 'A'
        and regexp_like(upper(frente.descr), 'FRENTE.*CAIXA')
+       and regexp_like(trim(frente.cod_secao), '(^|[.])02[.]002$')
        and upper(sub.descr) = 'PORTEIRO';
 
     update sgn_esc_prog p set p.escsecao_id = v_frente_id,
