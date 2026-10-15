@@ -18,6 +18,7 @@ require('./oracle-package-user-sync.test');
 require('./access-permissions.test');
 require('./portaria-section.test');
 require('./diagnosticar-loja.test');
+require('./diagnosticar-portarias.test');
 require('./registrar-loja.test');
 require('./absence-validation.test');
 require('./suspension-permissions.test');

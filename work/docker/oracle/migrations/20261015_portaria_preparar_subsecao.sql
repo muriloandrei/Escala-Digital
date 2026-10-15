@@ -11,6 +11,7 @@ begin
     select s.escsecao_id, s.codcoligada, s.codfilial
       from sgn_esc_secao s
      where regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$')
+       and s.codfilial <> 999
        and (exists (select 1 from sgn_esc_funcionario f
                     where f.escsecao_id = s.escsecao_id)
          or exists (select 1 from sgn_esc_prog p
@@ -51,6 +52,7 @@ begin
     select s.escsecao_id, s.codcoligada, s.codfilial
       from sgn_esc_secao s
      where regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$')
+       and s.codfilial <> 999
        and (exists (select 1 from sgn_esc_funcionario f
                     where f.escsecao_id = s.escsecao_id)
          or exists (select 1 from sgn_esc_prog p
