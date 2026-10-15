@@ -21,6 +21,29 @@ begin
                      where x.escsecao_id = s.escsecao_id
                        and x.mes_ref >= trunc(sysdate, 'MM')))
   ) loop
+    select count(*) into v_conflitos
+      from (select f.escfunc_id
+              from sgn_esc_funcionario f
+             where f.escsecao_id = origem.escsecao_id
+            union
+            select p.escfunc_id
+              from sgn_esc_prog p
+             where p.escsecao_id = origem.escsecao_id
+               and p.mes_ref >= trunc(sysdate, 'MM')
+               and p.ativa = 1 and p.oficializada = 0
+            union
+            select x.escfunc_id
+              from sgn_esc_fixo_escala x
+             where x.escsecao_id = origem.escsecao_id
+               and x.mes_ref >= trunc(sysdate, 'MM')) envolvidos
+      left join sgn_esc_funcionario f on f.escfunc_id = envolvidos.escfunc_id
+      left join sgn_esc_funcao fn on fn.escfuncao_id = f.escfuncao_id
+     where nvl(upper(trim(fn.descr)), '?') <> 'PORTEIRO';
+    if v_conflitos > 0 then
+      raise_application_error(-20004, 'Portaria ' || origem.escsecao_id ||
+        ': funcionarios ou programacoes de outra funcao; revise antes da migracao.');
+    end if;
+
     select count(*), min(frente.escsecao_id), min(sub.escsubsecao_id)
       into v_destinos, v_frente_id, v_porteiro_id
       from sgn_esc_secao frente
@@ -90,15 +113,26 @@ begin
            p.escsecaoturno_id = null
      where p.escsecao_id = origem.escsecao_id
        and p.mes_ref >= trunc(sysdate, 'MM')
-       and p.ativa = 1 and p.oficializada = 0;
+       and p.ativa = 1 and p.oficializada = 0
+       and exists (select 1 from sgn_esc_funcionario f
+                    join sgn_esc_funcao fn on fn.escfuncao_id = f.escfuncao_id
+                   where f.escfunc_id = p.escfunc_id
+                     and upper(trim(fn.descr)) = 'PORTEIRO');
 
     update sgn_esc_fixo_escala x set x.escsecao_id = v_frente_id
      where x.escsecao_id = origem.escsecao_id
-       and x.mes_ref >= trunc(sysdate, 'MM');
+       and x.mes_ref >= trunc(sysdate, 'MM')
+       and exists (select 1 from sgn_esc_funcionario f
+                    join sgn_esc_funcao fn on fn.escfuncao_id = f.escfuncao_id
+                   where f.escfunc_id = x.escfunc_id
+                     and upper(trim(fn.descr)) = 'PORTEIRO');
 
     update sgn_esc_funcionario f set f.escsecao_id = v_frente_id,
            f.escsubsecao_id = v_porteiro_id
-     where f.escsecao_id = origem.escsecao_id;
+     where f.escsecao_id = origem.escsecao_id
+       and exists (select 1 from sgn_esc_funcao fn
+                    where fn.escfuncao_id = f.escfuncao_id
+                      and upper(trim(fn.descr)) = 'PORTEIRO');
   end loop;
 end;
 /

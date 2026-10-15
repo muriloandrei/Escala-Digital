@@ -18,6 +18,8 @@ test('Portaria preparation creates only missing subsections and rejects ambiguou
   assert.match(sql, /if v_porteiros > 1/);
   assert.equal((sql.match(/regexp_like\(trim\(frente\.cod_secao\), '\(\^\|\[\.\]\)02\[\.\]002\$'\)/g) || []).length, 2);
   assert.equal((sql.match(/s\.codfilial <> 999/g) || []).length, 2);
+  assert.match(sql, /v_outras_funcoes > 0/);
+  assert.match(sql, /nvl\(upper\(trim\(fn\.descr\)\), '\?'\) <> 'PORTEIRO'/);
   assert.match(sql, /if v_porteiros = 0 then\s+insert into sgn_esc_subsecao/i);
   assert.doesNotMatch(sql, /update sgn_esc_(?:funcionario|prog)/i);
   assert.doesNotMatch(sql, /\bcommit\b/i);
@@ -27,6 +29,9 @@ test('Portaria migration preserves officialized history and checks conflicting a
   const { sql } = readMigration('20261015_portaria_migrar_frente_caixa.sql');
   assert.equal((sql.match(/regexp_like\(trim\(frente\.cod_secao\), '\(\^\|\[\.\]\)02\[\.\]002\$'\)/g) || []).length, 2);
   assert.equal((sql.match(/s\.codfilial <> 999/g) || []).length, 2);
+  assert.match(sql, /if v_conflitos > 0 then\s+raise_application_error\(-20004/);
+  assert.match(sql, /nvl\(upper\(trim\(fn\.descr\)\), '\?'\) <> 'PORTEIRO'/);
+  assert.equal((sql.match(/upper\(trim\(fn\.descr\)\) = 'PORTEIRO'/g) || []).length, 3);
   assert.match(sql, /p\.oficializada = 0/);
   assert.match(sql, /p\.ativa = 1/);
   assert.match(sql, /atual\.escfunc_id = p\.escfunc_id/);

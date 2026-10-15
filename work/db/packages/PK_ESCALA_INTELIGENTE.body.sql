@@ -304,7 +304,10 @@ create or replace package body PK_ESCALA_INTELIGENTE is
 
       begin
         if rec1.codfilial <> 999
-           and regexp_like(trim(rec1.codsecao), '(^|[.])02[.]012$') then
+           and regexp_like(trim(rec1.codsecao), '(^|[.])02[.]012$')
+           and exists (select 1 from ESCALAINT.SGN_ESC_FUNCAO fn
+                        where fn.escfuncao_id = v_reg_func.escfuncao_id
+                          and upper(trim(fn.descr)) = 'PORTEIRO') then
           select s.escsecao_id, ss.escsubsecao_id
             into v_reg_func.escsecao_id, v_reg_func.escsubsecao_id
             from ESCALAINT.SGN_ESC_SECAO s

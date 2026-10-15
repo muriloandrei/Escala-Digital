@@ -6,6 +6,7 @@ declare
   v_porteiros number;
   v_porteiros_ativos number;
   v_nomes_divergentes number;
+  v_outras_funcoes number;
 begin
   for origem in (
     select s.escsecao_id, s.codcoligada, s.codfilial
@@ -22,6 +23,29 @@ begin
                      where x.escsecao_id = s.escsecao_id
                        and x.mes_ref >= trunc(sysdate, 'MM')))
   ) loop
+    select count(*) into v_outras_funcoes
+      from (select f.escfunc_id
+              from sgn_esc_funcionario f
+             where f.escsecao_id = origem.escsecao_id
+            union
+            select p.escfunc_id
+              from sgn_esc_prog p
+             where p.escsecao_id = origem.escsecao_id
+               and p.mes_ref >= trunc(sysdate, 'MM')
+               and p.ativa = 1 and p.oficializada = 0
+            union
+            select x.escfunc_id
+              from sgn_esc_fixo_escala x
+             where x.escsecao_id = origem.escsecao_id
+               and x.mes_ref >= trunc(sysdate, 'MM')) envolvidos
+      left join sgn_esc_funcionario f on f.escfunc_id = envolvidos.escfunc_id
+      left join sgn_esc_funcao fn on fn.escfuncao_id = f.escfuncao_id
+     where nvl(upper(trim(fn.descr)), '?') <> 'PORTEIRO';
+    if v_outras_funcoes > 0 then
+      raise_application_error(-20004, 'Portaria ' || origem.escsecao_id ||
+        ': funcionarios ou programacoes de outra funcao; revise antes da migracao.');
+    end if;
+
     select count(*), min(frente.escsecao_id)
       into v_frentes, v_frente_id
       from sgn_esc_secao frente
