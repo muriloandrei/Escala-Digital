@@ -89,22 +89,22 @@ a {
   background: #275388;
   color: #fff;
 }
-.sidebar nav .sidebar-logout {
+.topbar-logout {
   display: flex;
   align-items: center;
-  gap: 11px;
-  min-height: 40px;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
   background: transparent;
-  border: 0;
+  border: 1px solid #dce3ec;
   border-radius: 5px;
-  color: #d9e4f4;
-  padding: 9px 12px;
-  text-align: left;
-  font-size: 14px;
+  color: #29435f;
+  padding: 7px 10px;
+  white-space: nowrap;
+  font-size: 13px;
 }
-.sidebar nav .sidebar-logout:hover {
-  background: #275388;
-  color: #fff;
+.topbar-logout:hover {
+  background: #edf3fa;
 }
 .workspace {
   min-width: 0;
@@ -124,6 +124,10 @@ a {
   margin-left: auto;
   font-weight: 400;
   color: #596b80;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .training-prompt {
   display: flex;

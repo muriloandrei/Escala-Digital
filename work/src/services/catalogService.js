@@ -1,5 +1,6 @@
 const { withConnection, oracledb } = require('../db/oracle');
 const escalaEventService = require('./escalaEventService');
+const { permiteEscala } = require('../domain/employeeStatus');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -43,7 +44,7 @@ function normalizeFuncionario(row) {
     DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl'),
     DT_DEMISS: pick(row, 'DT_DEMISS', 'dt_demiss'),
     STATUS: pick(row, 'STATUS', 'status') || 'A',
-    ATIVO: pick(row, 'DT_DEMISS', 'dt_demiss') || String(pick(row, 'STATUS', 'status') || 'A').toUpperCase() !== 'A' ? 'N' : 'S'
+    ATIVO: pick(row, 'DT_DEMISS', 'dt_demiss') || !permiteEscala(pick(row, 'STATUS', 'status')) ? 'N' : 'S'
   };
 }
 
@@ -357,7 +358,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
           : 'cast(null as date) as dt_nasc';
     const ativoWhere = options.includeInactive ? '' : [
       funcionarioColumns.has('DT_DEMISS') ? 'and f.dt_demiss is null' : '',
-      funcionarioColumns.has('STATUS') ? "and nvl(f.status, 'A') = 'A'" : ''
+      funcionarioColumns.has('STATUS') ? "and upper(trim(nvl(f.status, 'A'))) in ('A', 'F')" : ''
     ].filter(Boolean).join(' ');
     const statusSelect = funcionarioColumns.has('STATUS') ? 'f.status' : "'A' as status";
     const subsecaoJoinSql = hasFuncionarioSubsecao && hasSubsecaoTable

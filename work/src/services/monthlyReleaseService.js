@@ -4,6 +4,7 @@ const pendenciaFuncionarioService = require('./pendenciaFuncionarioService');
 const { validateEscalaPayload, getCriticasCoberturaMinima } = require('../rules/escalaRules');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { isPortariaSection } = require('../domain/portariaSection');
+const { permiteEscala } = require('../domain/employeeStatus');
 
 function formatDateValue(value) {
   if (value instanceof Date) {
@@ -93,7 +94,7 @@ function temAfastamentoIntegral(funcionario, mesRef, indiceAusencias) {
 }
 
 function temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes = new Map(), indiceAusencias = new Map()) {
-  if (String(funcionario.STATUS || 'A').trim().toUpperCase() !== 'A') return false;
+  if (!permiteEscala(funcionario.STATUS)) return false;
   if (temAfastamentoIntegral(funcionario, mesRef, indiceAusencias)) return false;
   const intervalo = suspensoes.get(Number(funcionario.ESCFUNC_ID));
   return getMonthDays(mesRef).some((dia) => {
@@ -1100,7 +1101,7 @@ function buildFuncionariosLiberacao(funcionarios, turnos, mesRef = null, hojeIso
   return (funcionarios || []).map((funcionario) => {
     const turno = findTurnoParaFuncionario(funcionario, turnos);
     const horario = getHorarioBaseFuncionario(funcionario, turno);
-    const dias = String(funcionario.STATUS || 'A').trim().toUpperCase() === 'A'
+    const dias = permiteEscala(funcionario.STATUS)
       ? montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, opcoes)
       : [];
     return montarFuncionarioRascunho(funcionario, turno, dias, horario);
@@ -1460,5 +1461,6 @@ module.exports = {
   liberarEscalasMensais,
   gerarEscalaSecao,
   resetarEscalaSecao,
-  startMonthlyReleaseScheduler
+  startMonthlyReleaseScheduler,
+  _private: { temDiasElegiveis }
 };

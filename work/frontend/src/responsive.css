@@ -39,10 +39,13 @@ body {
     display: none;
   }
 
-  .sidebar nav a,
-  .sidebar nav .sidebar-logout {
+  .sidebar nav a {
     flex: none;
     white-space: nowrap;
+  }
+
+  .topbar {
+    padding: 0 12px;
   }
 
   .training-steps {

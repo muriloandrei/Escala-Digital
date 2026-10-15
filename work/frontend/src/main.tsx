@@ -89,8 +89,8 @@ function App() {
 
   if (trainingStage < LAST_TRAINING_STAGE) return (
     <div className="shell training-required-shell">
-      <aside className="sidebar"><div className="brand"><img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" /></div><nav aria-label="Menu principal"><button className="sidebar-logout" type="button" onClick={logout}><LogOut size={18} /> Sair</button><NavLink to="/treinamento"><GraduationCap size={18} /> Treinamento obrigatório</NavLink></nav></aside>
-      <div className="workspace"><Routes><Route path="/treinamento" element={<Treinamento user={user} onComplete={() => { setTrainingStage(LAST_TRAINING_STAGE); navigate('/escalas-liberadas', { replace: true }); }} />} /><Route path="*" element={<Navigate to="/treinamento" replace />} /></Routes></div>
+      <aside className="sidebar"><div className="brand"><img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" /></div><nav aria-label="Menu principal"><NavLink to="/treinamento"><GraduationCap size={18} /> Treinamento obrigatório</NavLink></nav></aside>
+      <div className="workspace"><header className="topbar"><CalendarDays size={18} /><span>Escala Inteligente</span><span className="topbar-user">{user.nome || user.login}</span><button className="topbar-logout" type="button" onClick={logout}><LogOut size={16} /> Sair</button></header><Routes><Route path="/treinamento" element={<Treinamento user={user} onComplete={() => { setTrainingStage(LAST_TRAINING_STAGE); navigate('/escalas-liberadas', { replace: true }); }} />} /><Route path="*" element={<Navigate to="/treinamento" replace />} /></Routes></div>
     </div>
   );
 
@@ -114,7 +114,6 @@ function App() {
           <img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" />
         </div>
         <nav aria-label="Menu principal">
-          <button className="sidebar-logout" type="button" onClick={logout}><LogOut size={18} /> Sair</button>
           <div className="sidebar-nav-group"><span className="sidebar-nav-heading">Escalas</span>
           {canSeeEscalas && (
             <NavLink to="/escalas-liberadas">
@@ -188,6 +187,7 @@ function App() {
           <CalendarDays size={18} />
           <span>Escala Inteligente</span>
           <span className="topbar-user">{user.nome || user.login}</span>
+          <button className="topbar-logout" type="button" onClick={logout}><LogOut size={16} /> Sair</button>
         </header>
         <Routes>
           {canSeeEscalas && <Route path="/escalas-liberadas" element={<EscalasLiberadas user={user} />} />}

@@ -1,6 +1,6 @@
 # Correcoes da escala - 15/10/2026
 
-Este lote permanece na branch `homologacao` ate a validacao na loja. Nao altera automaticamente o Oracle Linux nem executa o job do RM.
+Este lote nao altera automaticamente o Oracle Linux nem executa o job do RM. O script de conversao da loja 16 exige aplicacao explicita no banco.
 
 ## Ordem de implantacao
 
@@ -16,10 +16,16 @@ Este lote permanece na branch `homologacao` ate a validacao na loja. Nao altera 
 ## Comportamento a validar
 
 - Porteiros de `02.012` passam a pertencer de fato a Frente de Caixa/Porteiro. Escalas antigas oficializadas continuam na Portaria original e acessiveis para historico; as novas sao geradas no escopo da Frente de Caixa.
-- O botao Sair aparece no topo do menu, inclusive em telas estreitas.
+- O botao Sair aparece no canto superior direito, ao lado do usuario, inclusive em telas estreitas.
 - Detalhes do funcionario aparece visualmente acima da lista; lideres com permissao de edicao podem abrir e encerrar suspensoes apenas nas secoes liberadas.
 - A geracao nova alterna os domingos entre colaboradores mesmo quando pertencem a turnos diferentes. Escalas antigas nao sao redistribuidas automaticamente.
-- Apenas `STATUS = 'A'` entra em novas liberacoes e geracoes. Na primeira leitura depois de uma carga com `STATUS = 'I'`, o sistema preserva os dias anteriores e remove de hoje em diante, desoficializando o funcionario afetado e registrando evento de auditoria. Como o RM nao fornece data efetiva nesse caso, o corte usa a data local da leitura.
+- `STATUS = 'A'` ou `STATUS = 'F'` (ferias no RM) pode entrar em novas liberacoes e geracoes. O periodo efetivo de ferias continua protegido pela tabela de ausencias; ferias em outubro nao excluem o funcionario da escala de novembro. Qualquer outro status, incluindo `I`, impede novos dias. Na primeira leitura apos a carga, o sistema preserva os dias anteriores e remove de hoje em diante, desoficializando o funcionario afetado e registrando evento de auditoria. Como o RM nao fornece data efetiva nesse caso, o corte usa a data local da leitura.
+
+## Correcao unica dos fixos da loja 16 em novembro
+
+Depois de publicar o codigo e confirmar backup do schema `ESCALAINT`, entre no diretorio `work` do release ativo. Execute `ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run correcao:fixos-loja16` para obter somente a previa. Confira os totais, os funcionarios e `blockers: []`. O script nao altera outras lojas ou meses e recusa programacoes ausentes, divergentes ou oficializadas. Caso encontre bloqueios, investigue antes de executar a aplicacao.
+
+Com a previa aprovada, execute `ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run correcao:fixos-loja16 -- --apply --by=OPERADOR`, substituindo `OPERADOR` pelo login responsavel. A operacao troca `FXF` por `F` nos dias gerados, desativa os registros de trabalho/folga fixa e registra auditoria na mesma transacao. Nao altera os horarios dos dias trabalhados e nao regenera a escala. Reexecute a previa: o esperado e `fixos: 0`. Em seguida confira a escala e suas criticas na interface; a conversao nao corrige automaticamente violacoes das regras de jornada/folga.
 
 ## Limites da validacao local
 

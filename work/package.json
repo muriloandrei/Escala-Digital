@@ -33,6 +33,7 @@
     "escalas:corrigir-oficializacao": "node scripts/corrigir-oficializacao-escalas.js",
     "escalas:liberar-novembro": "node scripts/liberar-escalas-novembro-2026.js",
     "correcao:aprendiz-descansos": "node scripts/corrigir-aprendiz-descansos.js",
+    "correcao:fixos-loja16": "node scripts/normalizar-fixos-loja16-novembro.js",
     "subsecoes:aprendiz": "node scripts/sincronizar-subsecao-aprendiz.js",
     "senhas:migrar-md5": "node scripts/migrar-senhas-md5.js"
   },

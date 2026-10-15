@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function loadService({ dismissal = '2026-10-15', inactive = false, officialized = 1, days = ['2026-10-14', '2026-10-16'], failEvent = false } = {}) {
+function loadService({ dismissal = '2026-10-15', inactive = false, status = 'A', officialized = 1, days = ['2026-10-14', '2026-10-16'], failEvent = false } = {}) {
   const calls = [];
   const events = [];
   const state = { days: [...days], active: true, revision: 7 };
@@ -18,9 +18,11 @@ function loadService({ dismissal = '2026-10-15', inactive = false, officialized 
           assert.match(sql, /p\.escsecao_id in \(:secaoPermitida0\)/i);
           assert.equal(binds.secaoPermitida0, 20);
         }
-        assert.match(sql, /nvl\(f\.status, 'A'\) <> 'A'/i);
-        const hasCut = state.days.some((day) => (dismissal && day > dismissal) || (inactive && day >= binds.hojeIso));
-        return { rows: state.active && hasCut ? [{ ESCFUNC_ID: 90, FUNCIONARIO_STATUS: inactive ? 'I' : 'A' }] : [] };
+        assert.match(sql, /upper\(trim\(nvl\(f\.status, 'A'\)\)\) not in \('A', 'F'\)/i);
+        const funcionarioStatus = inactive ? 'I' : status;
+        const hasCut = state.days.some((day) => (dismissal && day > dismissal)
+          || (!['A', 'F'].includes(funcionarioStatus) && day >= binds.hojeIso));
+        return { rows: state.active && hasCut ? [{ ESCFUNC_ID: 90, FUNCIONARIO_STATUS: funcionarioStatus }] : [] };
       }
       if (/update sgn_esc_rm_envio/i.test(sql)) return { rowsAffected: 1 };
       if (/update sgn_esc_prog set ativa = 0/i.test(sql)) {
@@ -47,6 +49,7 @@ function loadService({ dismissal = '2026-10-15', inactive = false, officialized 
       };
       if (name === '../utils/scheduleDiff') return require('../src/utils/scheduleDiff');
       if (name === '../domain/portariaSection') return require('../src/domain/portariaSection');
+      if (name === '../domain/employeeStatus') return require('../src/domain/employeeStatus');
       if (['./catalogService', '../domain/operationalPeriod', '../rules/escalaRules'].includes(name)) return {};
       throw new Error(`Dependencia inesperada: ${name}`);
     }
@@ -148,6 +151,20 @@ test('inactive employee cannot receive new days but historical days remain valid
   assert.throws(() => validate([{ data: '2026-10-15' }], 'I', '2026-10-15'),
     (error) => error.statusCode === 422 && /inativo/i.test(error.message));
   assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'A', '2026-10-15'));
+  assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'F', '2026-10-15'));
+  assert.throws(() => validate([{ data: '2026-10-15' }], 'S', '2026-10-15'), /inativo/i);
+});
+
+test('vacation status F does not remove existing future schedule days', async () => {
+  const { service, connection, state, calls } = loadService({
+    dismissal: null, status: 'F', days: ['2026-11-02', '2026-11-03']
+  });
+  const result = await service._private.reconciliarDesligamentosComConnection(connection, {
+    lojaId: 10, mesRef: '2026-11-01', hojeIso: '2026-10-15'
+  });
+  assert.equal(result.funcionarios, 0);
+  assert.deepEqual(state.days, ['2026-11-02', '2026-11-03']);
+  assert.equal(calls.some(({ sql }) => /^update/i.test(sql)), false);
 });
 
 test('audit failure rolls back the automatic dismissal adjustment', async () => {

@@ -3,6 +3,7 @@ const catalogService = require('./catalogService');
 const escalaEventService = require('./escalaEventService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { isPortariaSection } = require('../domain/portariaSection');
+const { permiteEscala } = require('../domain/employeeStatus');
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
 const { validarCriticasEscopo } = require('../rules/escalaRules');
 
@@ -107,7 +108,7 @@ function assertSemNovaProgramacaoAposDemissao(diasNovos = [], diasAtuais = [], d
 }
 
 function assertSemDiasFuturosParaInativo(dias = [], status, hojeIso = getHojeIso()) {
-  if (String(status || 'A').toUpperCase() === 'A') return;
+  if (permiteEscala(status)) return;
   const futuros = dias.map((dia) => normalizeDiaComparavel(dia).data).filter((data) => data >= hojeIso);
   if (!futuros.length) return;
   const error = new Error('Funcionario inativo no RM nao pode receber programacao de hoje em diante.');
@@ -1428,7 +1429,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       .filter((row) => pick(row, 'DT_DEMISS', 'dt_demiss'))
       .map((row) => [String(pick(row, 'ESCFUNC_ID', 'escfunc_id')), formatDateValue(pick(row, 'DT_DEMISS', 'dt_demiss'))]));
     const inativosPorFuncionario = new Set((result.rows || [])
-      .filter((row) => String(pick(row, 'FUNCIONARIO_STATUS', 'funcionario_status') || 'A').toUpperCase() !== 'A')
+      .filter((row) => !permiteEscala(pick(row, 'FUNCIONARIO_STATUS', 'funcionario_status')))
       .map((row) => String(pick(row, 'ESCFUNC_ID', 'escfunc_id'))));
     fixos = fixos.filter((fixo) => {
       const id = String(pick(fixo, 'ESCFUNC_ID', 'escfunc_id'));
@@ -1920,7 +1921,7 @@ async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRe
        from sgn_esc_prog p
        join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
       where p.loja = :lojaId and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-        and (f.dt_demiss is not null or nvl(f.status, 'A') <> 'A')
+        and (f.dt_demiss is not null or upper(trim(nvl(f.status, 'A'))) not in ('A', 'F'))
         and ${ativaSql}
         ${filtroSecoes}
         and p.revisao = (
@@ -1932,14 +1933,14 @@ async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRe
           select 1 from sgn_esc_prog_dia d
            where d.escprog_id = p.escprog_id
              and ((f.dt_demiss is not null and trunc(d.dt) > trunc(f.dt_demiss))
-               or (nvl(f.status, 'A') <> 'A' and trunc(d.dt) >= to_date(:hojeIso, 'YYYY-MM-DD')))
+               or (upper(trim(nvl(f.status, 'A'))) not in ('A', 'F') and trunc(d.dt) >= to_date(:hojeIso, 'YYYY-MM-DD')))
         )`,
     binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
   const ids = [...new Set((candidatos.rows || []).map((row) => Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'))).filter(Boolean))];
   if (!ids.length) return resumo;
   const inativos = new Set((candidatos.rows || [])
-    .filter((row) => String(pick(row, 'FUNCIONARIO_STATUS', 'funcionario_status') || 'A').toUpperCase() !== 'A')
+    .filter((row) => !permiteEscala(pick(row, 'FUNCIONARIO_STATUS', 'funcionario_status')))
     .map((row) => Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'))));
   const ontem = new Date(`${hojeIso}T12:00:00Z`);
   ontem.setUTCDate(ontem.getUTCDate() - 1);

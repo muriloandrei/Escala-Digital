@@ -11,6 +11,7 @@ import {
   type User,
 } from '../api';
 import { EditarHorarioBase } from './EditarHorarioBase';
+import { permiteEscala } from '../employeeStatus';
 
 type Suspension = { ESCPEND_ID: number; ESCFUNC_ID: number; DT_INICIO: string; DT_FIM?: string | null; TIPO?: string; STATUS: string; JUSTIFICATIVA?: string };
 
@@ -187,13 +188,13 @@ export function Funcionarios({ user }: { user: User }) {
               <h2>{detail.NOME}</h2>
               <p>{detail.CHAPA} · {detail.FUNCAO_DESCR || 'Cargo não informado'}</p>
             </div>
-            {canEdit(user, 'escalas') && !detail.DT_DEMISS && detail.STATUS !== 'I' &&
+            {canEdit(user, 'escalas') && !detail.DT_DEMISS && permiteEscala(detail.STATUS) &&
               !/APRENDIZ/i.test(detail.FUNCAO_DESCR || '') && (
                 <button type="button" className="button primary" onClick={() => openShift(detail)}>
                   <Pencil size={15} /> Editar horário
                 </button>
               )}
-            {canSuspend && !detail.DT_DEMISS && detail.STATUS !== 'I' && !detailSuspension &&
+            {canSuspend && !detail.DT_DEMISS && permiteEscala(detail.STATUS) && !detailSuspension &&
               <button type="button" className="button secondary" onClick={() => {
                 setSuspendTarget(detail); setSuspendError('');
               }}><UserRoundX size={15} /> Suspender da escala</button>}
@@ -319,7 +320,7 @@ export function Funcionarios({ user }: { user: User }) {
                           ? `${item.HR_ENT1}–${item.HR_SAI1}`
                           : '–'}
                     </td>
-                    <td>{item.DT_DEMISS ? 'Desligado' : item.STATUS === 'I' ? 'Inativo no RM' : suspensions.some((entry) => Number(entry.ESCFUNC_ID) === Number(item.ESCFUNC_ID) && entry.STATUS === 'P') ? 'Suspenso da escala' : 'Ativo'}</td>
+                    <td>{item.DT_DEMISS ? 'Desligado' : !permiteEscala(item.STATUS) ? 'Inativo no RM' : item.STATUS === 'F' ? 'Férias no RM' : suspensions.some((entry) => Number(entry.ESCFUNC_ID) === Number(item.ESCFUNC_ID) && entry.STATUS === 'P') ? 'Suspenso da escala' : 'Ativo'}</td>
                     <td>
                       <button
                         className="text-action"
