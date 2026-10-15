@@ -2,14 +2,24 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
-test('executor accepts only the fourteen mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 14);
+test('executor accepts only the fifteen mirrored single-block migrations', () => {
+  assert.equal(migrationNames.length, 15);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
     assert.match(migration.sql, /\bend;$/i);
     assert.equal(migration.checksum.length, 64);
   }
+});
+
+test('Portaria migration preserves officialized history and checks conflicting active schedules', () => {
+  const { sql } = readMigration('20261015_portaria_migrar_frente_caixa.sql');
+  assert.match(sql, /p\.oficializada = 0/);
+  assert.match(sql, /p\.ativa = 1/);
+  assert.match(sql, /atual\.escfunc_id = p\.escfunc_id/);
+  assert.match(sql, /t\.status in \('P', 'E'\)/);
+  assert.match(sql, /f\.escsubsecao_id = v_porteiro_id/);
+  assert.doesNotMatch(sql, /\bcommit\b/i);
 });
 
 test('executor rejects extra SQLPlus commands and multiple blocks', () => {

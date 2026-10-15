@@ -14,7 +14,7 @@ test('package existente chama a integracao de usuarios apos funcionarios sem mud
   assert.doesNotMatch(packageBody, /from SGN_USUARIO\s+where\s+status/i);
   assert.match(packageBody, /rec\.senha is null/i);
   assert.match(packageBody, /instr\(v_login, 'FISCAL'\) = 0/i);
-  assert.equal((packageBody.match(/\(\^\|\[\.\]\)02\[\.\]012\$/g) || []).length, 3);
+  assert.equal((packageBody.match(/\(\^\|\[\.\]\)02\[\.\]012\$/g) || []).length, 4);
   assert.match(packageBody, /'FÉRIAS', 'FER'/);
 });
 
@@ -25,10 +25,12 @@ test('preparo SQL preserva contas e cria somente os metadados de origem necessar
   assert.doesNotMatch(prepare, /AUTH_VERSION/);
 });
 
-test('carga registra lojas com funcionarios ativos mesmo sem brigada e replica situacao do RM', () => {
+test('carga registra lojas com funcionarios ativos mesmo sem brigada e associa Portaria a Frente de Caixa', () => {
   assert.match(packageBody, /from V_LOJAS l\s+left join SGN_BRIGADA_INCENDIO b/i);
   assert.match(packageBody, /exists \(select 1 from PFUNC f[\s\S]*?f\.datademissao is null\)/i);
-  assert.match(packageBody, /a\.codsituacao/i);
-  assert.match(packageBody, /a\.status = v_reg_func\.status/i);
+  assert.match(packageBody, /regexp_like\(trim\(rec1\.codsecao\), '\(\^\|\[\.\]\)02\[\.\]012\$'\)/i);
+  assert.match(packageBody, /upper\(ss\.descr\) = 'PORTEIRO'/i);
+  assert.match(packageBody, /a\.escsubsecao_id = case/i);
+  assert.doesNotMatch(packageBody, /a\.status = v_reg_func\.status/i);
   assert.match(packageBody, /ESCALAINT\.SGN_ESC_LOJA_SEQ\.nextval/i);
 });

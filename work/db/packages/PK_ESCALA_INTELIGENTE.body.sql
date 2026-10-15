@@ -280,10 +280,8 @@ create or replace package body PK_ESCALA_INTELIGENTE is
       v_reg_func.cpf := rec1.cpf_func;
 
       begin
-        select a.coligadaanteriortransf, a.chapaanteriortransf, b.sexo,
-               case when upper(trim(a.codsituacao)) = 'A' then 'A' else 'I' end
-          into v_reg_func.codcoligada_ant, v_reg_func.chapa_ant, v_reg_func.sexo,
-               v_reg_func.status
+        select a.coligadaanteriortransf, a.chapaanteriortransf, b.sexo
+          into v_reg_func.codcoligada_ant, v_reg_func.chapa_ant, v_reg_func.sexo
           from RM.PPESSOA@RM b, RM.PFUNC@RM a
          where b.codigo = a.codpessoa and a.chapa = rec1.chapa
            and a.codcoligada = rec1.codcoligada;
@@ -305,9 +303,19 @@ create or replace package body PK_ESCALA_INTELIGENTE is
       end;
 
       begin
-        select escsecao_id into v_reg_func.escsecao_id from ESCALAINT.SGN_ESC_SECAO
-         where codcoligada = rec1.codcoligada and cod_secao = rec1.codsecao
-           and codfilial = rec1.codfilial;
+        if regexp_like(trim(rec1.codsecao), '(^|[.])02[.]012$') then
+          select s.escsecao_id, ss.escsubsecao_id
+            into v_reg_func.escsecao_id, v_reg_func.escsubsecao_id
+            from ESCALAINT.SGN_ESC_SECAO s
+            join ESCALAINT.SGN_ESC_SUBSECAO ss on ss.escsecao_id = s.escsecao_id
+           where s.codcoligada = rec1.codcoligada and s.codfilial = rec1.codfilial
+             and regexp_like(upper(s.descr), 'FRENTE.*CAIXA')
+             and ss.status = 'A' and upper(ss.descr) = 'PORTEIRO';
+        else
+          select escsecao_id into v_reg_func.escsecao_id from ESCALAINT.SGN_ESC_SECAO
+           where codcoligada = rec1.codcoligada and cod_secao = rec1.codsecao
+             and codfilial = rec1.codfilial;
+        end if;
       exception
         when no_data_found then
           v_ignora_secao := v_ignora_secao + 1;
@@ -334,7 +342,11 @@ create or replace package body PK_ESCALA_INTELIGENTE is
              a.escsecao_id = v_reg_func.escsecao_id, a.escfuncao_id = v_reg_func.escfuncao_id,
              a.codcoligada_ant = v_reg_func.codcoligada_ant, a.chapa_ant = v_reg_func.chapa_ant,
              a.dt_demiss = v_reg_func.dt_demiss, a.codfilial = v_reg_func.codfilial,
-             a.cpf = v_reg_func.cpf, a.status = v_reg_func.status
+             a.cpf = v_reg_func.cpf,
+             a.escsubsecao_id = case
+               when v_reg_func.escsubsecao_id is not null then v_reg_func.escsubsecao_id
+               when a.escsecao_id <> v_reg_func.escsecao_id then null
+               else a.escsubsecao_id end
        where a.codcoligada = rec1.codcoligada and a.loja = rec1.loja and a.chapa = rec1.chapa
       returning escfunc_id into v_reg_func.escfunc_id;
 
@@ -342,14 +354,14 @@ create or replace package body PK_ESCALA_INTELIGENTE is
         insert into ESCALAINT.SGN_ESC_FUNCIONARIO
           (codcoligada, loja, chapa, nome, sexo, dt_admiss, brigadista, escsecao_id,
            escfuncao_id, codcoligada_ant, chapa_ant, hr_ent1, hr_sai1, hr_ent2, hr_sai2,
-           dt_hr_incl, dt_demiss, codfilial, cpf, status)
+           dt_hr_incl, dt_demiss, codfilial, cpf, escsubsecao_id)
         values
           (v_reg_func.codcoligada, v_reg_func.loja, v_reg_func.chapa, v_reg_func.nome,
            v_reg_func.sexo, v_reg_func.dt_admiss, v_reg_func.brigadista, v_reg_func.escsecao_id,
            v_reg_func.escfuncao_id, v_reg_func.codcoligada_ant, v_reg_func.chapa_ant,
            v_reg_func.hr_ent1, v_reg_func.hr_sai1, v_reg_func.hr_ent2, v_reg_func.hr_sai2,
            v_reg_func.dt_hr_incl, v_reg_func.dt_demiss, v_reg_func.codfilial, v_reg_func.cpf,
-           v_reg_func.status)
+           v_reg_func.escsubsecao_id)
         returning escfunc_id into v_reg_func.escfunc_id;
         v_inseridos := v_inseridos + 1;
       else
