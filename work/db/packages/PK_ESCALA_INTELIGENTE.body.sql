@@ -193,6 +193,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
 
   procedure PKB_INTEGRA_CADASTRO is
     v_reg_func         ESCALAINT.SGN_ESC_FUNCIONARIO%rowtype;
+    v_funcao_porteiro  number;
     v_total_lidos      number := 0;
     v_ignora_transf    number := 0;
     v_ignora_funcao    number := 0;
@@ -293,7 +294,10 @@ create or replace package body PK_ESCALA_INTELIGENTE is
       end;
 
       begin
-        select escfuncao_id into v_reg_func.escfuncao_id from ESCALAINT.SGN_ESC_FUNCAO
+        select escfuncao_id,
+               case when upper(trim(descr)) = 'PORTEIRO' then 1 else 0 end
+          into v_reg_func.escfuncao_id, v_funcao_porteiro
+          from ESCALAINT.SGN_ESC_FUNCAO
          where codcoligada = rec1.codcoligada and cod_funcao = rec1.codfuncao;
       exception
         when no_data_found then
@@ -305,9 +309,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
       begin
         if rec1.codfilial <> 999
            and regexp_like(trim(rec1.codsecao), '(^|[.])02[.]012$')
-           and exists (select 1 from ESCALAINT.SGN_ESC_FUNCAO fn
-                        where fn.escfuncao_id = v_reg_func.escfuncao_id
-                          and upper(trim(fn.descr)) = 'PORTEIRO') then
+           and v_funcao_porteiro = 1 then
           select s.escsecao_id, ss.escsubsecao_id
             into v_reg_func.escsecao_id, v_reg_func.escsubsecao_id
             from ESCALAINT.SGN_ESC_SECAO s

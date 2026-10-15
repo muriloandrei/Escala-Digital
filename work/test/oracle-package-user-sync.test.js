@@ -31,7 +31,9 @@ test('carga registra lojas com funcionarios ativos mesmo sem brigada e associa P
   assert.match(packageBody, /regexp_like\(trim\(rec1\.codsecao\), '\(\^\|\[\.\]\)02\[\.\]012\$'\)/i);
   assert.match(packageBody, /upper\(ss\.descr\) = 'PORTEIRO'/i);
   assert.match(packageBody, /regexp_like\(trim\(s\.cod_secao\), '\(\^\|\[\.\]\)02\[\.\]002\$'\)/i);
-  assert.match(packageBody, /if rec1\.codfilial <> 999\s+and regexp_like\(trim\(rec1\.codsecao\)[\s\S]*?upper\(trim\(fn\.descr\)\) = 'PORTEIRO'\) then/i);
+  assert.match(packageBody, /select escfuncao_id,\s+case when upper\(trim\(descr\)\) = 'PORTEIRO' then 1 else 0 end\s+into v_reg_func\.escfuncao_id, v_funcao_porteiro/i);
+  assert.match(packageBody, /if rec1\.codfilial <> 999\s+and regexp_like\(trim\(rec1\.codsecao\)[\s\S]*?and v_funcao_porteiro = 1 then/i);
+  assert.doesNotMatch(packageBody, /and exists\s*\(select 1 from ESCALAINT\.SGN_ESC_FUNCAO fn/i);
   assert.match(packageBody, /a\.escsubsecao_id = case/i);
   assert.doesNotMatch(packageBody, /a\.status = v_reg_func\.status/i);
   assert.match(packageBody, /ESCALAINT\.SGN_ESC_LOJA_SEQ\.nextval/i);
