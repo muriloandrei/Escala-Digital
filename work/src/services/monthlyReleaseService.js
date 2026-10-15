@@ -93,6 +93,7 @@ function temAfastamentoIntegral(funcionario, mesRef, indiceAusencias) {
 }
 
 function temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes = new Map(), indiceAusencias = new Map()) {
+  if (String(funcionario.STATUS || 'A').trim().toUpperCase() !== 'A') return false;
   if (temAfastamentoIntegral(funcionario, mesRef, indiceAusencias)) return false;
   const intervalo = suspensoes.get(Number(funcionario.ESCFUNC_ID));
   return getMonthDays(mesRef).some((dia) => {
@@ -1007,25 +1008,17 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
       }
     });
 
-    const posicaoNoTurno = new Map();
     const secaoOrdenada = secao
       .sort((left, right) => left.turnoKey.localeCompare(right.turnoKey)
         || String(left.funcionario.NOME || '').localeCompare(String(right.funcionario.NOME || ''))
         || String(left.funcionario.CHAPA || '').localeCompare(String(right.funcionario.CHAPA || '')));
-
-    secaoOrdenada.forEach(({ funcionario, turnoKey }) => {
-      const atual = posicaoNoTurno.get(turnoKey) || 0;
-      posicaoNoTurno.set(String(funcionario.ESCFUNC_ID), atual);
-      posicaoNoTurno.set(turnoKey, atual + 1);
-    });
 
     const payloadSecao = [];
     secaoOrdenada
       .forEach(({ funcionario, turno, turnoKey }, indiceSecao) => {
         const intervaloSuspensao = suspensoes.get(Number(funcionario.ESCFUNC_ID));
         const contagemFolgasTurno = contagensTurno.get(turnoKey);
-        const turnoIndex = posicaoNoTurno.get(String(funcionario.ESCFUNC_ID)) || 0;
-        const paridadeDomingo = turnoIndex % 2;
+        const paridadeDomingo = indiceSecao % 2;
         const domingosFolgaAlvo = domingosGerados.filter((data, index) => index % 2 === paridadeDomingo
           && !dataIndisponivel(intervaloSuspensao, funcionario, indiceAusencias, data));
         const domingosTrabalhoAlvo = domingosGerados.filter((data, index) => index % 2 !== paridadeDomingo
@@ -1107,7 +1100,9 @@ function buildFuncionariosLiberacao(funcionarios, turnos, mesRef = null, hojeIso
   return (funcionarios || []).map((funcionario) => {
     const turno = findTurnoParaFuncionario(funcionario, turnos);
     const horario = getHorarioBaseFuncionario(funcionario, turno);
-    const dias = montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, opcoes);
+    const dias = String(funcionario.STATUS || 'A').trim().toUpperCase() === 'A'
+      ? montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, opcoes)
+      : [];
     return montarFuncionarioRascunho(funcionario, turno, dias, horario);
   });
 }

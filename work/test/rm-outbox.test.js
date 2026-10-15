@@ -84,7 +84,7 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
       }
       if (/select max\(p\.revisao\)/i.test(sql)) return { rows: [{ REVISAO: 7 }] };
       if (/select distinct p\.escfunc_id/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90 }] };
-      if (/select escfunc_id, dt_demiss from sgn_esc_funcionario/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90, DT_DEMISS: dismissalDate }] };
+      if (/select escfunc_id, dt_demiss, status from sgn_esc_funcionario/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90, DT_DEMISS: dismissalDate, STATUS: 'A' }] };
       if (/select p\.escprog_id, p\.escfunc_id, p\.revisao/i.test(sql)) {
         return { rows: selectedIds.map((id) => ({ ESCPROG_ID: 100 + id, ESCFUNC_ID: id, REVISAO: 7 })) };
       }

@@ -106,6 +106,16 @@ function assertSemNovaProgramacaoAposDemissao(diasNovos = [], diasAtuais = [], d
   throw error;
 }
 
+function assertSemDiasFuturosParaInativo(dias = [], status, hojeIso = getHojeIso()) {
+  if (String(status || 'A').toUpperCase() === 'A') return;
+  const futuros = dias.map((dia) => normalizeDiaComparavel(dia).data).filter((data) => data >= hojeIso);
+  if (!futuros.length) return;
+  const error = new Error('Funcionario inativo no RM nao pode receber programacao de hoje em diante.');
+  error.statusCode = 422;
+  error.details = futuros;
+  throw error;
+}
+
 function assertPreservaDatasEscala(diasAtuais = [], diasNovos = []) {
   const datasNovas = (diasNovos || []).map((dia) => normalizeDiaComparavel(dia).data);
   if (datasNovas.some((data) => !/^\d{4}-\d{2}-\d{2}$/.test(data)) || new Set(datasNovas).size !== datasNovas.length) {
@@ -400,7 +410,7 @@ function buildHistoricoAuditoriaQuery(columns, { lojaId = null, mesRef = null, l
 
 async function getFuncionarioEscala(connection, escfuncId) {
   const result = await connection.execute(
-    `select escfunc_id, loja, chapa, escsecao_id, escfuncao_id
+    `select escfunc_id, loja, chapa, escsecao_id, escfuncao_id, status
      from sgn_esc_funcionario
      where escfunc_id = :escfuncId`,
     { escfuncId },
@@ -415,7 +425,8 @@ async function getFuncionarioEscala(connection, escfuncId) {
     LOJA: pick(row, 'LOJA', 'loja'),
     CHAPA: pick(row, 'CHAPA', 'chapa'),
     ESCSECAO_ID: pick(row, 'ESCSECAO_ID', 'escsecao_id'),
-    ESCFUNCAO_ID: pick(row, 'ESCFUNCAO_ID', 'escfuncao_id')
+    ESCFUNCAO_ID: pick(row, 'ESCFUNCAO_ID', 'escfuncao_id'),
+    STATUS: pick(row, 'STATUS', 'status') || 'A'
   };
 }
 
@@ -618,7 +629,7 @@ function situacaoDaAlteracao(atual, oficializadaNova = 0) {
     ? 'POS_OFICIALIZACAO' : 'RASCUNHO';
 }
 
-async function lockFuncionariosEscala(connection, lojaId, funcionarios) {
+async function lockFuncionariosEscala(connection, lojaId, funcionarios, situacoes = null) {
   const ids = [...new Set(funcionarios.map((funcionario) => Number(funcionario.escfuncId || funcionario.ESCFUNC_ID)).filter(Boolean))].sort((a, b) => a - b);
   const demissoes = new Map();
   for (let offset = 0; offset < ids.length; offset += 500) {
@@ -629,7 +640,7 @@ async function lockFuncionariosEscala(connection, lojaId, funcionarios) {
       return `:id${index}`;
     });
     const result = await connection.execute(
-      `select escfunc_id, dt_demiss from sgn_esc_funcionario
+      `select escfunc_id, dt_demiss, status from sgn_esc_funcionario
         where loja = :lojaId and escfunc_id in (${placeholders.join(', ')})
         order by escfunc_id for update wait 5`,
       binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -639,7 +650,11 @@ async function lockFuncionariosEscala(connection, lojaId, funcionarios) {
       error.statusCode = 409;
       throw error;
     }
-    result.rows.forEach((row) => demissoes.set(Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')), pick(row, 'DT_DEMISS', 'dt_demiss')));
+    result.rows.forEach((row) => {
+      const id = Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'));
+      demissoes.set(id, pick(row, 'DT_DEMISS', 'dt_demiss'));
+      if (situacoes) situacoes.set(id, pick(row, 'STATUS', 'status') || 'A');
+    });
   }
   return demissoes;
 }
@@ -1066,6 +1081,7 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
         error.statusCode = 404;
         throw error;
       }
+      assertSemDiasFuturosParaInativo([{ data: data.DT || data.dt }], funcionarioDb.STATUS);
       const demissoes = await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
       assertSemNovaProgramacaoAposDemissao([{ data: data.DT || data.dt }], [], demissoes.get(Number(escfuncId)));
 
@@ -1317,6 +1333,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           p.escfuncao_id,
           f.nome,
           ${dtDemissSelect},
+          f.status as funcionario_status,
           ${subsecaoSelect},
           ${subsecaoDescrSelect},
           s.cod_secao,
@@ -1410,9 +1427,14 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     const demissoesPorFuncionario = new Map((result.rows || [])
       .filter((row) => pick(row, 'DT_DEMISS', 'dt_demiss'))
       .map((row) => [String(pick(row, 'ESCFUNC_ID', 'escfunc_id')), formatDateValue(pick(row, 'DT_DEMISS', 'dt_demiss'))]));
+    const inativosPorFuncionario = new Set((result.rows || [])
+      .filter((row) => String(pick(row, 'FUNCIONARIO_STATUS', 'funcionario_status') || 'A').toUpperCase() !== 'A')
+      .map((row) => String(pick(row, 'ESCFUNC_ID', 'escfunc_id'))));
     fixos = fixos.filter((fixo) => {
-      const demissao = demissoesPorFuncionario.get(String(pick(fixo, 'ESCFUNC_ID', 'escfunc_id')));
-      return !demissao || formatDateValue(pick(fixo, 'DT', 'dt')) <= demissao;
+      const id = String(pick(fixo, 'ESCFUNC_ID', 'escfunc_id'));
+      const data = formatDateValue(pick(fixo, 'DT', 'dt'));
+      const demissao = demissoesPorFuncionario.get(id);
+      return (!demissao || data <= demissao) && (!inativosPorFuncionario.has(id) || data < getHojeIso());
     });
     if (Array.isArray(secoesPermitidas)) {
       const permitidasSet = new Set(secoesPermitidas.map(Number).filter(Boolean));
@@ -1483,6 +1505,9 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
         SECAO_DESCR: preservarAlocacao && atual.ESCSECAO_ID ? atual.SECAO_DESCR : pick(funcionario, 'SECAO_DESCR', 'secao_descr') || atual.SECAO_DESCR,
         FUNCAO_DESCR: pick(funcionario, 'FUNCAO_DESCR', 'funcao_descr') || atual.FUNCAO_DESCR,
         DT_DEMISS: pick(funcionario, 'DT_DEMISS', 'dt_demiss') ?? atual.DT_DEMISS ?? null,
+        STATUS: pick(funcionario, 'FUNCIONARIO_STATUS', 'funcionario_status')
+          || (preservarAlocacao ? pick(funcionario, 'STATUS', 'status') : null)
+          || atual.STATUS || 'A',
         HR_ENT1: pick(funcionario, 'HR_ENT1', 'hr_ent1') || atual.HR_ENT1,
         HR_SAI1: pick(funcionario, 'HR_SAI1', 'hr_sai1') || atual.HR_SAI1,
         HR_ENT2: pick(funcionario, 'HR_ENT2', 'hr_ent2') || atual.HR_ENT2,
@@ -1670,7 +1695,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       }
 
       const locked = await connection.execute(
-        `select escfunc_id, dt_demiss from sgn_esc_funcionario
+        `select escfunc_id, dt_demiss, status from sgn_esc_funcionario
          where escfunc_id = :escfuncId and loja = :loja for update wait 5`,
         { escfuncId, loja }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
@@ -1699,6 +1724,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       if (!targetDay) return null;
       const targetDate = pick(targetDay, 'DT', 'dt');
       assertSemNovaProgramacaoAposDemissao([{ data: targetDate }], [], pick(locked.rows[0], 'DT_DEMISS', 'dt_demiss'));
+      assertSemDiasFuturosParaInativo([{ data: targetDate }], pick(locked.rows[0], 'STATUS', 'status'));
       if (isDiaBloqueadoParaEdicao(targetDate)) {
         const error = new Error('Dias ja passados nao podem ser alterados manualmente.');
         error.statusCode = 422;
@@ -1881,20 +1907,20 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
   return { escprogId, revisao, escsecaoId };
 }
 
-async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRef, secoesPermitidas = null }) {
-  const resumo = { funcionarios: 0, dias: 0, oficializadas: 0 };
+async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRef, secoesPermitidas = null, hojeIso = formatDateValue(new Date()) }) {
+  const resumo = { funcionarios: 0, dias: 0, oficializadas: 0, inativos: 0 };
   const ativaSql = await getAtivaSql(connection, 'p');
   const ativaSubSql = await getAtivaSql(connection, 'px');
-  const binds = { lojaId, mesRef };
+  const binds = { lojaId, mesRef, hojeIso };
   const filters = [];
   addSecoesPermitidasFilter(filters, binds, 'p.escsecao_id', secoesPermitidas);
   const filtroSecoes = filters.length ? `and ${filters.join(' and ')}` : '';
   const candidatos = await connection.execute(
-    `select distinct p.escfunc_id
+    `select distinct p.escfunc_id, nvl(f.status, 'A') as funcionario_status
        from sgn_esc_prog p
        join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
       where p.loja = :lojaId and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-        and f.dt_demiss is not null
+        and (f.dt_demiss is not null or nvl(f.status, 'A') <> 'A')
         and ${ativaSql}
         ${filtroSecoes}
         and p.revisao = (
@@ -1904,19 +1930,29 @@ async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRe
         )
         and exists (
           select 1 from sgn_esc_prog_dia d
-           where d.escprog_id = p.escprog_id and trunc(d.dt) > trunc(f.dt_demiss)
+           where d.escprog_id = p.escprog_id
+             and ((f.dt_demiss is not null and trunc(d.dt) > trunc(f.dt_demiss))
+               or (nvl(f.status, 'A') <> 'A' and trunc(d.dt) >= to_date(:hojeIso, 'YYYY-MM-DD')))
         )`,
     binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
   const ids = [...new Set((candidatos.rows || []).map((row) => Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'))).filter(Boolean))];
   if (!ids.length) return resumo;
+  const inativos = new Set((candidatos.rows || [])
+    .filter((row) => String(pick(row, 'FUNCIONARIO_STATUS', 'funcionario_status') || 'A').toUpperCase() !== 'A')
+    .map((row) => Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'))));
+  const ontem = new Date(`${hojeIso}T12:00:00Z`);
+  ontem.setUTCDate(ontem.getUTCDate() - 1);
+  const limiteInativo = ontem.toISOString().slice(0, 10);
 
   try {
     const demissoes = await lockFuncionariosEscala(connection, lojaId, ids.map((escfuncId) => ({ escfuncId })));
     const operacaoId = escalaEventService.createOperationId();
     for (const escfuncId of ids) {
       const dataDemissao = formatDateValue(demissoes.get(escfuncId));
-      if (!dataDemissao) continue;
+      const inativo = inativos.has(escfuncId) && (!dataDemissao || limiteInativo < dataDemissao);
+      const dataLimite = inativo ? limiteInativo : dataDemissao;
+      if (!dataLimite) continue;
       const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
       if (!atual) continue;
       const grupos = new Map();
@@ -1926,17 +1962,17 @@ async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRe
         grupos.get(escprogId).dias.push(dia);
       }
       const gruposComCorte = [...grupos.values()].filter(({ dias }) =>
-        dias.some((dia) => formatDateValue(pick(dia, 'DT', 'dt')) > dataDemissao));
+        dias.some((dia) => formatDateValue(pick(dia, 'DT', 'dt')) > dataLimite));
       if (!gruposComCorte.length) continue;
 
-      const diasMantidos = atual.dias.filter((dia) => formatDateValue(pick(dia, 'DT', 'dt')) <= dataDemissao);
+      const diasMantidos = atual.dias.filter((dia) => formatDateValue(pick(dia, 'DT', 'dt')) <= dataLimite);
       const revisaoAnterior = atual.revisao;
       let revisaoNova = null;
       if (diasMantidos.length) {
         const maiorRevisao = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
         revisaoNova = Math.max(revisaoAnterior, maiorRevisao ?? revisaoAnterior) + 1;
         for (const { header, dias } of grupos.values()) {
-          const mantidos = dias.filter((dia) => formatDateValue(pick(dia, 'DT', 'dt')) <= dataDemissao);
+          const mantidos = dias.filter((dia) => formatDateValue(pick(dia, 'DT', 'dt')) <= dataLimite);
           if (!mantidos.length) continue;
           await insertEscalaOracle(connection, {
             lojaId, mesRef, revisao: revisaoNova, oficializada: 0,
@@ -1964,22 +2000,25 @@ async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRe
 
       await connection.execute(
         `update sgn_esc_rm_envio
-            set status = 'SUPERADO', erro = 'Escala ajustada apos demissao no RM; nova aprovacao necessaria.',
+            set status = 'SUPERADO', erro = :motivoAjuste,
                 dt_hr_alter = sysdate
           where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
             and escfunc_id = :escfuncId and revisao <= :revisaoAnterior and status = 'PENDENTE'`,
-        { lojaId, mesRef, escfuncId, revisaoAnterior }, { autoCommit: false }
+        { lojaId, mesRef, escfuncId, revisaoAnterior,
+          motivoAjuste: inativo ? 'Escala ajustada apos inativacao no RM; nova aprovacao necessaria.'
+            : 'Escala ajustada apos demissao no RM; nova aprovacao necessaria.' }, { autoCommit: false }
       );
       for (const { header, dias } of gruposComCorte) {
-        const removidos = dias.filter((dia) => formatDateValue(pick(dia, 'DT', 'dt')) > dataDemissao);
+        const removidos = dias.filter((dia) => formatDateValue(pick(dia, 'DT', 'dt')) > dataLimite);
         await escalaEventService.appendEvent(connection, {
           operacaoId, lojaId, mesRef, revisaoAnterior, revisaoNova,
           escfuncId, escsecaoId: Number(pick(header, 'ESCSECAO_ID', 'escsecao_id')),
-          acao: 'AJUSTAR_DEMISSAO_RM', origem: 'RM',
+          acao: inativo ? 'AJUSTAR_INATIVACAO_RM' : 'AJUSTAR_DEMISSAO_RM', origem: 'RM',
           situacao: Number(pick(header, 'OFICIALIZADA', 'oficializada') || 0) === 1
             ? 'POS_OFICIALIZACAO' : 'RASCUNHO',
           detalhe: {
             chapa: pick(header, 'CHAPA', 'chapa'), dataDemissao,
+            ...(inativo ? { dataInativacao: hojeIso, dataLimite } : {}),
             alteracoes: removidos.map((dia) => {
               const { data, ...anterior } = normalizeDiaComparavel(dia);
               return { data, anterior, novo: null };
@@ -1988,6 +2027,7 @@ async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRe
         });
       }
       resumo.funcionarios += 1;
+      if (inativo) resumo.inativos += 1;
       resumo.dias += atual.dias.length - diasMantidos.length;
       if ([...grupos.values()].some(({ header }) => Number(pick(header, 'OFICIALIZADA', 'oficializada') || 0) === 1)) {
         resumo.oficializadas += 1;
@@ -2064,7 +2104,8 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
 }
 
 async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcionarios, oficializada = 0, actor, acao, operacaoId, expectedSnapshots, expectedFixoSnapshots }) {
-  const demissoes = await lockFuncionariosEscala(connection, lojaId, funcionarios);
+  const situacoes = new Map();
+  const demissoes = await lockFuncionariosEscala(connection, lojaId, funcionarios, situacoes);
   if (expectedFixoSnapshots) {
     const escsecaoId = Number(funcionarios[0]?.escsecaoId || funcionarios[0]?.ESCSECAO_ID);
     const atuais = buildFixoSnapshots(await listFixosEscalaComConnection(connection, { lojaId, mesRef, escsecaoId }));
@@ -2086,6 +2127,7 @@ async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcion
       ? await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId })
       : null;
     assertSemNovaProgramacaoAposDemissao(funcionario.dias || [], escalaAtualFuncionario?.dias || [], demissoes.get(escfuncId));
+    assertSemDiasFuturosParaInativo(funcionario.dias || [], situacoes.get(escfuncId));
     if (expectedSnapshots) {
       assertEscalaSnapshot(expectedSnapshots[escfuncId] ?? null, escalaAtualFuncionario, funcionario);
       if (Number(pick(escalaAtualFuncionario?.header, 'OFICIALIZADA', 'oficializada') || 0) === 1) {
@@ -2175,6 +2217,12 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
         return saved;
       }
 
+      const situacoes = new Map();
+      await lockFuncionariosEscala(connection, lojaId, funcionarios, situacoes);
+      for (const funcionario of funcionarios) {
+        const id = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
+        assertSemDiasFuturosParaInativo(funcionario.dias || [], situacoes.get(id));
+      }
       const latestActiveRevision = await getLatestRevision(connection, { lojaId, mesRef });
       const latestAnyRevision = await getLatestRevision(connection, { lojaId, mesRef, includeInactive: true });
       const nextRevision = latestAnyRevision === null ? 0 : latestAnyRevision + 1;
@@ -2241,7 +2289,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
   const ids = funcionarios.map((funcionario) => Number(funcionario.escfuncId || funcionario.ESCFUNC_ID));
   const lockBinds = Object.fromEntries(ids.map((id, index) => [`func${index}`, id]));
   const locked = await connection.execute(
-    `select escfunc_id, dt_demiss from sgn_esc_funcionario
+    `select escfunc_id, dt_demiss, status from sgn_esc_funcionario
      where loja = :lojaId and escfunc_id in (${ids.map((_, index) => `:func${index}`).join(', ')})
      order by escfunc_id
      for update wait 5`,
@@ -2254,6 +2302,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
     throw error;
   }
   const demissoes = new Map(locked.rows.map((row) => [Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')), pick(row, 'DT_DEMISS', 'dt_demiss')]));
+  const situacoes = new Map(locked.rows.map((row) => [Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')), pick(row, 'STATUS', 'status') || 'A']));
   const saved = [];
   for (const funcionario of funcionarios) {
     const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
@@ -2266,6 +2315,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
     assertRevisaoBase(funcionario, revisaoAtual);
     const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
     assertSemNovaProgramacaoAposDemissao(funcionario.dias || [], atual?.dias || [], demissoes.get(escfuncId));
+    assertSemDiasFuturosParaInativo(funcionario.dias || [], situacoes.get(escfuncId));
     assertPreservaDatasEscala(atual?.dias || [], funcionario.dias || []);
     assertSemAlteracaoEmDiasBloqueados(atual?.dias || [], funcionario.dias || []);
     const revisaoQualquer = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
@@ -2421,7 +2471,7 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
       const operacaoId = escalaEventService.createOperationId();
       const escfuncId = Number(pick(funcionario, 'ESCFUNC_ID', 'escfuncId'));
       const locked = await connection.execute(
-        `select escfunc_id, dt_demiss from sgn_esc_funcionario
+        `select escfunc_id, dt_demiss, status from sgn_esc_funcionario
          where escfunc_id = :escfuncId and loja = :lojaId for update wait 5`,
         { escfuncId, lojaId },
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -2432,6 +2482,7 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
         throw error;
       }
       const demissao = formatDateValue(pick(locked.rows[0], 'DT_DEMISS', 'dt_demiss'));
+      assertSemDiasFuturosParaInativo([{ data: getHojeIso() }], pick(locked.rows[0], 'STATUS', 'status'));
       if (demissao && demissao <= getHojeIso()) {
         const error = new Error('O horario-base de funcionario desligado nao pode ser alterado.');
         error.statusCode = 422;
@@ -2995,6 +3046,7 @@ module.exports = {
   _private: {
     getAlteracoesDiasBloqueados,
     assertSemNovaProgramacaoAposDemissao,
+    assertSemDiasFuturosParaInativo,
     assertPreservaDatasEscala,
     isDiaBloqueadoParaEdicao,
     escolherRevisaoParaUpsertSemNovaRevisao,

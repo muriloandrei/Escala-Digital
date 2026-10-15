@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function loadService({ dismissal = '2026-10-15', officialized = 1, days = ['2026-10-14', '2026-10-16'], failEvent = false } = {}) {
+function loadService({ dismissal = '2026-10-15', inactive = false, officialized = 1, days = ['2026-10-14', '2026-10-16'], failEvent = false } = {}) {
   const calls = [];
   const events = [];
   const state = { days: [...days], active: true, revision: 7 };
@@ -18,7 +18,9 @@ function loadService({ dismissal = '2026-10-15', officialized = 1, days = ['2026
           assert.match(sql, /p\.escsecao_id in \(:secaoPermitida0\)/i);
           assert.equal(binds.secaoPermitida0, 20);
         }
-        return { rows: state.active && state.days.some((day) => day > dismissal) ? [{ ESCFUNC_ID: 90 }] : [] };
+        assert.match(sql, /nvl\(f\.status, 'A'\) <> 'A'/i);
+        const hasCut = state.days.some((day) => (dismissal && day > dismissal) || (inactive && day >= binds.hojeIso));
+        return { rows: state.active && hasCut ? [{ ESCFUNC_ID: 90, FUNCIONARIO_STATUS: inactive ? 'I' : 'A' }] : [] };
       }
       if (/update sgn_esc_rm_envio/i.test(sql)) return { rowsAffected: 1 };
       if (/update sgn_esc_prog set ativa = 0/i.test(sql)) {
@@ -117,6 +119,35 @@ test('RM dismissal before the period inactivates only the dismissed employee', a
   assert.equal(connection.inserted, undefined);
   assert.ok(calls.some(({ sql }) => /update sgn_esc_prog set ativa = 0/i.test(sql)));
   assert.ok(calls.some(({ sql }) => sql === 'COMMIT'));
+});
+
+test('RM inactive status removes only current and future days without a dismissal date', async () => {
+  const { service, connection, events, state } = loadService({
+    dismissal: null, inactive: true, days: ['2026-10-14', '2026-10-15', '2026-10-16']
+  });
+  const result = await service._private.reconciliarDesligamentosComConnection(connection, {
+    lojaId: 10, mesRef: '2026-10-01', hojeIso: '2026-10-15'
+  });
+  assert.equal(result.dias, 2);
+  assert.equal(result.inativos, 1);
+  assert.deepEqual(Array.from(state.days), ['2026-10-14']);
+  assert.equal(connection.inserted.oficializada, 0);
+  assert.equal(events[0].acao, 'AJUSTAR_INATIVACAO_RM');
+  assert.equal(events[0].detalhe.dataInativacao, '2026-10-15');
+  assert.equal(events[0].detalhe.alteracoes.length, 2);
+  const repeated = await service._private.reconciliarDesligamentosComConnection(connection, {
+    lojaId: 10, mesRef: '2026-10-01', hojeIso: '2026-10-15'
+  });
+  assert.equal(repeated.dias, 0);
+});
+
+test('inactive employee cannot receive new days but historical days remain valid', () => {
+  const { service } = loadService();
+  const validate = service._private.assertSemDiasFuturosParaInativo;
+  assert.doesNotThrow(() => validate([{ data: '2026-10-14' }], 'I', '2026-10-15'));
+  assert.throws(() => validate([{ data: '2026-10-15' }], 'I', '2026-10-15'),
+    (error) => error.statusCode === 422 && /inativo/i.test(error.message));
+  assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'A', '2026-10-15'));
 });
 
 test('audit failure rolls back the automatic dismissal adjustment', async () => {

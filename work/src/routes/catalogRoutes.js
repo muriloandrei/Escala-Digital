@@ -39,6 +39,11 @@ function podeGerirPendencias(req) {
   return ['ADMIN', 'RH'].includes(String(req.user?.perfil || '').toUpperCase());
 }
 
+function requireEditarSuspensao(req, res, next) {
+  if (podeGerirPendencias(req)) return next();
+  return requirePermission('escalas', 'editar')(req, res, next);
+}
+
 const secaoTurnoSchema = z.object({
   HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
   HR_SAI1: z.string().regex(/^\d{2}:\d{2}$/),
@@ -244,11 +249,16 @@ router.get('/suspensoes-funcionarios', async (req, res, next) => {
   try {
     const lojas = await getLojasPermitidas(req, req.query.lojaId || 'all');
     const suspensoes = [];
+    const podeEditar = podeGerirPendencias(req) || Number((await accessService.getPermissaoPerfil(req.user?.perfil, 'escalas'))?.PODE_EDITAR || 0) === 1;
     for (const lojaId of lojas) {
       const registros = await pendenciaFuncionarioService.listar({
         lojaId, incluirEncerradas: req.query.historico === '1'
       });
-      suspensoes.push(...(podeGerirPendencias(req) ? registros : registros.map((registro) => ({
+      const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
+      const visiveis = Array.isArray(secoesPermitidas)
+        ? registros.filter((registro) => secoesPermitidas.map(Number).includes(Number(registro.ESCSECAO_ID)))
+        : registros;
+      suspensoes.push(...(podeEditar ? visiveis : visiveis.map((registro) => ({
         ESCFUNC_ID: registro.ESCFUNC_ID,
         DT_INICIO: registro.DT_INICIO,
         DT_FIM: registro.DT_FIM,
@@ -261,13 +271,16 @@ router.get('/suspensoes-funcionarios', async (req, res, next) => {
   }
 });
 
-router.post('/lojas/:lojaId/funcionarios/:escfuncId/suspensoes', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+router.post('/lojas/:lojaId/funcionarios/:escfuncId/suspensoes', resolveLojaParam, requireLojaAccess, requireEditarSuspensao, async (req, res, next) => {
   try {
-    if (!podeGerirPendencias(req)) return res.status(403).json({ error: 'Somente Admin e RH podem suspender funcionarios da escala.' });
     const data = suspensaoFuncionarioSchema.parse(req.body);
     const lojaId = Number(req.params.lojaId);
     const escfuncId = Number(req.params.escfuncId);
     if (!Number.isInteger(escfuncId) || escfuncId <= 0) return res.status(400).json({ error: 'Funcionario invalido.' });
+    const funcionarios = await catalogService.listFuncionariosByLoja(lojaId, { includeInactive: true });
+    const funcionario = funcionarios.find((item) => Number(item.ESCFUNC_ID) === escfuncId);
+    if (!funcionario) return res.status(404).json({ error: 'Funcionario nao encontrado nesta loja.' });
+    await accessService.assertSecoesPermitidas(req.user, lojaId, [funcionario.ESCSECAO_ID]);
     const resultado = await pendenciaFuncionarioService.criar({ lojaId, escfuncId, ...data, usuario: req.user });
     await auditService.registerAudit({
       action: 'SUSPENDER_FUNCIONARIO_ESCALA', entity: 'FUNCIONARIO', user: req.user,
@@ -281,12 +294,15 @@ router.post('/lojas/:lojaId/funcionarios/:escfuncId/suspensoes', resolveLojaPara
   }
 });
 
-router.post('/lojas/:lojaId/suspensoes/:pendenciaId/encerrar', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
+router.post('/lojas/:lojaId/suspensoes/:pendenciaId/encerrar', resolveLojaParam, requireLojaAccess, requireEditarSuspensao, async (req, res, next) => {
   try {
-    if (!podeGerirPendencias(req)) return res.status(403).json({ error: 'Somente Admin e RH podem encerrar suspensoes.' });
     const lojaId = Number(req.params.lojaId);
     const pendenciaId = Number(req.params.pendenciaId);
     if (!Number.isInteger(pendenciaId) || pendenciaId <= 0) return res.status(400).json({ error: 'Pendencia invalida.' });
+    const pendencia = (await pendenciaFuncionarioService.listar({ lojaId }))
+      .find((item) => Number(item.ESCPEND_ID) === pendenciaId);
+    if (!pendencia) return res.status(404).json({ error: 'Pendencia aberta nao encontrada nesta loja.' });
+    await accessService.assertSecoesPermitidas(req.user, lojaId, [pendencia.ESCSECAO_ID]);
     const encerrada = await pendenciaFuncionarioService.encerrar({ lojaId, pendenciaId, usuario: req.user });
     if (!encerrada) return res.status(404).json({ error: 'Pendencia aberta nao encontrada nesta loja.' });
     await auditService.registerAudit({

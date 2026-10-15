@@ -42,7 +42,8 @@ function normalizeFuncionario(row) {
     HR_SAI2: pick(row, 'HR_SAI2', 'hr_sai2'),
     DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl'),
     DT_DEMISS: pick(row, 'DT_DEMISS', 'dt_demiss'),
-    ATIVO: pick(row, 'DT_DEMISS', 'dt_demiss') ? 'N' : 'S'
+    STATUS: pick(row, 'STATUS', 'status') || 'A',
+    ATIVO: pick(row, 'DT_DEMISS', 'dt_demiss') || String(pick(row, 'STATUS', 'status') || 'A').toUpperCase() !== 'A' ? 'N' : 'S'
   };
 }
 
@@ -354,7 +355,11 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
         : funcionarioColumns.has('DATA_NASCIMENTO')
           ? 'f.data_nascimento as dt_nasc'
           : 'cast(null as date) as dt_nasc';
-    const ativoWhere = options.includeInactive || !funcionarioColumns.has('DT_DEMISS') ? '' : 'and f.dt_demiss is null';
+    const ativoWhere = options.includeInactive ? '' : [
+      funcionarioColumns.has('DT_DEMISS') ? 'and f.dt_demiss is null' : '',
+      funcionarioColumns.has('STATUS') ? "and nvl(f.status, 'A') = 'A'" : ''
+    ].filter(Boolean).join(' ');
+    const statusSelect = funcionarioColumns.has('STATUS') ? 'f.status' : "'A' as status";
     const subsecaoJoinSql = hasFuncionarioSubsecao && hasSubsecaoTable
       ? 'left join sgn_esc_subsecao sub on sub.escsubsecao_id = f.escsubsecao_id and sub.escsecao_id = f.escsecao_id'
       : '';
@@ -386,6 +391,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
           ${options.mesRef ? 'coalesce(e.hr_sai2, f.hr_sai2)' : 'f.hr_sai2'} as hr_sai2,
           ${options.mesRef ? 'e.programacao as escala_programacao, e.revisao as escala_revisao, e.oficializada as escala_oficializada' : "cast(null as varchar2(3)) as escala_programacao, cast(null as number) as escala_revisao, cast(null as number) as escala_oficializada"},
           f.dt_hr_incl,
+          ${statusSelect},
           ${dtDemissSelect}
        from sgn_esc_funcionario f
        left join sgn_esc_secao s on s.escsecao_id = f.escsecao_id ${secaoJoinLoja} ${secaoJoinColigada}

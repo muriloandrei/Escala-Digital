@@ -3,10 +3,12 @@ const assert = require('node:assert/strict');
 const { parseArgs, run } = require('../scripts/liberar-escalas-novembro-2026');
 
 test('november release requires operator and rejects unknown arguments', () => {
-  assert.deepEqual(parseArgs([]), { apply: false, by: null });
+  assert.deepEqual(parseArgs([]), { apply: false, by: null, loja: null });
   assert.throws(() => parseArgs(['--apply']), /--by/);
   assert.throws(() => parseArgs(['--mes=2026-12']), /Argumento desconhecido/);
   assert.equal(parseArgs(['--apply', '--by=murilo.jesus']).by, 'murilo.jesus');
+  assert.equal(parseArgs(['--loja=64']).loja, 64);
+  assert.throws(() => parseArgs(['--loja=0']), /numero positivo/);
 });
 
 test('november preview is read-only and application audits created stores', async () => {
@@ -25,4 +27,6 @@ test('november preview is read-only and application audits created stores', asyn
   assert.deepEqual(calls[1], { mesRef: '2026-11-01', dryRun: false });
   assert.equal(calls[2].lojaId, 10);
   assert.equal(calls[2].user.login, 'murilo.jesus');
+  await run(['--loja=64'], dependencies);
+  assert.deepEqual(calls[3], { mesRef: '2026-11-01', dryRun: true, lojas: [64] });
 });

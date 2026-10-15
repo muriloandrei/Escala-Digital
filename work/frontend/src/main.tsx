@@ -89,7 +89,7 @@ function App() {
 
   if (trainingStage < LAST_TRAINING_STAGE) return (
     <div className="shell training-required-shell">
-      <aside className="sidebar"><div className="brand"><img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" /></div><nav aria-label="Menu principal"><NavLink to="/treinamento"><GraduationCap size={18} /> Treinamento obrigatório</NavLink></nav><div className="sidebar-user"><span>{user.nome || user.login}</span><button type="button" onClick={logout}><LogOut size={16} /> Sair</button></div></aside>
+      <aside className="sidebar"><div className="brand"><img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" /></div><nav aria-label="Menu principal"><button className="sidebar-logout" type="button" onClick={logout}><LogOut size={18} /> Sair</button><NavLink to="/treinamento"><GraduationCap size={18} /> Treinamento obrigatório</NavLink></nav></aside>
       <div className="workspace"><Routes><Route path="/treinamento" element={<Treinamento user={user} onComplete={() => { setTrainingStage(LAST_TRAINING_STAGE); navigate('/escalas-liberadas', { replace: true }); }} />} /><Route path="*" element={<Navigate to="/treinamento" replace />} /></Routes></div>
     </div>
   );
@@ -114,6 +114,7 @@ function App() {
           <img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" />
         </div>
         <nav aria-label="Menu principal">
+          <button className="sidebar-logout" type="button" onClick={logout}><LogOut size={18} /> Sair</button>
           <div className="sidebar-nav-group"><span className="sidebar-nav-heading">Escalas</span>
           {canSeeEscalas && (
             <NavLink to="/escalas-liberadas">
@@ -181,13 +182,6 @@ function App() {
           )}
           </div>
         </nav>
-        <div className="sidebar-user">
-          <span>{user.nome || user.login}</span>
-          <small>{user.perfil}</small>
-          <button type="button" onClick={logout}>
-            <LogOut size={16} /> Sair
-          </button>
-        </div>
       </aside>
       <div className="workspace">
         <header className="topbar">

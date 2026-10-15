@@ -89,29 +89,22 @@ a {
   background: #275388;
   color: #fff;
 }
-.sidebar-user {
-  margin-top: auto;
-  flex-shrink: 0;
-  border-top: 1px solid #354760;
-  padding: 16px;
-  display: grid;
-  gap: 5px;
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-.sidebar-user small {
-  color: #afc0d6;
-}
-.sidebar-user button {
-  margin-top: 8px;
+.sidebar nav .sidebar-logout {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 11px;
+  min-height: 40px;
   background: transparent;
   border: 0;
-  color: #eef6ff;
-  padding: 4px 0;
+  border-radius: 5px;
+  color: #d9e4f4;
+  padding: 9px 12px;
   text-align: left;
+  font-size: 14px;
+}
+.sidebar nav .sidebar-logout:hover {
+  background: #275388;
+  color: #fff;
 }
 .workspace {
   min-width: 0;
@@ -164,6 +157,9 @@ a {
   padding: 26px;
   max-width: 1600px;
   margin: 0 auto;
+}
+.directory-detail {
+  scroll-margin-top: 16px;
 }
 .page-heading {
   display: flex;
@@ -578,9 +574,6 @@ tbody tr:hover {
   }
   .sidebar nav a {
     white-space: nowrap;
-  }
-  .sidebar-user {
-    display: none;
   }
   .training-layout {
     grid-template-columns: 1fr;

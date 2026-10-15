@@ -207,6 +207,7 @@ export function EscalaMensal({ user }: { user: User }) {
   const section = sections.find((item) => item.ESCSECAO_ID === sectionId);
   const selectedTopLevelId = sectionGroups.portaria.some((item) => item.ESCSECAO_ID === sectionId)
     ? sectionGroups.front?.ESCSECAO_ID : sectionId;
+  const isPortariaView = sectionGroups.portaria.some((item) => item.ESCSECAO_ID === sectionId);
   const sectionCatalog = catalogSections.find((item) => Number(item.ESCSECAO_ID) === Number(sectionId));
   const employees = useMemo(
     () => (escala?.funcionarios || []).filter((item) => Number(item.ESCSECAO_ID) === Number(sectionId)),
@@ -217,6 +218,17 @@ export function EscalaMensal({ user }: { user: User }) {
       .map((item: Subsecao) => [String(item.ESCSUBSECAO_ID), item.STATUS === 'I' ? `${item.DESCR} (inativa)` : item.DESCR] as const)
       .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
   }, [sectionCatalog]);
+  const frontSubsections = catalogSections.find((item) => Number(item.ESCSECAO_ID) === Number(sectionGroups.front?.ESCSECAO_ID))?.SUBSECOES || [];
+  const frontEmployees = (escala?.funcionarios || []).filter((item) => Number(item.ESCSECAO_ID) === Number(sectionGroups.front?.ESCSECAO_ID));
+  const showFrontSubsections = !!sectionGroups.front && Number(selectedTopLevelId) === Number(sectionGroups.front.ESCSECAO_ID);
+  const navigationSubsections = showFrontSubsections && sectionGroups.portaria.length
+    ? frontSubsections.filter((item) => !/portaria/i.test(item.DESCR)
+      || frontEmployees.some((person) => Number(person.ESCSUBSECAO_ID) === Number(item.ESCSUBSECAO_ID)))
+      .map((item) => [String(item.ESCSUBSECAO_ID), item.STATUS === 'I' ? `${item.DESCR} (inativa)` : item.DESCR] as const)
+      .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+    : subsections;
+  const navigationEmployees = showFrontSubsections ? frontEmployees : employees;
+  const navigationSubsectionIds = new Set(navigationSubsections.map(([id]) => id));
   const subsectionIds = useMemo(() => new Set(subsections.map(([id]) => id)), [subsections]);
   const personSubKey = (person: Funcionario) => {
     const id = String(person.ESCSUBSECAO_ID || '');
@@ -224,12 +236,12 @@ export function EscalaMensal({ user }: { user: User }) {
   };
   const personFilter = params.get('funcionario');
   const selectedPerson = employees.find((item) => String(item.ESCFUNC_ID) === personFilter);
-  const defaultSubsection = selectedPerson
+  const defaultSubsection = isPortariaView ? 'all' : selectedPerson
     ? personSubKey(selectedPerson)
     : subsections.find(([id]) => employees.some((item) => String(item.ESCSUBSECAO_ID) === id))?.[0]
       || (employees.some((item) => personSubKey(item) === 'sem') ? 'sem' : subsections[0]?.[0] || 'all');
   const requestedSubsection = params.get('subsecao');
-  const subsection = requestedSubsection && (subsectionIds.has(requestedSubsection) || requestedSubsection === 'sem')
+  const subsection = !isPortariaView && requestedSubsection && (subsectionIds.has(requestedSubsection) || requestedSubsection === 'sem')
     ? requestedSubsection : defaultSubsection;
   const scopeName =
     personFilter
@@ -371,6 +383,17 @@ export function EscalaMensal({ user }: { user: User }) {
     setActionError('');
   }
 
+  function selectSubsectionInFront(id: string) {
+    const next = new URLSearchParams(params);
+    next.set('secao', String(sectionGroups.front?.ESCSECAO_ID));
+    next.set('subsecao', id);
+    next.delete('funcionario');
+    setParams(next);
+    setSelectedCell(null);
+    setActionMessage('');
+    setActionError('');
+  }
+
   async function confirmOperation() {
     if (!pendingAction || !lojaId || !mesRef || !sectionId || !scopePeople.length) return;
     if (mixedSubsectionScope) {
@@ -444,7 +467,7 @@ export function EscalaMensal({ user }: { user: User }) {
 
   async function quickToggle(employee: Funcionario, date: string, day?: DiaEscala) {
     if (!lojaId || !mesRef || quickBusyRef.current || !canEdit(user, 'escalas') || !canEdit(user, 'escalas-funcionarios') || date < localToday() || escala?.status === 'FINALIZADA') return;
-    if (employee.DT_DEMISS && date > iso(employee.DT_DEMISS)) return;
+    if (employee.STATUS === 'I' || (employee.DT_DEMISS && date > iso(employee.DT_DEMISS))) return;
     if (day?.AUSENCIA_OBRIGATORIA || ['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) return;
     const existingFixed = escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && iso(item.DT) === date);
     if (day?.FIXO_ESCALA && day) {
@@ -510,7 +533,7 @@ export function EscalaMensal({ user }: { user: User }) {
     if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
     clickTimer.current = window.setTimeout(() => {
       clickTimer.current = null;
-      if (employee.DT_DEMISS && date > iso(employee.DT_DEMISS)) return;
+      if (employee.STATUS === 'I' || (employee.DT_DEMISS && date > iso(employee.DT_DEMISS))) return;
       if (canEdit(user, 'escalas') && canEdit(user, 'escalas-funcionarios')) void quickToggle(employee, date, day);
       else setSelectedCell({ employee, date, day });
     }, 260);
@@ -519,7 +542,7 @@ export function EscalaMensal({ user }: { user: User }) {
   function doubleClickDay(employee: Funcionario, date: string, day?: DiaEscala) {
     if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
     clickTimer.current = null;
-    if (employee.DT_DEMISS && date > iso(employee.DT_DEMISS)) return;
+    if (employee.STATUS === 'I' || (employee.DT_DEMISS && date > iso(employee.DT_DEMISS))) return;
     if (!canEdit(user, 'escalas') || !canEdit(user, 'escalas-funcionarios') || escala?.status === 'FINALIZADA') { setSelectedCell({ employee, date, day }); return; }
     if (day && !day.FIXO_ESCALA && !day.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase())) setEditingCell({ employee, day });
     else if (date >= localToday() && Number(day?.OFICIALIZADA) !== 1 && !day?.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) setFixedCell({ employee, date });
@@ -595,7 +618,7 @@ export function EscalaMensal({ user }: { user: User }) {
       )}
       {!loading && !error && !!escala?.ajustesDesligamento?.dias && (
         <div className="notice warning" role="status">
-          O desligamento registrado no RM retirou automaticamente {escala.ajustesDesligamento.dias} dia(s) da escala de {escala.ajustesDesligamento.funcionarios} funcionário(s), preservando os dias até a demissão.
+          A atualização do RM retirou automaticamente {escala.ajustesDesligamento.dias} dia(s) da escala de {escala.ajustesDesligamento.funcionarios} funcionário(s), preservando o histórico anterior.
           {!!escala.ajustesDesligamento.oficializadas && ` ${escala.ajustesDesligamento.oficializadas} programação(ões) perderam a oficialização e precisam de nova aprovação. Confira também as pendências de envio ao RM.`}
         </div>
       )}
@@ -651,40 +674,40 @@ export function EscalaMensal({ user }: { user: User }) {
                   </button>
                 ))}
               </div>
-              {sectionGroups.front && sectionGroups.portaria.length > 0 &&
-                Number(selectedTopLevelId) === Number(sectionGroups.front.ESCSECAO_ID) && (
-                  <div className="scope-subtabs scope-areas" aria-label="Áreas de Frente de Caixa">
-                    {[sectionGroups.front, ...sectionGroups.portaria].map((item) => (
-                      <button
-                        key={item.ESCSECAO_ID}
-                        className={Number(sectionId) === Number(item.ESCSECAO_ID) ? 'selected' : ''}
-                        aria-pressed={Number(sectionId) === Number(item.ESCSECAO_ID)}
-                        onClick={() => updateFilter('secao', String(item.ESCSECAO_ID), true)}
-                      >
-                        {item.ESCSECAO_ID === sectionGroups.front?.ESCSECAO_ID ? 'Frente de Caixa' : `Portaria · ${item.COD_SECAO || item.DESCR}`}
-                        {' '}<small>{item.FUNCIONARIOS ?? 0}</small>
-                      </button>
-                    ))}
-                  </div>
-                )}
               <div className="scope-subtabs" aria-label="Subseções da seção">
-                {subsections.map(([id, name]) => (
+                {navigationSubsections.map(([id, name]) => (
                   <button
                     key={id}
-                    className={subsection === id ? 'selected' : ''}
-                    onClick={() => updateFilter('subsecao', id)}
+                    className={!isPortariaView && subsection === id ? 'selected' : ''}
+                    onClick={() => isPortariaView ? selectSubsectionInFront(id) : updateFilter('subsecao', id)}
                   >
                     {name}{' '}
-                    <small>{employees.filter((item) => memberOfSubsection(item, id)).length}</small>
+                    <small>{isPortariaView
+                      ? navigationEmployees.filter((item) => String(item.ESCSUBSECAO_ID || '') === id).length
+                      : employees.filter((item) => memberOfSubsection(item, id)).length}</small>
                   </button>
                 ))}
-                {employees.some((item) => memberOfSubsection(item, 'sem')) && (
+                {showFrontSubsections && sectionGroups.portaria.map((item) => (
                   <button
-                    className={subsection === 'sem' ? 'selected' : ''}
-                    onClick={() => updateFilter('subsecao', 'sem')}
+                    key={`portaria-${item.ESCSECAO_ID}`}
+                    className={Number(sectionId) === Number(item.ESCSECAO_ID) ? 'selected' : ''}
+                    onClick={() => updateFilter('secao', String(item.ESCSECAO_ID), true)}
+                  >
+                    Portaria{sectionGroups.portaria.length > 1 ? ` · ${item.COD_SECAO || item.DESCR}` : ''}{' '}
+                    <small>{item.FUNCIONARIOS ?? 0}</small>
+                  </button>
+                ))}
+                {(isPortariaView
+                  ? navigationEmployees.some((item) => !navigationSubsectionIds.has(String(item.ESCSUBSECAO_ID || '')))
+                  : employees.some((item) => memberOfSubsection(item, 'sem'))) && (
+                  <button
+                    className={!isPortariaView && subsection === 'sem' ? 'selected' : ''}
+                    onClick={() => isPortariaView ? selectSubsectionInFront('sem') : updateFilter('subsecao', 'sem')}
                   >
                     Sem subseção{' '}
-                    <small>{employees.filter((item) => memberOfSubsection(item, 'sem')).length}</small>
+                    <small>{isPortariaView
+                      ? navigationEmployees.filter((item) => !navigationSubsectionIds.has(String(item.ESCSUBSECAO_ID || ''))).length
+                      : employees.filter((item) => memberOfSubsection(item, 'sem')).length}</small>
                   </button>
                 )}
               </div>
@@ -824,11 +847,12 @@ export function EscalaMensal({ user }: { user: User }) {
                             <strong>
                               {person.CHAPA} · {person.NOME}
                             </strong>
-                            <small>{person.FUNCAO_DESCR || 'Cargo não informado'}{person.DT_DEMISS ? ` · Desligado em ${formatDate(iso(person.DT_DEMISS))}` : ''}</small>
+                            <small>{person.FUNCAO_DESCR || 'Cargo não informado'}{person.DT_DEMISS ? ` · Desligado em ${formatDate(iso(person.DT_DEMISS))}` : person.STATUS === 'I' ? ' · Inativo no RM' : ''}</small>
                             <button type="button" className="person-menu-trigger" title={`Ações de ${person.NOME}`} aria-label={`Ações de ${person.NOME}`} onClick={(event) => openPersonMenu(event, person)}><MoreVertical size={16} /></button>
                           </th>
                           {dates.map((date, index) => {
                             const aposDemissao = Boolean(person.DT_DEMISS && date > iso(person.DT_DEMISS));
+                            const inativo = person.STATUS === 'I';
                             const dayCritiques = critiqueMarkers.get(Number(person.ESCFUNC_ID))?.dates.get(date) || [];
                             const scheduled = daysByEmployee.get(String(person.ESCFUNC_ID))?.get(date);
                             const day = scheduled && (subsection === 'all' || daySubKey(scheduled) === subsection)
@@ -841,9 +865,9 @@ export function EscalaMensal({ user }: { user: User }) {
                               >
                                 <button
                                   type="button"
-                                  title={`${person.NOME} · ${formatDate(date)}${aposDemissao ? ' · Após desligamento' : ''}${holidays[date] ? ` · Feriado: ${holidays[date]}` : ''} · ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `\nCríticas: ${dayCritiques.join('\n')}` : ''}`}
+                                  title={`${person.NOME} · ${formatDate(date)}${aposDemissao ? ' · Após desligamento' : ''}${inativo ? ' · Inativo no RM' : ''}${holidays[date] ? ` · Feriado: ${holidays[date]}` : ''} · ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `\nCríticas: ${dayCritiques.join('\n')}` : ''}`}
                                   aria-label={`${person.NOME}, ${formatDate(date)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `, ${dayCritiques.length} crítica(s)` : ''}`}
-                                  disabled={quickBusy || aposDemissao || Boolean(scheduled && !day)}
+                                  disabled={quickBusy || aposDemissao || inativo || Boolean(scheduled && !day)}
                                   onClick={() => clickDay(person, date, day)}
                                   onDoubleClick={() => doubleClickDay(person, date, day)}
                                 >
@@ -871,14 +895,15 @@ export function EscalaMensal({ user }: { user: User }) {
                     <tbody>
                       {visibleEmployees.map((person) => {
                         const aposDemissao = Boolean(person.DT_DEMISS && selectedDate > iso(person.DT_DEMISS));
+                        const inativo = person.STATUS === 'I';
                         const dayCritiques = critiqueMarkers.get(Number(person.ESCFUNC_ID))?.dates.get(selectedDate) || [];
                         const rowCritiques = critiqueMarkers.get(Number(person.ESCFUNC_ID))?.row || [];
                         const day = daysByEmployee.get(String(person.ESCFUNC_ID))?.get(selectedDate);
                         const fixed = !day && escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(person.ESCFUNC_ID) && iso(item.DT) === selectedDate);
                         return (
                           <tr key={person.ESCFUNC_ID} className={dayCritiques.length || rowCritiques.length ? 'critical' : ''} title={[...rowCritiques, ...dayCritiques].join('\n') || undefined}>
-                            <td className="daily-employee"><strong>{person.NOME}</strong><small>{person.CHAPA} · {person.FUNCAO_DESCR || 'Cargo não informado'}</small></td>
-                            <td><button className="daily-distribution" type="button" disabled={quickBusy || aposDemissao} title={aposDemissao ? 'Após desligamento' : undefined} onClick={() => clickDay(person, selectedDate, day)} onDoubleClick={() => doubleClickDay(person, selectedDate, day)} aria-label={`${person.NOME}, ${formatDate(selectedDate)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `, ${dayCritiques.length} crítica(s)` : ''}`}>
+                            <td className="daily-employee"><strong>{person.NOME}</strong><small>{person.CHAPA} · {person.FUNCAO_DESCR || 'Cargo não informado'}{inativo ? ' · Inativo no RM' : ''}</small></td>
+                            <td><button className="daily-distribution" type="button" disabled={quickBusy || aposDemissao || inativo} title={aposDemissao ? 'Após desligamento' : inativo ? 'Inativo no RM' : undefined} onClick={() => clickDay(person, selectedDate, day)} onDoubleClick={() => doubleClickDay(person, selectedDate, day)} aria-label={`${person.NOME}, ${formatDate(selectedDate)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `, ${dayCritiques.length} crítica(s)` : ''}`}>
                               <div className="daily-shift-track" aria-hidden="true">{hasShift(day) && <>{timeSegment(day?.HR_ENT1, day?.HR_SAI1) && <span style={timeSegment(day?.HR_ENT1, day?.HR_SAI1)!} />}{timeSegment(day?.HR_ENT2, day?.HR_SAI2) && <span style={timeSegment(day?.HR_ENT2, day?.HR_SAI2)!} />}</>}</div>
                               <span className="daily-shift-times">{hasShift(day) ? shiftLabel(day) : fixed ? fixed.PROGRAMACAO === 'TRB' ? fixed.HR_ENT1 || 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}</span>
                             </button></td>
@@ -972,12 +997,12 @@ export function EscalaMensal({ user }: { user: User }) {
               if (day) setSelectedCell({ employee: personMenu.employee, date: iso(day.DT), day });
               setPersonMenu(null);
             }}>Ver detalhes</button>
-            {escala?.status !== 'FINALIZADA' && canEdit(user, 'escalas-funcionarios') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && <button type="button" role="menuitem" onClick={() => { setShiftTarget(personMenu.employee); setPersonMenu(null); }}>Editar horário-base</button>}
-            {escala?.status !== 'FINALIZADA' && canEdit(user, 'escalas') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
+            {escala?.status !== 'FINALIZADA' && personMenu.employee.STATUS !== 'I' && canEdit(user, 'escalas-funcionarios') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && <button type="button" role="menuitem" onClick={() => { setShiftTarget(personMenu.employee); setPersonMenu(null); }}>Editar horário-base</button>}
+            {escala?.status !== 'FINALIZADA' && personMenu.employee.STATUS !== 'I' && canEdit(user, 'escalas') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
               setIndividualTarget(personMenu.employee);
               setPersonMenu(null);
             }}>Gerar escala individual</button>}
-            {escala?.status !== 'FINALIZADA' && canEdit(user, 'escalas') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
+            {escala?.status !== 'FINALIZADA' && personMenu.employee.STATUS !== 'I' && canEdit(user, 'escalas') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
               setTransferTarget(personMenu.employee);
               setPersonMenu(null);
             }}>Transferir de subseção</button>}

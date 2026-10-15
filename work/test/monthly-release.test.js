@@ -731,6 +731,30 @@ test('monthly release avoids automatic consecutive worked Sundays', () => {
   assert.equal(errors.some((error) => /domingos/i.test(error)), false);
 });
 
+test('monthly release alternates Sunday rests across shifts in the same section', () => {
+  const shifts = [
+    { id: 41, start: '08:00', lunch: '12:00', return: '13:10', end: '17:58' },
+    { id: 42, start: '09:00', lunch: '13:00', return: '14:10', end: '18:58' }
+  ];
+  const funcionarios = shifts.map((shift, index) => ({
+    ESCFUNC_ID: 940 + index, CHAPA: `09400${index}`, NOME: `Domingo Turno ${index + 1}`,
+    LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: shift.start, HR_SAI1: shift.lunch, HR_ENT2: shift.return, HR_SAI2: shift.end
+  }));
+  const turnos = shifts.map((shift) => ({
+    ESCSECAOTURNO_ID: shift.id, ESCSECAO_ID: 20,
+    HR_ENT1: shift.start, HR_SAI1: shift.lunch, HR_ENT2: shift.return, HR_SAI2: shift.end
+  }));
+
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, turnos, '2026-09-01', '2026-09-01');
+  const domingos = rascunhos[0].dias.filter((dia) => new Date(`${dia.data}T00:00:00Z`).getUTCDay() === 0);
+  for (const domingo of domingos) {
+    const programacoes = rascunhos.map((funcionario) => funcionario.dias.find((dia) => dia.data === domingo.data)?.programacao);
+    assert.ok(programacoes.includes('F'), `${domingo.data} sem folga`);
+    assert.ok(programacoes.includes('TRB'), `${domingo.data} sem trabalho`);
+  }
+});
+
 test('section generation saves draft even when automatic validation returns critiques', async () => {
   const originals = {
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
@@ -899,6 +923,21 @@ test('monthly liberation does not copy protected days inside a partial suspensio
     }
   );
   assert.deepEqual(payload[0].dias.map((dia) => dia.data), ['2026-10-13', '2026-10-21']);
+});
+
+test('inactive RM employee has no future release days, including fixed or absence days', () => {
+  const employee = {
+    ESCFUNC_ID: 303, CHAPA: '303', NOME: 'Inativo RM', STATUS: 'I',
+    LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  };
+  const result = monthlyReleaseService.buildFuncionariosLiberacao(
+    [employee], [], '2026-10-01', '2026-10-05', {
+      fixos: [{ ESCFUNC_ID: 303, DT: '2026-10-06', PROGRAMACAO: 'FXF' }],
+      ausencias: [{ ESCFUNC_ID: 303, DT_INIC: '2026-10-07', DT_FIM: '2026-10-08', MOTIVO: 'FERIAS' }]
+    }
+  );
+  assert.deepEqual(result[0].dias, []);
 });
 
 test('RM absence remains visible even while a local suspension is open', () => {

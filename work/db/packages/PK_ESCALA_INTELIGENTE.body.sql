@@ -201,9 +201,15 @@ create or replace package body PK_ESCALA_INTELIGENTE is
     v_atualizados      number := 0;
   begin
     -- Loja
-    for rec1 in (select l.nro loja, b.nro_func_total, b.nro_func_dia, l.codcoligada
-                   from SGN_BRIGADA_INCENDIO b, V_LOJAS l
-                  where l.loja_id = b.loja_id) loop
+    for rec1 in (select l.nro loja, nvl(b.nro_func_total, 0) nro_func_total,
+                        nvl(b.nro_func_dia, 0) nro_func_dia, l.codcoligada
+                   from V_LOJAS l
+                   left join SGN_BRIGADA_INCENDIO b on b.loja_id = l.loja_id
+                  where b.loja_id is not null
+                     or exists (select 1 from PFUNC f
+                                 where f.nroempresa = l.nro
+                                   and f.codcoligada = l.codcoligada
+                                   and f.datademissao is null)) loop
       update ESCALAINT.SGN_ESC_LOJA a
          set a.qtde_brigadista_exigido = rec1.nro_func_total,
              a.qtde_brigadista_exigido_dia = rec1.nro_func_dia,
@@ -211,8 +217,9 @@ create or replace package body PK_ESCALA_INTELIGENTE is
        where a.loja = rec1.loja;
       if sql%rowcount = 0 then
         insert into ESCALAINT.SGN_ESC_LOJA
-          (loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, codcoligada)
-        values (rec1.loja, rec1.nro_func_total, rec1.nro_func_dia, rec1.codcoligada);
+          (escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, codcoligada)
+        values (ESCALAINT.SGN_ESC_LOJA_SEQ.nextval, rec1.loja, rec1.nro_func_total,
+                rec1.nro_func_dia, rec1.codcoligada);
       end if;
     end loop;
     commit;
@@ -273,8 +280,10 @@ create or replace package body PK_ESCALA_INTELIGENTE is
       v_reg_func.cpf := rec1.cpf_func;
 
       begin
-        select a.coligadaanteriortransf, a.chapaanteriortransf, b.sexo
-          into v_reg_func.codcoligada_ant, v_reg_func.chapa_ant, v_reg_func.sexo
+        select a.coligadaanteriortransf, a.chapaanteriortransf, b.sexo,
+               case when upper(trim(a.codsituacao)) = 'A' then 'A' else 'I' end
+          into v_reg_func.codcoligada_ant, v_reg_func.chapa_ant, v_reg_func.sexo,
+               v_reg_func.status
           from RM.PPESSOA@RM b, RM.PFUNC@RM a
          where b.codigo = a.codpessoa and a.chapa = rec1.chapa
            and a.codcoligada = rec1.codcoligada;
@@ -325,7 +334,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
              a.escsecao_id = v_reg_func.escsecao_id, a.escfuncao_id = v_reg_func.escfuncao_id,
              a.codcoligada_ant = v_reg_func.codcoligada_ant, a.chapa_ant = v_reg_func.chapa_ant,
              a.dt_demiss = v_reg_func.dt_demiss, a.codfilial = v_reg_func.codfilial,
-             a.cpf = v_reg_func.cpf
+             a.cpf = v_reg_func.cpf, a.status = v_reg_func.status
        where a.codcoligada = rec1.codcoligada and a.loja = rec1.loja and a.chapa = rec1.chapa
       returning escfunc_id into v_reg_func.escfunc_id;
 
@@ -333,13 +342,14 @@ create or replace package body PK_ESCALA_INTELIGENTE is
         insert into ESCALAINT.SGN_ESC_FUNCIONARIO
           (codcoligada, loja, chapa, nome, sexo, dt_admiss, brigadista, escsecao_id,
            escfuncao_id, codcoligada_ant, chapa_ant, hr_ent1, hr_sai1, hr_ent2, hr_sai2,
-           dt_hr_incl, dt_demiss, codfilial, cpf)
+           dt_hr_incl, dt_demiss, codfilial, cpf, status)
         values
           (v_reg_func.codcoligada, v_reg_func.loja, v_reg_func.chapa, v_reg_func.nome,
            v_reg_func.sexo, v_reg_func.dt_admiss, v_reg_func.brigadista, v_reg_func.escsecao_id,
            v_reg_func.escfuncao_id, v_reg_func.codcoligada_ant, v_reg_func.chapa_ant,
            v_reg_func.hr_ent1, v_reg_func.hr_sai1, v_reg_func.hr_ent2, v_reg_func.hr_sai2,
-           v_reg_func.dt_hr_incl, v_reg_func.dt_demiss, v_reg_func.codfilial, v_reg_func.cpf)
+           v_reg_func.dt_hr_incl, v_reg_func.dt_demiss, v_reg_func.codfilial, v_reg_func.cpf,
+           v_reg_func.status)
         returning escfunc_id into v_reg_func.escfunc_id;
         v_inseridos := v_inseridos + 1;
       else

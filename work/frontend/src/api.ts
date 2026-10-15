@@ -65,6 +65,7 @@ export type Funcionario = {
   HR_ENT2?: string | null;
   HR_SAI2?: string | null;
   DT_DEMISS?: string | null;
+    STATUS?: string | null;
   GERADA?: number;
 };
 

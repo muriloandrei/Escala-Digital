@@ -20,6 +20,7 @@ require('./portaria-section.test');
 require('./diagnosticar-loja.test');
 require('./registrar-loja.test');
 require('./absence-validation.test');
+require('./suspension-permissions.test');
 require('./rm-integration.test');
 require('./rm-outbox.test');
 require('./horario-funcionario.test');

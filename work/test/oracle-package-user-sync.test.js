@@ -24,3 +24,11 @@ test('preparo SQL preserva contas e cria somente os metadados de origem necessar
   assert.doesNotMatch(prepare, /\b(delete|truncate|drop)\b/i);
   assert.doesNotMatch(prepare, /AUTH_VERSION/);
 });
+
+test('carga registra lojas com funcionarios ativos mesmo sem brigada e replica situacao do RM', () => {
+  assert.match(packageBody, /from V_LOJAS l\s+left join SGN_BRIGADA_INCENDIO b/i);
+  assert.match(packageBody, /exists \(select 1 from PFUNC f[\s\S]*?f\.datademissao is null\)/i);
+  assert.match(packageBody, /a\.codsituacao/i);
+  assert.match(packageBody, /a\.status = v_reg_func\.status/i);
+  assert.match(packageBody, /ESCALAINT\.SGN_ESC_LOJA_SEQ\.nextval/i);
+});

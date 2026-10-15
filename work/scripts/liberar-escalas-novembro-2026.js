@@ -5,11 +5,18 @@ const auditService = require('../src/services/auditService');
 const MES_REF = '2026-11-01';
 
 function parseArgs(argv) {
-  const args = { apply: false, by: null };
+  const args = { apply: false, by: null, loja: null };
   for (const arg of argv) {
     if (arg === '--apply') args.apply = true;
     else if (arg === '--dry-run') args.apply = false;
     else if (arg.startsWith('--by=')) args.by = arg.slice(5).trim();
+    else if (arg.startsWith('--loja=')) {
+      const value = arg.slice(7);
+      if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) {
+        throw new Error('Informe --loja com um numero positivo.');
+      }
+      args.loja = Number(value);
+    }
     else throw new Error(`Argumento desconhecido: ${arg}`);
   }
   if (args.apply && !/^[\w.-]{2,80}$/.test(args.by || '')) {
@@ -22,7 +29,7 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
   const args = parseArgs(argv);
   const release = dependencies.liberarEscalasMensais || liberarEscalasMensais;
   const audit = dependencies.registerAudit || auditService.registerAudit;
-  const results = await release({ mesRef: MES_REF, dryRun: !args.apply });
+  const results = await release({ mesRef: MES_REF, dryRun: !args.apply, ...(args.loja ? { lojas: [args.loja] } : {}) });
   console.log(`${args.apply ? 'APLICACAO' : 'PREVIA'} - novembro/2026 - ${results.length} loja(s)`);
   for (const result of results) {
     const status = result.erro ? `ERRO: ${result.erro}`

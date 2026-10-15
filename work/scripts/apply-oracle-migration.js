@@ -17,7 +17,8 @@ const migrationNames = [
   '20261005_auditoria_mes_revisao.sql',
   '20261006_treinamento_tour_v3.sql',
   '20261009_portaria_escopo_frente_caixa.sql',
-  '20261014_portaria_codigo_02012.sql'
+  '20261014_portaria_codigo_02012.sql',
+  '20261015_funcionario_status_rm.sql'
 ];
 
 function parseSinglePlsqlBlock(source) {

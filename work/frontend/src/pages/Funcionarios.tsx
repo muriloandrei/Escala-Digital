@@ -42,6 +42,7 @@ export function Funcionarios({ user }: { user: User }) {
   const [suspendError, setSuspendError] = useState('');
   const [suspendBusy, setSuspendBusy] = useState(false);
   const deepLinkOpened = useRef('');
+  const detailRef = useRef<HTMLElement>(null);
   const loja = params.get('loja') || preferredStore(user, lojas);
 
   useEffect(() => {
@@ -102,7 +103,14 @@ export function Funcionarios({ user }: { user: User }) {
   );
   const detail = funcionarios.find((item) => item.ESCFUNC_ID === selected);
   const detailSuspension = suspensions.find((item) => Number(item.ESCFUNC_ID) === Number(selected) && item.STATUS === 'P');
-  const canSuspend = ['ADMIN', 'RH'].includes(user.perfil.toUpperCase());
+  const canSuspend = ['ADMIN', 'RH'].includes(user.perfil.toUpperCase()) || canEdit(user, 'escalas');
+
+  useEffect(() => {
+    if (selected !== null) {
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      detailRef.current?.focus({ preventScroll: true });
+    }
+  }, [selected]);
 
   async function saveSuspension(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -171,6 +179,43 @@ export function Funcionarios({ user }: { user: User }) {
           {message}
         </div>
       )}
+      {detail && (
+        <section className="directory-detail" aria-label="Detalhes do funcionário" ref={detailRef} tabIndex={-1}>
+          <div className="directory-detail-heading">
+            <UserRound size={19} />
+            <div>
+              <h2>{detail.NOME}</h2>
+              <p>{detail.CHAPA} · {detail.FUNCAO_DESCR || 'Cargo não informado'}</p>
+            </div>
+            {canEdit(user, 'escalas') && !detail.DT_DEMISS && detail.STATUS !== 'I' &&
+              !/APRENDIZ/i.test(detail.FUNCAO_DESCR || '') && (
+                <button type="button" className="button primary" onClick={() => openShift(detail)}>
+                  <Pencil size={15} /> Editar horário
+                </button>
+              )}
+            {canSuspend && !detail.DT_DEMISS && detail.STATUS !== 'I' && !detailSuspension &&
+              <button type="button" className="button secondary" onClick={() => {
+                setSuspendTarget(detail); setSuspendError('');
+              }}><UserRoundX size={15} /> Suspender da escala</button>}
+            {canSuspend && detailSuspension &&
+              <button type="button" className="button secondary" disabled={suspendBusy} onClick={() => {
+                setSuspendError(''); setCloseTarget(detailSuspension);
+              }}>Encerrar suspensão</button>}
+            <button type="button" className="button secondary" onClick={() => setSelected(null)}>Fechar</button>
+          </div>
+          <dl>
+            {detailSuspension && <div><dt>Suspensão local</dt><dd>{detailSuspension.TIPO || 'Ativa'} · {String(detailSuspension.DT_INICIO).slice(0, 10)}{detailSuspension.DT_FIM ? ` a ${String(detailSuspension.DT_FIM).slice(0, 10)}` : ''}</dd></div>}
+            <div><dt>Loja</dt><dd>{detail.LOJA || loja}</dd></div>
+            <div><dt>Seção</dt><dd>{detail.SECAO_DESCR || '–'}</dd></div>
+            <div><dt>Subseção</dt><dd>{detail.SUBSECAO_DESCR || 'Sem subseção'}</dd></div>
+            <div><dt>Entrada</dt><dd>{detail.HR_ENT1 || '–'}</dd></div>
+            <div><dt>Saída intervalo</dt><dd>{detail.HR_SAI1 || '–'}</dd></div>
+            <div><dt>Retorno</dt><dd>{detail.HR_ENT2 || '–'}</dd></div>
+            <div><dt>Saída</dt><dd>{detail.HR_SAI2 || '–'}</dd></div>
+          </dl>
+          {suspendError && <div className="notice error" role="alert">{suspendError}</div>}
+        </section>
+      )}
       <section className="list-surface" aria-label="Funcionários">
         <div className="filters">
           <label>
@@ -216,7 +261,7 @@ export function Funcionarios({ user }: { user: User }) {
               checked={includeInactive}
               onChange={(event) => setIncludeInactive(event.target.checked)}
             />{' '}
-            Incluir desligados
+            Incluir inativos e desligados
           </label>
           <button
             className="button secondary"
@@ -274,7 +319,7 @@ export function Funcionarios({ user }: { user: User }) {
                           ? `${item.HR_ENT1}–${item.HR_SAI1}`
                           : '–'}
                     </td>
-                    <td>{item.DT_DEMISS ? 'Desligado' : suspensions.some((entry) => Number(entry.ESCFUNC_ID) === Number(item.ESCFUNC_ID) && entry.STATUS === 'P') ? 'Suspenso da escala' : 'Ativo'}</td>
+                    <td>{item.DT_DEMISS ? 'Desligado' : item.STATUS === 'I' ? 'Inativo no RM' : suspensions.some((entry) => Number(entry.ESCFUNC_ID) === Number(item.ESCFUNC_ID) && entry.STATUS === 'P') ? 'Suspenso da escala' : 'Ativo'}</td>
                     <td>
                       <button
                         className="text-action"
@@ -291,65 +336,6 @@ export function Funcionarios({ user }: { user: User }) {
           </div>
         )}
       </section>
-      {detail && (
-        <section className="directory-detail" aria-label="Detalhes do funcionário">
-          <div className="directory-detail-heading">
-            <UserRound size={19} />
-            <div>
-              <h2>{detail.NOME}</h2>
-              <p>
-                {detail.CHAPA} · {detail.FUNCAO_DESCR || 'Cargo não informado'}
-              </p>
-            </div>
-            {canEdit(user, 'escalas') &&
-              !detail.DT_DEMISS &&
-              !/APRENDIZ/i.test(detail.FUNCAO_DESCR || '') && (
-                <button type="button" className="button primary" onClick={() => openShift(detail)}>
-                  <Pencil size={15} /> Editar horário
-                </button>
-              )}
-            {canSuspend && !detail.DT_DEMISS && !detailSuspension && <button type="button" className="button secondary" onClick={() => {
-              setSuspendTarget(detail); setSuspendError('');
-            }}><UserRoundX size={15} /> Suspender da escala</button>}
-            {canSuspend && detailSuspension && <button type="button" className="button secondary" disabled={suspendBusy} onClick={() => { setSuspendError(''); setCloseTarget(detailSuspension); }}>Encerrar suspensão</button>}
-            <button type="button" className="button secondary" onClick={() => setSelected(null)}>
-              Fechar
-            </button>
-          </div>
-          <dl>
-            {detailSuspension && <div><dt>Suspensão local</dt><dd>{detailSuspension.TIPO || 'Ativa'} · {String(detailSuspension.DT_INICIO).slice(0, 10)}{detailSuspension.DT_FIM ? ` a ${String(detailSuspension.DT_FIM).slice(0, 10)}` : ''}</dd></div>}
-            <div>
-              <dt>Loja</dt>
-              <dd>{detail.LOJA || loja}</dd>
-            </div>
-            <div>
-              <dt>Seção</dt>
-              <dd>{detail.SECAO_DESCR || '–'}</dd>
-            </div>
-            <div>
-              <dt>Subseção</dt>
-              <dd>{detail.SUBSECAO_DESCR || 'Sem subseção'}</dd>
-            </div>
-            <div>
-              <dt>Entrada</dt>
-              <dd>{detail.HR_ENT1 || '–'}</dd>
-            </div>
-            <div>
-              <dt>Saída intervalo</dt>
-              <dd>{detail.HR_SAI1 || '–'}</dd>
-            </div>
-            <div>
-              <dt>Retorno</dt>
-              <dd>{detail.HR_ENT2 || '–'}</dd>
-            </div>
-            <div>
-              <dt>Saída</dt>
-              <dd>{detail.HR_SAI2 || '–'}</dd>
-            </div>
-          </dl>
-          {suspendError && <div className="notice error" role="alert">{suspendError}</div>}
-        </section>
-      )}
       {suspendTarget && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
         if (event.key === 'Escape' && !suspendBusy) setSuspendTarget(null);
       }}><form className="confirm-dialog release-form" role="dialog" aria-modal="true" aria-labelledby="suspension-title" onSubmit={saveSuspension}>
