@@ -167,6 +167,17 @@ test('vacation status F does not remove existing future schedule days', async ()
   assert.equal(calls.some(({ sql }) => /^update/i.test(sql)), false);
 });
 
+test('future inactive header is hidden while historical days remain visible', () => {
+  const { service } = loadService();
+  const rows = [
+    { ESCFUNC_ID: 90, FUNCIONARIO_STATUS: 'I', ESCPROGDIA_ID: null },
+    { ESCFUNC_ID: 91, FUNCIONARIO_STATUS: 'S', ESCPROGDIA_ID: 12 },
+    { ESCFUNC_ID: 92, FUNCIONARIO_STATUS: 'F', ESCPROGDIA_ID: null }
+  ];
+  const visible = service._private.filtrarCabecalhosInativosSemDias(rows);
+  assert.deepEqual(visible.map((row) => row.ESCFUNC_ID), [91, 92]);
+});
+
 test('audit failure rolls back the automatic dismissal adjustment', async () => {
   const { service, connection, calls } = loadService({ failEvent: true });
   await assert.rejects(

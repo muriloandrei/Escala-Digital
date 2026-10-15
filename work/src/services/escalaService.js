@@ -1301,6 +1301,11 @@ async function listDiasSecaoAtual({ lojaId, mesRef, escsecaoId }) {
   });
 }
 
+function filtrarCabecalhosInativosSemDias(rows) {
+  return rows.filter((row) => permiteEscala(pick(row, 'FUNCIONARIO_STATUS', 'funcionario_status'))
+    || pick(row, 'ESCPROGDIA_ID', 'escprogdia_id'));
+}
+
 async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     // A primeira leitura apos a sincronizacao do RM aplica o recorte pendente antes de montar a escala.
@@ -1377,7 +1382,8 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    const { rows, pendencias: pendenciasDesligamento } = projetarDemissoesNaEscala(result.rows || []);
+    const { rows: rowsProjetadas, pendencias: pendenciasDesligamento } = projetarDemissoesNaEscala(result.rows || []);
+    const rows = filtrarCabecalhosInativosSemDias(rowsProjetadas);
     const funcionariosCatalogoCompleto = await catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }).catch(() => []);
     const funcionariosCatalogo = filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogoCompleto, rows);
     const catalogoPorFuncionario = new Map((funcionariosCatalogo || [])
@@ -3053,6 +3059,7 @@ module.exports = {
     escolherRevisaoParaUpsertSemNovaRevisao,
     buildHistoricoAuditoriaQuery,
     filtrarFuncionariosCatalogoPorSecoesEscala,
+    filtrarCabecalhosInativosSemDias,
     projetarDemissoesNaEscala,
     listarDiasAposDemissao,
     reconciliarDesligamentosComConnection,
