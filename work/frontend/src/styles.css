@@ -202,6 +202,23 @@ a {
 .button.primary:hover:not(:disabled) {
   background: #1748ba;
 }
+.button.success {
+  background: #177448;
+  color: #fff;
+}
+.button.success:hover:not(:disabled) { background: #0f5b37; }
+.button.success:disabled { opacity: .46; cursor: not-allowed; }
+.progress-list { padding: 0 18px; }
+.progress-row { padding: 18px 0; border-bottom: 1px solid #e1e7ee; }
+.progress-row:last-child { border-bottom: 0; }
+.progress-row-heading, .progress-row-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.progress-row-heading strong { color: #173453; font-size: 14px; }
+.progress-row-heading span, .progress-row-meta { color: #53657b; font-size: 12px; }
+.progress-row progress { display: block; width: 100%; height: 12px; margin: 12px 0 9px; accent-color: #2865d7; }
+.progress-row progress.official { accent-color: #178053; }
+.progress-row-meta a { color: #174fba; font-weight: 650; }
+.progress-critique { color: #a62c35; }
+.store-toggle { display: inline-flex; align-items: center; gap: 8px; }
 .button.secondary {
   background: #fff;
   color: #25415f;

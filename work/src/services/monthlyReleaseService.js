@@ -1452,6 +1452,8 @@ function startMonthlyReleaseScheduler(env) {
 }
 
 module.exports = {
+  isSecaoEscopoOperacional,
+  isSecaoFiscalRemoto,
   buildFuncionarioRascunho,
   buildFuncionariosRascunhoBalanceado,
   buildFuncionariosLiberacao,

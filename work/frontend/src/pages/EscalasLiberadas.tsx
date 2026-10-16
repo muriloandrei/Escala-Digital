@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Plus, RefreshCw, Search, Archive } from 'lucide-react';
+import { ArrowUpRight, ChartNoAxesColumn, Plus, RefreshCw, Search, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { canCreate, getJson, postJson, type Loja, type ResumoEscala, type User } from '../api';
 
@@ -277,6 +277,7 @@ export function EscalasLiberadas({ user }: { user: User }) {
                         >
                           <ArrowUpRight size={17} /> Abrir
                         </Link>
+                        {['ADMIN', 'RH', 'GERENTE'].includes(user.perfil) && <Link className="open-link" to={`/escalas/${encodeURIComponent(item.LOJA)}/${encodeURIComponent(key)}/progresso`} aria-label={`Ver progresso da escala da loja ${item.LOJA}`}><ChartNoAxesColumn size={17} /> Ver progresso</Link>}
                         {user.perfil === 'ADMIN' && <button className="icon-action" type="button" title={`Inativar escala da Loja ${item.LOJA} em ${monthLabel(key)}`} aria-label={`Inativar escala da Loja ${item.LOJA} em ${monthLabel(key)}`} onClick={() => {
                           setActionError('');
                           setInactiveTarget(item);

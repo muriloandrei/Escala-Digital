@@ -41,12 +41,6 @@ export function toPayloadDay(day: DiaEscala): PayloadDay {
   };
 }
 
-function issueText(issue: unknown) {
-  if (typeof issue === 'string') return issue;
-  if (issue && typeof issue === 'object' && 'message' in issue) return String(issue.message);
-  return String(issue);
-}
-
 export function EditarDiaEscala({
   lojaId,
   mesRef,
@@ -77,7 +71,6 @@ export function EditarDiaEscala({
   });
   const [justification, setJustification] = useState(day.JUSTIFICATIVA_ALTERACAO || '');
   const [busy, setBusy] = useState(false);
-  const [issues, setIssues] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [uncertain, setUncertain] = useState(false);
 
@@ -96,7 +89,6 @@ export function EditarDiaEscala({
     if (!next) { setError('O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.'); return; }
     setShift({ hrEnt1: next.HR_ENT1, hrSai1: next.HR_SAI1, hrEnt2: next.HR_ENT2, hrSai2: next.HR_SAI2 });
     setError('');
-    setIssues([]);
   }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -126,12 +118,12 @@ export function EditarDiaEscala({
     try { operacaoId = createOperationId(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Identificador indisponível.'); return; }
     setBusy(true);
-    setIssues([]);
     setError('');
     const payload = {
       lojaId: Number(lojaId),
       mesRef,
       operacaoId,
+      edicaoPontual: true,
       funcionarios: [
         {
           escfuncId: Number(employee.ESCFUNC_ID),
@@ -142,17 +134,12 @@ export function EditarDiaEscala({
           escsecaoId: employee.ESCSECAO_ID,
           escfuncaoId: employee.ESCFUNCAO_ID,
           aprendiz: apprentice,
-          dias: days.map((item) => (dateOnly(item.DT) === date ? changed : toPayloadDay(item))),
+          dias: [changed],
         },
       ],
       oficializada: 0,
     };
     try {
-      const validation = await postJson<{ ok: boolean; errors: unknown[] }>('/api/escalas/validar', payload);
-      if (!validation.ok) {
-        setIssues((validation.errors || []).map(issueText));
-        return;
-      }
       let saved: { saved: { revisao: number }[] };
       try {
         saved = await postJson('/api/escalas/funcionarios/revisao', payload);
@@ -242,7 +229,6 @@ export function EditarDiaEscala({
                 disabled={apprentice && (!reference.HR_ENT1 || isRest(reference))}
                 onClick={() => {
                   setMode('TRB');
-                  setIssues([]);
                 }}
               >
                 Trabalho
@@ -252,7 +238,6 @@ export function EditarDiaEscala({
                 className={mode === 'F' ? 'selected' : ''}
                 onClick={() => {
                   setMode('F');
-                  setIssues([]);
                 }}
               >
                 Folga
@@ -296,17 +281,6 @@ export function EditarDiaEscala({
             </label>
           </>
         )}
-        {!!issues.length && (
-          <div className="notice error day-editor-issues" role="alert">
-            <strong>Críticas da escala</strong>
-            <ul>
-              {issues.slice(0, 10).map((issue, index) => (
-                <li key={index}>{issue}</li>
-              ))}
-            </ul>
-            {issues.length > 10 && <span>Mais {issues.length - 10} crítica(s).</span>}
-          </div>
-        )}
         {error && (
           <div className="notice error" role="alert">
             {error}
@@ -317,7 +291,7 @@ export function EditarDiaEscala({
             Cancelar
           </button>
           <button className="button primary" type="submit" disabled={!editable || busy || uncertain}>
-            {busy ? 'Validando...' : 'Salvar rascunho'}
+            {busy ? 'Salvando...' : 'Salvar rascunho'}
           </button>
         </div>
       </form>

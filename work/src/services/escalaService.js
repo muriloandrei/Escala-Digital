@@ -784,10 +784,14 @@ function filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo = [], r
   const secoesDaEscala = new Set((rows || [])
     .map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id')))
     .filter(Boolean));
+  const migradosDaPortaria = new Set((rows || [])
+    .filter(isPortariaSection)
+    .map((row) => Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'))));
   if (!secoesDaEscala.size) return funcionariosCatalogo || [];
   return (funcionariosCatalogo || [])
     .filter((funcionario) => secoesDaEscala.has(Number(pick(funcionario, 'ESCSECAO_ID', 'escsecao_id')))
-      || isPortariaSection(funcionario));
+      || isPortariaSection(funcionario)
+      || migradosDaPortaria.has(Number(pick(funcionario, 'ESCFUNC_ID', 'escfunc_id'))));
 }
 
 function projetarDemissoesNaEscala(rows = [], hojeIso = getHojeIso()) {
@@ -1534,10 +1538,19 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     });
     funcionariosCatalogo.forEach((funcionario) => {
       const escfuncId = pick(funcionario, 'ESCFUNC_ID', 'escfunc_id');
-      ensureFuncionarioMap(funcionario, funcionariosMap.get(String(escfuncId))?.GERADA || 0, true);
+      const atual = funcionariosMap.get(String(escfuncId));
+      const portariaHistorica = atual && isPortariaSection({ COD_SECAO: atual.COD_SECAO, DESCR: atual.SECAO_DESCR })
+        && Number(atual.ESCSECAO_ID) !== Number(pick(funcionario, 'ESCSECAO_ID', 'escsecao_id'));
+      ensureFuncionarioMap(funcionario, atual?.GERADA || 0, !portariaHistorica);
       const secao = ensureSecaoMap(funcionario);
       if (secao) secao.FUNCIONARIOS.add(String(escfuncId));
     });
+
+    const funcionariosAtuaisPorSecao = new Map();
+    for (const funcionario of funcionariosMap.values()) {
+      const id = String(funcionario.ESCSECAO_ID || '');
+      funcionariosAtuaisPorSecao.set(id, (funcionariosAtuaisPorSecao.get(id) || 0) + 1);
+    }
 
     return {
       revisao: latestRevision,
@@ -1549,11 +1562,13 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       funcionarios: [...funcionariosMap.values()],
       fixos,
       ausencias,
-      secoes: [...secoesMap.values()].map((secao) => ({
+      secoes: [...secoesMap.values()].filter((secao) =>
+        isMesFinalizado(mesRef) || !isPortariaSection(secao)
+          || (funcionariosAtuaisPorSecao.get(String(secao.ESCSECAO_ID)) || 0) > 0).map((secao) => ({
         ESCSECAO_ID: secao.ESCSECAO_ID,
         COD_SECAO: secao.COD_SECAO,
         DESCR: secao.DESCR,
-        FUNCIONARIOS: secao.FUNCIONARIOS.size,
+        FUNCIONARIOS: funcionariosAtuaisPorSecao.get(String(secao.ESCSECAO_ID)) || 0,
         GERADOS: secao.GERADOS.size,
         OFICIALIZADA: secao.OFICIALIZADA
       }))
@@ -2872,6 +2887,51 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
         error.details = [...new Set(diasAposDemissao.map((row) => String(pick(row, 'CHAPA', 'chapa'))))]
           .map((chapa) => `Funcionario ${chapa}: programacao apos a data de demissao.`);
         throw error;
+      }
+      if (!ids) {
+        const { inicio, fim } = getOperationalPeriodIso(mesRef);
+        const periodDates = [];
+        const current = new Date(`${inicio}T00:00:00Z`);
+        const last = new Date(`${fim}T00:00:00Z`);
+        while (current <= last && periodDates.length < 42) {
+          periodDates.push(current.toISOString().slice(0, 10));
+          current.setUTCDate(current.getUTCDate() + 1);
+        }
+        const suspensions = await connection.execute(
+          `select escfunc_id, dt_inicio, dt_fim from sgn_esc_pendencia_func
+            where loja = :lojaId and status = 'P'
+              and dt_inicio <= to_date(:fim, 'YYYY-MM-DD')
+              and (dt_fim is null or dt_fim >= to_date(:inicio, 'YYYY-MM-DD'))`,
+          { lojaId, inicio, fim }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        const suspendedByEmployee = new Map();
+        for (const row of suspensions.rows || []) {
+          const id = Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'));
+          if (!suspendedByEmployee.has(id)) suspendedByEmployee.set(id, []);
+          suspendedByEmployee.get(id).push({
+            inicio: formatDateValue(pick(row, 'DT_INICIO', 'dt_inicio')),
+            fim: pick(row, 'DT_FIM', 'dt_fim') ? formatDateValue(pick(row, 'DT_FIM', 'dt_fim')) : '9999-12-31'
+          });
+        }
+        const incomplete = [];
+        const rowsByEmployee = new Map();
+        for (const row of diasEscopo.rows || []) {
+          const id = Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'));
+          if (!rowsByEmployee.has(id)) rowsByEmployee.set(id, { dates: new Set(), dismissal: pick(row, 'DT_DEMISS', 'dt_demiss') });
+          if (pick(row, 'DT', 'dt')) rowsByEmployee.get(id).dates.add(formatDateValue(pick(row, 'DT', 'dt')));
+        }
+        for (const [id, item] of rowsByEmployee) {
+          const dismissal = item.dismissal ? formatDateValue(item.dismissal) : null;
+          if (periodDates.some((date) => (!dismissal || date <= dismissal)
+            && !(suspendedByEmployee.get(id) || []).some((period) => period.inicio <= date && period.fim >= date)
+            && !item.dates.has(date))) incomplete.push(id);
+        }
+        if (incomplete.length) {
+          const error = new Error('A secao possui dias sem programacao. Conclua a escala antes de oficializar.');
+          error.statusCode = 422;
+          error.details = incomplete.map((id) => `Funcionario ${id}: programacao incompleta.`);
+          throw error;
+        }
       }
       const funcionarios = new Map();
       for (const row of diasEscopo.rows || []) {

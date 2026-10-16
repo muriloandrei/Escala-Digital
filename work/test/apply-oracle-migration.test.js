@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
-test('executor accepts only the sixteen mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 16);
+test('executor accepts only the seventeen mirrored single-block migrations', () => {
+  assert.equal(migrationNames.length, 17);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);

@@ -30,6 +30,8 @@ import { TurnosSecao } from './pages/TurnosSecao';
 import { Acessos } from './pages/Acessos';
 import { PerfisAcesso } from './pages/PerfisAcesso';
 import { LiberacaoSecoes } from './pages/LiberacaoSecoes';
+import { ProgressoEscala } from './pages/ProgressoEscala';
+import { OficializacaoLojas } from './pages/OficializacaoLojas';
 import { RegrasEscala, HorariosPadrao, TiposDescanso } from './pages/ConfiguracoesEscala';
 import './styles.css';
 import './responsive.css';
@@ -167,6 +169,7 @@ function App() {
               <ShieldCheck size={18} /> Perfis de acesso
             </NavLink>
           )}
+          {user.perfil === 'ADMIN' && <NavLink to="/oficializacao-lojas"><ShieldCheck size={18} /> Oficialização por loja</NavLink>}
           {canView(user, 'liberacao-secoes') && !['LIDER', 'OPERADOR'].includes(user.perfil) && (
             <NavLink to="/liberacao-secoes">
               <LayoutGrid size={18} /> Liberação de seções
@@ -192,6 +195,7 @@ function App() {
         <Routes>
           {canSeeEscalas && <Route path="/escalas-liberadas" element={<EscalasLiberadas user={user} />} />}
           {canSeeEscalas && <Route path="/escalas/:lojaId/:mesRef" element={<EscalaMensal user={user} />} />}
+          {canSeeEscalas && ['ADMIN', 'RH', 'GERENTE'].includes(user.perfil) && <Route path="/escalas/:lojaId/:mesRef/progresso" element={<ProgressoEscala />} />}
           {canSeeEscalas && <Route path="/escalas-funcionarios" element={<EscalasFuncionarios user={user} />} />}
           {canSeeEscalas && (
             <Route path="/escalas/:lojaId/:mesRef/imprimir" element={<ImprimirEscala user={user} />} />
@@ -206,6 +210,7 @@ function App() {
           {canView(user, 'horarios-padrao') && <Route path="/horarios-padrao" element={<HorariosPadrao user={user} />} />}
           {user.perfil === 'ADMIN' && <Route path="/acessos" element={<Acessos user={user} />} />}
           {user.perfil === 'ADMIN' && <Route path="/perfis" element={<PerfisAcesso />} />}
+          {user.perfil === 'ADMIN' && <Route path="/oficializacao-lojas" element={<OficializacaoLojas />} />}
           {canView(user, 'liberacao-secoes') && !['LIDER', 'OPERADOR'].includes(user.perfil) && <Route path="/liberacao-secoes" element={<LiberacaoSecoes user={user} />} />}
           {canSeeSecoes && (
             <Route path="/secoes/:lojaId/:secaoId/subsecoes" element={<Subsecoes user={user} />} />

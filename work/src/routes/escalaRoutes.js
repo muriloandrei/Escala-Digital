@@ -7,6 +7,7 @@ const accessService = require('../services/accessService');
 const auditService = require('../services/auditService');
 const escalaEventService = require('../services/escalaEventService');
 const rmIntegrationService = require('../services/rmIntegrationService');
+const officializationService = require('../services/officializationService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { validateStandardShift } = require('../domain/shiftValidation');
 const monthlyReleaseService = require('../services/monthlyReleaseService');
@@ -23,6 +24,7 @@ const saveSchema = z.object({
   mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   operacaoId: z.string().uuid().optional(),
   edicaoRapida: z.boolean().optional(),
+  edicaoPontual: z.boolean().optional(),
   escalaOrigemId: z.number().int().positive().optional(),
   funcionarios: z.array(z.object({
     escfuncId: z.number().int().positive(),
@@ -401,8 +403,41 @@ router.get('/mensal', requirePermission('escalas', 'visualizar'), resolveLojaReq
 
     const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
     const escala = await escalaService.getEscalaMensal({ lojaId, mesRef, secoesPermitidas });
-    return res.json({ escala, periodo: getOperationalPeriodIso(mesRef) });
+    const progresso = await officializationService.getProgress({ lojaId, mesRef, secoesPermitidas, escala });
+    return res.json({ escala, periodo: getOperationalPeriodIso(mesRef), progresso });
   } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/progresso', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    if (!['ADMIN', 'RH', 'GERENTE'].includes(String(req.user?.perfil || '').toUpperCase())) {
+      return res.status(403).json({ error: 'Perfil sem permissao para consultar o progresso.' });
+    }
+    const query = z.object({
+      lojaId: z.coerce.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+    }).parse(req.query);
+    const secoesPermitidas = await getSecoesPermitidas(req, query.lojaId);
+    const progresso = await officializationService.getProgress({ ...query, secoesPermitidas });
+    return res.json({ progresso });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Loja ou mes invalidos.' });
+    return next(error);
+  }
+});
+
+router.put('/oficializacao-loja', requireAdmin, resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({ lojaId: z.number().int().positive(), habilitada: z.boolean() }).parse(req.body);
+    const found = await officializationService.setStoreEnabled(payload.lojaId, payload.habilitada);
+    if (!found) return res.status(404).json({ error: 'Loja nao encontrada.' });
+    await auditService.registerAudit({ action: 'ALTERAR_OFICIALIZACAO_LOJA', user: req.user,
+      lojaId: payload.lojaId, details: { habilitada: payload.habilitada } });
+    return res.json({ ok: true, habilitada: payload.habilitada });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Configuracao invalida.' });
     return next(error);
   }
 });
@@ -510,14 +545,27 @@ router.get('/rm/envios', requirePermission('integracao-rm', 'visualizar'), resol
   }
 });
 
-router.post('/oficializar', requireAdmin, requirePermission('escalas', 'oficializar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = z.object({
       lojaId: z.number().int().positive(),
       mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      escsecaoId: z.number().int().positive(),
-      escfuncIds: z.array(z.number().int().positive()).min(1).optional()
-    }).parse(req.body);
+      escsecaoId: z.number().int().positive()
+    }).strict().parse(req.body);
+
+    if (!['ADMIN', 'LIDER', 'GERENTE'].includes(String(req.user?.perfil || '').toUpperCase())) {
+      return res.status(403).json({ error: 'Perfil sem permissao para oficializar.' });
+    }
+    await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+    const progresso = await officializationService.getProgress({
+      lojaId: payload.lojaId, mesRef: payload.mesRef,
+      secoesPermitidas: [payload.escsecaoId]
+    });
+    if (!progresso.habilitada) return res.status(403).json({ error: 'Oficializacao nao habilitada para esta loja.' });
+    const secao = progresso.secoes.find((item) => item.escsecaoId === payload.escsecaoId);
+    if (!secao || !secao.completa || secao.criticas) {
+      return res.status(422).json({ error: 'Gere todos os dias e resolva as criticas da secao antes de oficializar.' });
+    }
 
     const preRequisitosRm = await rmIntegrationService.validarPreRequisitosRm(payload);
     if (preRequisitosRm.errors?.length) {
@@ -623,7 +671,7 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
     }
     await assertPayloadDentroDoEscopo(req, payload);
     let anteriores;
-    if (payload.edicaoRapida) {
+    if (payload.edicaoRapida || payload.edicaoPontual) {
       if (payload.funcionarios.length !== 1 || payload.funcionarios[0].dias.length !== 1) {
         return res.status(422).json({ error: 'A edicao rapida exige exatamente um funcionario e um dia.' });
       }
@@ -631,7 +679,8 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
         lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: payload.funcionarios[0].escfuncId
       })];
       if (!anteriores[0]) return res.status(422).json({ error: 'A edicao rapida exige uma escala existente para um funcionario.' });
-      const quickError = validateQuickRestWorkEdit(payload.funcionarios[0], anteriores[0].dias);
+      const quickError = validateQuickRestWorkEdit(payload.funcionarios[0], anteriores[0].dias,
+        { allowShiftChange: payload.edicaoPontual === true });
       if (quickError) return res.status(422).json({ error: quickError });
       const alteracao = buildDiaAlteracoes(anteriores[0].dias, payload.funcionarios[0].dias)[0];
       const fixos = await escalaService.listFixosEscala({ lojaId: payload.lojaId, mesRef: payload.mesRef,
@@ -646,7 +695,7 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
     }
     const errors = validateEscalaPayload(payload);
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
-    if (ausenciaErrors.length || (!payload.edicaoRapida && errors.length)) return res.status(422).json({ errors: [...errors, ...ausenciaErrors] });
+    if (ausenciaErrors.length || (!payload.edicaoRapida && !payload.edicaoPontual && errors.length)) return res.status(422).json({ errors: [...errors, ...ausenciaErrors] });
     if (!anteriores) anteriores = await Promise.all(payload.funcionarios.map((funcionario) =>
       escalaService.getEscalaFuncionarioAtual({
         lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: funcionario.escfuncId
@@ -670,7 +719,7 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
         alteracoes: buildDiaAlteracoes(anteriores[index]?.dias || [], payload.funcionarios[index].dias)
       }
     })));
-    return res.status(201).json({ saved, operacaoId, criticas: payload.edicaoRapida ? errors : [] });
+    return res.status(201).json({ saved, operacaoId, criticas: payload.edicaoRapida || payload.edicaoPontual ? errors : [] });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Formato da escala invalido.', details: error.errors });
     return next(error);

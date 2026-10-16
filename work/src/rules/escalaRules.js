@@ -45,11 +45,6 @@ function isFolgaSemanal(dia) {
   return programacao === 'F' || programacao === 'FOLGA' || programacao === 'FXF' || programacao === 'FOLGA_FIXA';
 }
 
-function isFolgaSemanalAutomatica(dia) {
-  const programacao = String(dia?.programacao || dia?.PROGRAMACAO || 'TRB').trim().toUpperCase();
-  return programacao === 'F' || programacao === 'FOLGA';
-}
-
 function isFerias(dia) {
   const programacao = String(dia?.programacao || dia?.PROGRAMACAO || dia?.hrEnt1 || dia?.HR_ENT1 || '').trim().toUpperCase();
   return programacao === 'FER' || programacao === 'FERIAS';
@@ -196,7 +191,7 @@ function validarRegrasFuncionario(funcionario, onCritica) {
     (isFuncionarioAprendiz(funcionario) ? validarTurnoAprendiz(label, dia) : validarTurnoDia(label, dia))
       .forEach((mensagem) => addCritica(mensagem, [dataIso]));
 
-    if (isFolgaSemanalAutomatica(dia)) {
+    if (isFolgaSemanal(dia)) {
       const totalFolgasSemana = (folgasPorSemana.get(weekKey) || 0) + 1;
       folgasPorSemana.set(weekKey, totalFolgasSemana);
       const limiteFolgasSemana = semanasExcecaoPosFerias.has(weekKey) ? 3 : 2;

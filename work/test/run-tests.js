@@ -42,3 +42,5 @@ require('./national-holidays.test');
 require('./quick-edit.test');
 require('./quick-edit-routes.test');
 require('./apply-oracle-migration.test');
+require('./officialization-progress.test');
+require('./officialization-routes.test');

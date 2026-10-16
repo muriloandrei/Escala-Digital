@@ -80,6 +80,12 @@ A listagem React fica em `/nova/escalas-liberadas`. O treinamento em `/nova/trei
 
 Para liberar a interface atual a todos, configure `REACT_ALLOWED_LOGINS=*` e `REACT_DEFAULT_UI=true` no ambiente do servidor. Uma allowlist parcial bloqueia os demais usuarios; `/app` nao serve mais como alternativa. Antes de publicar a inclusao da Portaria, aplique `20261009_portaria_escopo_frente_caixa.sql` no schema da aplicacao com `npm run migrations:apply -- --name 20261009_portaria_escopo_frente_caixa.sql` para preflight e depois `npm run migrations:apply -- --name 20261009_portaria_escopo_frente_caixa.sql --apply --by OPERADOR` no diretorio do release, com `ESCALA_ENV_FILE` apontando para o `.env` do servico. A migration ativa as secoes Portaria existentes e vincula os lideres de Frente de Caixa da mesma loja.
 
+### Oficializacao por loja (outubro de 2026)
+
+Antes de publicar este lote, aplique `20261016_oficializacao_por_loja.sql` no schema `ESCALAINT` usando `npm run migrations:apply -- --name 20261016_oficializacao_por_loja.sql` para o preflight e depois `npm run migrations:apply -- --name 20261016_oficializacao_por_loja.sql --apply --by OPERADOR`. O parametro nasce desligado em todas as lojas. Confira com `npm run migrations:status` e `npm run db:check-schema` antes de reiniciar o servico. Somente Admin pode habilitar lojas em **Configuracao > Oficializacao por loja**; isso libera o botao, mas nao altera o estado da integracao RM.
+
+Para gravar aprovacoes e pendencias sem transmitir ao RM, mantenha `RM_API_ENABLED=false` no `.env` do servico. Para envio real, apos validar credenciais, rede e permissoes com a equipe de RM, configure `RM_API_BASE_URL`, `RM_API_USER`, `RM_API_PASSWORD`, `RM_API_FUNCIONARIO_PATH`, `RM_API_FOLGAS_PATH` e `RM_API_FOLGAS_POST_CODCOLIGADA`; entao defina `RM_API_ENABLED=true` e reinicie o servico. Os parametros de timeout, tentativas, horas e fuso estao em `.env.example`. A habilitacao por loja nao substitui esse interruptor global; sem RM habilitado, a fila permanece `PENDENTE` para retomada controlada. Nao ative a escrita no RM de producao sem homologacao operacional.
+
 6. Abrir:
 
 ```txt

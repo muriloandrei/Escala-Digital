@@ -25,3 +25,11 @@ test('quick edit keeps apprentice shift at 05:15', () => {
   employee.dias[0].hrSai1 = '14:00';
   assert.match(validateQuickRestWorkEdit(employee, [rest]), /05:15/);
 });
+
+test('single-day edit accepts a corrected shift while another day remains in critique', () => {
+  const employee = { funcao: 'OPERADOR DE CAIXA', dias: [{
+    data: '2026-10-12', programacao: 'TRB', hrEnt1: '09:00', hrSai1: '13:00', hrEnt2: '14:10', hrSai2: '18:58'
+  }] };
+  assert.equal(validateQuickRestWorkEdit(employee, [oldDay], { allowShiftChange: true }), '');
+  assert.match(validateQuickRestWorkEdit(employee, [oldDay]), /somente alternar/);
+});

@@ -65,6 +65,45 @@ test('quick route saves a holiday rest while returning critiques; regular draft 
   }
 });
 
+test('single-day route saves a corrected work shift despite critiques on other dates', async () => {
+  const originals = {
+    assertFuncionariosPermitidos: accessService.assertFuncionariosPermitidos,
+    validateAusencias: escalaService.validateAusencias,
+    getEscalaFuncionarioAtual: escalaService.getEscalaFuncionarioAtual,
+    listFixosEscala: escalaService.listFixosEscala,
+    saveEscalasFuncionariosRevision: escalaService.saveEscalasFuncionariosRevision,
+    registerAudit: auditService.registerAudit
+  };
+  const oldDays = [
+    { DT: '2026-11-18', PROGRAMACAO: 'TRB', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' },
+    { DT: '2026-11-24', PROGRAMACAO: 'TRB', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' }
+  ];
+  let saved = 0;
+  accessService.assertFuncionariosPermitidos = async () => {};
+  escalaService.validateAusencias = async () => [];
+  escalaService.getEscalaFuncionarioAtual = async () => ({ revisao: 1, dias: oldDays });
+  escalaService.listFixosEscala = async () => [];
+  escalaService.saveEscalasFuncionariosRevision = async () => { saved += 1; return [{ revisao: 2, escprogId: 3 }]; };
+  auditService.registerAudit = async () => {};
+  try {
+    const res = response();
+    await handler('/funcionarios/revisao')({ body: { lojaId: 10, mesRef: '2026-11-01', edicaoPontual: true,
+      funcionarios: [{ escfuncId: 10, revisaoBase: 1, chapa: '000010', nome: 'Teste', funcao: 'OPERADOR DE CAIXA',
+        escsecaoId: 20, escfuncaoId: 30, dias: [{ data: '2026-11-18', programacao: 'TRB',
+          hrEnt1: '09:00', hrSai1: '13:00', hrEnt2: '14:10', hrSai2: '18:58' }] }] },
+      user: { sub: 1 } }, res, (error) => { throw error; });
+    assert.equal(res.code, 201);
+    assert.equal(saved, 1);
+  } finally {
+    accessService.assertFuncionariosPermitidos = originals.assertFuncionariosPermitidos;
+    escalaService.validateAusencias = originals.validateAusencias;
+    escalaService.getEscalaFuncionarioAtual = originals.getEscalaFuncionarioAtual;
+    escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.saveEscalasFuncionariosRevision = originals.saveEscalasFuncionariosRevision;
+    auditService.registerAudit = originals.registerAudit;
+  }
+});
+
 test('quick route moves a rest across two saves despite a temporary 5x2 critique', async () => {
   const originals = {
     assertFuncionariosPermitidos: accessService.assertFuncionariosPermitidos,

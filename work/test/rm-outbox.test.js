@@ -74,7 +74,7 @@ test('revisao aprovada ausente fica incerta e nao e marcada como enviada', async
   assert.match(updates[1].binds.erro, /Programacao oficializada nao encontrada/);
 });
 
-function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], dismissalDate = null } = {}) {
+function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], dismissalDate = null, missingDay = null } = {}) {
   const operations = [];
   const connection = {
     async execute(sql, binds) {
@@ -83,15 +83,20 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
           ? [{ COLUMN_NAME: 'STATUS' }] : [{ COLUMN_NAME: 'ATIVA' }] };
       }
       if (/select max\(p\.revisao\)/i.test(sql)) return { rows: [{ REVISAO: 7 }] };
+      if (/from sgn_esc_pendencia_func/i.test(sql)) return { rows: [] };
       if (/select distinct p\.escfunc_id/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90 }] };
       if (/select escfunc_id, dt_demiss, status from sgn_esc_funcionario/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90, DT_DEMISS: dismissalDate, STATUS: 'A' }] };
       if (/select p\.escprog_id, p\.escfunc_id, p\.revisao/i.test(sql)) {
         return { rows: selectedIds.map((id) => ({ ESCPROG_ID: 100 + id, ESCFUNC_ID: id, REVISAO: 7 })) };
       }
       if (/from sgn_esc_prog p\s+left join sgn_esc_funcionario f/i.test(sql)) {
-        return { rows: [{ ESCFUNC_ID: 90, CHAPA: '000090', NOME: 'Teste', DT_DEMISS: dismissalDate,
-          FUNCAO_DESCR: 'OPERADOR DE CAIXA', DT: new Date('2026-10-05T00:00:00Z'),
-          PROGRAMACAO: 'TRB', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' }] };
+        return { rows: Array.from({ length: 28 }, (_, index) => {
+          const date = new Date('2026-10-05T00:00:00Z');
+          date.setUTCDate(date.getUTCDate() + index);
+          return { ESCFUNC_ID: 90, CHAPA: '000090', NOME: 'Teste', DT_DEMISS: dismissalDate,
+            FUNCAO_DESCR: 'OPERADOR DE CAIXA', DT: date.toISOString().slice(0, 10),
+            PROGRAMACAO: 'TRB', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };
+        }).filter((row) => row.DT !== missingDay) };
       }
       if (/update sgn_esc_prog set oficializada/i.test(sql)) {
         operations.push('approve');
@@ -152,6 +157,15 @@ test('criticas bloqueiam oficializacao sem enfileirar envio ao RM', async () => 
   assert.deepEqual(operations, ['rollback']);
 });
 
+test('oficializacao da secao recusa um dia ausente na transacao', async () => {
+  const { service, operations } = loadEscalaService({ missingDay: '2026-10-12' });
+  await assert.rejects(
+    service.oficializarEscala({ lojaId: 35, mesRef: '2026-10-01', escsecaoId: 2003 }),
+    (error) => error.statusCode === 422 && /dias sem programacao/.test(error.message)
+  );
+  assert.deepEqual(operations, ['rollback']);
+});
+
 test('envio RM pendente nao transmite dias posteriores a demissao', async () => {
   const { service, statements } = loadService({
     enabled: true,
@@ -167,7 +181,7 @@ test('envio RM pendente nao transmite dias posteriores a demissao', async () => 
 });
 
 test('demissao no RM bloqueia oficializacao de dias posteriores sem enfileirar envio', async () => {
-  const { service, operations } = loadEscalaService({ dismissalDate: new Date('2026-10-04T00:00:00Z') });
+  const { service, operations } = loadEscalaService({ dismissalDate: '2026-10-04' });
   await assert.rejects(
     service.oficializarEscala({ lojaId: 35, mesRef: '2026-10-01', escsecaoId: 2003 }),
     (error) => error.statusCode === 422 && /demissao registrada no RM/i.test(error.message)

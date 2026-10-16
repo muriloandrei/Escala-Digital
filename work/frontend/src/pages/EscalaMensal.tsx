@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown, MoreVertical, Pencil, Play, Printer, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ChartNoAxesColumn, ChevronDown, MoreVertical, Pencil, Play, Printer, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -116,6 +116,9 @@ type CritiqueGroup = {
   marcadores: { escfuncId: number; datas: string[]; mensagem: string }[];
 };
 
+type SectionProgress = { escsecaoId: number; completa: boolean; oficializada: boolean; podeOficializar: boolean; criticas: number };
+type ScheduleProgress = { habilitada: boolean; secoes: SectionProgress[]; oficializada: boolean };
+
 export function EscalaMensal({ user }: { user: User }) {
   const { lojaId, mesRef } = useParams();
   const [params, setParams] = useSearchParams();
@@ -123,6 +126,7 @@ export function EscalaMensal({ user }: { user: User }) {
   const [periodo, setPeriodo] = useState<PeriodoOperacional | null>(null);
   const [holidays, setHolidays] = useState<Record<string, string>>({});
   const [catalogSections, setCatalogSections] = useState<Secao[]>([]);
+  const [progress, setProgress] = useState<ScheduleProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
@@ -135,9 +139,7 @@ export function EscalaMensal({ user }: { user: User }) {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [actionError, setActionError] = useState('');
-  const [scopeCritiques, setScopeCritiques] = useState<string[]>([]);
   const [critiqueGroups, setCritiqueGroups] = useState<CritiqueGroup[]>([]);
-  const [scopeCritiquesLoading, setScopeCritiquesLoading] = useState(false);
   const [scopeCritiquesError, setScopeCritiquesError] = useState('');
   const [selectedCell, setSelectedCell] = useState<{
     employee: Funcionario;
@@ -160,10 +162,11 @@ export function EscalaMensal({ user }: { user: User }) {
     const controller = new AbortController();
     setLoading(true);
     setError('');
+    setProgress(null);
     setSelectedCell(null);
     const monthQuery = new URLSearchParams({ lojaId, mesRef });
     Promise.all([
-      getJson<{ escala: EscalaMensal; periodo: PeriodoOperacional }>(
+      getJson<{ escala: EscalaMensal; periodo: PeriodoOperacional; progresso: ScheduleProgress }>(
         `/api/escalas/mensal?${monthQuery}`,
         controller.signal,
       ),
@@ -175,6 +178,7 @@ export function EscalaMensal({ user }: { user: User }) {
       .then(([month, catalog]) => {
         setEscala(month.escala);
         setPeriodo(month.periodo);
+        setProgress(month.progresso);
         setCatalogSections(catalog.secoes || []);
         setLoading(false);
       })
@@ -297,36 +301,28 @@ export function EscalaMensal({ user }: { user: User }) {
   const scopePeople = employees.filter((item) =>
     memberOfSubsection(item, subsection) &&
     (!personFilter || String(item.ESCFUNC_ID) === personFilter));
-  const scopeIdsKey = scopePeople.map((person) => Number(person.ESCFUNC_ID)).sort((a, b) => a - b).join(',');
   useEffect(() => setCritiqueGroups([]), [lojaId, mesRef]);
   useEffect(() => {
     if (!lojaId || !mesRef || !sectionId || !escala) {
-      setScopeCritiques([]);
       setCritiqueGroups([]);
-      setScopeCritiquesLoading(false);
       setScopeCritiquesError('');
       return;
     }
     const controller = new AbortController();
-    setScopeCritiques([]);
-    setScopeCritiquesLoading(true);
     setScopeCritiquesError('');
     getJson<{ criticas: string[]; grupos: CritiqueGroup[] }>(`/api/escalas/criticas?${new URLSearchParams({
-      lojaId, mesRef, escsecaoId: String(sectionId), ...(scopeIdsKey ? { escfuncIds: scopeIdsKey } : {}),
+      lojaId, mesRef, escsecaoId: String(sectionId),
     })}`, controller.signal)
-      .then(({ criticas, grupos }) => {
-        setScopeCritiques(scopeIdsKey ? criticas : []);
+      .then(({ grupos }) => {
         setCritiqueGroups(grupos || []);
-        setScopeCritiquesLoading(false);
       })
       .catch((reason) => {
         if (reason.name === 'AbortError') return;
         setCritiqueGroups([]);
         setScopeCritiquesError(reason instanceof Error ? reason.message : 'Não foi possível verificar as críticas.');
-        setScopeCritiquesLoading(false);
       });
     return () => controller.abort();
-  }, [lojaId, mesRef, sectionId, scopeIdsKey, escala]);
+  }, [lojaId, mesRef, sectionId, escala]);
   const mixedSubsectionScope = subsection !== 'all' && scopePeople.some((person) => {
     const personDays = daysByEmployee.get(String(person.ESCFUNC_ID));
     return personDays && [...personDays.values()].some((day) => daySubKey(day) !== subsection);
@@ -396,8 +392,8 @@ export function EscalaMensal({ user }: { user: User }) {
   }
 
   async function confirmOperation() {
-    if (!pendingAction || !lojaId || !mesRef || !sectionId || !scopePeople.length) return;
-    if (mixedSubsectionScope) {
+    if (!pendingAction || !lojaId || !mesRef || !sectionId || (pendingAction !== 'oficializar' && !scopePeople.length)) return;
+    if (pendingAction !== 'oficializar' && mixedSubsectionScope) {
       setActionError('Esta subseção possui funcionário transferido durante o mês. Revise a programação desse funcionário individualmente.');
       return;
     }
@@ -413,9 +409,9 @@ export function EscalaMensal({ user }: { user: User }) {
       };
       if (action === 'oficializar') {
         const response = await postJson<{ affectedRows: number; rm?: { status?: string } }>(
-          '/api/escalas/oficializar', payload,
+          '/api/escalas/oficializar', { lojaId: payload.lojaId, mesRef: payload.mesRef, escsecaoId: payload.escsecaoId },
         );
-        setActionMessage(`${scopeName} oficializada · ${response.affectedRows} dia(s). Envio RM: ${response.rm?.status || 'a verificar'}.`);
+        setActionMessage(`${section?.DESCR || 'Seção'} oficializada · ${response.affectedRows} funcionário(s). Envio RM: ${response.rm?.status || 'a verificar'}.`);
       } else {
         const response = await postJson<{
           resultado: { criada?: boolean; resetada?: boolean; funcionarios?: number; criticas?: unknown[] };
@@ -488,12 +484,13 @@ export function EscalaMensal({ user }: { user: User }) {
           const result = await postJson<{ result: { removed: boolean } }>('/api/escalas/fixos/remover', base);
           if (!result.result?.removed) throw new Error('O fixo não foi encontrado. Atualize a escala.');
         } else await postJson('/api/escalas/fixos', { ...base, PROGRAMACAO: 'FXF', JUSTIFICATIVA: 'Distribuição rápida na grade' });
-        const readback = await getJson<{ escala: EscalaMensal }>(`/api/escalas/mensal?${new URLSearchParams({ lojaId, mesRef })}`).catch(() => null);
+        const readback = await getJson<{ escala: EscalaMensal; progresso: ScheduleProgress }>(`/api/escalas/mensal?${new URLSearchParams({ lojaId, mesRef })}`).catch(() => null);
         const recorded = readback?.escala.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && iso(item.DT) === date);
         if (!readback || (nextFixed ? recorded?.PROGRAMACAO !== nextFixed : Boolean(recorded))) {
           throw new Error('A leitura de volta não confirmou o fixo. Atualize a escala antes de tentar novamente.');
         }
         setEscala(readback.escala);
+        setProgress(readback.progresso);
       } else {
         if (!Number.isInteger(Number(day.REVISAO))) throw new Error('Revisão do funcionário indisponível. Atualize a escala.');
         const personDays = (escala?.dias || []).filter((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID));
@@ -518,12 +515,13 @@ export function EscalaMensal({ user }: { user: User }) {
           if (!confirmation?.confirmada) throw new Error('Não foi possível confirmar a gravação. Atualize a escala antes de tentar novamente.');
         }
         if (saved && saved.saved?.length !== 1) throw new Error('A revisão não foi confirmada. Atualize a escala antes de tentar novamente.');
-        const readback = await getJson<{ escala: EscalaMensal }>(`/api/escalas/mensal?${new URLSearchParams({ lojaId, mesRef })}`).catch(() => null);
+        const readback = await getJson<{ escala: EscalaMensal; progresso: ScheduleProgress }>(`/api/escalas/mensal?${new URLSearchParams({ lojaId, mesRef })}`).catch(() => null);
         const recorded = readback?.escala.dias.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && iso(item.DT) === date);
         if (!recorded || String(recorded.PROGRAMACAO || '').toUpperCase() !== changed.programacao || (saved && Number(recorded.REVISAO) !== Number(saved.saved?.[0]?.revisao))) {
           throw new Error('A leitura de volta não confirmou o dia. Atualize a escala antes de tentar novamente.');
         }
         setEscala(readback!.escala);
+        setProgress(readback!.progresso);
       }
       setActionMessage(`${employee.NOME}: ${day ? nextRest ? 'folga' : 'trabalho' : nextFixed === 'FXF' ? 'folga fixa' : nextFixed === 'TRB' ? 'horário fixo' : 'dia vazio'} atualizado.${Number(day?.OFICIALIZADA) === 1 ? ' Reoficialização necessária.' : ''}`);
     } catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Não foi possível alterar o dia.'); }
@@ -558,8 +556,10 @@ export function EscalaMensal({ user }: { user: User }) {
   const scopeIds = new Set(scopePeople.map((person) => Number(person.ESCFUNC_ID)));
   const scopedDays = (escala?.dias || []).filter((day) =>
     scopeIds.has(Number(day.ESCFUNC_ID)) && (subsection === 'all' || daySubKey(day) === subsection));
-  const scopeOfficial = scopedDays.length > 0 && scopedDays.every((day) => Number(day.OFICIALIZADA) === 1);
   const scopeHasOfficial = scopedDays.some((day) => Number(day.OFICIALIZADA) === 1);
+  const sectionProgress = progress?.secoes.find((item) => item.escsecaoId === Number(sectionId));
+  const canOfficialize = ['ADMIN', 'LIDER', 'GERENTE'].includes(user.perfil);
+  const canSeeProgress = ['ADMIN', 'RH', 'GERENTE'].includes(user.perfil);
 
   return (
     <main className="content schedule-page">
@@ -572,7 +572,7 @@ export function EscalaMensal({ user }: { user: User }) {
           <p>
             {monthlyTitle}
             {periodo ? ` · ${formatDate(periodo.inicio)} a ${formatDate(periodo.fim)}` : ''}
-            {escala?.status ? ` · ${escala.status}` : ''}
+            {progress?.oficializada ? ' · OFICIALIZADA' : escala?.status ? ` · ${escala.status}` : ''}
           </p>
         </div>
         <div className="heading-actions">
@@ -582,6 +582,11 @@ export function EscalaMensal({ user }: { user: User }) {
           >
             <Printer size={16} /> Imprimir
           </Link>
+          {canOfficialize && !sectionProgress?.oficializada && <button className="button success" type="button"
+            disabled={loading || actionBusy || !progress?.habilitada || !sectionProgress?.podeOficializar || escala?.status === 'FINALIZADA'}
+            title={!progress?.habilitada ? 'Oficialização desabilitada nesta loja' : !sectionProgress?.completa ? 'Gere todos os dias da seção' : sectionProgress.criticas ? 'Resolva as críticas da seção' : undefined}
+            onClick={() => { setActionError(''); setPendingAction('oficializar'); }}><ShieldCheck size={16} /> Oficializar</button>}
+          {canSeeProgress && <Link className="button secondary" to={`/escalas/${encodeURIComponent(lojaId || '')}/${encodeURIComponent(mesRef || '')}/progresso`}><ChartNoAxesColumn size={16} /> Progresso da escala</Link>}
           <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}>
             <RefreshCw size={16} /> Atualizar
           </button>
@@ -792,13 +797,7 @@ export function EscalaMensal({ user }: { user: User }) {
                   >
                     <Play size={15} /> Gerar escala
                   </button>
-                  {user.perfil === 'ADMIN' && !scopeOfficial && scopedDays.length > 0 && (
-                    <button className="button secondary" type="button" disabled={loading || mixedSubsectionScope || scopeCritiquesLoading || !!scopeCritiquesError || scopeCritiques.length > 0} title={scopeCritiques.length ? 'Resolva as críticas deste escopo antes de oficializar' : undefined} onClick={() => {
-                      setActionError('');
-                      setPendingAction('oficializar');
-                    }}><ShieldCheck size={15} /> Oficializar</button>
-                  )}
-                  {scopeOfficial && <span>Escopo oficializado</span>}
+                  {sectionProgress?.oficializada && <span>Seção oficializada</span>}
                 </div>
               )}
               {!visibleEmployees.length ? (
@@ -1082,11 +1081,13 @@ export function EscalaMensal({ user }: { user: User }) {
               {pendingAction === 'gerar' ? 'Gerar escala' : pendingAction === 'resetar' ? 'Resetar escala' : 'Oficializar escala'}
             </h2>
             <p>
-              Loja {lojaId} · {section?.DESCR} · {scopeName} · {scopePeople.length} funcionário(s).
+              {pendingAction === 'oficializar'
+                ? `Loja ${lojaId} · seção ${section?.DESCR} completa.`
+                : `Loja ${lojaId} · ${section?.DESCR} · ${scopeName} · ${scopePeople.length} funcionário(s).`}
             </p>
             <p>
               {pendingAction === 'oficializar'
-                ? 'A oficialização deste escopo aprova a revisão atual e inicia o envio ao RM. As demais seções e subseções continuam editáveis.'
+                ? 'Todas as subseções desta seção serão aprovadas. A pendência de envio será registrada; a transmissão ao RM depende da integração configurada no servidor. As demais seções continuam editáveis.'
                 : pendingAction === 'gerar'
                 ? 'A geração recalcula os dias editáveis deste escopo. Alterações manuais futuras podem ser substituídas.'
                 : 'O reset remove os dias gerados deste escopo e restaura folgas fixas, férias e afastamentos protegidos.'}

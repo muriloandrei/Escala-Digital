@@ -15,7 +15,8 @@ function normalizeLoja(row) {
     LOJA: pick(row, 'LOJA', 'loja'),
     QTDE_BRIGADISTA_EXIGIDO: pick(row, 'QTDE_BRIGADISTA_EXIGIDO', 'qtde_brigadista_exigido'),
     QTDE_BRIGADISTA_EXIGIDO_DIA: pick(row, 'QTDE_BRIGADISTA_EXIGIDO_DIA', 'qtde_brigadista_exigido_dia'),
-    CODCOLIGADA: pick(row, 'CODCOLIGADA', 'codcoligada')
+    CODCOLIGADA: pick(row, 'CODCOLIGADA', 'codcoligada'),
+    OFICIALIZACAO_HABILITADA: Number(pick(row, 'OFICIALIZACAO_HABILITADA', 'oficializacao_habilitada') || 0)
   };
 }
 
@@ -287,8 +288,9 @@ async function listLojas() {
   return withConnection(async (connection) => {
     const columns = await getTableColumns(connection, 'SGN_ESC_LOJA');
     const codcoligadaSelect = columns.has('CODCOLIGADA') ? 'codcoligada' : 'cast(null as number) as codcoligada';
+    const oficializacaoSelect = columns.has('OFICIALIZACAO_HABILITADA') ? 'oficializacao_habilitada' : 'cast(0 as number) as oficializacao_habilitada';
     const result = await connection.execute(
-      `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, ${codcoligadaSelect}
+      `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, ${codcoligadaSelect}, ${oficializacaoSelect}
        from sgn_esc_loja
        order by loja`,
       {},

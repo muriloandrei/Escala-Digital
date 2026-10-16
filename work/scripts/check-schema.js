@@ -1,6 +1,7 @@
 const { initOraclePool, closeOraclePool, withConnection, oracledb } = require('../src/db/oracle');
 
 const required = {
+  SGN_ESC_LOJA: ['LOJA', 'OFICIALIZACAO_HABILITADA'],
   SGN_ESC_PROG: ['ESCPROG_ID', 'MES_REF', 'ESCFUNC_ID', 'ESCSECAO_ID', 'REVISAO', 'ATIVA'],
   SGN_ESC_PROG_DIA: ['ESCPROGDIA_ID', 'ESCPROG_ID', 'DT', 'PROGRAMACAO'],
   SGN_ESC_FUNCIONARIO: ['ESCFUNC_ID', 'LOJA', 'DT_DEMISS', 'ESCSUBSECAO_ID', 'STATUS'],

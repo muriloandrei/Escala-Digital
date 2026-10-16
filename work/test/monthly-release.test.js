@@ -1506,6 +1506,16 @@ test('monthly scale detail adds active Portaria to an existing scale without unr
   assert.deepEqual(filtrados.map((funcionario) => funcionario.ESCFUNC_ID), [1, 4]);
 });
 
+test('monthly scale keeps migrated porteiro catalog row alongside historical Portaria days', () => {
+  const rows = [{ ESCFUNC_ID: 4, ESCSECAO_ID: 25, COD_SECAO: '010.02.012', SECAO_DESCR: 'Portaria' }];
+  const funcionariosCatalogo = [
+    { ESCFUNC_ID: 4, ESCSECAO_ID: 20, COD_SECAO: '010.02.002', SECAO_DESCR: 'Frente de Caixa' },
+    { ESCFUNC_ID: 5, ESCSECAO_ID: 99, COD_SECAO: '010.03.001', SECAO_DESCR: 'Mercearia' }
+  ];
+  const filtrados = _private.filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo, rows);
+  assert.deepEqual(filtrados.map((funcionario) => funcionario.ESCFUNC_ID), [4]);
+});
+
 test('monthly scale read keeps days through dismissal and flags later saved days', () => {
   const rows = [
     { ESCFUNC_ID: 1, DT_DEMISS: new Date(2026, 9, 18), DT: new Date(2026, 9, 17) },
