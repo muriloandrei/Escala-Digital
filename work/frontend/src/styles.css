@@ -209,6 +209,13 @@ a {
 .button.success:hover:not(:disabled) { background: #0f5b37; }
 .button.success:disabled { opacity: .46; cursor: not-allowed; }
 .progress-list { padding: 0 18px; }
+.confirm-dialog.progress-dialog { width: min(760px, calc(100vw - 32px)); max-height: min(760px, calc(100dvh - 32px)); overflow: auto; }
+.progress-dialog .progress-list { padding: 0; }
+.progress-modal-head, .progress-modal-actions { display: flex; align-items: center; gap: 12px; }
+.progress-modal-head { justify-content: space-between; flex-wrap: wrap; border-bottom: 1px solid #e1e7ee; padding-bottom: 12px; }
+.progress-modal-head h2 { margin-bottom: 2px; }
+.progress-modal-head span { color: #53657b; font-size: 12px; }
+.progress-modal-actions { margin-left: auto; }
 .progress-row { padding: 18px 0; border-bottom: 1px solid #e1e7ee; }
 .progress-row:last-child { border-bottom: 0; }
 .progress-row-heading, .progress-row-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -329,6 +336,8 @@ tbody tr:hover {
   color: #2056b7;
   font-weight: 650;
 }
+button.open-link { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
+.open-link + .open-link, .open-link + .icon-action { margin-left: 12px; }
 .open-link:hover {
   text-decoration: underline;
 }

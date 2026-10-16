@@ -21,7 +21,8 @@ const migrationNames = [
   '20261015_funcionario_status_rm.sql',
   '20261015_portaria_preparar_subsecao.sql',
   '20261015_portaria_migrar_frente_caixa.sql',
-  '20261016_oficializacao_por_loja.sql'
+  '20261016_oficializacao_por_loja.sql',
+  '20261016_unificar_portaria_porteiro.sql'
 ];
 
 function parseSinglePlsqlBlock(source) {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import {
   CalendarDays,
   GraduationCap,
@@ -30,7 +30,6 @@ import { TurnosSecao } from './pages/TurnosSecao';
 import { Acessos } from './pages/Acessos';
 import { PerfisAcesso } from './pages/PerfisAcesso';
 import { LiberacaoSecoes } from './pages/LiberacaoSecoes';
-import { ProgressoEscala } from './pages/ProgressoEscala';
 import { OficializacaoLojas } from './pages/OficializacaoLojas';
 import { RegrasEscala, HorariosPadrao, TiposDescanso } from './pages/ConfiguracoesEscala';
 import './styles.css';
@@ -40,6 +39,11 @@ import './directory.css';
 import './print.css';
 
 const LAST_TRAINING_STAGE = 16;
+
+function LegacyProgressRedirect() {
+  const { lojaId, mesRef } = useParams();
+  return <Navigate replace to={`/escalas/${encodeURIComponent(lojaId || '')}/${encodeURIComponent(mesRef || '')}?progresso=1`} />;
+}
 
 function App() {
   const navigate = useNavigate();
@@ -195,7 +199,7 @@ function App() {
         <Routes>
           {canSeeEscalas && <Route path="/escalas-liberadas" element={<EscalasLiberadas user={user} />} />}
           {canSeeEscalas && <Route path="/escalas/:lojaId/:mesRef" element={<EscalaMensal user={user} />} />}
-          {canSeeEscalas && ['ADMIN', 'RH', 'GERENTE'].includes(user.perfil) && <Route path="/escalas/:lojaId/:mesRef/progresso" element={<ProgressoEscala />} />}
+          {canSeeEscalas && ['ADMIN', 'RH', 'GERENTE'].includes(user.perfil) && <Route path="/escalas/:lojaId/:mesRef/progresso" element={<LegacyProgressRedirect />} />}
           {canSeeEscalas && <Route path="/escalas-funcionarios" element={<EscalasFuncionarios user={user} />} />}
           {canSeeEscalas && (
             <Route path="/escalas/:lojaId/:mesRef/imprimir" element={<ImprimirEscala user={user} />} />

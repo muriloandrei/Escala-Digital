@@ -2,14 +2,25 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
-test('executor accepts only the seventeen mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 17);
+test('executor accepts only the eighteen mirrored single-block migrations', () => {
+  assert.equal(migrationNames.length, 18);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
     assert.match(migration.sql, /\bend;$/i);
     assert.equal(migration.checksum.length, 64);
   }
+});
+
+test('Portaria unification preserves officialized records and loja 999', () => {
+  const { sql } = readMigration('20261016_unificar_portaria_porteiro.sql');
+  assert.match(sql, /p\.oficializada = 0/);
+  assert.match(sql, /p\.mes_ref >= trunc\(sysdate, 'MM'\)/);
+  assert.match(sql, /s\.codfilial <> 999/);
+  assert.match(sql, /f\.escsubsecao_id = v_porteiro_id/);
+  assert.match(sql, /nvl\(f\.escsubsecao_id, -1\) <> v_porteiro_id/);
+  assert.match(sql, /if v_conflitos > 0 then/);
+  assert.doesNotMatch(sql, /\bcommit\b/i);
 });
 
 test('Portaria preparation creates only missing subsections and rejects ambiguous destination', () => {

@@ -780,6 +780,30 @@ function aplicarHistoricoSubsecoes(rows = [], transfers = []) {
   return rows;
 }
 
+function projetarPortariaNaFrente(rows = [], catalogo = [], mesRef) {
+  if (isMesFinalizado(mesRef)) return rows;
+  const atuais = new Map(catalogo.map((funcionario) => [
+    String(pick(funcionario, 'ESCFUNC_ID', 'escfunc_id')), funcionario
+  ]));
+  for (const row of rows) {
+    const atual = atuais.get(String(pick(row, 'ESCFUNC_ID', 'escfunc_id')));
+    if (!atual || !/PORTEIRO/i.test(String(pick(atual, 'SUBSECAO_DESCR', 'subsecao_descr') || ''))
+      || !/FRENTE.*CAIXA/i.test(String(pick(atual, 'SECAO_DESCR', 'secao_descr') || ''))) continue;
+    const secaoAntiga = isPortariaSection(row);
+    const subsecaoAntiga = Number(pick(row, 'ESCSUBSECAO_ID', 'escsubsecao_id'))
+      !== Number(pick(atual, 'ESCSUBSECAO_ID', 'escsubsecao_id'));
+    if (!secaoAntiga && !subsecaoAntiga) continue;
+    if (secaoAntiga) {
+      row.ESCSECAO_ID = pick(atual, 'ESCSECAO_ID', 'escsecao_id');
+      row.COD_SECAO = pick(atual, 'COD_SECAO', 'cod_secao');
+      row.SECAO_DESCR = pick(atual, 'SECAO_DESCR', 'secao_descr');
+    }
+    row.ESCSUBSECAO_ID = pick(atual, 'ESCSUBSECAO_ID', 'escsubsecao_id');
+    row.SUBSECAO_DESCR = pick(atual, 'SUBSECAO_DESCR', 'subsecao_descr');
+  }
+  return rows;
+}
+
 function filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo = [], rows = []) {
   const secoesDaEscala = new Set((rows || [])
     .map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id')))
@@ -1416,6 +1440,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       { lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     aplicarHistoricoSubsecoes(rows, transferHistory.rows || []);
+    projetarPortariaNaFrente(rows, funcionariosCatalogo, mesRef);
     const inicio = getOperationalPeriod(mesRef).inicio;
     const fim = getMonthEndIso(mesRef);
     let ausencias = await listAusenciasEscalaMensalComConnection(connection, { lojaId, inicio, fim });
@@ -3131,6 +3156,7 @@ module.exports = {
     situacaoDaAlteracao,
     encontrarErrosAusencias,
     aplicarHistoricoSubsecoes,
+    projetarPortariaNaFrente,
     aplicarHorarioBaseNosDias
   }
 };

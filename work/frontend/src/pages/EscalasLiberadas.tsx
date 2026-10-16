@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, ChartNoAxesColumn, Plus, RefreshCw, Search, Archive } from 'lucide-react';
+import { Plus, RefreshCw, Search, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { canCreate, getJson, postJson, type Loja, type ResumoEscala, type User } from '../api';
+import { ProgressoEscalaModal } from './ProgressoEscala';
 
 const months = [
   'Janeiro',
@@ -51,6 +52,7 @@ export function EscalasLiberadas({ user }: { user: User }) {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [inactiveTarget, setInactiveTarget] = useState<ResumoEscala | null>(null);
+  const [progressTarget, setProgressTarget] = useState<{ lojaId: string; mesRef: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
   const [message, setMessage] = useState('');
@@ -275,9 +277,9 @@ export function EscalasLiberadas({ user }: { user: User }) {
                           to={`/escalas/${encodeURIComponent(item.LOJA)}/${encodeURIComponent(key)}`}
                           aria-label={`Abrir escala da loja ${item.LOJA} de ${monthLabel(key)}`}
                         >
-                          <ArrowUpRight size={17} /> Abrir
+                          Abrir escala
                         </Link>
-                        {['ADMIN', 'RH', 'GERENTE'].includes(user.perfil) && <Link className="open-link" to={`/escalas/${encodeURIComponent(item.LOJA)}/${encodeURIComponent(key)}/progresso`} aria-label={`Ver progresso da escala da loja ${item.LOJA}`}><ChartNoAxesColumn size={17} /> Ver progresso</Link>}
+                        {['ADMIN', 'RH', 'GERENTE'].includes(user.perfil) && <button className="open-link" type="button" onClick={() => setProgressTarget({ lojaId: String(item.LOJA), mesRef: key })} aria-label={`Ver progresso da escala da loja ${item.LOJA}`}>Ver progresso</button>}
                         {user.perfil === 'ADMIN' && <button className="icon-action" type="button" title={`Inativar escala da Loja ${item.LOJA} em ${monthLabel(key)}`} aria-label={`Inativar escala da Loja ${item.LOJA} em ${monthLabel(key)}`} onClick={() => {
                           setActionError('');
                           setInactiveTarget(item);
@@ -315,6 +317,7 @@ export function EscalasLiberadas({ user }: { user: User }) {
         {actionError && <div className="notice error" role="alert">{actionError}</div>}
         <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setInactiveTarget(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={inactivateSchedule}>{busy ? 'Inativando...' : 'Confirmar inativação'}</button></div>
       </div></div>}
+      {progressTarget && <ProgressoEscalaModal lojaId={progressTarget.lojaId} mesRef={progressTarget.mesRef} onClose={() => setProgressTarget(null)} />}
     </main>
   );
 }

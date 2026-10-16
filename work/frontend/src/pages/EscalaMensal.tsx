@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ChartNoAxesColumn, ChevronDown, MoreVertical, Pencil, Play, Printer, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ChevronDown, MoreVertical, Pencil, Play, Printer, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -26,6 +26,7 @@ import { nextFixedState } from '../quickFixedCycle';
 import { compareEmployeesByShift } from '../scheduleOrder';
 import { groupScheduleSections } from '../scheduleSections';
 import { permiteEscala } from '../employeeStatus';
+import { ProgressoEscalaModal } from './ProgressoEscala';
 
 function iso(value: string | null | undefined) {
   return String(value || '').slice(0, 10);
@@ -220,13 +221,17 @@ export function EscalaMensal({ user }: { user: User }) {
   );
   const subsections = useMemo(() => {
     return (sectionCatalog?.SUBSECOES || [])
+      .filter((item: Subsecao) => escala?.status === 'FINALIZADA'
+        || Number(sectionId) !== Number(sectionGroups.front?.ESCSECAO_ID)
+        || !/portaria/i.test(item.DESCR)
+        || employees.some((person) => Number(person.ESCSUBSECAO_ID) === Number(item.ESCSUBSECAO_ID)))
       .map((item: Subsecao) => [String(item.ESCSUBSECAO_ID), item.STATUS === 'I' ? `${item.DESCR} (inativa)` : item.DESCR] as const)
       .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
-  }, [sectionCatalog]);
+  }, [sectionCatalog, escala?.status, sectionId, sectionGroups.front, employees]);
   const frontSubsections = catalogSections.find((item) => Number(item.ESCSECAO_ID) === Number(sectionGroups.front?.ESCSECAO_ID))?.SUBSECOES || [];
   const frontEmployees = (escala?.funcionarios || []).filter((item) => Number(item.ESCSECAO_ID) === Number(sectionGroups.front?.ESCSECAO_ID));
   const showFrontSubsections = !!sectionGroups.front && Number(selectedTopLevelId) === Number(sectionGroups.front.ESCSECAO_ID);
-  const navigationSubsections = showFrontSubsections && sectionGroups.portaria.length
+  const navigationSubsections = showFrontSubsections
     ? frontSubsections.filter((item) => !/portaria/i.test(item.DESCR)
       || frontEmployees.some((person) => Number(person.ESCSUBSECAO_ID) === Number(item.ESCSUBSECAO_ID)))
       .map((item) => [String(item.ESCSUBSECAO_ID), item.STATUS === 'I' ? `${item.DESCR} (inativa)` : item.DESCR] as const)
@@ -586,7 +591,7 @@ export function EscalaMensal({ user }: { user: User }) {
             disabled={loading || actionBusy || !progress?.habilitada || !sectionProgress?.podeOficializar || escala?.status === 'FINALIZADA'}
             title={!progress?.habilitada ? 'Oficialização desabilitada nesta loja' : !sectionProgress?.completa ? 'Gere todos os dias da seção' : sectionProgress.criticas ? 'Resolva as críticas da seção' : undefined}
             onClick={() => { setActionError(''); setPendingAction('oficializar'); }}><ShieldCheck size={16} /> Oficializar</button>}
-          {canSeeProgress && <Link className="button secondary" to={`/escalas/${encodeURIComponent(lojaId || '')}/${encodeURIComponent(mesRef || '')}/progresso`}><ChartNoAxesColumn size={16} /> Progresso da escala</Link>}
+          {canSeeProgress && <button className="button secondary" type="button" onClick={() => updateFilter('progresso', '1')}>Progresso da escala</button>}
           <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}>
             <RefreshCw size={16} /> Atualizar
           </button>
@@ -1125,6 +1130,7 @@ export function EscalaMensal({ user }: { user: User }) {
           </div>
         </div>
       )}
+      {canSeeProgress && params.get('progresso') === '1' && lojaId && mesRef && <ProgressoEscalaModal lojaId={lojaId} mesRef={mesRef} onClose={() => updateFilter('progresso', '')} />}
     </main>
   );
 }

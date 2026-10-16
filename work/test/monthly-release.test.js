@@ -1516,6 +1516,26 @@ test('monthly scale keeps migrated porteiro catalog row alongside historical Por
   assert.deepEqual(filtrados.map((funcionario) => funcionario.ESCFUNC_ID), [4]);
 });
 
+test('open month projects old Estacionamento days and orphan Portaria subsection into Porteiro', () => {
+  const rows = [
+    { ESCFUNC_ID: 4, ESCSECAO_ID: 25, COD_SECAO: '016.02.012', SECAO_DESCR: 'Estacionamento', ESCSUBSECAO_ID: 634, SUBSECAO_DESCR: null, OFICIALIZADA: 1 },
+    { ESCFUNC_ID: 4, ESCSECAO_ID: 20, COD_SECAO: '016.02.002', SECAO_DESCR: 'Frente de Caixa', ESCSUBSECAO_ID: 634, SUBSECAO_DESCR: 'Portaria' }
+  ];
+  const catalogo = [{ ESCFUNC_ID: 4, ESCSECAO_ID: 20, COD_SECAO: '016.02.002', SECAO_DESCR: 'Frente de Caixa', ESCSUBSECAO_ID: 612, SUBSECAO_DESCR: 'Porteiro' }];
+  _private.projetarPortariaNaFrente(rows, catalogo, '2099-11-01');
+  assert.deepEqual(rows.map((row) => [row.ESCSECAO_ID, row.ESCSUBSECAO_ID, row.SUBSECAO_DESCR]), [
+    [20, 612, 'Porteiro'], [20, 612, 'Porteiro']
+  ]);
+  assert.equal(rows[0].OFICIALIZADA, 1);
+});
+
+test('finished month keeps original Portaria scope for history', () => {
+  const rows = [{ ESCFUNC_ID: 4, ESCSECAO_ID: 25, COD_SECAO: '016.02.012', SECAO_DESCR: 'Estacionamento' }];
+  const catalogo = [{ ESCFUNC_ID: 4, ESCSECAO_ID: 20, SECAO_DESCR: 'Frente de Caixa', ESCSUBSECAO_ID: 612, SUBSECAO_DESCR: 'Porteiro' }];
+  _private.projetarPortariaNaFrente(rows, catalogo, '2020-09-01');
+  assert.equal(rows[0].ESCSECAO_ID, 25);
+});
+
 test('monthly scale read keeps days through dismissal and flags later saved days', () => {
   const rows = [
     { ESCFUNC_ID: 1, DT_DEMISS: new Date(2026, 9, 18), DT: new Date(2026, 9, 17) },
