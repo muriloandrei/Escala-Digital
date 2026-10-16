@@ -1574,7 +1574,7 @@ test('full-period absence excludes employee, while partial absence and vacation 
   assert.ok(buildFuncionarioRascunho(funcionario, null, '2026-10-01', '2026-10-05', 0, null, options(fullVacation)).dias.length > 0);
 });
 
-test('status F keeps November eligible after October vacation, while other non-active statuses do not', () => {
+test('statuses F and P remain eligible while inactive statuses do not', () => {
   const base = {
     ESCFUNC_ID: 901, CHAPA: '901', NOME: 'Funcionario em ferias', LOJA: 10,
     ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
@@ -1587,6 +1587,8 @@ test('status F keeps November eligible after October vacation, while other non-a
   const ferias = buildFuncionariosLiberacao([{ ...base, STATUS: 'F' }], [], '2026-11-01', '2026-11-02', comFixo)[0];
   assert.ok(ferias.dias.length > 0);
   assert.ok(ferias.dias.some((dia) => dia.programacao === 'TRB'));
+  assert.equal(monthlyReleaseService._private.temDiasElegiveis({ ...base, STATUS: 'P' }, '2026-11-01', '2026-11-02'), true);
+  assert.ok(buildFuncionariosLiberacao([{ ...base, STATUS: 'P' }], [], '2026-11-01', '2026-11-02', comFixo)[0].dias.length > 0);
   for (const status of ['I', 'S', 'D']) {
     assert.equal(monthlyReleaseService._private.temDiasElegiveis({ ...base, STATUS: status }, '2026-11-01', '2026-11-02'), false);
     assert.deepEqual(buildFuncionariosLiberacao([{ ...base, STATUS: status }], [], '2026-11-01', '2026-11-02', comFixo)[0].dias, []);

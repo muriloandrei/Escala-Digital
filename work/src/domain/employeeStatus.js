@@ -1,5 +1,5 @@
 function permiteEscala(status) {
-  return ['A', 'F'].includes(String(status || 'A').trim().toUpperCase());
+  return ['A', 'F', 'P'].includes(String(status || 'A').trim().toUpperCase());
 }
 
 module.exports = { permiteEscala };

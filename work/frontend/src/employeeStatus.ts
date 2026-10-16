@@ -1,3 +1,3 @@
 export function permiteEscala(status?: string | null) {
-  return ['A', 'F'].includes(String(status || 'A').trim().toUpperCase());
+  return ['A', 'F', 'P'].includes(String(status || 'A').trim().toUpperCase());
 }

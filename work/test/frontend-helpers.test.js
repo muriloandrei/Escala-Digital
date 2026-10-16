@@ -10,6 +10,13 @@ async function loadFrontendHelper(filename) {
   return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 }
 
+test('frontend includes status P in employees eligible for schedules', async () => {
+  const { permiteEscala } = await loadFrontendHelper('employeeStatus.ts');
+  assert.equal(permiteEscala('P'), true);
+  assert.equal(permiteEscala(' p '), true);
+  assert.equal(permiteEscala('I'), false);
+});
+
 test('operation id uses secure random values when randomUUID is unavailable on HTTP', async () => {
   const { createOperationId } = await loadFrontendHelper('operationId.ts');
   assert.match(createOperationId({ getRandomValues: (buffer) => buffer.fill(42) }), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
