@@ -31,6 +31,15 @@ test('Portaria unification allows older Front revisions but rejects true conflic
   assert.match(sql, /p2\.ativa = 1 and p2\.oficializada = 0/);
 });
 
+test('Portaria unification creates only missing Porteiro destinations', () => {
+  const { sql } = readMigration('20261016_unificar_portaria_porteiro.sql');
+  assert.match(sql, /if v_destinos <> 1 then/);
+  assert.match(sql, /if v_porteiros > 1 or \(v_porteiros = 1 and v_porteiros_ativos <> 1\) then/);
+  assert.match(sql, /if v_porteiros = 0 then\s+insert into sgn_esc_subsecao/);
+  assert.match(sql, /sgn_esc_subsecao_seq\.nextval, v_frente_id, 'Porteiro', 'A'/);
+  assert.doesNotMatch(sql, /\bcommit\b/i);
+});
+
 test('Portaria preparation creates only missing subsections and rejects ambiguous destination', () => {
   const { sql } = readMigration('20261015_portaria_preparar_subsecao.sql');
   assert.match(sql, /if v_frentes <> 1 then/);

@@ -4,6 +4,8 @@ declare
   v_destinos number;
   v_frente_id number;
   v_porteiro_id number;
+  v_porteiros number;
+  v_porteiros_ativos number;
   v_conflitos number;
 begin
   for origem in (
@@ -17,18 +19,26 @@ begin
          or exists (select 1 from sgn_esc_fixo_escala x where x.escsecao_id = s.escsecao_id
                        and x.mes_ref >= trunc(sysdate, 'MM')))
   ) loop
-    select count(*), min(frente.escsecao_id), min(sub.escsubsecao_id)
-      into v_destinos, v_frente_id, v_porteiro_id
+    select count(*), min(frente.escsecao_id)
+      into v_destinos, v_frente_id
       from sgn_esc_secao frente
-      join sgn_esc_subsecao sub on sub.escsecao_id = frente.escsecao_id
      where frente.codcoligada = origem.codcoligada and frente.codfilial = origem.codfilial
-       and frente.status = 'A' and sub.status = 'A'
+       and frente.status = 'A'
        and regexp_like(trim(frente.cod_secao), '(^|[.])02[.]002$')
-       and regexp_like(upper(frente.descr), 'FRENTE.*CAIXA')
-       and upper(trim(sub.descr)) = 'PORTEIRO';
+       and regexp_like(upper(frente.descr), 'FRENTE.*CAIXA');
     if v_destinos <> 1 then
       raise_application_error(-20001, 'Secao 02.012 ' || origem.escsecao_id ||
-        ': esperado exatamente um destino Frente de Caixa > Porteiro; encontrados ' || v_destinos);
+        ': esperado exatamente uma Frente de Caixa ativa; encontradas ' || v_destinos);
+    end if;
+
+    select count(*), count(case when sub.status = 'A' then 1 end), min(sub.escsubsecao_id)
+      into v_porteiros, v_porteiros_ativos, v_porteiro_id
+      from sgn_esc_subsecao sub
+     where sub.escsecao_id = v_frente_id
+       and upper(trim(sub.descr)) = 'PORTEIRO';
+    if v_porteiros > 1 or (v_porteiros = 1 and v_porteiros_ativos <> 1) then
+      raise_application_error(-20001, 'Frente de Caixa ' || v_frente_id ||
+        ': subseção Porteiro duplicada ou inativa; revise o cadastro.');
     end if;
 
     select count(*) into v_conflitos
@@ -69,6 +79,11 @@ begin
     if v_conflitos > 0 then
       raise_application_error(-20004, 'Secao 02.012 ' || origem.escsecao_id ||
         ': transferencia de subseção pendente.');
+    end if;
+
+    if v_porteiros = 0 then
+      insert into sgn_esc_subsecao (escsubsecao_id, escsecao_id, descr, status, dt_hr_incl)
+      values (sgn_esc_subsecao_seq.nextval, v_frente_id, 'Porteiro', 'A', sysdate);
     end if;
   end loop;
 
