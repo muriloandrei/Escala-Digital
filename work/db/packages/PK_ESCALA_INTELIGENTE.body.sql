@@ -1,4 +1,4 @@
--- Baseado no corpo enviado em 14/10/2026. Compare com USER_SOURCE antes de compilar.
+-- Baseado no corpo em uso enviado em 19/10/2026. Compare com USER_SOURCE antes de compilar.
 -- Compilar conectado ao schema que possui SGN_USUARIO e PK_ESCALA_INTELIGENTE.
 create or replace package body PK_ESCALA_INTELIGENTE is
 
@@ -8,7 +8,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
     v_loja              number;
     v_perfil            varchar2(30);
     v_usuario_id        number;
-    v_origem_id_atual   number;
+    v_existe_id         number;
     v_perfil_atual      varchar2(30);
     v_hash_atual        varchar2(100);
     v_data_senha_atual  date;
@@ -62,8 +62,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
           select count(*) into v_secao_total
             from ESCALAINT.SGN_ESC_SECAO
            where codfilial = v_loja and status = 'A'
-             and (regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA')
-               or regexp_like(trim(cod_secao), '(^|[.])02[.]012$'));
+             and regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA');
         elsif rec.chapa is not null and rec.codcoligada is not null then
           select count(distinct f.escsecao_id), min(f.escsecao_id)
             into v_secao_total, v_secao_id
@@ -80,45 +79,34 @@ create or replace package body PK_ESCALA_INTELIGENTE is
         end if;
       end if;
 
-      select count(*), min(usuario_id)
-        into v_total, v_usuario_id
-        from ESCALAINT.SGN_ESC_USUARIO
-       where upper(login) = v_login;
-      if v_total > 1 then
-        v_ignorados := v_ignorados + 1;
-        dbms_output.put_line('USUARIO IGNORADO: ' || v_login || ' - login duplicado no destino.');
-        continue;
-      end if;
-
+      v_usuario_id := rec.usuario_id;
       select count(*) into v_total
         from ESCALAINT.SGN_ESC_USUARIO
-       where origem_usuario_id = rec.usuario_id
-         and (v_usuario_id is null or usuario_id <> v_usuario_id);
+       where upper(trim(login)) = v_login
+         and usuario_id <> v_usuario_id;
       if v_total > 0 then
         v_ignorados := v_ignorados + 1;
-        dbms_output.put_line('USUARIO IGNORADO: ' || v_login || ' - ID de origem vinculado a outra conta.');
+        dbms_output.put_line('USUARIO IGNORADO: ' || v_login || ' - login ja vinculado a outro usuario_id no destino.');
         continue;
       end if;
 
-      if v_usuario_id is null then
-        select ESCALAINT.SGN_ESC_USUARIO_SEQ.nextval into v_usuario_id from dual;
+      select count(*) into v_existe_id
+        from ESCALAINT.SGN_ESC_USUARIO
+       where usuario_id = v_usuario_id;
+
+      if v_existe_id = 0 then
         insert into ESCALAINT.SGN_ESC_USUARIO
           (usuario_id, login, nome, senha_hash, perfil, status, loja_principal,
            origem_usuario_id, dt_hr_ult_senha_origem, dt_hr_incl)
         values
           (v_usuario_id, v_login, rec.nome, lower(rec.senha), v_perfil, 'A', v_loja,
-           rec.usuario_id, rec.dt_hr_ult_senha, sysdate);
+           v_usuario_id, rec.dt_hr_ult_senha, sysdate);
         v_inseridos := v_inseridos + 1;
       else
-        select origem_usuario_id, perfil, senha_hash, dt_hr_ult_senha_origem, dt_hr_incl
-          into v_origem_id_atual, v_perfil_atual, v_hash_atual, v_data_senha_atual, v_data_inclusao
+        select perfil, senha_hash, dt_hr_ult_senha_origem, dt_hr_incl
+          into v_perfil_atual, v_hash_atual, v_data_senha_atual, v_data_inclusao
           from ESCALAINT.SGN_ESC_USUARIO
          where usuario_id = v_usuario_id;
-        if v_origem_id_atual is not null and v_origem_id_atual <> rec.usuario_id then
-          v_ignorados := v_ignorados + 1;
-          dbms_output.put_line('USUARIO IGNORADO: ' || v_login || ' - ID de origem divergente.');
-          continue;
-        end if;
         if upper(v_perfil_atual) in ('ADMIN', 'CONTROLADORIA') then
           v_ignorados := v_ignorados + 1;
           dbms_output.put_line('USUARIO IGNORADO: ' || v_login || ' - perfil global preservado.');
@@ -134,10 +122,11 @@ create or replace package body PK_ESCALA_INTELIGENTE is
         end if;
 
         update ESCALAINT.SGN_ESC_USUARIO
-           set nome = rec.nome,
+           set login = v_login,
+               nome = rec.nome,
                perfil = v_perfil,
                loja_principal = v_loja,
-               origem_usuario_id = rec.usuario_id,
+               origem_usuario_id = v_usuario_id,
                dt_hr_ult_senha_origem = rec.dt_hr_ult_senha,
                senha_hash = case when v_trocar_senha = 1 then lower(rec.senha) else senha_hash end
          where usuario_id = v_usuario_id;
@@ -161,15 +150,13 @@ create or replace package body PK_ESCALA_INTELIGENTE is
              select escsecao_id from ESCALAINT.SGN_ESC_SECAO
               where (v_secao_id is not null and escsecao_id = v_secao_id)
                  or (v_secao_id is null and codfilial = v_loja and status = 'A'
-                     and (regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA')
-                       or regexp_like(trim(cod_secao), '(^|[.])02[.]012$')))
+                     and regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA'))
            );
         for sec in (
           select escsecao_id from ESCALAINT.SGN_ESC_SECAO
            where (v_secao_id is not null and escsecao_id = v_secao_id)
               or (v_secao_id is null and codfilial = v_loja and status = 'A'
-                  and (regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA')
-                    or regexp_like(trim(cod_secao), '(^|[.])02[.]012$')))
+                  and regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA'))
         ) loop
           merge into ESCALAINT.SGN_ESC_USUARIO_SECAO dest
           using (select v_usuario_id usuario_id, sec.escsecao_id escsecao_id from dual) src
@@ -202,15 +189,9 @@ create or replace package body PK_ESCALA_INTELIGENTE is
     v_atualizados      number := 0;
   begin
     -- Loja
-    for rec1 in (select l.nro loja, nvl(b.nro_func_total, 0) nro_func_total,
-                        nvl(b.nro_func_dia, 0) nro_func_dia, l.codcoligada
-                   from V_LOJAS l
-                   left join SGN_BRIGADA_INCENDIO b on b.loja_id = l.loja_id
-                  where b.loja_id is not null
-                     or exists (select 1 from PFUNC f
-                                 where f.nroempresa = l.nro
-                                   and f.codcoligada = l.codcoligada
-                                   and f.datademissao is null)) loop
+    for rec1 in (select l.nro loja, b.nro_func_total, b.nro_func_dia, l.codcoligada
+                   from SGN_BRIGADA_INCENDIO b, V_LOJAS l
+                  where l.loja_id = b.loja_id) loop
       update ESCALAINT.SGN_ESC_LOJA a
          set a.qtde_brigadista_exigido = rec1.nro_func_total,
              a.qtde_brigadista_exigido_dia = rec1.nro_func_dia,
@@ -218,9 +199,8 @@ create or replace package body PK_ESCALA_INTELIGENTE is
        where a.loja = rec1.loja;
       if sql%rowcount = 0 then
         insert into ESCALAINT.SGN_ESC_LOJA
-          (escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, codcoligada)
-        values (ESCALAINT.SGN_ESC_LOJA_SEQ.nextval, rec1.loja, rec1.nro_func_total,
-                rec1.nro_func_dia, rec1.codcoligada);
+          (loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, codcoligada)
+        values (rec1.loja, rec1.nro_func_total, rec1.nro_func_dia, rec1.codcoligada);
       end if;
     end loop;
     commit;
@@ -265,7 +245,8 @@ create or replace package body PK_ESCALA_INTELIGENTE is
 
     dbms_output.put_line('--- INICIANDO PROCESSAMENTO DE FUNCIONARIOS ---');
     for rec1 in (select a.codcoligada, a.nroempresa loja, a.chapa, a.nome, a.dataadmissao,
-                        a.datademissao, a.codsecao, a.codfuncao, a.codfilial, a.cpf_func
+                        a.datademissao, a.codsecao, a.codfuncao, a.codfilial, a.cpf_func,
+                        a.codsituacao
                    from PFUNC a
                   where a.datademissao is null or a.datademissao >= to_date('01/06/2026', 'dd/mm/yyyy')) loop
       v_total_lidos := v_total_lidos + 1;
@@ -279,6 +260,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
       v_reg_func.dt_hr_incl := sysdate;
       v_reg_func.codfilial := rec1.codfilial;
       v_reg_func.cpf := rec1.cpf_func;
+      v_reg_func.status := rec1.codsituacao;
 
       begin
         select a.coligadaanteriortransf, a.chapaanteriortransf, b.sexo
@@ -349,7 +331,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
              a.escsecao_id = v_reg_func.escsecao_id, a.escfuncao_id = v_reg_func.escfuncao_id,
              a.codcoligada_ant = v_reg_func.codcoligada_ant, a.chapa_ant = v_reg_func.chapa_ant,
              a.dt_demiss = v_reg_func.dt_demiss, a.codfilial = v_reg_func.codfilial,
-             a.cpf = v_reg_func.cpf,
+             a.cpf = v_reg_func.cpf, a.status = v_reg_func.status,
              a.escsubsecao_id = case
                when v_reg_func.escsubsecao_id is not null then v_reg_func.escsubsecao_id
                when a.escsecao_id <> v_reg_func.escsecao_id then null
@@ -366,13 +348,14 @@ create or replace package body PK_ESCALA_INTELIGENTE is
         insert into ESCALAINT.SGN_ESC_FUNCIONARIO
           (codcoligada, loja, chapa, nome, sexo, dt_admiss, brigadista, escsecao_id,
            escfuncao_id, codcoligada_ant, chapa_ant, hr_ent1, hr_sai1, hr_ent2, hr_sai2,
-           dt_hr_incl, dt_demiss, codfilial, cpf, escsubsecao_id)
+           dt_hr_incl, dt_demiss, codfilial, cpf, status, escsubsecao_id)
         values
           (v_reg_func.codcoligada, v_reg_func.loja, v_reg_func.chapa, v_reg_func.nome,
            v_reg_func.sexo, v_reg_func.dt_admiss, v_reg_func.brigadista, v_reg_func.escsecao_id,
            v_reg_func.escfuncao_id, v_reg_func.codcoligada_ant, v_reg_func.chapa_ant,
            v_reg_func.hr_ent1, v_reg_func.hr_sai1, v_reg_func.hr_ent2, v_reg_func.hr_sai2,
            v_reg_func.dt_hr_incl, v_reg_func.dt_demiss, v_reg_func.codfilial, v_reg_func.cpf,
+           v_reg_func.status,
            v_reg_func.escsubsecao_id)
         returning escfunc_id into v_reg_func.escfunc_id;
         v_inseridos := v_inseridos + 1;

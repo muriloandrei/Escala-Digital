@@ -13,8 +13,12 @@ test('package existente chama a integracao de usuarios apos funcionarios sem mud
   assert.match(packageBody, /from SGN_USUARIO\b/i);
   assert.doesNotMatch(packageBody, /from SGN_USUARIO\s+where\s+status/i);
   assert.match(packageBody, /rec\.senha is null/i);
+  assert.match(packageBody, /v_usuario_id := rec\.usuario_id;/i);
+  assert.match(packageBody, /where usuario_id = v_usuario_id;/i);
+  assert.match(packageBody, /set login = v_login,/i);
+  assert.doesNotMatch(packageBody, /SGN_ESC_USUARIO_SEQ\.nextval/i);
   assert.match(packageBody, /instr\(v_login, 'FISCAL'\) = 0/i);
-  assert.equal((packageBody.match(/\(\^\|\[\.\]\)02\[\.\]012\$/g) || []).length, 4);
+  assert.equal((packageBody.match(/\(\^\|\[\.\]\)02\[\.\]012\$/g) || []).length, 1);
   assert.match(packageBody, /'FÉRIAS', 'FER'/);
 });
 
@@ -25,9 +29,8 @@ test('preparo SQL preserva contas e cria somente os metadados de origem necessar
   assert.doesNotMatch(prepare, /AUTH_VERSION/);
 });
 
-test('carga registra lojas com funcionarios ativos mesmo sem brigada e associa Portaria a Frente de Caixa', () => {
-  assert.match(packageBody, /from V_LOJAS l\s+left join SGN_BRIGADA_INCENDIO b/i);
-  assert.match(packageBody, /exists \(select 1 from PFUNC f[\s\S]*?f\.datademissao is null\)/i);
+test('carga preserva lojas do corpo em uso e associa Porteiro a Frente de Caixa', () => {
+  assert.match(packageBody, /from SGN_BRIGADA_INCENDIO b, V_LOJAS l\s+where l\.loja_id = b\.loja_id/i);
   assert.match(packageBody, /regexp_like\(trim\(rec1\.codsecao\), '\(\^\|\[\.\]\)02\[\.\]012\$'\)/i);
   assert.match(packageBody, /upper\(ss\.descr\) = 'PORTEIRO'/i);
   assert.match(packageBody, /regexp_like\(trim\(s\.cod_secao\), '\(\^\|\[\.\]\)02\[\.\]002\$'\)/i);
@@ -36,8 +39,11 @@ test('carga registra lojas com funcionarios ativos mesmo sem brigada e associa P
   assert.doesNotMatch(packageBody, /and exists\s*\(select 1 from ESCALAINT\.SGN_ESC_FUNCAO fn/i);
   assert.match(packageBody, /a\.escsubsecao_id = case/i);
   assert.match(packageBody, /when rec1\.datademissao is null and v_funcao_porteiro = 0 and exists \([\s\S]*?upper\(trim\(sub\.descr\)\) = 'PORTEIRO'\) then null/i);
-  assert.doesNotMatch(packageBody, /a\.status = v_reg_func\.status/i);
-  assert.match(packageBody, /ESCALAINT\.SGN_ESC_LOJA_SEQ\.nextval/i);
+  assert.match(packageBody, /a\.codsituacao/i);
+  assert.match(packageBody, /v_reg_func\.status := rec1\.codsituacao;/i);
+  assert.match(packageBody, /a\.status = v_reg_func\.status/i);
+  assert.match(packageBody, /cpf, status, escsubsecao_id\)/i);
+  assert.doesNotMatch(packageBody, /SGN_ESC_LOJA_SEQ\.nextval/i);
 });
 
 test('limpeza da subsecao Porteiro preserva a programacao e a loja 999', () => {
