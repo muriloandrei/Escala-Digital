@@ -10,6 +10,7 @@ ref=main
 apply=false
 operator=
 expected_sha=
+package_confirmed=false
 
 for arg in "$@"; do
   case "$arg" in
@@ -17,6 +18,7 @@ for arg in "$@"; do
     --sha=*) expected_sha=${arg#*=} ;;
     --apply) apply=true ;;
     --by=*) operator=${arg#*=} ;;
+    --package-confirmed) package_confirmed=true ;;
     *) printf 'Argumento desconhecido: %s\n' "$arg" >&2; exit 2 ;;
   esac
 done
@@ -96,9 +98,23 @@ if [[ -n "$new_migrations" ]]; then
   printf 'Migrations alteradas desde o release ativo: todas confirmadas no Oracle.\n'
 fi
 
+new_packages=$(git -C "$release" diff --name-only "$running_sha" "$sha" -- 'work/db/packages/*.sql')
+if [[ -n "$new_packages" ]]; then
+  printf 'Packages Oracle alteradas desde o release ativo:\n%s\n' "$new_packages"
+  if [[ "$package_confirmed" != true ]]; then
+    printf 'Compare o corpo com o banco, compile e confirme USER_ERRORS vazio e STATUS VALID.\n'
+    if [[ "$apply" == true ]]; then
+      printf 'Para publicar, repita com --package-confirmed apos validar a package no Oracle.\n' >&2
+      exit 1
+    fi
+  fi
+fi
+
 printf 'Preflight concluido. Ativo: %s. Candidato: %s.\n' "$running_sha" "$sha"
 if [[ "$apply" != true ]]; then
-  printf 'Nenhuma troca feita. Para publicar, repita com --sha=%s --apply --by=LOGIN.\n' "$sha"
+  package_flag=
+  if [[ -n "$new_packages" ]]; then package_flag=' --package-confirmed'; fi
+  printf 'Nenhuma troca feita. Para publicar, repita com --sha=%s --apply --by=LOGIN%s.\n' "$sha" "$package_flag"
   exit 0
 fi
 if [[ "$running_sha" == "$sha" ]]; then
