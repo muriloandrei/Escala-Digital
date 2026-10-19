@@ -1330,8 +1330,12 @@ async function listDiasSecaoAtual({ lojaId, mesRef, escsecaoId }) {
 }
 
 function filtrarCabecalhosInativosSemDias(rows) {
-  return rows.filter((row) => permiteEscala(pick(row, 'FUNCIONARIO_STATUS', 'funcionario_status'))
-    || pick(row, 'ESCPROGDIA_ID', 'escprogdia_id'));
+  return rows.filter((row) => {
+    if (pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')) return true;
+    if (!permiteEscala(pick(row, 'FUNCIONARIO_STATUS', 'funcionario_status'))) return false;
+    const secaoCadastro = pick(row, 'CADASTRO_SECAO_ID', 'cadastro_secao_id');
+    return !secaoCadastro || Number(secaoCadastro) === Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'));
+  });
 }
 
 async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
@@ -1364,6 +1368,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           p.chapa,
           p.escfunc_id,
           p.escsecao_id,
+          f.escsecao_id as cadastro_secao_id,
           p.escfuncao_id,
           f.nome,
           ${dtDemissSelect},
@@ -2872,6 +2877,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
             )
             and ${ativaSql}
             and ${secaoAtivaSql}
+            and exists (select 1 from sgn_esc_prog_dia d where d.escprog_id = p.escprog_id)
           for update of p.oficializada wait 5`,
         binds,
         { outFormat: oracledb.OUT_FORMAT_OBJECT }

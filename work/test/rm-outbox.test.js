@@ -76,8 +76,10 @@ test('revisao aprovada ausente fica incerta e nao e marcada como enviada', async
 
 function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], dismissalDate = null, missingDay = null } = {}) {
   const operations = [];
+  const statements = [];
   const connection = {
     async execute(sql, binds) {
+      statements.push({ sql, binds });
       if (/user_tab_columns/i.test(sql)) {
         return { rows: binds.tableName === 'SGN_ESC_SECAO'
           ? [{ COLUMN_NAME: 'STATUS' }] : [{ COLUMN_NAME: 'ATIVA' }] };
@@ -128,7 +130,7 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
   };
   const source = fs.readFileSync(path.join(__dirname, '../src/services/escalaService.js'), 'utf8');
   vm.runInNewContext(source, { module, require: (name) => dependencies[name], console });
-  return { service: module.exports, operations };
+  return { service: module.exports, operations, statements };
 }
 
 test('oficializacao grava pendencia e evento antes do commit', async () => {
@@ -137,6 +139,13 @@ test('oficializacao grava pendencia e evento antes do commit', async () => {
   assert.equal(result.affectedRows, 1);
   assert.equal(result.operacaoId, 'op-queue');
   assert.deepEqual(operations, ['approve', 'queue', 'event', 'commit']);
+});
+
+test('oficializacao ignora cabecalhos sem dias ao selecionar programacoes', async () => {
+  const { service, statements } = loadEscalaService();
+  await service.oficializarEscala({ lojaId: 35, mesRef: '2026-10-01', escsecaoId: 2003 });
+  const selection = statements.find(({ sql }) => /select p\.escprog_id, p\.escfunc_id, p\.revisao/i.test(sql));
+  assert.match(selection.sql, /exists \(select 1 from sgn_esc_prog_dia d where d\.escprog_id = p\.escprog_id\)/i);
 });
 
 test('falha ao registrar pendencia reverte a oficializacao', async () => {

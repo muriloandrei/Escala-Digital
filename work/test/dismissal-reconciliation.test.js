@@ -192,6 +192,20 @@ test('future inactive header is hidden while historical days remain visible', ()
   assert.deepEqual(visible.map((row) => row.ESCFUNC_ID), [91, 92, 93]);
 });
 
+test('empty header from a previous section is hidden after an employee changes section', () => {
+  const { service } = loadService();
+  const rows = [
+    { ESCFUNC_ID: 24597, ESCSECAO_ID: 4673, CADASTRO_SECAO_ID: 4678,
+      FUNCIONARIO_STATUS: 'A', ESCPROGDIA_ID: null },
+    { ESCFUNC_ID: 50, ESCSECAO_ID: 4673, CADASTRO_SECAO_ID: 4673,
+      FUNCIONARIO_STATUS: 'A', ESCPROGDIA_ID: null },
+    { ESCFUNC_ID: 51, ESCSECAO_ID: 4673, CADASTRO_SECAO_ID: 4678,
+      FUNCIONARIO_STATUS: 'A', ESCPROGDIA_ID: 100 }
+  ];
+  const visible = service._private.filtrarCabecalhosInativosSemDias(rows);
+  assert.deepEqual(visible.map((row) => row.ESCFUNC_ID), [50, 51]);
+});
+
 test('audit failure rolls back the automatic dismissal adjustment', async () => {
   const { service, connection, calls } = loadService({ failEvent: true });
   await assert.rejects(
