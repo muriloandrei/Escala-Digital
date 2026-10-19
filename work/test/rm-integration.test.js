@@ -6,7 +6,7 @@ process.env.ORACLE_USER ||= 'test';
 process.env.ORACLE_PASSWORD ||= 'test';
 process.env.ORACLE_CONNECT_STRING ||= 'localhost/XEPDB1';
 
-const { _private } = require('../src/services/rmIntegrationService');
+const { consultarFolgasFuncionarioMes, _private } = require('../src/services/rmIntegrationService');
 
 test('monta DELETE do RM com data direta retornada pela API', () => {
   const path = _private.buildDeleteFolgaPath(
@@ -84,6 +84,56 @@ test('rejeita resposta RM incompleta ou com datas fora do periodo', () => {
   assert.throws(() => _private.validarFolgasConsultadasRm({}, [{ DATA: '2026-11-02' }], periodo));
   assert.doesNotThrow(() => _private.validarFolgasConsultadasRm({ items: [] }, [], periodo));
   assert.doesNotThrow(() => _private.validarFolgasConsultadasRm({}, [{ DATA: '2026-11-01' }], periodo));
+});
+
+test('aceita somente o aviso 0003 do RM como consulta de folgas vazia', () => {
+  const periodo = { inicio: '2026-11-02', fim: '2026-12-06' };
+  const semRegistros = {
+    messages: [{ code: '0003', type: 'info', detail: 'Nenhum registro foi encontrado no banco de dados.' }],
+    length: 0,
+    data: null
+  };
+  const folgas = _private.extrairFolgasConsultadasRm(semRegistros);
+  assert.deepEqual(folgas, []);
+  assert.doesNotThrow(() => _private.validarFolgasConsultadasRm(semRegistros, folgas, periodo));
+
+  for (const resposta of [
+    null,
+    '',
+    { ...semRegistros, messages: [{ code: '0003', type: 'erro' }] },
+    { ...semRegistros, messages: [{ code: '0004', type: 'info' }] },
+    { ...semRegistros, length: 1 },
+    { ...semRegistros, messages: [...semRegistros.messages, { code: '0004', type: 'erro' }] }
+  ]) {
+    assert.throws(() => _private.validarFolgasConsultadasRm(
+      resposta, _private.extrairFolgasConsultadasRm(resposta), periodo));
+  }
+});
+
+test('consulta folgas do RM sem registros sem iniciar escrita', async () => {
+  const previousFetch = global.fetch;
+  const previousBaseUrl = process.env.RM_API_BASE_URL;
+  const methods = [];
+  process.env.RM_API_BASE_URL = 'http://localhost:1';
+  global.fetch = async (_url, options) => {
+    methods.push(options.method || 'GET');
+    const body = methods.length === 1
+      ? [{ CODSITUACAO: 'A', CODTABFOLGA: '035.1499', CODCOLIGADA: 1 }]
+      : { messages: [{ code: '0003', type: 'info', detail: 'Nenhum registro foi encontrado no banco de dados.' }], length: 0, data: null };
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
+  try {
+    const result = await consultarFolgasFuncionarioMes({
+      cpf: '12345678901', inicio: '2026-11-02', fim: '2026-12-06', codColigadaFallback: 1
+    });
+    assert.deepEqual(result.folgas, []);
+    assert.deepEqual(result.datas, []);
+    assert.deepEqual(methods, ['GET', 'GET']);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousBaseUrl === undefined) delete process.env.RM_API_BASE_URL;
+    else process.env.RM_API_BASE_URL = previousBaseUrl;
+  }
 });
 
 test('RM does not repeat uncertain writes but can retry read requests', async () => {

@@ -85,6 +85,15 @@ function toArrayResult(body) {
   return [body];
 }
 
+function extrairFolgasConsultadasRm(body) {
+  if (!body || typeof body !== 'object') return [body];
+  const semRegistros = !Array.isArray(body) && body.data === null && body.length === 0
+    && Array.isArray(body.messages) && body.messages.length === 1
+    && String(body.messages[0]?.code) === '0003'
+    && String(body.messages[0]?.type).toLowerCase() === 'info';
+  return semRegistros ? [] : toArrayResult(body);
+}
+
 function formatRmDate(value, options = {}) {
   const date = formatDate(value);
   const time = options.endOfDay ? '23:59:59' : '00:00:00';
@@ -279,7 +288,7 @@ async function getFolgasExistentes({ codTabFolga, inicio, fim }) {
     formatRmDate(fim, { endOfDay: true })
   ]);
   const resposta = await requestRm(`${rmConfig.folgasPath}?filter=${encodeURIComponent(filter)}`);
-  const folgas = toArrayResult(resposta);
+  const folgas = extrairFolgasConsultadasRm(resposta);
   validarFolgasConsultadasRm(resposta, folgas, { inicio, fim });
   return folgas;
 }
@@ -831,6 +840,7 @@ module.exports = {
     buildDeleteFolgaPath,
     getFuncionarioRmData,
     getFolgaKey,
+    extrairFolgasConsultadasRm,
     validarFolgasConsultadasRm,
     pick
   }
