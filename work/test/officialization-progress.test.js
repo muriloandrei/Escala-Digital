@@ -49,3 +49,19 @@ test('full suspension is excluded and partial suspension does not require missin
   const full = buildProgress({ ...input, suspensoes: [{ ESCFUNC_ID: 42, DT_INICIO: '2026-11-02', DT_FIM: '2026-11-08' }] });
   assert.deepEqual(full.secoes, []);
 });
+
+test('RM-projected absence is visible without counting as a persisted officialization day', () => {
+  const absence = { ESCFUNC_ID: 42, DT_INIC: '2026-11-05', DT_FIM: '2026-11-08' };
+  const projected = week().slice(3).map((day) => ({
+    ...day, PROGRAMACAO: 'AFA', HR_ENT1: 'AFA', HR_SAI1: 'AFA',
+    HR_ENT2: 'AFA', HR_SAI2: 'AFA', AUSENCIA_OBRIGATORIA: 1, AUSENCIA_PROJETADA: 1
+  }));
+  const escala = { dias: [...week().slice(0, 3), ...projected], ausencias: [absence] };
+  const progress = buildProgress({ escala, secoes: [section], pessoas: [person],
+    periodo: period, lojaId: 10, mesRef: '2026-11-01' });
+  assert.equal(progress.secoes[0].preenchidos, 3);
+  assert.equal(progress.secoes[0].completa, false);
+  const fullAbsence = buildProgress({ escala: { dias: projected, ausencias: [{ ...absence, DT_INIC: period.inicio }] },
+    secoes: [section], pessoas: [person], periodo: period, lojaId: 10, mesRef: '2026-11-01' });
+  assert.deepEqual(fullAbsence.secoes, []);
+});

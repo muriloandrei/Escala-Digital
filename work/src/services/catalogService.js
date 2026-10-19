@@ -934,7 +934,7 @@ async function listAusenciasByLojaMes(lojaId, inicio, fim) {
        join sgn_esc_funcionario f
          on (f.escfunc_id = a.escfunc_id or f.chapa = a.chapa)
        where f.loja = :lojaId
-         and a.dt_inic <= to_date(:fim, 'YYYY-MM-DD')
+         and a.dt_inic < to_date(:fim, 'YYYY-MM-DD') + 1
          and nvl(a.dt_fim, a.dt_inic) >= to_date(:inicio, 'YYYY-MM-DD')
        order by a.dt_inic, a.chapa`,
       { lojaId: lojaCodigo, inicio, fim },

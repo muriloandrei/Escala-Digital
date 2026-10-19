@@ -23,6 +23,7 @@ require('./normalizar-fixos-loja16.test');
 require('./corrigir-escala-portaria-operador-311.test');
 require('./registrar-loja.test');
 require('./absence-validation.test');
+require('./absence-projection.test');
 require('./suspension-permissions.test');
 require('./rm-integration.test');
 require('./rm-outbox.test');

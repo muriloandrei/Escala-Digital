@@ -503,6 +503,60 @@ function encontrarAusenciaFuncionario(indiceAusencias, row, dataIso) {
   return null;
 }
 
+function projetarDiasAusentes(rows, funcionarios, ausencias, inicio, fim) {
+  const indice = criarIndiceAusencias(ausencias);
+  const existentes = new Set(rows
+    .filter((row) => pick(row, 'DT', 'dt'))
+    .map((row) => `${pick(row, 'ESCFUNC_ID', 'escfunc_id')}|${formatDateValue(pick(row, 'DT', 'dt'))}`));
+  const projetados = [];
+  const datas = [];
+  const atual = new Date(`${inicio}T00:00:00Z`);
+  const ultima = new Date(`${fim}T00:00:00Z`);
+  while (atual <= ultima && datas.length < 42) {
+    datas.push(atual.toISOString().slice(0, 10));
+    atual.setUTCDate(atual.getUTCDate() + 1);
+  }
+  for (const funcionario of funcionarios) {
+    if (!permiteEscala(pick(funcionario, 'STATUS', 'status'))) continue;
+    const escfuncId = pick(funcionario, 'ESCFUNC_ID', 'escfunc_id');
+    const admissao = formatDateValue(pick(funcionario, 'DT_ADMISS', 'dt_admiss'));
+    const demissao = formatDateValue(pick(funcionario, 'DT_DEMISS', 'dt_demiss'));
+    for (const data of datas) {
+      if ((admissao && data < admissao) || (demissao && data > demissao)
+        || existentes.has(`${escfuncId}|${data}`)) continue;
+      const ausencia = encontrarAusenciaFuncionario(indice, funcionario, data);
+      if (!ausencia) continue;
+      const motivo = pick(ausencia, 'MOTIVO', 'motivo') || 'Ausencia';
+      const sigla = normalizarAusenciaSigla(motivo);
+      projetados.push({
+        ESCFUNC_ID: escfuncId,
+        CHAPA: pick(funcionario, 'CHAPA', 'chapa'),
+        NOME: pick(funcionario, 'NOME', 'nome'),
+        ESCSECAO_ID: pick(funcionario, 'ESCSECAO_ID', 'escsecao_id'),
+        COD_SECAO: pick(funcionario, 'COD_SECAO', 'cod_secao'),
+        SECAO_DESCR: pick(funcionario, 'SECAO_DESCR', 'secao_descr'),
+        ESCSUBSECAO_ID: pick(funcionario, 'ESCSUBSECAO_ID', 'escsubsecao_id'),
+        SUBSECAO_DESCR: pick(funcionario, 'SUBSECAO_DESCR', 'subsecao_descr'),
+        ESCFUNCAO_ID: pick(funcionario, 'ESCFUNCAO_ID', 'escfuncao_id'),
+        FUNCAO_DESCR: pick(funcionario, 'FUNCAO_DESCR', 'funcao_descr'),
+        FUNCIONARIO_STATUS: pick(funcionario, 'STATUS', 'status'),
+        DT_DEMISS: pick(funcionario, 'DT_DEMISS', 'dt_demiss'),
+        DT: data,
+        PROGRAMACAO: sigla,
+        HR_ENT1: sigla,
+        HR_SAI1: sigla,
+        HR_ENT2: sigla,
+        HR_SAI2: sigla,
+        AUSENCIA_OBRIGATORIA: 1,
+        AUSENCIA_PROJETADA: 1,
+        MOTIVO_AUSENCIA: motivo
+      });
+      existentes.add(`${escfuncId}|${data}`);
+    }
+  }
+  return projetados;
+}
+
 async function listAusenciasEscalaMensalComConnection(connection, { lojaId, inicio, fim }) {
   const result = await connection.execute(
     `select distinct
@@ -517,7 +571,7 @@ async function listAusenciasEscalaMensalComConnection(connection, { lojaId, inic
        join sgn_esc_funcionario f
          on (f.escfunc_id = a.escfunc_id or f.chapa = a.chapa)
       where f.loja = :lojaId
-        and a.dt_inic <= to_date(:fim, 'YYYY-MM-DD')
+        and a.dt_inic < to_date(:fim, 'YYYY-MM-DD') + 1
         and nvl(a.dt_fim, a.dt_inic) >= to_date(:inicio, 'YYYY-MM-DD')
       order by a.dt_inic, a.chapa`,
     { lojaId: Number(lojaId), inicio, fim },
@@ -1507,6 +1561,9 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       row.AUSENCIA_OBRIGATORIA = 1;
       row.MOTIVO_AUSENCIA = motivo;
     });
+    const diasAusentes = projetarDiasAusentes(rows, funcionariosCatalogo, ausencias, inicio, fim);
+    aplicarHistoricoSubsecoes(diasAusentes, transferHistory.rows || []);
+    rows.push(...diasAusentes);
     const funcionariosMap = new Map();
     const secoesMap = new Map();
     const ensureSecaoMap = (secao) => {
@@ -1586,7 +1643,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       revisao: latestRevision,
       status: getMesStatus(mesRef, latestRevision),
       oficializada: rows.some((row) => Number(pick(row, 'OFICIALIZADA', 'oficializada') || 0) === 1) ? 1 : 0,
-      dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id')),
+      dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id') || row.AUSENCIA_PROJETADA),
       pendenciasDesligamento,
       ajustesDesligamento,
       funcionarios: [...funcionariosMap.values()],
@@ -3161,6 +3218,7 @@ module.exports = {
     appendMudancaEscala,
     situacaoDaAlteracao,
     encontrarErrosAusencias,
+    projetarDiasAusentes,
     aplicarHistoricoSubsecoes,
     projetarPortariaNaFrente,
     aplicarHorarioBaseNosDias

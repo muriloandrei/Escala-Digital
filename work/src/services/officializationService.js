@@ -62,7 +62,7 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
         if ((person.DT_DEMISS && date > dateKey(person.DT_DEMISS)) || isSuspended(person, date)) continue;
         expected += 1;
         const day = days.get(`${escsecaoId}|${date}`);
-        if (day) filled += 1;
+        if (day && !day.AUSENCIA_PROJETADA) filled += 1;
         if (Number(day?.OFICIALIZADA) === 1) official += 1;
       }
     }

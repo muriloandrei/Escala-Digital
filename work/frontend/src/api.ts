@@ -99,6 +99,7 @@ export type DiaEscala = Funcionario & {
   HR_SAI2?: string | null;
   FIXO_ESCALA?: number;
   AUSENCIA_OBRIGATORIA?: number;
+  AUSENCIA_PROJETADA?: number;
   MOTIVO_AUSENCIA?: string | null;
   JUSTIFICATIVA_ALTERACAO?: string | null;
   OFICIALIZADA?: number;

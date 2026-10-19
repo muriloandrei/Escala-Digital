@@ -289,6 +289,10 @@ export function EscalaMensal({ user }: { user: User }) {
     });
     return map;
   }, [escala]);
+  const fullAbsenceIds = useMemo(() => new Set(employees
+    .filter((person) => dates.length > 0 && dates.every((date) =>
+      daysByEmployee.get(String(person.ESCFUNC_ID))?.get(date)?.AUSENCIA_OBRIGATORIA))
+    .map((person) => Number(person.ESCFUNC_ID))), [employees, dates, daysByEmployee]);
   const daySubKey = (day: DiaEscala) => {
     const id = String(day.ESCSUBSECAO_ID || '');
     return subsectionIds.has(id) ? id : 'sem';
@@ -306,6 +310,7 @@ export function EscalaMensal({ user }: { user: User }) {
   const scopePeople = employees.filter((item) =>
     memberOfSubsection(item, subsection) &&
     (!personFilter || String(item.ESCFUNC_ID) === personFilter));
+  const scopeFullyAbsent = scopePeople.length > 0 && scopePeople.every((person) => fullAbsenceIds.has(Number(person.ESCFUNC_ID)));
   useEffect(() => setCritiqueGroups([]), [lojaId, mesRef]);
   useEffect(() => {
     if (!lojaId || !mesRef || !sectionId || !escala) {
@@ -793,8 +798,8 @@ export function EscalaMensal({ user }: { user: User }) {
                   <button
                     className="button primary"
                     type="button"
-                    disabled={!scopePeople.length || loading || mixedSubsectionScope || scopeHasOfficial || escala?.status === 'FINALIZADA'}
-                    title={escala?.status === 'FINALIZADA' ? 'Escala finalizada não pode ser gerada novamente.' : scopeHasOfficial ? 'Escopo com dias oficializados não pode ser gerado novamente. Edite os dias e oficialize novamente.' : undefined}
+                    disabled={!scopePeople.length || scopeFullyAbsent || loading || mixedSubsectionScope || scopeHasOfficial || escala?.status === 'FINALIZADA'}
+                    title={scopeFullyAbsent ? 'Todos os dias deste escopo estão cobertos por férias ou afastamento.' : escala?.status === 'FINALIZADA' ? 'Escala finalizada não pode ser gerada novamente.' : scopeHasOfficial ? 'Escopo com dias oficializados não pode ser gerado novamente. Edite os dias e oficialize novamente.' : undefined}
                     onClick={() => {
                       setActionError('');
                       setPendingAction('gerar');
@@ -870,7 +875,7 @@ export function EscalaMensal({ user }: { user: User }) {
                               >
                                 <button
                                   type="button"
-                                  title={`${person.NOME} · ${formatDate(date)}${aposDemissao ? ' · Após desligamento' : ''}${inativo ? ' · Inativo no RM' : ''}${holidays[date] ? ` · Feriado: ${holidays[date]}` : ''} · ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `\nCríticas: ${dayCritiques.join('\n')}` : ''}`}
+                                  title={`${person.NOME} · ${formatDate(date)}${aposDemissao ? ' · Após desligamento' : ''}${inativo ? ' · Inativo no RM' : ''}${holidays[date] ? ` · Feriado: ${holidays[date]}` : ''} · ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${day?.AUSENCIA_PROJETADA ? ' · Ausência do RM, ainda não gravada na escala' : ''}${dayCritiques.length ? `\nCríticas: ${dayCritiques.join('\n')}` : ''}`}
                                   aria-label={`${person.NOME}, ${formatDate(date)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `, ${dayCritiques.length} crítica(s)` : ''}`}
                                   disabled={quickBusy || aposDemissao || inativo || Boolean(scheduled && !day)}
                                   onClick={() => clickDay(person, date, day)}
@@ -908,7 +913,7 @@ export function EscalaMensal({ user }: { user: User }) {
                         return (
                           <tr key={person.ESCFUNC_ID} className={dayCritiques.length || rowCritiques.length ? 'critical' : ''} title={[...rowCritiques, ...dayCritiques].join('\n') || undefined}>
                             <td className="daily-employee"><strong>{person.NOME}</strong><small>{person.CHAPA} · {person.FUNCAO_DESCR || 'Cargo não informado'}{inativo ? ' · Inativo no RM' : ''}</small></td>
-                            <td><button className="daily-distribution" type="button" disabled={quickBusy || aposDemissao || inativo} title={aposDemissao ? 'Após desligamento' : inativo ? 'Inativo no RM' : undefined} onClick={() => clickDay(person, selectedDate, day)} onDoubleClick={() => doubleClickDay(person, selectedDate, day)} aria-label={`${person.NOME}, ${formatDate(selectedDate)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `, ${dayCritiques.length} crítica(s)` : ''}`}>
+                            <td><button className="daily-distribution" type="button" disabled={quickBusy || aposDemissao || inativo} title={aposDemissao ? 'Após desligamento' : inativo ? 'Inativo no RM' : day?.AUSENCIA_PROJETADA ? 'Ausência do RM, ainda não gravada na escala' : undefined} onClick={() => clickDay(person, selectedDate, day)} onDoubleClick={() => doubleClickDay(person, selectedDate, day)} aria-label={`${person.NOME}, ${formatDate(selectedDate)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `, ${dayCritiques.length} crítica(s)` : ''}`}>
                               <div className="daily-shift-track" aria-hidden="true">{hasShift(day) && <>{timeSegment(day?.HR_ENT1, day?.HR_SAI1) && <span style={timeSegment(day?.HR_ENT1, day?.HR_SAI1)!} />}{timeSegment(day?.HR_ENT2, day?.HR_SAI2) && <span style={timeSegment(day?.HR_ENT2, day?.HR_SAI2)!} />}</>}</div>
                               <span className="daily-shift-times">{hasShift(day) ? shiftLabel(day) : fixed ? fixed.PROGRAMACAO === 'TRB' ? fixed.HR_ENT1 || 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}</span>
                             </button></td>
@@ -1003,7 +1008,7 @@ export function EscalaMensal({ user }: { user: User }) {
               setPersonMenu(null);
             }}>Ver detalhes</button>
             {escala?.status !== 'FINALIZADA' && permiteEscala(personMenu.employee.STATUS) && canEdit(user, 'escalas-funcionarios') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && <button type="button" role="menuitem" onClick={() => { setShiftTarget(personMenu.employee); setPersonMenu(null); }}>Editar horário-base</button>}
-            {escala?.status !== 'FINALIZADA' && permiteEscala(personMenu.employee.STATUS) && canEdit(user, 'escalas') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
+            {escala?.status !== 'FINALIZADA' && permiteEscala(personMenu.employee.STATUS) && !fullAbsenceIds.has(Number(personMenu.employee.ESCFUNC_ID)) && canEdit(user, 'escalas') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
               setIndividualTarget(personMenu.employee);
               setPersonMenu(null);
             }}>Gerar escala individual</button>}
