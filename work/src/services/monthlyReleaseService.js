@@ -103,6 +103,31 @@ function temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes = new Map(), 
   });
 }
 
+function motivoGeracaoFuncionario(funcionario, escsecaoId, mesRef, hojeIso, suspensoes, indiceAusencias) {
+  if (!funcionario) return 'Funcionario nao encontrado no cadastro desta loja.';
+  const secaoAtual = [funcionario.COD_SECAO, funcionario.SECAO_DESCR].filter(Boolean).join(' - ')
+    || `ID ${funcionario.ESCSECAO_ID}`;
+  const secaoInativa = String(funcionario.SECAO_STATUS || 'A').trim().toUpperCase() !== 'A';
+  if (Number(funcionario.ESCSECAO_ID) !== Number(escsecaoId)) {
+    const funcao = funcionario.FUNCAO_DESCR ? ` Funcao atual: ${funcionario.FUNCAO_DESCR}.` : '';
+    return `Cadastro atual vinculado a ${secaoAtual}${secaoInativa ? ' (secao inativa)' : ''}, fora da secao desta escala.${funcao}`;
+  }
+  if (secaoInativa) return `A secao ${secaoAtual} esta inativa para geracao.`;
+  if (!permiteEscala(funcionario.STATUS)) return `Status do funcionario (${funcionario.STATUS}) nao permite gerar escala.`;
+  if (temAfastamentoIntegral(funcionario, mesRef, indiceAusencias)) {
+    return 'Afastamento cobre todos os dias do periodo operacional.';
+  }
+  if (hojeIso > getMonthEndIso(mesRef)) return 'O periodo operacional ja terminou; nao ha dias editaveis.';
+  const demissao = formatDateValue(funcionario.DT_DEMISS);
+  if (demissao && demissao < hojeIso) return `Desligamento em ${demissao}: nao ha dias futuros para gerar.`;
+  const diasFuturos = getMonthDays(mesRef).map(formatDateValue).filter((data) => data >= hojeIso);
+  const intervalo = suspensoes.get(Number(funcionario.ESCFUNC_ID));
+  if (intervalo && diasFuturos.every((data) => dataIndisponivel(intervalo, funcionario, indiceAusencias, data))) {
+    return 'Suspensao local cobre todos os dias futuros editaveis.';
+  }
+  return 'Nao ha dias editaveis para gerar nesta escala; confira o cadastro e o periodo.';
+}
+
 function normalizeTime(value, fallback) {
   const text = String(value || '').trim();
   return /^\d{2}:\d{2}$/.test(text) ? text : fallback;
@@ -1287,7 +1312,26 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
     .filter((funcionario) => !filtroFuncionarios || filtroFuncionarios.has(Number(funcionario.escfuncId)));
 
   if (!funcionariosPayload.length) {
-    return { lojaId, mesRef, escsecaoId, criada: false, motivo: 'Nenhum funcionario apto para geracao da secao.' };
+    let motivo = 'Nenhum funcionario apto para geracao da secao.';
+    if (filtroFuncionarios) {
+      const idsFaltantes = [...filtroFuncionarios].filter((id) => !funcionarios.some((item) => Number(item.ESCFUNC_ID) === id));
+      const todos = idsFaltantes.length
+        ? await catalogService.listFuncionariosByLoja(lojaId, { includeInactive: true, includeInactiveSecoes: true })
+        : [];
+      const detalhes = [...filtroFuncionarios].map((id) => {
+        const funcionario = funcionarios.find((item) => Number(item.ESCFUNC_ID) === id)
+          || todos.find((item) => Number(item.ESCFUNC_ID) === id);
+        return motivoGeracaoFuncionario(funcionario, escsecaoId, mesRef, hojeIso, suspensoes, indiceAusencias);
+      });
+      motivo = detalhes.length === 1
+        ? detalhes[0]
+        : `${detalhes.slice(0, 3).join(' ')}${detalhes.length > 3 ? ` E mais ${detalhes.length - 3} funcionario(s) sem geracao.` : ''}`;
+    } else if (!funcionariosSecaoTodos.length) {
+      motivo = 'Nenhum funcionario vinculado a esta secao ativa para gerar.';
+    } else {
+      motivo = `Nenhum funcionario apto para geracao da secao. ${motivoGeracaoFuncionario(funcionariosSecaoTodos[0], escsecaoId, mesRef, hojeIso, suspensoes, indiceAusencias)}`;
+    }
+    return { lojaId, mesRef, escsecaoId, criada: false, motivo };
   }
 
   const ruleErrors = [
@@ -1464,5 +1508,5 @@ module.exports = {
   gerarEscalaSecao,
   resetarEscalaSecao,
   startMonthlyReleaseScheduler,
-  _private: { temDiasElegiveis }
+  _private: { temDiasElegiveis, motivoGeracaoFuncionario, criarIndiceAusencias }
 };

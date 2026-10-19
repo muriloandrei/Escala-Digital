@@ -1615,6 +1615,66 @@ test('statuses F and P remain eligible while inactive statuses do not', () => {
   }
 });
 
+test('individual generation explains a stale empty schedule in another inactive section', async () => {
+  const originals = {
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listFixosEscala: escalaService.listFixosEscala,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  const calls = [];
+  let saved = false;
+  catalogService.listFuncionariosByLoja = async (_loja, options) => {
+    calls.push(options);
+    return options.includeInactiveSecoes ? [{
+      ESCFUNC_ID: 24597, CHAPA: '052.0398', ESCSECAO_ID: 4678,
+      COD_SECAO: '052.02.008', SECAO_DESCR: 'Outra secao', SECAO_STATUS: 'I',
+      FUNCAO_DESCR: 'OPERADOR DE SUPERMERCADO', STATUS: 'A'
+    }] : [];
+  };
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.listDiasSecaoAtual = async () => [];
+  escalaService.saveEscalasBatch = async () => { saved = true; return []; };
+  try {
+    const result = await monthlyReleaseService.gerarEscalaSecao({
+      lojaId: 52, mesRef: '2026-11-01', escsecaoId: 4673,
+      escfuncIds: [24597], hojeIso: '2026-11-02'
+    });
+    assert.equal(result.criada, false);
+    assert.match(result.motivo, /052\.02\.008.*secao inativa/);
+    assert.match(result.motivo, /OPERADOR DE SUPERMERCADO/);
+    assert.equal(calls[1].includeInactiveSecoes, true);
+    assert.equal(saved, false);
+  } finally {
+    Object.entries(originals).forEach(([key, value]) => {
+      if (key in catalogService) catalogService[key] = value;
+      else escalaService[key] = value;
+    });
+  }
+});
+
+test('individual generation diagnoses status, absence, dismissal, suspension and past period', () => {
+  const { motivoGeracaoFuncionario, criarIndiceAusencias } = monthlyReleaseService._private;
+  const employee = { ESCFUNC_ID: 9, ESCSECAO_ID: 20, STATUS: 'A' };
+  const month = '2026-11-01';
+  const today = '2026-11-02';
+  const noSuspension = new Map();
+  const noAbsence = new Map();
+  const reason = (item, date = today, suspensions = noSuspension, absences = noAbsence) =>
+    motivoGeracaoFuncionario(item, 20, month, date, suspensions, absences);
+  assert.match(reason({ ...employee, STATUS: 'I' }), /Status.*I/);
+  assert.match(reason(employee, today, noSuspension, criarIndiceAusencias([{
+    ESCFUNC_ID: 9, DT_INIC: '2026-11-02', DT_FIM: '2026-12-06', MOTIVO: 'AFASTAMENTO'
+  }])), /Afastamento/);
+  assert.match(reason({ ...employee, DT_DEMISS: '2026-10-31' }), /Desligamento/);
+  assert.match(reason(employee, today, new Map([[9, { inicio: '2026-11-02', fim: '2026-12-06' }]])), /Suspensao/);
+  assert.match(reason(employee, '2026-12-07'), /periodo operacional ja terminou/);
+});
+
 test('monthly release skips an employee absent for the whole operational period', async () => {
   const originals = {
     listSecoesByLoja: catalogService.listSecoesByLoja,
