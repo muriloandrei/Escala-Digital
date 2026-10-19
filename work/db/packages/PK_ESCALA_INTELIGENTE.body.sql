@@ -353,6 +353,11 @@ create or replace package body PK_ESCALA_INTELIGENTE is
              a.escsubsecao_id = case
                when v_reg_func.escsubsecao_id is not null then v_reg_func.escsubsecao_id
                when a.escsecao_id <> v_reg_func.escsecao_id then null
+               when rec1.datademissao is null and v_funcao_porteiro = 0 and exists (
+                 select 1 from ESCALAINT.SGN_ESC_SUBSECAO sub
+                  where sub.escsubsecao_id = a.escsubsecao_id
+                    and sub.escsecao_id = a.escsecao_id
+                    and upper(trim(sub.descr)) = 'PORTEIRO') then null
                else a.escsubsecao_id end
        where a.codcoligada = rec1.codcoligada and a.loja = rec1.loja and a.chapa = rec1.chapa
       returning escfunc_id into v_reg_func.escfunc_id;

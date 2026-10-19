@@ -49,3 +49,6 @@ automaticamente um registro persistente do `DBMS_SCHEDULER`.
 - Senha MD5 nova substitui o hash local quando diferente ou quando
   `DT_HR_ULT_SENHA` avanca. O login da Escala ja converte MD5 para bcrypt.
 - Contas `ADMIN` e `CONTROLADORIA` existentes nao sao alteradas.
+- Na carga diaria, quem deixa a funcao Porteiro nao conserva o vinculo atual com
+  a subsecao Porteiro. A migration `20261019_limpar_porteiro_funcao_divergente.sql`
+  limpa os vinculos ja divergentes na Frente de Caixa sem alterar programacoes.

@@ -834,6 +834,27 @@ function aplicarHistoricoSubsecoes(rows = [], transfers = []) {
   return rows;
 }
 
+function corrigirPorteiroFuncaoDivergente(rows = [], catalogo = [], mesRef) {
+  if (isMesFinalizado(mesRef)) return rows;
+  const divergentes = new Set();
+  for (const funcionario of catalogo) {
+    if (!/FRENTE.*CAIXA/i.test(String(pick(funcionario, 'SECAO_DESCR', 'secao_descr') || ''))
+      || /^PORTEIRO$/i.test(String(pick(funcionario, 'FUNCAO_DESCR', 'funcao_descr') || '').trim())) continue;
+    divergentes.add(String(pick(funcionario, 'ESCFUNC_ID', 'escfunc_id')));
+    if (/^PORTEIRO$/i.test(String(pick(funcionario, 'SUBSECAO_DESCR', 'subsecao_descr') || '').trim())) {
+      funcionario.ESCSUBSECAO_ID = null;
+      funcionario.SUBSECAO_DESCR = null;
+    }
+  }
+  for (const row of rows) {
+    if (!divergentes.has(String(pick(row, 'ESCFUNC_ID', 'escfunc_id')))
+      || !/^PORTEIRO$/i.test(String(pick(row, 'SUBSECAO_DESCR', 'subsecao_descr') || '').trim())) continue;
+    row.ESCSUBSECAO_ID = null;
+    row.SUBSECAO_DESCR = null;
+  }
+  return rows;
+}
+
 function projetarPortariaNaFrente(rows = [], catalogo = [], mesRef) {
   if (isMesFinalizado(mesRef)) return rows;
   const atuais = new Map(catalogo.map((funcionario) => [
@@ -1564,6 +1585,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     const diasAusentes = projetarDiasAusentes(rows, funcionariosCatalogo, ausencias, inicio, fim);
     aplicarHistoricoSubsecoes(diasAusentes, transferHistory.rows || []);
     rows.push(...diasAusentes);
+    corrigirPorteiroFuncaoDivergente(rows, funcionariosCatalogo, mesRef);
     const funcionariosMap = new Map();
     const secoesMap = new Map();
     const ensureSecaoMap = (secao) => {
@@ -3220,6 +3242,7 @@ module.exports = {
     encontrarErrosAusencias,
     projetarDiasAusentes,
     aplicarHistoricoSubsecoes,
+    corrigirPorteiroFuncaoDivergente,
     projetarPortariaNaFrente,
     aplicarHorarioBaseNosDias
   }

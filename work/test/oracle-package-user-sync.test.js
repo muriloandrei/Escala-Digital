@@ -35,6 +35,17 @@ test('carga registra lojas com funcionarios ativos mesmo sem brigada e associa P
   assert.match(packageBody, /if rec1\.codfilial <> 999\s+and regexp_like\(trim\(rec1\.codsecao\)[\s\S]*?and v_funcao_porteiro = 1 then/i);
   assert.doesNotMatch(packageBody, /and exists\s*\(select 1 from ESCALAINT\.SGN_ESC_FUNCAO fn/i);
   assert.match(packageBody, /a\.escsubsecao_id = case/i);
+  assert.match(packageBody, /when rec1\.datademissao is null and v_funcao_porteiro = 0 and exists \([\s\S]*?upper\(trim\(sub\.descr\)\) = 'PORTEIRO'\) then null/i);
   assert.doesNotMatch(packageBody, /a\.status = v_reg_func\.status/i);
   assert.match(packageBody, /ESCALAINT\.SGN_ESC_LOJA_SEQ\.nextval/i);
+});
+
+test('limpeza da subsecao Porteiro preserva a programacao e a loja 999', () => {
+  const migration = fs.readFileSync(path.join(__dirname, '../db/migrations/20261019_limpar_porteiro_funcao_divergente.sql'), 'utf8');
+  assert.match(migration, /update sgn_esc_funcionario f set f\.escsubsecao_id = null/i);
+  assert.match(migration, /where f\.dt_demiss is null/i);
+  assert.match(migration, /upper\(trim\(sub\.descr\)\) = 'PORTEIRO'/i);
+  assert.match(migration, /not exists \([\s\S]*?upper\(trim\(fn\.descr\)\) = 'PORTEIRO'/i);
+  assert.match(migration, /sec\.codfilial <> 999/i);
+  assert.doesNotMatch(migration, /\b(update|delete)\s+sgn_esc_prog\b/i);
 });

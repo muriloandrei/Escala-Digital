@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { effectiveDate } = require('../src/services/subsectionTransferService');
-const { _private: { aplicarHistoricoSubsecoes } } = require('../src/services/escalaService');
+const { _private: { aplicarHistoricoSubsecoes, corrigirPorteiroFuncaoDivergente } } = require('../src/services/escalaService');
 
 test('proxima semana comeca na segunda seguinte, inclusive se hoje ja for segunda', () => {
   assert.equal(effectiveDate('PROXIMA_SEMANA', '2026-10-01'), '2026-10-05');
@@ -27,6 +27,36 @@ test('dias anteriores a vigencia mantem a subsecao de origem', () => {
     { ESCFUNC_ID: 91, VIGENCIA: '2026-10-12', ORIGEM_ID: 6, DESTINO_ID: 7, ORIGEM_NOME: 'Padaria Caixa', DESTINO_NOME: 'Balcão' }
   ]);
   assert.deepEqual(rows.map((row) => row.ESCSUBSECAO_ID), [5, 6, 7]);
+});
+
+test('funcao atual diferente de Porteiro nao aparece na subsecao em mes aberto', () => {
+  const catalogo = [
+    { ESCFUNC_ID: 91, SECAO_DESCR: 'Frente de Caixa', FUNCAO_DESCR: 'OPERADOR DE SUPERMERCADO', ESCSUBSECAO_ID: 6, SUBSECAO_DESCR: 'Porteiro' },
+    { ESCFUNC_ID: 92, SECAO_DESCR: 'Frente de Caixa', FUNCAO_DESCR: 'PORTEIRO', ESCSUBSECAO_ID: 6, SUBSECAO_DESCR: 'Porteiro' }
+  ];
+  const rows = [
+    { ESCFUNC_ID: 91, ESCSUBSECAO_ID: 6, SUBSECAO_DESCR: 'Porteiro' },
+    { ESCFUNC_ID: 92, ESCSUBSECAO_ID: 6, SUBSECAO_DESCR: 'Porteiro' }
+  ];
+  corrigirPorteiroFuncaoDivergente(rows, catalogo, '2099-11-01');
+  assert.equal(catalogo[0].ESCSUBSECAO_ID, null);
+  assert.equal(rows[0].ESCSUBSECAO_ID, null);
+  assert.equal(catalogo[1].ESCSUBSECAO_ID, 6);
+  assert.equal(rows[1].ESCSUBSECAO_ID, 6);
+});
+
+test('vinculo antigo no historico nao devolve outra funcao para Porteiro', () => {
+  const catalogo = [{ ESCFUNC_ID: 91, SECAO_DESCR: 'Frente de Caixa', FUNCAO_DESCR: 'OPERADOR DE SUPERMERCADO', ESCSUBSECAO_ID: null, SUBSECAO_DESCR: null }];
+  const rows = [{ ESCFUNC_ID: 91, ESCSUBSECAO_ID: 6, SUBSECAO_DESCR: 'Porteiro' }];
+  corrigirPorteiroFuncaoDivergente(rows, catalogo, '2099-11-01');
+  assert.equal(rows[0].ESCSUBSECAO_ID, null);
+});
+
+test('mes encerrado preserva historico da subsecao', () => {
+  const catalogo = [{ ESCFUNC_ID: 91, SECAO_DESCR: 'Frente de Caixa', FUNCAO_DESCR: 'OPERADOR DE SUPERMERCADO', ESCSUBSECAO_ID: 6, SUBSECAO_DESCR: 'Porteiro' }];
+  const rows = [{ ESCFUNC_ID: 91, ESCSUBSECAO_ID: 6, SUBSECAO_DESCR: 'Porteiro' }];
+  corrigirPorteiroFuncaoDivergente(rows, catalogo, '2020-09-01');
+  assert.equal(rows[0].ESCSUBSECAO_ID, 6);
 });
 
 test('agendamento persiste evento e nao muda o vinculo atual', async () => {
