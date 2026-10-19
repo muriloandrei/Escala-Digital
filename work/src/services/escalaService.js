@@ -1166,6 +1166,27 @@ async function listFixosEscala({ lojaId, mesRef, escsecaoId = null }) {
   return withConnection((connection) => listFixosEscalaComConnection(connection, { lojaId, mesRef, escsecaoId }));
 }
 
+function diasComFixoAtualizado(diasAtuais, data, fixo) {
+  const dias = diasAtuais.map(normalizeDiaComparavel);
+  const dia = dias.find((item) => item.data === data);
+  if (!dia) return null;
+  if (['FER', 'AFA'].includes(dia.programacao)) {
+    const error = new Error('Dia de ferias ou afastamento nao pode receber horario fixo.');
+    error.statusCode = 422;
+    throw error;
+  }
+  const anterior = { ...dia };
+  Object.assign(dia, {
+    programacao: fixo.programacao,
+    hrEnt1: fixo.hrEnt1,
+    hrSai1: fixo.hrSai1,
+    hrEnt2: fixo.hrEnt2,
+    hrSai2: fixo.hrSai2
+  });
+  if (diasSaoIguais(anterior, dia)) return null;
+  return dias;
+}
+
 async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, actor }) {
   return withConnection(async (connection) => {
     try {
@@ -1188,6 +1209,7 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
       assertSemDiasFuturosParaInativo([{ data: data.DT || data.dt }], funcionarioDb.STATUS);
       const demissoes = await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
       assertSemNovaProgramacaoAposDemissao([{ data: data.DT || data.dt }], [], demissoes.get(Number(escfuncId)));
+      const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
 
       const programacaoInput = String(data.PROGRAMACAO || data.programacao || 'TRB').trim().toUpperCase();
       const programacao = programacaoInput === 'F' || programacaoInput === 'FOLGA' ? 'FXF' : programacaoInput;
@@ -1246,7 +1268,14 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
         binds,
         { autoCommit: false }
       );
-      const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+      const diasAtualizados = diasComFixoAtualizado(escalaAntes?.dias || [], binds.dt, binds);
+      if (diasAtualizados) {
+        await saveEscalasFuncionariosRevisionComConnection(connection, {
+          lojaId, mesRef, actor, acao: 'EDITAR_DIA_FIXO',
+          funcionarios: [{ escfuncId: Number(escfuncId), revisaoBase: escalaAntes.revisao,
+            escsecaoId: Number(escsecaoId), dias: diasAtualizados }]
+        });
+      }
       await escalaEventService.appendEvent(connection, {
         operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, escsecaoId, escfuncId,
         actor, acao: 'SALVAR_FIXO_ESCALA', origem: 'USUARIO', situacao: situacaoDaAlteracao(escalaAntes),
@@ -3244,6 +3273,7 @@ module.exports = {
     aplicarHistoricoSubsecoes,
     corrigirPorteiroFuncaoDivergente,
     projetarPortariaNaFrente,
-    aplicarHorarioBaseNosDias
+    aplicarHorarioBaseNosDias,
+    diasComFixoAtualizado
   }
 };

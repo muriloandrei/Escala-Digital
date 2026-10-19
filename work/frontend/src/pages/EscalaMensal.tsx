@@ -1069,6 +1069,7 @@ export function EscalaMensal({ user }: { user: User }) {
         lojaId={lojaId} mesRef={mesRef} employee={fixedCell.employee} date={fixedCell.date}
         holidayName={holidays[fixedCell.date]}
         existing={escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(fixedCell.employee.ESCFUNC_ID) && iso(item.DT) === fixedCell.date)}
+        generatedDay={escala?.dias?.find((item) => Number(item.ESCFUNC_ID) === Number(fixedCell.employee.ESCFUNC_ID) && iso(item.DT) === fixedCell.date)}
         reference={(escala?.dias || []).find((item) => Number(item.ESCFUNC_ID) === Number(fixedCell.employee.ESCFUNC_ID) && hasShift(item))}
         onClose={() => setFixedCell(null)}
         onSaved={(message) => { setFixedCell(null); setSelectedCell(null); setActionMessage(message); setReload((value) => value + 1); }}

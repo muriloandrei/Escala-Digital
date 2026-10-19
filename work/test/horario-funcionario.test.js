@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { _private: { aplicarHorarioBaseNosDias } } = require('../src/services/escalaService');
+const { _private: { aplicarHorarioBaseNosDias, diasComFixoAtualizado } } = require('../src/services/escalaService');
 const escalaRouter = require('../src/routes/escalaRoutes');
 
 const horario = { HR_ENT1: '09:00', HR_SAI1: '13:00', HR_ENT2: '14:10', HR_SAI2: '18:58' };
@@ -42,6 +42,35 @@ test('edicao do horario-base preserva ajuste individual do dia', () => {
   assert.equal(result.diasAlterados, 1);
   assert.equal(result.dias[0].hrEnt1, '09:00');
   assert.equal(result.dias[1].hrEnt1, '08:00');
+});
+
+test('edicao de horario fixo altera o dia gerado e preserva os demais', () => {
+  const atuais = [jornada('2026-11-02'), jornada('2026-11-03')];
+  const dias = diasComFixoAtualizado(atuais, '2026-11-03', {
+    programacao: 'TRB', hrEnt1: '09:00', hrSai1: '13:00', hrEnt2: '14:10', hrSai2: '18:58'
+  });
+  assert.equal(dias[0].hrEnt1, '08:00');
+  assert.equal(dias[1].hrEnt1, '09:00');
+  assert.equal(dias[1].hrSai2, '18:58');
+  assert.equal(atuais[1].HR_ENT1, '08:00');
+});
+
+test('fixo sem dia gerado ou sem mudanca de horario nao cria revisao', () => {
+  const atuais = [jornada('2026-11-02')];
+  assert.equal(diasComFixoAtualizado(atuais, '2026-11-03', {
+    programacao: 'TRB', hrEnt1: '09:00', hrSai1: '13:00', hrEnt2: '14:10', hrSai2: '18:58'
+  }), null);
+  assert.equal(diasComFixoAtualizado(atuais, '2026-11-02', {
+    programacao: 'TRB', hrEnt1: '08:00', hrSai1: '12:00', hrEnt2: '13:10', hrSai2: '17:58'
+  }), null);
+});
+
+test('ferias e afastamento nao podem ser substituidos por fixo', () => {
+  for (const programacao of ['FER', 'AFA']) {
+    assert.throws(() => diasComFixoAtualizado([jornada('2026-11-02', programacao)], '2026-11-02', {
+      programacao: 'TRB', hrEnt1: '09:00', hrSai1: '13:00', hrEnt2: '14:10', hrSai2: '18:58'
+    }), /nao pode receber horario fixo/i);
+  }
 });
 
 for (const method of ['post', 'patch']) {

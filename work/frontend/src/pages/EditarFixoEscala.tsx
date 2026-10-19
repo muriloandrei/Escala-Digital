@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { postJson, type DiaEscala, type FixoEscala, type Funcionario } from '../api';
+import { getJson, postJson, type DiaEscala, type EscalaMensal, type FixoEscala, type Funcionario } from '../api';
 import { validateStandardHours, type StandardHours } from '../shiftValidation';
 import { autofillStandardHours } from '../shiftAutofill';
 
 export function EditarFixoEscala({
-  lojaId, mesRef, employee, date, existing, reference, holidayName, onClose, onSaved,
+  lojaId, mesRef, employee, date, existing, generatedDay, reference, holidayName, onClose, onSaved,
 }: {
   lojaId: string;
   mesRef: string;
   employee: Funcionario;
   date: string;
   existing?: FixoEscala;
+  generatedDay?: DiaEscala;
   reference?: DiaEscala;
   holidayName?: string;
   onClose: () => void;
@@ -26,6 +27,7 @@ export function EditarFixoEscala({
   const [justification, setJustification] = useState(existing?.JUSTIFICATIVA || '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [uncertain, setUncertain] = useState(false);
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
   const base = {
     lojaId: Number(lojaId), mesRef, escfuncId: Number(employee.ESCFUNC_ID),
@@ -34,7 +36,7 @@ export function EditarFixoEscala({
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || uncertain) return;
     const invalid = mode === 'TRB' ? validateStandardHours(hours) : '';
     if (invalid) { setError(invalid); return; }
     setBusy(true);
@@ -45,6 +47,27 @@ export function EditarFixoEscala({
         ...(mode === 'TRB' ? hours : {}),
         JUSTIFICATIVA: justification.trim() || null,
       });
+      try {
+        const { escala } = await getJson<{ escala: EscalaMensal }>(
+          `/api/escalas/mensal?${new URLSearchParams({ lojaId, mesRef })}`,
+        );
+        const fixo = escala.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID)
+          && String(item.DT).slice(0, 10) === date);
+        const dia = escala.dias.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID)
+          && String(item.DT).slice(0, 10) === date);
+        const expectedHours = mode === 'TRB' ? hours : {
+          HR_ENT1: 'FXF', HR_SAI1: 'FXF', HR_ENT2: 'FXF', HR_SAI2: 'FXF',
+        };
+        if (!fixo || fixo.PROGRAMACAO !== mode
+          || (generatedDay && (!dia || dia.PROGRAMACAO !== mode))
+          || (mode === 'TRB' && (['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'] as const)
+            .some((key) => fixo[key] !== expectedHours[key] || (generatedDay && dia?.[key] !== expectedHours[key])))) {
+          throw new Error('A leitura de volta não confirmou o horário.');
+        }
+      } catch {
+        setUncertain(true);
+        throw new Error('Não foi possível confirmar a atualização na escala. Recarregue antes de tentar novamente.');
+      }
       onSaved(mode === 'FXF' ? 'Folga fixa salva.' : 'Horário fixo salvo.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Não foi possível salvar o fixo.');
@@ -54,7 +77,7 @@ export function EditarFixoEscala({
   }
 
   async function remove() {
-    if (!existing || busy) return;
+    if (!existing || busy || uncertain) return;
     setBusy(true);
     setError('');
     try {
@@ -84,9 +107,9 @@ export function EditarFixoEscala({
     <label className="day-editor-justification">Justificativa<input maxLength={500} value={justification} onChange={(event) => setJustification(event.target.value)} placeholder="Opcional" /></label>
     {error && <div className="notice error" role="alert">{error}</div>}
     <div className="confirm-actions">
-      {existing && <button className="button secondary" type="button" disabled={busy} onClick={remove}>Remover fixo</button>}
+      {existing && <button className="button secondary" type="button" disabled={busy || uncertain} onClick={remove}>Remover fixo</button>}
       <button className="button secondary" type="button" disabled={busy} onClick={onClose}>Cancelar</button>
-      <button className="button primary" type="submit" disabled={busy}>{busy ? 'Salvando...' : 'Salvar fixo'}</button>
+      <button className="button primary" type="submit" disabled={busy || uncertain}>{busy ? 'Salvando...' : 'Salvar fixo'}</button>
     </div>
   </form></div>;
 }
