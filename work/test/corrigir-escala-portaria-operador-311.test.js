@@ -9,8 +9,8 @@ function state(overrides = {}) {
       ESCSECAO_ID: 5444, REVISAO: 17, ATIVA: 1, OFICIALIZADA: 0,
       SECAO_ANTIGA_CODIGO: '311.02.012', FILIAL_ANTIGA: 311,
       FUNCAO_PROGRAMADA: 'PORTEIRO', LOJA_ATUAL: 311, SECAO_ATUAL_ID: 5442,
-      FUNCIONARIO_STATUS: 'A', DT_DEMISS: null, SECAO_ATUAL_CODIGO: '311.02.002',
-      FILIAL_ATUAL: 311, SECAO_ATUAL_STATUS: 'A', FUNCAO_ATUAL: 'OPERADOR DE SUPERMERCADO',
+      FUNCIONARIO_STATUS: 'A', DT_DEMISS: null, SECAO_ATUAL_CODIGO: '311.02.009',
+      FILIAL_ATUAL: 311, SECAO_ATUAL_STATUS: 'I', FUNCAO_ATUAL: 'OPERADOR DE SUPERMERCADO',
       DIAS: 35, DIAS_FUTUROS: 35,
       ...overrides
     },
@@ -25,25 +25,26 @@ test('specific correction is preview-only unless apply and operator are explicit
 });
 
 test('only the exact future, nonofficialized Porteiro draft may be deactivated', () => {
-  assert.equal(evaluateState(state()).action, 'DESATIVAR_E_GERAR');
+  assert.equal(evaluateState(state()).action, 'DESATIVAR');
   assert.equal(evaluateState(state({ DIAS_FUTUROS: 34 })).action, 'BLOQUEADA');
   assert.equal(evaluateState(state({ OFICIALIZADA: 1 })).action, 'BLOQUEADA');
   assert.equal(evaluateState(state({ OFICIALIZADA: null })).action, 'BLOQUEADA');
   assert.equal(evaluateState(state({ ATIVA: null })).action, 'BLOQUEADA');
   assert.equal(evaluateState(state({ ESCPROG_ID: 80716 })).action, 'BLOQUEADA');
   assert.equal(evaluateState(state({ SECAO_ATUAL_CODIGO: '311.02.012' })).action, 'BLOQUEADA');
+  assert.equal(evaluateState(state({ SECAO_ATUAL_STATUS: 'A' })).action, 'BLOQUEADA');
   assert.equal(evaluateState(state({ FUNCAO_ATUAL: 'PORTEIRO' })).action, 'BLOQUEADA');
   const competing = state();
   competing.active.push({ ESCPROG_ID: 90000, ESCSECAO_ID: 5442, DIAS: 35 });
   assert.equal(evaluateState(competing).action, 'BLOQUEADA');
 });
 
-test('a retry generates only when old draft is inactive and no new scale exists', () => {
+test('a retry is complete only when old draft is inactive and no new scale exists', () => {
   const retry = state({ ATIVA: 0, DIAS_FUTUROS: 34 });
   retry.active = [];
-  assert.equal(evaluateState(retry).action, 'GERAR');
-  retry.active = [{ ESCPROG_ID: 90000, ESCSECAO_ID: 5442, DIAS: 35, OFICIALIZADA: 0 }];
   assert.equal(evaluateState(retry).action, 'CONCLUIDA');
+  retry.active = [{ ESCPROG_ID: 90000, ESCSECAO_ID: 5442, DIAS: 35, OFICIALIZADA: 0 }];
+  assert.equal(evaluateState(retry).action, 'BLOQUEADA');
 });
 
 function fakeConnection(snapshot, calls) {
@@ -72,7 +73,7 @@ test('old schedule is deactivated with audit in one transaction', async () => {
   const result = await deactivateSource(fakeConnection(state(), calls), 'opc', async () => {
     calls.push('EVENT');
   });
-  assert.equal(result, 'GERAR');
+  assert.equal(result, 'CONCLUIDA');
   assert.deepEqual(calls, ['LOCK', 'LOCK', 'UPDATE', 'EVENT', 'COMMIT']);
 });
 
@@ -95,6 +96,6 @@ test('retry does not deactivate or audit the same schedule twice', async () => {
   const result = await deactivateSource(fakeConnection(retry, calls), 'opc', async () => {
     calls.push('EVENT');
   });
-  assert.equal(result, 'GERAR');
+  assert.equal(result, 'CONCLUIDA');
   assert.deepEqual(calls, ['LOCK', 'LOCK']);
 });

@@ -1,7 +1,6 @@
 const { getEnv } = require('../src/config/env');
 const { withConnection, closeOraclePool, oracledb } = require('../src/db/oracle');
 const escalaEventService = require('../src/services/escalaEventService');
-const monthlyReleaseService = require('../src/services/monthlyReleaseService');
 
 const LOJA = 311;
 const MES_REF = '2026-11-01';
@@ -65,11 +64,11 @@ function evaluateState({ source, active }) {
     blockers.push('Identidade ou estado da programacao antiga divergiu da previa aprovada.');
   }
   if (!is(source.LOJA_ATUAL, LOJA) || !is(source.SECAO_ATUAL_ID, SECAO_ATUAL)
-      || String(source.SECAO_ATUAL_CODIGO || '').trim() !== '311.02.002'
-      || !is(source.FILIAL_ATUAL, LOJA) || role(source.SECAO_ATUAL_STATUS) !== 'A'
+      || String(source.SECAO_ATUAL_CODIGO || '').trim() !== '311.02.009'
+      || !is(source.FILIAL_ATUAL, LOJA) || role(source.SECAO_ATUAL_STATUS) !== 'I'
       || role(source.FUNCAO_ATUAL) !== 'OPERADOR DE SUPERMERCADO'
       || role(source.FUNCIONARIO_STATUS) !== 'A' || source.DT_DEMISS) {
-    blockers.push('Cadastro atual nao corresponde ao Operador ativo da secao 5442.');
+    blockers.push('Cadastro atual nao corresponde ao Operador da secao inativa 5442.');
   }
   if (!is(source.DIAS, 35)) blockers.push('Os 35 dias originais nao estao intactos.');
   if (blockers.length) return { action: 'BLOQUEADA', blockers };
@@ -79,16 +78,12 @@ function evaluateState({ source, active }) {
     if (active.length !== 1 || !is(active[0]?.ESCPROG_ID, ESCPROG_ID)) {
       blockers.push('Existe outra programacao ativa para o funcionario em novembro.');
     }
-    return { action: blockers.length ? 'BLOQUEADA' : 'DESATIVAR_E_GERAR', blockers };
+    return { action: blockers.length ? 'BLOQUEADA' : 'DESATIVAR', blockers };
   }
   if (!is(source.ATIVA, 0)) {
     return { action: 'BLOQUEADA', blockers: ['Estado ATIVA da programacao antiga nao reconhecido.'] };
   }
-  if (active.length === 0) return { action: 'GERAR', blockers: [] };
-  if (active.length === 1 && is(active[0].ESCSECAO_ID, SECAO_ATUAL)
-      && Number(active[0].DIAS) > 0 && !is(active[0].OFICIALIZADA, 1)) {
-    return { action: 'CONCLUIDA', blockers: [] };
-  }
+  if (active.length === 0) return { action: 'CONCLUIDA', blockers: [] };
   return { action: 'BLOQUEADA', blockers: ['Programacao ativa inesperada apos a desativacao.'] };
 }
 
@@ -104,8 +99,8 @@ async function deactivateSource(connection, actor, appendEvent = escalaEventServ
     );
     const state = await loadState(connection);
     const review = evaluateState(state);
-    if (review.action !== 'DESATIVAR_E_GERAR') {
-      if (review.action === 'GERAR' || review.action === 'CONCLUIDA') return review.action;
+    if (review.action !== 'DESATIVAR') {
+      if (review.action === 'CONCLUIDA') return review.action;
       throw new Error(review.blockers.join(' '));
     }
     const changed = await connection.execute(
@@ -120,13 +115,13 @@ async function deactivateSource(connection, actor, appendEvent = escalaEventServ
       revisaoAnterior: 17, revisaoNova: null,
       actor: { login: actor }, acao: 'INATIVAR_ESCALA_FUNCAO', origem: 'SISTEMA', situacao: 'RASCUNHO',
       detalhe: {
-        motivo: 'Cadastro atual mudou de Porteiro para Operador de Supermercado.',
+        motivo: 'Cadastro atual mudou de Porteiro para Operador de Supermercado em secao inativa para escalas.',
         escprogId: ESCPROG_ID, diasPreservados: 35,
         secaoAntigaId: SECAO_ANTIGA, secaoAtualId: SECAO_ATUAL
       }
     });
     await connection.commit();
-    return 'GERAR';
+    return 'CONCLUIDA';
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -154,24 +149,14 @@ async function main() {
       return;
     }
 
-    const action = await withConnection((connection) => deactivateSource(connection, args.actor));
-    if (action === 'CONCLUIDA') return;
-    console.log('Programacao antiga preservada como inativa. Gerando a escala na secao atual...');
-    const generated = await monthlyReleaseService.gerarEscalaSecao({
-      lojaId: LOJA, mesRef: MES_REF, escsecaoId: SECAO_ATUAL,
-      escfuncIds: [ESCFUNC_ID], actor: { login: args.actor }
-    });
-    if (!generated.criada || generated.funcionarios !== 1) {
-      throw new Error(`Geracao nao concluida: ${generated.motivo || 'resultado inesperado'}. A escala antiga permanece inativa; repita este comando depois de corrigir a causa.`);
-    }
+    await withConnection((connection) => deactivateSource(connection, args.actor));
     const finalState = await withConnection(loadState);
     const finalReview = evaluateState(finalState);
     if (finalReview.action !== 'CONCLUIDA') {
-      throw new Error('Geracao retornou sucesso, mas a nova escala nao passou na verificacao. Revise antes de repetir.');
+      throw new Error('Desativacao gravada, mas a verificacao final encontrou outra programacao ativa. Revise antes de repetir.');
     }
-    console.log(JSON.stringify({ resultado: 'CONCLUIDA', funcionarios: generated.funcionarios,
-      criticas: generated.criticas?.length || 0,
-      primeirasCriticas: (generated.criticas || []).slice(0, 10) }, null, 2));
+    console.log(JSON.stringify({ resultado: 'CONCLUIDA', origemId: ESCPROG_ID,
+      diasPreservados: Number(finalState.source.DIAS), novaEscalaGerada: false }, null, 2));
   } finally {
     await closeOraclePool();
   }
