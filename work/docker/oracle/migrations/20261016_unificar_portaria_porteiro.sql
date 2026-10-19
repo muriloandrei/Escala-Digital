@@ -52,10 +52,16 @@ begin
        and p.ativa = 1 and p.oficializada = 0
        and exists (select 1 from sgn_esc_prog atual
                     where atual.escfunc_id = p.escfunc_id and atual.mes_ref = p.mes_ref
-                      and atual.escsecao_id = v_frente_id and atual.ativa = 1);
+                      and atual.escsecao_id = v_frente_id and atual.ativa = 1
+                      and (atual.revisao = p.revisao
+                        or atual.revisao >= (
+                          select max(p2.revisao) from sgn_esc_prog p2
+                           where p2.escfunc_id = p.escfunc_id and p2.mes_ref = p.mes_ref
+                             and p2.escsecao_id = origem.escsecao_id
+                             and p2.ativa = 1 and p2.oficializada = 0)));
     if v_conflitos > 0 then
       raise_application_error(-20003, 'Secao 02.012 ' || origem.escsecao_id ||
-        ': ha programacoes ativas duplicadas na Frente de Caixa.');
+        ': ha revisoes conflitantes na Frente de Caixa.');
     end if;
 
     select count(*) into v_conflitos from sgn_esc_transfer_sub t

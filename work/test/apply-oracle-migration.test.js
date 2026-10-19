@@ -23,6 +23,14 @@ test('Portaria unification preserves officialized records and loja 999', () => {
   assert.doesNotMatch(sql, /\bcommit\b/i);
 });
 
+test('Portaria unification allows older Front revisions but rejects true conflicts', () => {
+  const { sql } = readMigration('20261016_unificar_portaria_porteiro.sql');
+  assert.match(sql, /atual\.revisao = p\.revisao/);
+  assert.match(sql, /atual\.revisao >= \(\s*select max\(p2\.revisao\)/);
+  assert.match(sql, /p2\.escsecao_id = origem\.escsecao_id/);
+  assert.match(sql, /p2\.ativa = 1 and p2\.oficializada = 0/);
+});
+
 test('Portaria preparation creates only missing subsections and rejects ambiguous destination', () => {
   const { sql } = readMigration('20261015_portaria_preparar_subsecao.sql');
   assert.match(sql, /if v_frentes <> 1 then/);
