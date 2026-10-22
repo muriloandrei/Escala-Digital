@@ -80,6 +80,52 @@ test('painel mostra criticas de outras subsecoes sem repetir funcionarios ou sec
   assert.ok(grupos[0].marcadores.every((marker) => marker.datas.length === 0));
 });
 
+test('painel destaca domingo com folgas concentradas na subseção', () => {
+  const funcionarios = Array.from({ length: 5 }, (_, index) => ({
+    ESCFUNC_ID: index + 1,
+    NOME: `Fiscal ${index + 1}`,
+    ESCSECAO_ID: 1,
+    ESCSUBSECAO_ID: 11,
+    SUBSECAO_DESCR: 'Fiscal Caixa'
+  }));
+  const dias = funcionarios.map((funcionario) => ({
+    ESCFUNC_ID: funcionario.ESCFUNC_ID,
+    DT: '2026-11-08',
+    PROGRAMACAO: 'F'
+  }));
+  const [grupo] = agruparCriticasPorSubsecao({ escala: {
+    secoes: [{ ESCSECAO_ID: 1, DESCR: 'Frente de Caixa' }],
+    funcionarios,
+    dias
+  } });
+
+  assert.ok(grupo.criticas.some((critica) => critica.includes('0/5 trabalhando')));
+  assert.equal(grupo.marcadores.filter((marcador) => marcador.datas.includes('2026-11-08')).length, 5);
+
+  const diaTrabalhado = (escfuncId) => ({
+    ESCFUNC_ID: escfuncId,
+    DT: '2026-11-08',
+    PROGRAMACAO: 'TRB',
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  });
+  dias[0] = diaTrabalhado(1);
+  const umTrabalhando = agruparCriticasPorSubsecao({ escala: {
+    secoes: [{ ESCSECAO_ID: 1, DESCR: 'Frente de Caixa' }], funcionarios, dias
+  } })[0];
+  assert.ok(umTrabalhando.criticas.some((critica) => critica.includes('1/5 trabalhando')));
+
+  dias[1] = diaTrabalhado(2);
+  assert.equal(agruparCriticasPorSubsecao({ escala: {
+    secoes: [{ ESCSECAO_ID: 1, DESCR: 'Frente de Caixa' }], funcionarios, dias
+  } }).some((item) => item.criticas.some((critica) => critica.includes('Cobertura desequilibrada'))), false);
+
+  for (const funcionario of funcionarios) dias[funcionario.ESCFUNC_ID - 1] = diaTrabalhado(funcionario.ESCFUNC_ID);
+  const todosTrabalhando = agruparCriticasPorSubsecao({ escala: {
+    secoes: [{ ESCSECAO_ID: 1, DESCR: 'Frente de Caixa' }], funcionarios, dias
+  } })[0];
+  assert.ok(todosTrabalhando.criticas.some((critica) => critica.includes('5/5 trabalhando')));
+});
+
 test('criticas marcam dia invalido e todos os dias da semana com falta de folga', () => {
   const dias = Array.from({ length: 7 }, (_, index) => ({
     ESCFUNC_ID: 1,

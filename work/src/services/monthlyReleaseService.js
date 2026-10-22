@@ -407,7 +407,7 @@ function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDa
 }
 
 function getSecaoKey(funcionario) {
-  return String(Number(funcionario.ESCSECAO_ID || 0));
+  return `${Number(funcionario.ESCSECAO_ID || 0)}:${Number(funcionario.ESCSUBSECAO_ID || 0)}`;
 }
 
 function getTurnoKey(funcionario, turno) {
@@ -823,6 +823,14 @@ function escolherPadraoBalanceado({
     const maxFolgasSecaoDia = Math.max(...folgasDiasComunsSecao, 0);
     const maxFolgasTurnoDia = Math.max(...getCounterValues(projetadaTurno));
     const excessoFolgaSecao = calcularExcessoFolgasPorDia(projetadaSecao, secaoSize, { ignorarDomingos: true });
+    const limiteFolgasDomingo = Math.ceil(Number(secaoSize || 1) / 2);
+    const minimoFolgasDomingo = Math.floor(Number(secaoSize || 1) / 2);
+    const funcionariosRestantes = Math.max(0, Number(secaoSize || 1) - indiceSecao - 1);
+    const desvioFolgasDomingo = [...projetadaSecao.entries()]
+      .filter(([data]) => isDomingoIso(data))
+      .reduce((total, [, folgasDia]) => total
+        + Math.max(0, folgasDia - limiteFolgasDomingo) ** 2
+        + Math.max(0, minimoFolgasDomingo - folgasDia - funcionariosRestantes) ** 2, 0);
     const somaQuadradosSecao = folgasDiasComunsSecao.reduce((acc, value) => acc + (value * value), 0);
     const somaQuadradosTurno = getCounterValues(projetadaTurno).reduce((acc, value) => acc + (value * value), 0);
     const somaQuadradosSemana = getCounterValues(projetadaSemanaSecao).reduce((acc, value) => acc + (value * value), 0);
@@ -848,6 +856,7 @@ function escolherPadraoBalanceado({
       + (domingosFolgaPerdidos * 8500)
       + (domingosTrabalhoViraramFolga * 3500)
       + (excessoFolgaSecao * 26000)
+      + (desvioFolgasDomingo * 50000)
       + (excessoFolgaTurno * 70000)
       + (maxFolgasTurnoDia * 2600)
       + (folgasPrimeiroDia * folgasPrimeiroDia * 120)
@@ -861,10 +870,10 @@ function escolherPadraoBalanceado({
       + (desempate / 1000);
     const candidato = { padrao, folgas: folgasEfetivas, score, folgasAbaixoMinimo };
     if (!melhor || score < melhor.score) melhor = candidato;
-    if (!errors.length && !folgasAbaixoMinimo && !excessoFolgaTurno && !excessoFolgaSecao && (!melhorIdeal || score < melhorIdeal.score)) {
+    if (!errors.length && !folgasAbaixoMinimo && !excessoFolgaTurno && !excessoFolgaSecao && !desvioFolgasDomingo && (!melhorIdeal || score < melhorIdeal.score)) {
       melhorIdeal = candidato;
     }
-    if (!errors.length && !folgasAbaixoMinimo && !excessoFolgaTurno && (!melhorComCobertura || score < melhorComCobertura.score)) {
+    if (!errors.length && !folgasAbaixoMinimo && !excessoFolgaTurno && !desvioFolgasDomingo && (!melhorComCobertura || score < melhorComCobertura.score)) {
       melhorComCobertura = candidato;
     }
   });

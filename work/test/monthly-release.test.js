@@ -755,6 +755,33 @@ test('monthly release alternates Sunday rests across shifts in the same section'
   }
 });
 
+test('monthly release balances Sundays within each subsection', () => {
+  const time = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  const funcionarios = Array.from({ length: 10 }, (_, index) => ({
+    ESCFUNC_ID: 2000 + index,
+    CHAPA: `313.${String(index).padStart(4, '0')}`,
+    NOME: `Pessoa ${index}`,
+    LOJA: 313,
+    ESCSECAO_ID: 20,
+    ESCSUBSECAO_ID: index % 2 ? 2 : 1,
+    ESCFUNCAO_ID: 30,
+    HR_ENT1: time(480 + index),
+    HR_SAI1: time(720 + index),
+    HR_ENT2: time(790 + index),
+    HR_SAI2: time(1078 + index)
+  }));
+  const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, [], '2026-11-01', '2026-11-02');
+
+  for (const data of ['2026-11-08', '2026-11-15', '2026-11-22', '2026-11-29', '2026-12-06']) {
+    for (const subsecaoId of [1, 2]) {
+      const pessoas = funcionarios.filter((item) => item.ESCSUBSECAO_ID === subsecaoId);
+      const trabalhando = pessoas.filter((item) => rascunhos.find((rascunho) => rascunho.escfuncId === item.ESCFUNC_ID)
+        .dias.find((dia) => dia.data === data)?.programacao === 'TRB').length;
+      assert.ok(trabalhando >= 2 && trabalhando <= 3, `${data}: subseção ${subsecaoId} com ${trabalhando}/5 trabalhando`);
+    }
+  }
+});
+
 test('section generation saves draft even when automatic validation returns critiques', async () => {
   const originals = {
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
