@@ -562,7 +562,7 @@ router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaR
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
     const progresso = await officializationService.getProgress({
       lojaId: payload.lojaId, mesRef: payload.mesRef,
-      secoesPermitidas: [payload.escsecaoId]
+      secoesPermitidas: await getSecoesPermitidas(req, payload.lojaId)
     });
     if (!progresso.habilitada) return res.status(403).json({ error: 'Oficializacao nao habilitada para esta loja.' });
     const secao = progresso.secoes.find((item) => item.escsecaoId === payload.escsecaoId);
@@ -579,23 +579,68 @@ router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaR
       });
     }
 
+    const relacionadas = [];
+    const prontas = [];
+    for (const candidata of officializationService.readyLinkedSections(
+      progresso.secoes, payload.escsecaoId, payload.lojaId
+    )) {
+      try {
+        await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [candidata.escsecaoId]);
+        const requisitos = await rmIntegrationService.validarPreRequisitosRm({
+          lojaId: payload.lojaId, mesRef: payload.mesRef, escsecaoId: candidata.escsecaoId
+        });
+        if (requisitos.errors?.length) {
+          relacionadas.push({ escsecaoId: candidata.escsecaoId, secao: candidata.secao,
+            status: 'IGNORADA', motivo: requisitos.errors.join(' ') });
+        } else prontas.push(candidata);
+      } catch (error) {
+        console.error(JSON.stringify({ event: 'related_officialization_preflight_error',
+          lojaId: payload.lojaId, escsecaoId: candidata.escsecaoId, message: error.message }));
+        relacionadas.push({ escsecaoId: candidata.escsecaoId, secao: candidata.secao,
+          status: 'IGNORADA', motivo: 'Nao foi possivel validar esta secao; tente novamente.' });
+      }
+    }
+
     const result = await escalaService.oficializarEscala({ ...payload, actor: req.user });
     if (!result.affectedRows) return res.status(404).json({ error: 'Escala ativa nao encontrada.' });
-    let rm;
-    try {
-      rm = await rmIntegrationService.processarOperacaoRm({ operacaoId: result.operacaoId });
-    } catch (error) {
-      rm = { enabled: true, status: 'PENDENTE', pendentes: result.affectedRows, enviados: 0, falhas: 0, error: error.message };
+    const aprovadas = [{ secao, result }];
+    for (const candidata of prontas) {
+      try {
+        const adicional = await escalaService.oficializarEscala({ ...payload,
+          escsecaoId: candidata.escsecaoId, actor: req.user });
+        if (adicional.affectedRows) aprovadas.push({ secao: candidata, result: adicional });
+        else relacionadas.push({ escsecaoId: candidata.escsecaoId, secao: candidata.secao,
+          status: 'IGNORADA', motivo: 'A escala mudou durante a oficializacao; recarregue o progresso.' });
+      } catch (error) {
+        console.error(JSON.stringify({ event: 'related_officialization_error',
+          lojaId: payload.lojaId, escsecaoId: candidata.escsecaoId, message: error.message }));
+        relacionadas.push({ escsecaoId: candidata.escsecaoId, secao: candidata.secao,
+          status: 'IGNORADA', motivo: error.statusCode === 409 || error.statusCode === 422
+            ? error.message : 'Nao foi possivel oficializar esta secao; verifique os logs.' });
+      }
     }
-    await auditService.registerAudit({
-      action: 'OFICIALIZAR_ESCALA',
-      user: req.user,
-      lojaId: payload.lojaId,
-      mesRef: payload.mesRef,
-      revisao: result.revisao,
-      details: { oficializada: 1, rmStatus: rm.status, rmEnviados: rm.enviados, rmFalhas: rm.falhas, operacaoId: result.operacaoId }
-    });
-    return res.json({ ok: true, revisao: result.revisao, affectedRows: result.affectedRows, operacaoId: result.operacaoId, rm });
+    let rm;
+    for (const aprovada of aprovadas) {
+      let resultadoRm;
+      try {
+        resultadoRm = await rmIntegrationService.processarOperacaoRm({ operacaoId: aprovada.result.operacaoId });
+      } catch (error) {
+        resultadoRm = { enabled: true, status: 'PENDENTE', pendentes: aprovada.result.affectedRows,
+          enviados: 0, falhas: 0, error: error.message };
+      }
+      await auditService.registerAudit({
+        action: 'OFICIALIZAR_ESCALA', user: req.user, lojaId: payload.lojaId, mesRef: payload.mesRef,
+        revisao: aprovada.result.revisao,
+        details: { escsecaoId: aprovada.secao.escsecaoId, oficializada: 1, rmStatus: resultadoRm.status,
+          rmEnviados: resultadoRm.enviados, rmFalhas: resultadoRm.falhas, operacaoId: aprovada.result.operacaoId }
+      });
+      if (aprovada.secao.escsecaoId === payload.escsecaoId) rm = resultadoRm;
+      else relacionadas.push({ escsecaoId: aprovada.secao.escsecaoId, secao: aprovada.secao.secao,
+        status: 'OFICIALIZADA', affectedRows: aprovada.result.affectedRows, operacaoId: aprovada.result.operacaoId,
+        rm: resultadoRm });
+    }
+    return res.json({ ok: true, revisao: result.revisao, affectedRows: result.affectedRows,
+      operacaoId: result.operacaoId, rm, relacionadas });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de oficializacao invalidos.', details: error.errors });
     if (error.statusCode === 422 && Array.isArray(error.details)) {

@@ -101,3 +101,108 @@ test('leader can officialize only a whole enabled complete section', async () =>
     auditService.registerAudit = originals.registerAudit;
   }
 });
+
+test('officializing Transportes also approves ready linked sections without approving blocked or unrelated ones', async () => {
+  const handle = router.stack.find((layer) => layer.route?.path === '/oficializar').route.stack.at(-1).handle;
+  const originals = {
+    getSecoesPermitidasUsuario: accessService.getSecoesPermitidasUsuario,
+    assertSecoesPermitidas: accessService.assertSecoesPermitidas,
+    getProgress: officializationService.getProgress,
+    validarPreRequisitosRm: rmIntegrationService.validarPreRequisitosRm,
+    processarOperacaoRm: rmIntegrationService.processarOperacaoRm,
+    oficializarEscala: escalaService.oficializarEscala,
+    registerAudit: auditService.registerAudit
+  };
+  const approved = [];
+  const audited = [];
+  const sent = [];
+  accessService.getSecoesPermitidasUsuario = async () => [1, 2, 3, 4];
+  accessService.assertSecoesPermitidas = async (_user, _loja, ids) => {
+    assert.ok(ids.every((id) => [1, 2, 3, 4].includes(id)));
+  };
+  officializationService.getProgress = async (params) => {
+    assert.deepEqual(params.secoesPermitidas, [1, 2, 3, 4]);
+    return { habilitada: true, secoes: [
+      { escsecaoId: 1, codigo: '035.02.002', secao: 'Frente de Caixa', completa: true, criticas: 0, podeOficializar: true },
+      { escsecaoId: 2, codigo: '035.02.004', secao: 'Transportes', completa: true, criticas: 0, podeOficializar: true },
+      { escsecaoId: 3, codigo: '035.03.001', secao: 'Serviços a Clientes', completa: true, criticas: 0, podeOficializar: true },
+      { escsecaoId: 4, codigo: '035.02.012', secao: 'Estacionamento', completa: false, criticas: 1, podeOficializar: false },
+      { escsecaoId: 5, codigo: '035.03.008', secao: 'Fiscal Remoto', completa: true, criticas: 0, podeOficializar: true }
+    ] };
+  };
+  rmIntegrationService.validarPreRequisitosRm = async ({ escsecaoId }) => ({
+    errors: escsecaoId === 3 ? ['CPF ausente.'] : []
+  });
+  escalaService.oficializarEscala = async ({ escsecaoId }) => {
+    approved.push(escsecaoId);
+    return { affectedRows: 2, revisao: 7, operacaoId: `operation-${escsecaoId}` };
+  };
+  rmIntegrationService.processarOperacaoRm = async ({ operacaoId }) => {
+    sent.push(operacaoId);
+    return { status: 'ENVIADO', enviados: 2, falhas: 0 };
+  };
+  auditService.registerAudit = async ({ details }) => { audited.push(details.escsecaoId); };
+  try {
+    const res = response();
+    await handle({ body: { lojaId: 35, mesRef: '2026-11-01', escsecaoId: 2 },
+      user: { perfil: 'LIDER', sub: 1 } }, res, (error) => { throw error; });
+    assert.equal(res.code, 200);
+    assert.deepEqual(approved, [2, 1]);
+    assert.deepEqual(sent, ['operation-2', 'operation-1']);
+    assert.deepEqual(audited, [2, 1]);
+    assert.deepEqual(res.body.relacionadas.map((item) => [item.escsecaoId, item.status]),
+      [[3, 'IGNORADA'], [1, 'OFICIALIZADA']]);
+    assert.equal(res.body.relacionadas[0].motivo, 'CPF ausente.');
+  } finally {
+    accessService.getSecoesPermitidasUsuario = originals.getSecoesPermitidasUsuario;
+    accessService.assertSecoesPermitidas = originals.assertSecoesPermitidas;
+    officializationService.getProgress = originals.getProgress;
+    rmIntegrationService.validarPreRequisitosRm = originals.validarPreRequisitosRm;
+    rmIntegrationService.processarOperacaoRm = originals.processarOperacaoRm;
+    escalaService.oficializarEscala = originals.oficializarEscala;
+    auditService.registerAudit = originals.registerAudit;
+  }
+});
+
+test('a linked section changed during approval is reported without hiding the primary success', async () => {
+  const handle = router.stack.find((layer) => layer.route?.path === '/oficializar').route.stack.at(-1).handle;
+  const originals = {
+    getSecoesPermitidasUsuario: accessService.getSecoesPermitidasUsuario,
+    assertSecoesPermitidas: accessService.assertSecoesPermitidas,
+    getProgress: officializationService.getProgress,
+    validarPreRequisitosRm: rmIntegrationService.validarPreRequisitosRm,
+    processarOperacaoRm: rmIntegrationService.processarOperacaoRm,
+    oficializarEscala: escalaService.oficializarEscala,
+    registerAudit: auditService.registerAudit
+  };
+  accessService.getSecoesPermitidasUsuario = async () => [1, 2];
+  accessService.assertSecoesPermitidas = async () => {};
+  officializationService.getProgress = async () => ({ habilitada: true, secoes: [
+    { escsecaoId: 1, codigo: '035.02.002', secao: 'Frente de Caixa', completa: true, criticas: 0, podeOficializar: true },
+    { escsecaoId: 2, codigo: '035.02.004', secao: 'Transportes', completa: true, criticas: 0, podeOficializar: true }
+  ] });
+  rmIntegrationService.validarPreRequisitosRm = async () => ({ errors: [] });
+  escalaService.oficializarEscala = async ({ escsecaoId }) => {
+    if (escsecaoId === 2) throw Object.assign(new Error('A programacao mudou.'), { statusCode: 409 });
+    return { affectedRows: 1, revisao: 7, operacaoId: 'operation-1' };
+  };
+  rmIntegrationService.processarOperacaoRm = async () => ({ status: 'ENVIADO' });
+  auditService.registerAudit = async () => {};
+  try {
+    const res = response();
+    await handle({ body: { lojaId: 35, mesRef: '2026-11-01', escsecaoId: 1 },
+      user: { perfil: 'GERENTE', sub: 1 } }, res, (error) => { throw error; });
+    assert.equal(res.code, 200);
+    assert.equal(res.body.affectedRows, 1);
+    assert.deepEqual(res.body.relacionadas.map((item) => [item.escsecaoId, item.status, item.motivo]),
+      [[2, 'IGNORADA', 'A programacao mudou.']]);
+  } finally {
+    accessService.getSecoesPermitidasUsuario = originals.getSecoesPermitidasUsuario;
+    accessService.assertSecoesPermitidas = originals.assertSecoesPermitidas;
+    officializationService.getProgress = originals.getProgress;
+    rmIntegrationService.validarPreRequisitosRm = originals.validarPreRequisitosRm;
+    rmIntegrationService.processarOperacaoRm = originals.processarOperacaoRm;
+    escalaService.oficializarEscala = originals.oficializarEscala;
+    auditService.registerAudit = originals.registerAudit;
+  }
+});

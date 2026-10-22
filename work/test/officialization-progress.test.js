@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildProgress, groupProgressSections } = require('../src/services/officializationService');
+const { buildProgress, groupProgressSections, readyLinkedSections } = require('../src/services/officializationService');
 
 const period = { inicio: '2026-11-02', fim: '2026-11-08' };
 const section = { ESCSECAO_ID: 12, COD_SECAO: '010.02.002', DESCR: 'Frente de Caixa' };
@@ -98,4 +98,21 @@ test('progress groups old Estacionamento under Frente de Caixa but keeps Transpo
     ['Estacionamento', 'Transportes', 'Frente de Caixa']);
   assert.deepEqual(groupProgressSections([portaria, transport, front], { lojaId: 35, finalized: true })
     .map((group) => group.secao), ['Estacionamento', 'Transportes', 'Frente de Caixa']);
+});
+
+test('linked officialization includes only ready operational sections in both directions', () => {
+  const sections = [
+    { escsecaoId: 1, codigo: '035.02.002', secao: 'Frente de Caixa', podeOficializar: true },
+    { escsecaoId: 2, codigo: '035.02.004', secao: 'Transportes', podeOficializar: true },
+    { escsecaoId: 3, codigo: '035.03.001', secao: 'Serviços a Clientes', podeOficializar: false },
+    { escsecaoId: 4, codigo: '035.02.012', secao: 'Estacionamento', podeOficializar: true },
+    { escsecaoId: 5, codigo: '035.03.008', secao: 'Fiscal Remoto', podeOficializar: true }
+  ];
+  assert.deepEqual(readyLinkedSections(sections, 1, 35).map((secao) => secao.escsecaoId), [2, 4]);
+  assert.equal(readyLinkedSections(sections, 1, 35)[1].secao, 'Porteiro');
+  assert.deepEqual(readyLinkedSections(sections, 2, 35).map((secao) => secao.escsecaoId), [1, 4]);
+  sections[2].podeOficializar = true;
+  assert.deepEqual(readyLinkedSections(sections, 1, 35).map((secao) => secao.escsecaoId), [2, 3, 4]);
+  assert.deepEqual(readyLinkedSections(sections, 4, 999).map((secao) => secao.escsecaoId), []);
+  assert.deepEqual(readyLinkedSections(sections, 5, 35).map((secao) => secao.escsecaoId), []);
 });

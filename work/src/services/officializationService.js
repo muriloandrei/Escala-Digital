@@ -118,6 +118,22 @@ function groupProgressSections(secoes, { lojaId, finalized = false } = {}) {
   }, []);
 }
 
+function isLinkedOfficializationSection(secao, lojaId) {
+  const code = String(secao.codigo || '').trim();
+  const name = String(secao.secao || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  return /FRENTE.*CAIXA|TRANSPORT|SERVIC.*CLIENT/.test(name)
+    || (Number(lojaId) !== 999 && /(?:^|[.])02[.]012$/.test(code));
+}
+
+function readyLinkedSections(secoes, selectedId, lojaId) {
+  const selected = secoes.find((secao) => Number(secao.escsecaoId) === Number(selectedId));
+  if (!selected || !isLinkedOfficializationSection(selected, lojaId)) return [];
+  return secoes.filter((secao) => Number(secao.escsecaoId) !== Number(selectedId)
+    && isLinkedOfficializationSection(secao, lojaId) && secao.podeOficializar)
+    .map((secao) => ({ ...secao, secao: /(?:^|[.])02[.]012$/.test(String(secao.codigo || ''))
+      ? 'Porteiro' : secao.secao }));
+}
+
 async function getStoreEnabled(lojaId) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
@@ -173,4 +189,4 @@ async function getProgress({ lojaId, mesRef, secoesPermitidas = null, escala = n
     finalized: schedule.status === 'FINALIZADA' }), habilitada: enabled === true };
 }
 
-module.exports = { buildProgress, groupProgressSections, getProgress, getStoreEnabled, setStoreEnabled };
+module.exports = { buildProgress, groupProgressSections, readyLinkedSections, getProgress, getStoreEnabled, setStoreEnabled };

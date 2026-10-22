@@ -408,10 +408,20 @@ export function EscalaMensal({ user }: { user: User }) {
         escfuncIds: scopePeople.map((person) => Number(person.ESCFUNC_ID)),
       };
       if (action === 'oficializar') {
-        const response = await postJson<{ affectedRows: number; rm?: { status?: string } }>(
+        const response = await postJson<{ affectedRows: number; rm?: { status?: string }; relacionadas: Array<{
+          secao: string; status: 'OFICIALIZADA' | 'IGNORADA'; motivo?: string; rm?: { status?: string };
+        }> }>(
           '/api/escalas/oficializar', { lojaId: payload.lojaId, mesRef: payload.mesRef, escsecaoId: payload.escsecaoId },
         );
-        setActionMessage(`${section?.DESCR || 'Seção'} oficializada · ${response.affectedRows} funcionário(s). Envio RM: ${response.rm?.status || 'a verificar'}.`);
+        const adicionais = response.relacionadas || [];
+        const oficializadas = adicionais.filter((item) => item.status === 'OFICIALIZADA');
+        const pendentes = adicionais.filter((item) => item.status === 'IGNORADA');
+        setActionMessage([
+          `${section?.DESCR || 'Seção'} oficializada · ${response.affectedRows} funcionário(s). Envio RM: ${response.rm?.status || 'a verificar'}.`,
+          oficializadas.length ? `Também oficializadas: ${oficializadas.map((item) => `${item.secao} (RM: ${item.rm?.status || 'a verificar'})`).join(', ')}.` : '',
+        ].filter(Boolean).join(' '));
+        if (pendentes.length) setActionError(`Não oficializadas: ${pendentes.map((item) =>
+          `${item.secao} (${item.motivo || 'verifique o progresso'})`).join(', ')}.`);
       } else {
         const response = await postJson<{
           resultado: { criada?: boolean; resetada?: boolean; funcionarios?: number; criticas?: unknown[] };
@@ -1087,7 +1097,7 @@ export function EscalaMensal({ user }: { user: User }) {
             </p>
             <p>
               {pendingAction === 'oficializar'
-                ? 'Todas as subseções desta seção serão aprovadas. A pendência de envio será registrada; a transmissão ao RM depende da integração configurada no servidor. As demais seções continuam editáveis.'
+                ? 'A seção selecionada e as seções relacionadas que estiverem completas e sem críticas serão oficializadas. Cada envio ao RM será registrado separadamente; se alguma seção não puder ser aprovada, ela permanecerá pendente.'
                 : pendingAction === 'gerar'
                 ? 'A geração recalcula os dias editáveis deste escopo. Alterações manuais futuras podem ser substituídas.'
                 : 'O reset remove os dias gerados deste escopo e restaura folgas fixas, férias e afastamentos protegidos.'}
