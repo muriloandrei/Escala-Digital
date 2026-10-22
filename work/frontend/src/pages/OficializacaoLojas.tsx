@@ -5,7 +5,8 @@ import { getJson, putJson, type Loja } from '../api';
 
 type Store = Loja & { OFICIALIZACAO_HABILITADA?: number };
 type SectionProgress = { escsecaoId: number; codigo: string; secao: string; funcionarios: number; percentual: number; oficializada: boolean };
-type StoreProgress = { secoes: SectionProgress[] };
+type ProgressGroup = SectionProgress & { partes: SectionProgress[] };
+type StoreProgress = { secoes: SectionProgress[]; grupos: ProgressGroup[] };
 const PAGE_SIZE = 8;
 
 export function OficializacaoLojas() {
@@ -96,7 +97,10 @@ export function OficializacaoLojas() {
                 onChange={() => toggle(store)} /> Habilitada</label>
             </td></tr>
             {failure && <tr><td colSpan={4} className="officialization-message" role="alert">{failure}</td></tr>}
-            {result?.secoes.map((section) => <tr key={section.escsecaoId}><td className="officialization-section"><Link to={`/escalas/${store.LOJA}/${month}-01?secao=${section.escsecaoId}`}>{section.codigo} · {section.secao}</Link></td><td>{section.funcionarios}</td><td><span className={`officialization-status ${section.oficializada ? 'complete' : 'pending'}`}>{!section.funcionarios ? 'Sem funcionários' : section.oficializada ? 'Oficializada' : `${section.percentual}% preenchida`}</span></td><td>–</td></tr>)}
+            {result?.grupos.map((group) => <Fragment key={group.escsecaoId}>
+              <tr><td className="officialization-section">{group.partes.length > 1 ? `${group.codigo} · ${group.secao}` : <Link to={`/escalas/${store.LOJA}/${month}-01?secao=${group.escsecaoId}`}>{group.codigo} · {group.secao}</Link>}</td><td>{group.funcionarios}</td><td><span className={`officialization-status ${group.oficializada ? 'complete' : 'pending'}`}>{!group.funcionarios ? 'Sem funcionários' : group.oficializada ? 'Oficializada' : `${group.percentual}% preenchida`}</span></td><td>–</td></tr>
+              {group.partes.length > 1 && group.partes.map((part) => <tr key={part.escsecaoId}><td className="officialization-part"><Link to={`/escalas/${store.LOJA}/${month}-01?secao=${part.escsecaoId}`}>{part.codigo} · {part.secao}</Link></td><td>{part.funcionarios}</td><td><span className={`officialization-status ${part.oficializada ? 'complete' : 'pending'}`}>{!part.funcionarios ? 'Sem funcionários' : part.oficializada ? 'Oficializada' : `${part.percentual}% preenchida`}</span></td><td>–</td></tr>)}
+            </Fragment>)}
           </Fragment>;
         })}</tbody></table></div>}
     </section>

@@ -87,6 +87,37 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
   return { secoes: results, oficializada: results.length > 0 && results.every((section) => section.oficializada) };
 }
 
+function groupProgressSections(secoes, { lojaId, finalized = false } = {}) {
+  if (Number(lojaId) === 999 || finalized) return secoes.map((secao) => ({ ...secao, partes: [secao] }));
+  const byCode = new Map(secoes.map((secao) => [String(secao.codigo || '').trim(), secao]));
+  const childIds = new Set(secoes.flatMap((secao) => {
+    const match = String(secao.codigo || '').trim().match(/^(.*)[.]02[.]002$/);
+    return match ? [byCode.get(`${match[1]}.02.012`)?.escsecaoId].filter(Boolean) : [];
+  }));
+  return secoes.reduce((groups, secao) => {
+    if (childIds.has(secao.escsecaoId)) return groups;
+    const match = String(secao.codigo || '').trim().match(/^(.*)[.]02[.]002$/);
+    const parts = match
+      ? [secao, byCode.get(`${match[1]}.02.012`)].filter(Boolean)
+      : [secao];
+    const previstos = parts.reduce((sum, part) => sum + part.previstos, 0);
+    const preenchidos = parts.reduce((sum, part) => sum + part.preenchidos, 0);
+    groups.push({
+      ...secao,
+      funcionarios: parts.reduce((sum, part) => sum + part.funcionarios, 0),
+      previstos,
+      preenchidos,
+      percentual: previstos ? Math.round(preenchidos / previstos * 100) : 0,
+      criticas: parts.reduce((sum, part) => sum + part.criticas, 0),
+      completa: parts.some((part) => part.funcionarios > 0) && parts.every((part) => !part.funcionarios || part.completa),
+      oficializada: parts.some((part) => part.funcionarios > 0) && parts.every((part) => !part.funcionarios || part.oficializada),
+      partes: parts.map((part) => ({ ...part,
+        secao: /[.]02[.]012$/.test(String(part.codigo || '')) ? 'Porteiro' : part.secao }))
+    });
+    return groups;
+  }, []);
+}
+
 async function getStoreEnabled(lojaId) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
@@ -136,8 +167,10 @@ async function getProgress({ lojaId, mesRef, secoesPermitidas = null, escala = n
   ]);
   const operacionais = secoes.filter((secao) => isSecaoEscopoOperacional(secao)
     || (Number(lojaId) === 999 && isSecaoFiscalRemoto(secao)));
-  return { ...buildProgress({ escala: schedule, secoes: operacionais, pessoas, suspensoes, periodo, lojaId, mesRef,
-    includeEmpty, includeCritiques }), habilitada: enabled === true };
+  const progress = buildProgress({ escala: schedule, secoes: operacionais, pessoas, suspensoes, periodo, lojaId, mesRef,
+    includeEmpty, includeCritiques });
+  return { ...progress, grupos: groupProgressSections(progress.secoes, { lojaId,
+    finalized: schedule.status === 'FINALIZADA' }), habilitada: enabled === true };
 }
 
-module.exports = { buildProgress, getProgress, getStoreEnabled, setStoreEnabled };
+module.exports = { buildProgress, groupProgressSections, getProgress, getStoreEnabled, setStoreEnabled };

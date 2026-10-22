@@ -224,6 +224,11 @@ a {
 .progress-row progress { display: block; width: 100%; height: 12px; margin: 12px 0 9px; accent-color: #2865d7; }
 .progress-row progress.official { accent-color: #178053; }
 .progress-row-meta a { color: #174fba; font-weight: 650; }
+.progress-parts { margin-top: 12px; border-top: 1px solid #e1e7ee; }
+.progress-part { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 16px; padding: 10px 0 10px 16px; color: #53657b; font-size: 12px; }
+.progress-part span:first-child { color: #173453; font-weight: 600; }
+.progress-part a { color: #174fba; font-weight: 650; }
+@media (max-width: 600px) { .progress-part { grid-template-columns: minmax(0, 1fr) auto; } .progress-part a { grid-column: 1 / -1; } }
 .progress-critique { color: #a62c35; }
 .store-toggle { display: inline-flex; align-items: center; gap: 8px; }
 .officialization-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
@@ -233,6 +238,8 @@ a {
 .officialization-table .officialization-store th { text-align: left; color: #19334f; }
 .officialization-table .officialization-section { padding-left: 30px; }
 .officialization-table .officialization-section a { color: #2055b1; font-weight: 600; }
+.officialization-table .officialization-part { padding-left: 46px; }
+.officialization-table .officialization-part a { color: #2055b1; }
 .officialization-table .officialization-message { color: #a02f34; }
 .officialization-status { font-weight: 650; }
 .officialization-status.complete { color: #17704e; }

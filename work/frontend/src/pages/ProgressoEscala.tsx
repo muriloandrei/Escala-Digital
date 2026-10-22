@@ -9,11 +9,12 @@ type Section = {
   previstos: number; preenchidos: number; percentual: number; criticas: number;
   completa: boolean; oficializada: boolean;
 };
+type Group = Section & { partes: Section[] };
 
 export function ProgressoEscalaModal({ lojaId, mesRef, onClose }: {
   lojaId: string; mesRef: string; onClose: () => void;
 }) {
-  const [sections, setSections] = useState<Section[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
@@ -30,8 +31,8 @@ export function ProgressoEscalaModal({ lojaId, mesRef, onClose }: {
     const controller = new AbortController();
     setLoading(true);
     setError('');
-    getJson<{ progresso: { secoes: Section[] } }>(`/api/escalas/progresso?${new URLSearchParams({ lojaId, mesRef })}`, controller.signal)
-      .then(({ progresso }) => { setSections(progresso.secoes); setLoading(false); })
+    getJson<{ progresso: { grupos: Group[] } }>(`/api/escalas/progresso?${new URLSearchParams({ lojaId, mesRef })}`, controller.signal)
+      .then(({ progresso }) => { setGroups(progresso.grupos); setLoading(false); })
       .catch((reason) => { if (reason.name !== 'AbortError') { setError(reason.message); setLoading(false); } });
     return () => controller.abort();
   }, [lojaId, mesRef, reload]);
@@ -49,13 +50,18 @@ export function ProgressoEscalaModal({ lojaId, mesRef, onClose }: {
       </div>
       {error && <div className="notice error" role="alert">{error}</div>}
       {loading ? <div className="empty-state" role="status">Carregando progresso...</div>
-        : !sections.length ? <div className="empty-state">Nenhuma seção ativa com funcionários nesta escala.</div>
-          : <div className="progress-list">{sections.map((section) => <div className="progress-row" key={section.escsecaoId}>
+        : !groups.length ? <div className="empty-state">Nenhuma seção ativa com funcionários nesta escala.</div>
+          : <div className="progress-list">{groups.map((section) => <div className="progress-row" key={section.escsecaoId}>
             <div className="progress-row-heading"><strong>{section.codigo} · {section.secao}</strong><span>{section.oficializada ? 'Oficializada' : section.completa ? 'Concluída' : 'Em andamento'}</span></div>
             <progress className={section.oficializada ? 'official' : ''} max="100" value={section.percentual} aria-label={`Progresso de ${section.secao}: ${section.percentual}%`} />
             <div className="progress-row-meta"><span>{section.percentual}% · {section.preenchidos}/{section.previstos} dias · {section.funcionarios} funcionário(s)</span>
               {section.criticas > 0 && <span className="progress-critique">{section.criticas} crítica(s)</span>}
-              <Link onClick={onClose} to={`/escalas/${lojaId}/${mesRef}?secao=${section.escsecaoId}`}>Abrir seção</Link></div>
+              {section.partes.length === 1 && <Link onClick={onClose} to={`/escalas/${lojaId}/${mesRef}?secao=${section.escsecaoId}`}>Abrir seção</Link>}</div>
+            {section.partes.length > 1 && <div className="progress-parts">{section.partes.map((part) => <div className="progress-part" key={part.escsecaoId}>
+              <span>{part.codigo} · {part.secao}</span>
+              <span>{part.oficializada ? 'Oficializada' : `${part.percentual}% · ${part.preenchidos}/${part.previstos} dias`}</span>
+              <Link onClick={onClose} to={`/escalas/${lojaId}/${mesRef}?secao=${part.escsecaoId}`}>Abrir seção</Link>
+            </div>)}</div>}
           </div>)}</div>}
     </div>
   </div>, document.body);

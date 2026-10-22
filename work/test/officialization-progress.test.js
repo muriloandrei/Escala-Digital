@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildProgress } = require('../src/services/officializationService');
+const { buildProgress, groupProgressSections } = require('../src/services/officializationService');
 
 const period = { inicio: '2026-11-02', fim: '2026-11-08' };
 const section = { ESCSECAO_ID: 12, COD_SECAO: '010.02.002', DESCR: 'Frente de Caixa' };
@@ -73,4 +73,29 @@ test('RM-projected absence is visible without counting as a persisted officializ
   const fullAbsence = buildProgress({ escala: { dias: projected, ausencias: [{ ...absence, DT_INIC: period.inicio }] },
     secoes: [section], pessoas: [person], periodo: period, lojaId: 10, mesRef: '2026-11-01' });
   assert.deepEqual(fullAbsence.secoes, []);
+});
+
+test('progress groups old Estacionamento under Frente de Caixa but keeps Transportes independent', () => {
+  const front = { escsecaoId: 1, codigo: '035.02.002', secao: 'Frente de Caixa', funcionarios: 2,
+    previstos: 70, preenchidos: 70, criticas: 0, completa: true, oficializada: true };
+  const transport = { escsecaoId: 2, codigo: '035.02.004', secao: 'Transportes', funcionarios: 1,
+    previstos: 35, preenchidos: 35, criticas: 0, completa: true, oficializada: true };
+  const portaria = { escsecaoId: 3, codigo: '035.02.012', secao: 'Estacionamento', funcionarios: 1,
+    previstos: 35, preenchidos: 0, criticas: 2, completa: false, oficializada: false };
+  const groups = groupProgressSections([portaria, transport, front], { lojaId: 35 });
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].codigo, transport.codigo);
+  assert.equal(groups[0].oficializada, true);
+  assert.equal(groups[1].codigo, front.codigo);
+  assert.equal(groups[1].previstos, 105);
+  assert.equal(groups[1].preenchidos, 70);
+  assert.equal(groups[1].percentual, 67);
+  assert.equal(groups[1].criticas, 2);
+  assert.equal(groups[1].oficializada, false);
+  assert.deepEqual(groups[1].partes.map((part) => part.secao), ['Frente de Caixa', 'Porteiro']);
+  assert.deepEqual(groups[1].partes.map((part) => part.escsecaoId), [1, 3]);
+  assert.deepEqual(groupProgressSections([portaria, transport, front], { lojaId: 999 }).map((group) => group.secao),
+    ['Estacionamento', 'Transportes', 'Frente de Caixa']);
+  assert.deepEqual(groupProgressSections([portaria, transport, front], { lojaId: 35, finalized: true })
+    .map((group) => group.secao), ['Estacionamento', 'Transportes', 'Frente de Caixa']);
 });
