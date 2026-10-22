@@ -44,8 +44,10 @@ test('compra inteligente usa semanas completas e mantem 01/11 na transicao', () 
   assert.match(disponibilidade, /p\.mes_ref = trunc\(ed_dt_ref, 'MM'\)/i);
   assert.match(disponibilidade, /p\.oficializada = 1/i);
   assert.match(disponibilidade, /select count\(\*\) into vn_pendentes/i);
-  assert.match(disponibilidade, /d\.dt >= FKG_INICIO_PERIODO_OPERACIONAL\(ed_dt_ref\)/i);
-  assert.match(disponibilidade, /d\.dt < FKG_FIM_PERIODO_OPERACIONAL\(ed_dt_ref\) \+ 1/i);
+  assert.match(disponibilidade, /vd_inicio_periodo := FKG_INICIO_PERIODO_OPERACIONAL\(ed_dt_ref\)/i);
+  assert.match(disponibilidade, /vd_fim_periodo := FKG_FIM_PERIODO_OPERACIONAL\(ed_dt_ref\)/i);
+  assert.match(disponibilidade, /d\.dt >= vd_inicio_periodo\s+and d\.dt < vd_fim_periodo \+ 1/i);
+  assert.doesNotMatch(disponibilidade, /d\.dt\s*[<>]=?\s*FKG_(INICIO|FIM)_PERIODO_OPERACIONAL/i);
   assert.match(dias, /p\.oficializada = 1 or \(/i);
   assert.match(dias, /trunc\(ed_dt_inic, 'MM'\) = date '2026-11-01'\s+and p\.mes_ref = date '2026-10-01'\s+and trunc\(d\.dt\) = date '2026-11-01'/i);
   assert.match(dias, /pm\.mes_ref = date '2026-11-01'\s+and pm\.ativa = 1 and pm\.oficializada = 1/i);

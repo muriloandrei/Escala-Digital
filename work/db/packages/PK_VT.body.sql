@@ -178,6 +178,10 @@ vn_jovem      Tint;
 
 vn_pendentes  Tint;
 
+vd_inicio_periodo date;
+
+vd_fim_periodo date;
+
 
 
 BEGIN
@@ -213,6 +217,8 @@ BEGIN
               or regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$'));
       vn_ret := case when vn_ret > 0 then 1 else 0 end;
       if vn_ret = 1 then
+         vd_inicio_periodo := FKG_INICIO_PERIODO_OPERACIONAL(ed_dt_ref);
+         vd_fim_periodo := FKG_FIM_PERIODO_OPERACIONAL(ed_dt_ref);
          select count(*) into vn_pendentes
            from ESCALAINT.SGN_ESC_PROG p
            join ESCALAINT.SGN_ESC_PROG_DIA d on d.escprog_id = p.escprog_id
@@ -224,8 +230,8 @@ BEGIN
                where px.loja = p.loja and px.escfunc_id = p.escfunc_id
                  and px.mes_ref = p.mes_ref and px.ativa = 1)
             and d.programacao = 'TRB'
-            and d.dt >= FKG_INICIO_PERIODO_OPERACIONAL(ed_dt_ref)
-            and d.dt < FKG_FIM_PERIODO_OPERACIONAL(ed_dt_ref) + 1
+            and d.dt >= vd_inicio_periodo
+            and d.dt < vd_fim_periodo + 1
             and (regexp_like(upper(nvl(s.descr, ' ')), 'FRENTE.*CAIXA|SERVI[CÇ]OS?.*CLIENT|TRANSPORT|PORTARIA')
                  or regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$'));
          if vn_pendentes > 0 then vn_ret := 0; end if;
