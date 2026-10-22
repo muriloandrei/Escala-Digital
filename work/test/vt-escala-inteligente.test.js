@@ -17,13 +17,27 @@ test('VT libera somente as 25 lojas informadas a partir de novembro de 2026', ()
 });
 
 test('VT conta o mes calendario cruzando escalas operacionais sem usar revisoes antigas', () => {
-  assert.match(body, /from ESCALAINT\.SGN_ESC_PROG p\s+join ESCALAINT\.SGN_ESC_PROG_DIA d/i);
-  assert.match(body, /p\.ativa = 1 and p\.oficializada = 1/i);
-  assert.match(body, /p\.revisao = \(\s*select max\(px\.revisao\)/i);
-  assert.match(body, /d\.dt >= trunc\(ed_dt_inic\) and d\.dt < trunc\(ed_dt_fim\) \+ 1/i);
-  assert.doesNotMatch(body, /p\.mes_ref = trunc\(ed_dt_inic, 'MM'\)/i);
-  assert.match(body, /d\.programacao = 'TRB'/i);
-  assert.doesNotMatch(body, /nvl\(d\.programacao, 'TRB'\) = 'TRB'/i);
+  const dias = body.slice(body.indexOf('PROCEDURE PKB_APURA_DIAS_TRAB'), body.indexOf('FUNCTION FKG_DIAS_TRAB'));
+  assert.match(dias, /from ESCALAINT\.SGN_ESC_PROG p\s+join ESCALAINT\.SGN_ESC_PROG_DIA d/i);
+  assert.match(dias, /p\.ativa = 1/i);
+  assert.match(dias, /p\.revisao = \(\s*select max\(px\.revisao\)/i);
+  assert.match(dias, /d\.dt >= trunc\(ed_dt_inic\) and d\.dt < trunc\(ed_dt_fim\) \+ 1/i);
+  assert.doesNotMatch(dias, /p\.mes_ref = trunc\(ed_dt_inic, 'MM'\)/i);
+  assert.match(dias, /d\.programacao = 'TRB'/i);
+  assert.doesNotMatch(dias, /nvl\(d\.programacao, 'TRB'\) = 'TRB'/i);
+});
+
+test('somente 01/11/2026 herda escala encerrada de outubro apos aprovacao de novembro', () => {
+  const disponibilidade = body.slice(body.indexOf('FUNCTION FKG_ESCALA_OK'), body.indexOf('FUNCTION FKG_QTDE_COMPRA'));
+  const dias = body.slice(body.indexOf('PROCEDURE PKB_APURA_DIAS_TRAB'), body.indexOf('FUNCTION FKG_DIAS_TRAB'));
+  assert.match(disponibilidade, /p\.mes_ref = trunc\(ed_dt_ref, 'MM'\)/i);
+  assert.match(disponibilidade, /p\.oficializada = 1/i);
+  assert.match(disponibilidade, /select count\(\*\) into vn_pendentes/i);
+  assert.match(disponibilidade, /trunc\(ed_dt_ref, 'MM'\) = date '2026-11-01'\s+and p\.mes_ref = date '2026-10-01'\s+and trunc\(d\.dt\) = date '2026-11-01'/i);
+  assert.match(dias, /p\.oficializada = 1 or \(/i);
+  assert.match(dias, /trunc\(ed_dt_inic, 'MM'\) = date '2026-11-01'\s+and p\.mes_ref = date '2026-10-01'\s+and trunc\(d\.dt\) = date '2026-11-01'/i);
+  assert.match(dias, /pm\.mes_ref = date '2026-11-01'\s+and pm\.ativa = 1 and pm\.oficializada = 1/i);
+  assert.match(dias, /select max\(pmx\.revisao\)/i);
 });
 
 test('compra usa a mesma disponibilidade exibida no APEX e preserva dias para desligamento', () => {

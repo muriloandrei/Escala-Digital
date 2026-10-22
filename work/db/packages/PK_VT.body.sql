@@ -173,6 +173,8 @@ vn_ret        Tint;
 
 vn_jovem      Tint;
 
+vn_pendentes  Tint;
+
 
 
 BEGIN
@@ -207,6 +209,27 @@ BEGIN
          and (regexp_like(upper(nvl(s.descr, ' ')), 'FRENTE.*CAIXA|SERVI[CÇ]OS?.*CLIENT|TRANSPORT|PORTARIA')
               or regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$'));
       vn_ret := case when vn_ret > 0 then 1 else 0 end;
+      if vn_ret = 1 then
+         select count(*) into vn_pendentes
+           from ESCALAINT.SGN_ESC_PROG p
+           join ESCALAINT.SGN_ESC_PROG_DIA d on d.escprog_id = p.escprog_id
+           join ESCALAINT.SGN_ESC_SECAO s on s.escsecao_id = p.escsecao_id
+          where p.loja = en_nroempresa and p.chapa = ev_chapa
+            and p.ativa = 1 and p.oficializada = 0
+            and p.revisao = (
+              select max(px.revisao) from ESCALAINT.SGN_ESC_PROG px
+               where px.loja = p.loja and px.escfunc_id = p.escfunc_id
+                 and px.mes_ref = p.mes_ref and px.ativa = 1)
+            and d.programacao = 'TRB'
+            and d.dt >= trunc(ed_dt_ref, 'MM')
+            and d.dt < add_months(trunc(ed_dt_ref, 'MM'), 1)
+            and not (trunc(ed_dt_ref, 'MM') = date '2026-11-01'
+                     and p.mes_ref = date '2026-10-01'
+                     and trunc(d.dt) = date '2026-11-01')
+            and (regexp_like(upper(nvl(s.descr, ' ')), 'FRENTE.*CAIXA|SERVI[CÇ]OS?.*CLIENT|TRANSPORT|PORTARIA')
+                 or regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$'));
+         if vn_pendentes > 0 then vn_ret := 0; end if;
+      end if;
    else
       begin
          select 1 into vn_ret
@@ -2133,13 +2156,31 @@ begin
             join ESCALAINT.SGN_ESC_PROG_DIA d on d.escprog_id = p.escprog_id
             join ESCALAINT.SGN_ESC_SECAO s on s.escsecao_id = p.escsecao_id
            where vn_fonte_nova = 1 and p.loja = vn_loja_nro and p.chapa = ev_chapa
-             and p.ativa = 1 and p.oficializada = 1
+             and p.ativa = 1
              and p.revisao = (
                select max(px.revisao) from ESCALAINT.SGN_ESC_PROG px
                 where px.loja = p.loja and px.escfunc_id = p.escfunc_id
                   and px.mes_ref = p.mes_ref and px.ativa = 1)
              and d.programacao = 'TRB'
              and d.dt >= trunc(ed_dt_inic) and d.dt < trunc(ed_dt_fim) + 1
+             and (p.oficializada = 1 or (
+               trunc(ed_dt_inic, 'MM') = date '2026-11-01'
+               and p.mes_ref = date '2026-10-01'
+               and trunc(d.dt) = date '2026-11-01'
+               and exists (
+                 select 1 from ESCALAINT.SGN_ESC_PROG pm
+                 join ESCALAINT.SGN_ESC_SECAO sm on sm.escsecao_id = pm.escsecao_id
+                  where pm.loja = p.loja and pm.escfunc_id = p.escfunc_id
+                    and pm.mes_ref = date '2026-11-01'
+                    and pm.ativa = 1 and pm.oficializada = 1
+                    and pm.revisao = (
+                      select max(pmx.revisao) from ESCALAINT.SGN_ESC_PROG pmx
+                       where pmx.loja = pm.loja and pmx.escfunc_id = pm.escfunc_id
+                         and pmx.mes_ref = pm.mes_ref and pmx.ativa = 1)
+                    and (regexp_like(upper(nvl(sm.descr, ' ')), 'FRENTE.*CAIXA|SERVI[CÇ]OS?.*CLIENT|TRANSPORT|PORTARIA')
+                         or regexp_like(trim(sm.cod_secao), '(^|[.])02[.]012$'))
+               )
+             ))
              and (regexp_like(upper(nvl(s.descr, ' ')), 'FRENTE.*CAIXA|SERVI[CÇ]OS?.*CLIENT|TRANSPORT|PORTARIA')
                   or regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$'))
         ) dias

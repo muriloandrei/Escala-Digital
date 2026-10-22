@@ -19,6 +19,11 @@ desligamento. Nao foi compilado contra o Oracle de producao. Compare-o com o
 - `FKG_DIAS_TRAB` conta datas `TRB` no intervalo calendario da compra,
   inclusive dias que pertencem a escala operacional do mes anterior. Dias
   repetidos sao contados uma vez. Regras de gratuidade e exclusao permanecem.
+- Excecao de transicao: 01/11/2026 vem do mes operacional de outubro, que ja
+  esta encerrado. Esse unico dia pode ser contado pela ultima revisao ativa
+  de outubro mesmo sem oficializacao propria, mas somente depois que a ultima
+  revisao ativa de novembro do mesmo funcionario estiver oficializada. Nos
+  demais dias e meses, a programacao que fornece o dia deve estar oficializada.
 - Cada compra nova guarda os dias usados no calculo. O desligamento das lojas
   migradas usa esse retrato, e nao a escala que pode ter sido alterada depois.
 
@@ -65,8 +70,9 @@ select c.loja_id, c.dt_ref, count(*) compras_sem_retrato
 Compile como dono de `PK_VT` e confirme `USER_ERRORS` vazio e package body
 `VALID`. Compare `FKG_ESCALA_OK` e `FKG_DIAS_TRAB` para um empregado de uma loja
 migrada e outro de uma loja APEX. Teste 01/11/2026 vindo da escala operacional
-de outubro, uma revisao nova nao oficializada, folga/FER/AFA, compra parcial e
-gratuidade. Faca uma compra de teste transacional e confira
+de outubro antes e depois de oficializar novembro, uma revisao nova nao
+oficializada, folga/FER/AFA, compra parcial e gratuidade. Faca uma compra de
+teste transacional e confira
 `SGN_VT_ESCALA_SNAPSHOT` e `SGN_VT_ESCALA_SNAPSHOT_DIA`.
 
 O SELECT da pagina APEX enviado nao consulta diretamente as tabelas da escala:
