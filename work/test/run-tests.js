@@ -15,6 +15,7 @@ require('./mutation-diagnostics.test');
 require('./csrf.test');
 require('./auth-md5-password.test');
 require('./oracle-package-user-sync.test');
+require('./vt-escala-inteligente.test');
 require('./access-permissions.test');
 require('./portaria-section.test');
 require('./diagnosticar-loja.test');
