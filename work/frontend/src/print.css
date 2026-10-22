@@ -300,7 +300,18 @@
   background: #f8d364;
   color: #543b09;
 }
-.print-four-times { display: grid; justify-items: center; gap: 1px; line-height: 1.05; white-space: nowrap; }
+.print-grid td.rest,
+.print-grid td.fixed-rest,
+.print-grid td.absence { font-size: 13px; font-weight: 700; }
+.print-four-times {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  font-size: 14px;
+  line-height: 1.12;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .print-four-times strong { font-weight: 800; }
 .print-sheet.daily .print-grid .print-person-col { width: 210px; }
 .print-sheet.daily .print-grid td { padding: 10px 24px; }
@@ -344,15 +355,19 @@
   font-size: 9px;
 }
 .print-sheet.compact .print-grid {
-  font-size: 7px;
+  font-size: 8px;
 }
 .print-sheet.compact .print-grid th,
 .print-sheet.compact .print-grid td {
-  padding: 4px 1px;
+  padding: 5px 1px;
 }
 .print-sheet.compact .print-grid th:first-child {
   width: 145px;
 }
+.print-sheet.compact .print-four-times { font-size: 10px; line-height: 1.15; }
+.print-sheet.compact .print-grid td.rest,
+.print-sheet.compact .print-grid td.fixed-rest,
+.print-sheet.compact .print-grid td.absence { font-size: 10px; }
 
 @media (max-width: 1200px) {
   .print-layout {
@@ -424,9 +439,7 @@
   .print-sheet-header {
     padding-bottom: 6mm;
   }
-  .print-sheet.compact .print-grid {
-    font-size: 6px;
-  }
+  .print-sheet.compact .print-grid { font-size: 8px; }
   .print-grid tr {
     break-inside: avoid;
     page-break-inside: avoid;

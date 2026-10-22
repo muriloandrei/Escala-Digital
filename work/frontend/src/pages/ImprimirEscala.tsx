@@ -64,24 +64,18 @@ function dayKind(day?: DiaEscala) {
   return 'work';
 }
 
-function dayText(day: DiaEscala | undefined, compact: boolean) {
+function dayText(day: DiaEscala | undefined) {
   if (!day) return '–';
-  if (['rest', 'fixed-rest', 'absence'].includes(dayKind(day))) {
-    return day.PROGRAMACAO || 'F';
-  }
-  const first = day.HR_ENT1 || '';
-  const last = day.HR_SAI2 || day.HR_SAI1 || '';
-  return compact ? first || 'TRB' : [first, last].filter(Boolean).join('–') || 'TRB';
+  return day.PROGRAMACAO || 'F';
 }
 
-function PrintDayCell({ day, compact, daily }: { day?: DiaEscala; compact: boolean; daily: boolean }) {
-  if (!day || !['work', 'fixed-work'].includes(dayKind(day))) return <>{dayText(day, compact)}</>;
+function PrintDayCell({ day, daily }: { day?: DiaEscala; daily: boolean }) {
+  if (!day || !['work', 'fixed-work'].includes(dayKind(day))) return <>{dayText(day)}</>;
   if (daily) return <ShiftTimeline day={day} />;
-  if (compact) return <div className="print-four-times">
+  return <div className="print-four-times">
     <strong>{day.HR_ENT1 || '–'}</strong><span>{day.HR_SAI1 || '–'}</span>
     <span>{day.HR_ENT2 || '–'}</span><strong>{day.HR_SAI2 || '–'}</strong>
   </div>;
-  return <>{dayText(day, false)}</>;
 }
 
 function SelectList({
@@ -218,12 +212,12 @@ function PrintSheet({
                 </thead>
                 <tbody>
                   <tr>
-                    <th>{compact ? 'Horários' : daily ? 'Jornada' : 'Entrada–saída'}</th>
+                    <th>{daily ? 'Jornada' : 'Horários'}</th>
                     {sheet.dates.map((date) => {
                       const day = getDay(person, date);
                       return (
                         <td key={date} className={dayKind(day)}>
-                          <PrintDayCell day={day} compact={compact} daily={daily} />
+                          <PrintDayCell day={day} daily={daily} />
                         </td>
                       );
                     })}
@@ -255,7 +249,7 @@ function PrintSheet({
                   const day = getDay(person, date);
                   return (
                     <td key={date} className={dayKind(day)}>
-                      <PrintDayCell day={day} compact={compact} daily={daily} />
+                      <PrintDayCell day={day} daily={daily} />
                     </td>
                   );
                 })}
@@ -418,7 +412,7 @@ export function ImprimirEscala({ user }: { user: User }) {
           ? 2
           : mode === 'diario'
             ? 24
-            : 16;
+            : 14;
       chunks(group.people, pageSize).forEach((batch) => {
         result.push({
           title: `${modeNames[mode]}${group.name ? ` · ${group.name}` : ''}`,
