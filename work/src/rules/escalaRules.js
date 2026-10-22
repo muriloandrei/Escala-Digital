@@ -340,32 +340,6 @@ function agruparCriticasPorSubsecao({ escala }) {
         marcadores.push({ escfuncId: funcionario.escfuncId, datas, mensagem });
       }));
     }
-    if (funcionarios.length > 1) {
-      const diasPorData = new Map();
-      for (const funcionario of funcionarios) {
-        for (const dia of funcionario.dias) {
-          const data = formatDate(dia.data || dia.DT);
-          if (!data) continue;
-          if (!diasPorData.has(data)) diasPorData.set(data, new Map());
-          diasPorData.get(data).set(funcionario.escfuncId, dia);
-        }
-      }
-      for (const [data, programados] of diasPorData) {
-        if (programados.size !== funcionarios.length || new Date(`${data}T00:00:00`).getDay() !== 0) continue;
-        const dias = [...programados.values()];
-        const trabalhando = dias.filter((dia) => !isDescanso(dia)).length;
-        const folgas = dias.filter(isFolgaSemanal).length;
-        const minimoTrabalhando = Math.floor(funcionarios.length / 2);
-        const maximoTrabalhando = Math.ceil(funcionarios.length / 2);
-        if ((trabalhando >= minimoTrabalhando && trabalhando <= maximoTrabalhando)
-          || (trabalhando < minimoTrabalhando && trabalhando + folgas < minimoTrabalhando)) continue;
-        const mensagem = `Cobertura desequilibrada em ${data}: ${trabalhando}/${funcionarios.length} trabalhando na subseção.`;
-        criticas.push(mensagem);
-        for (const funcionario of funcionarios) {
-          marcadores.push({ escfuncId: funcionario.escfuncId, datas: [data], mensagem });
-        }
-      }
-    }
     return { ...grupo, criticas, marcadores };
   }).filter((grupo) => grupo.criticas.length > 0);
 }
