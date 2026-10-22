@@ -144,21 +144,24 @@ begin
           where s.codcoligada = f.codcoligada
             and s.codfilial = f.codfilial
             and s.cod_secao = f.codsecao
-            and regexp_like(upper(nvl(s.descr, ' ')), 'SERVI[CÇ]OS?.*CLIENT|TRANSPORT')
-       )
-       or exists (
-         select 1 from ESCALAINT.SGN_ESC_PROG p
-         join ESCALAINT.SGN_ESC_SECAO s on s.escsecao_id = p.escsecao_id
-          where p.loja = en_nroempresa
-            and p.chapa = ev_chapa
-            and p.mes_ref = trunc(ed_dt_ref, 'MM')
-            and p.ativa = 1
-            and (regexp_like(upper(nvl(s.descr, ' ')), 'FRENTE.*CAIXA|SERVI[CÇ]OS?.*CLIENT|TRANSPORT|PORTARIA')
-                 or regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$'))
+            and s.status = 'A'
+            and regexp_like(upper(nvl(s.descr, ' ')), 'FRENTE.*CAIXA|SERVI[CÇ]OS?.*CLIENT|TRANSPORT')
        )
      );
   return case when vn_encontrado > 0 then 1 else 0 end;
 end FKG_USA_ESCALA_INTELIGENTE;
+
+
+FUNCTION FKG_INICIO_PERIODO_OPERACIONAL (ed_dt_ref in date) return date is
+begin
+   return trunc(trunc(ed_dt_ref, 'MM') + 6, 'IW');
+end FKG_INICIO_PERIODO_OPERACIONAL;
+
+
+FUNCTION FKG_FIM_PERIODO_OPERACIONAL (ed_dt_ref in date) return date is
+begin
+   return FKG_INICIO_PERIODO_OPERACIONAL(add_months(trunc(ed_dt_ref, 'MM'), 1)) - 1;
+end FKG_FIM_PERIODO_OPERACIONAL;
 
 
 FUNCTION FKG_ESCALA_OK (en_nroempresa  in Tint
@@ -221,11 +224,8 @@ BEGIN
                where px.loja = p.loja and px.escfunc_id = p.escfunc_id
                  and px.mes_ref = p.mes_ref and px.ativa = 1)
             and d.programacao = 'TRB'
-            and d.dt >= trunc(ed_dt_ref, 'MM')
-            and d.dt < add_months(trunc(ed_dt_ref, 'MM'), 1)
-            and not (trunc(ed_dt_ref, 'MM') = date '2026-11-01'
-                     and p.mes_ref = date '2026-10-01'
-                     and trunc(d.dt) = date '2026-11-01')
+            and d.dt >= FKG_INICIO_PERIODO_OPERACIONAL(ed_dt_ref)
+            and d.dt < FKG_FIM_PERIODO_OPERACIONAL(ed_dt_ref) + 1
             and (regexp_like(upper(nvl(s.descr, ' ')), 'FRENTE.*CAIXA|SERVI[CÇ]OS?.*CLIENT|TRANSPORT|PORTARIA')
                  or regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$'));
          if vn_pendentes > 0 then vn_ret := 0; end if;
@@ -1718,6 +1718,8 @@ vn_valor    Tnum;
 
 vn_sem_snapshot Tint;
 
+vn_fonte_inteligente Tint;
+
 
 
 BEGIN
@@ -1740,13 +1742,18 @@ BEGIN
 
                      , pfunc              p
 
-                 where b.dt_ref    between trunc(p.datademissao,'month')
+                 where b.dt_ref    between add_months(trunc(p.datademissao,'month'), -1)
 
                                     and last_day(last_day(p.datademissao)+1)
 
                    and b.vtcompra_id   = a.vtcompra_id
 
                    and a.chapa         = p.chapa
+                   and (b.dt_ref >= trunc(p.datademissao,'month')
+                        or exists (select 1
+                                     from SGN_VT_ESCALA_SNAPSHOT_DIA sd
+                                    where sd.vtcompfunc_id = a.vtcompfunc_id
+                                      and sd.dt > trunc(p.datademissao)))
 
                    and p.datademissao >= trunc(sysdate)-10
 
@@ -1804,14 +1811,26 @@ BEGIN
 
 --
 
-               if FKG_USA_ESCALA_INTELIGENTE(rec1.nroempresa, rec1.chapa, rec1.dt_ref_fim) = 1 then
+               select count(*) into vn_fonte_inteligente
+                 from sgn_vt_compra_func cf
+                 join sgn_vt_compra c on c.vtcompra_id = cf.vtcompra_id
+                 join SGN_VT_ESCALA_SNAPSHOT ss on ss.vtcompfunc_id = cf.vtcompfunc_id
+                where cf.chapa = rec1.chapa and c.loja_id = vn_loja_id
+                  and c.tipo_utiliz = rec1.tipo_utiliz and c.status <> 4
+                  and c.dt_ref between add_months(trunc(rec1.datademissao, 'MM'), -1)
+                                   and last_day(last_day(rec1.datademissao) + 1)
+                  and ss.fonte = 'INTELIGENTE' and rownum = 1;
+
+               if vn_fonte_inteligente > 0 or
+                  FKG_USA_ESCALA_INTELIGENTE(rec1.nroempresa, rec1.chapa, rec1.dt_ref_fim) = 1 then
                   select count(*) into vn_sem_snapshot
                     from sgn_vt_compra_func cf
                     join sgn_vt_compra c on c.vtcompra_id = cf.vtcompra_id
                    where cf.chapa = rec1.chapa and c.loja_id = vn_loja_id
                      and c.tipo_utiliz = rec1.tipo_utiliz and c.status <> 4
-                     and c.dt_ref between trunc(rec1.datademissao, 'MM')
+                     and c.dt_ref between add_months(trunc(rec1.datademissao, 'MM'), -1)
                                       and last_day(last_day(rec1.datademissao) + 1)
+                     and c.dt_ref >= date '2026-11-01'
                      and cf.qtde_vt > 0
                      and not exists (select 1 from SGN_VT_ESCALA_SNAPSHOT ss
                                       where ss.vtcompfunc_id = cf.vtcompfunc_id);
@@ -1828,11 +1847,11 @@ BEGIN
                     join SGN_VT_ESCALA_SNAPSHOT_DIA sd on sd.vtcompfunc_id = ss.vtcompfunc_id
                    where cf.chapa = rec1.chapa and c.loja_id = vn_loja_id
                      and c.tipo_utiliz = rec1.tipo_utiliz and c.status <> 4
-                     and c.dt_ref between trunc(rec1.datademissao, 'MM')
+                     and c.dt_ref between add_months(trunc(rec1.datademissao, 'MM'), -1)
                                       and last_day(last_day(rec1.datademissao) + 1)
                      and cf.qtde_vt > 0
                      and sd.dt > trunc(rec1.datademissao)
-                     and sd.dt <= last_day(rec1.dt_ref_fim);
+                     and sd.dt < add_months(trunc(rec1.datademissao, 'MM'), 3);
                else
                   vn_saldo := fkg_dias_trab (ed_dt_inic => rec1.datademissao + 1
                                             ,ed_dt_fim  => last_day(rec1.dt_ref_fim)
@@ -2403,6 +2422,10 @@ vn_dias_trab_ant      Tint;
 
 vn_dias_cred_ant      Tint;
 
+vn_cred_ant_inteligente Tint;
+
+vn_cred_ant_apex Tint;
+
 vn_dias_escala        Tint;
 
 vn_dias_snapshot      Tint;
@@ -2422,6 +2445,10 @@ vd_dt_inic_escala     date;
 vd_dt_fim_escala      date;
 
 vd_dt_cred_ant        date;
+
+vd_dt_inic_cred_ant   date;
+
+vd_dt_fim_cred_ant    date;
 
 vv_memoria            tstr;
 
@@ -2491,19 +2518,7 @@ BEGIN
 
 --
 
-   if v_reg.tipo_carga = 1 then
-
-      vd_dt_inic_escala := fg_get_date(to_char(v_reg.dia_mes,'fm00') || '/' || to_char(v_reg.dt_ref,'mm/yyyy'));
-
-   else
-
-      vd_dt_inic_escala := trunc(v_reg.dt_ref,'month');
-
-   end if;
-
---
-
-   vd_dt_fim_escala  := last_day(vd_dt_inic_escala);
+   -- O periodo da escala depende da fonte de cada funcionario da compra.
 
 --
 
@@ -2551,6 +2566,25 @@ BEGIN
         when FKG_USA_ESCALA_INTELIGENTE(vn_loja_nro, vt_chapa(i), v_reg.dt_ref) = 1
           then 'INTELIGENTE' else 'APEX' end;
 
+      if vv_fonte_escala = 'INTELIGENTE' then
+         vd_dt_inic_escala := FKG_INICIO_PERIODO_OPERACIONAL(v_reg.dt_ref);
+         vd_dt_fim_escala := FKG_FIM_PERIODO_OPERACIONAL(v_reg.dt_ref);
+         if trunc(v_reg.dt_ref, 'MM') = date '2026-11-01' then
+            vd_dt_inic_escala := date '2026-11-01';
+         end if;
+         if v_reg.tipo_carga = 1 then
+            vd_dt_inic_escala := greatest(vd_dt_inic_escala,
+               fg_get_date(to_char(v_reg.dia_mes,'fm00') || '/' || to_char(v_reg.dt_ref,'mm/yyyy')));
+         end if;
+      else
+         if v_reg.tipo_carga = 1 then
+            vd_dt_inic_escala := fg_get_date(to_char(v_reg.dia_mes,'fm00') || '/' || to_char(v_reg.dt_ref,'mm/yyyy'));
+         else
+            vd_dt_inic_escala := trunc(v_reg.dt_ref,'month');
+         end if;
+         vd_dt_fim_escala := last_day(vd_dt_inic_escala);
+      end if;
+
 --
 
       select codfuncao
@@ -2587,7 +2621,9 @@ BEGIN
 
 --
 
-         add_memoria ('Dias Escala ' || to_char(vd_dt_inic_escala,'mm/yyyy') || ' (+) = ' || vn_dias_trab,'green');
+         add_memoria ('Dias Escala ' || to_char(vd_dt_inic_escala,'dd/mm/yyyy') ||
+                     ' a ' || to_char(vd_dt_fim_escala,'dd/mm/yyyy') ||
+                     ' (+) = ' || vn_dias_trab,'green');
 
 --
 
@@ -2709,6 +2745,38 @@ BEGIN
 
 --
 
+         select count(*) into vn_cred_ant_inteligente
+           from sgn_vt_compra_func b
+           join sgn_vt_compra a on a.vtcompra_id = b.vtcompra_id
+           join SGN_VT_ESCALA_SNAPSHOT ss on ss.vtcompfunc_id = b.vtcompfunc_id
+          where b.chapa = vt_chapa(i) and a.loja_id = v_reg.loja_id
+            and a.dt_ref = vd_dt_cred_ant and a.tipo_utiliz = v_reg.tipo_utiliz
+            and a.status <> 4 and ss.fonte = 'INTELIGENTE' and rownum = 1;
+
+         select count(*) into vn_cred_ant_apex
+           from sgn_vt_compra_func b
+           join sgn_vt_compra a on a.vtcompra_id = b.vtcompra_id
+           join SGN_VT_ESCALA_SNAPSHOT ss on ss.vtcompfunc_id = b.vtcompfunc_id
+          where b.chapa = vt_chapa(i) and a.loja_id = v_reg.loja_id
+            and a.dt_ref = vd_dt_cred_ant and a.tipo_utiliz = v_reg.tipo_utiliz
+            and a.status <> 4 and ss.fonte = 'APEX' and rownum = 1;
+
+         if vn_cred_ant_inteligente > 0 and vn_cred_ant_apex > 0 then
+            raise_application_error(-20002,
+              'Compras anteriores em fontes APEX e Escala Inteligente para a chapa ' || vt_chapa(i) ||
+              '. Concilie os dias de VT antes de nova compra.');
+         end if;
+
+         vd_dt_inic_cred_ant := trunc(vd_dt_cred_ant, 'MM');
+         vd_dt_fim_cred_ant := last_day(vd_dt_cred_ant);
+         if vn_cred_ant_inteligente > 0 then
+            vd_dt_inic_cred_ant := FKG_INICIO_PERIODO_OPERACIONAL(vd_dt_cred_ant);
+            vd_dt_fim_cred_ant := FKG_FIM_PERIODO_OPERACIONAL(vd_dt_cred_ant);
+            if trunc(vd_dt_cred_ant, 'MM') = date '2026-11-01' then
+               vd_dt_inic_cred_ant := date '2026-11-01';
+            end if;
+         end if;
+
          select nvl(sum(dias_cred),0)
 
            into vn_dias_cred_ant
@@ -2757,9 +2825,9 @@ BEGIN
 
                and a.codcoligada = 1
 
-               and a.data between vd_dt_cred_ant
+               and a.data between vd_dt_inic_cred_ant
 
-                             and last_day (vd_dt_cred_ant);
+                             and vd_dt_fim_cred_ant;
 
 --
 
@@ -2781,9 +2849,9 @@ BEGIN
 
                and (a.compensado + a.descanso) = 0
 
-               and a.data between vd_dt_cred_ant
+               and a.data between vd_dt_inic_cred_ant
 
-                             and last_day (vd_dt_cred_ant);
+                             and vd_dt_fim_cred_ant;
 
 --
 
