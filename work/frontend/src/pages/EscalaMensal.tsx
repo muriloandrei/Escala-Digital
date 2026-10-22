@@ -18,6 +18,7 @@ import {
 import { EditarDiaEscala } from './EditarDiaEscala';
 import { TransferirSubsecao } from './TransferirSubsecao';
 import { EditarFixoEscala } from './EditarFixoEscala';
+import { ShiftTimeline } from '../ShiftTimeline';
 import { EditarDiasEmMassa } from './EditarDiasEmMassa';
 import { EditarHorarioBase } from './EditarHorarioBase';
 import { createOperationId } from '../operationId';
@@ -64,17 +65,6 @@ function weekday(value: string) {
   return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', timeZone: 'UTC' })
     .format(new Date(`${value}T00:00:00Z`))
     .replace('.', '');
-}
-
-function timeSegment(start?: string | null, end?: string | null) {
-  const minutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-  if (!start || !end || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return null;
-  const from = minutes(start);
-  const to = minutes(end);
-  if (to <= from) return null;
-  const left = Math.max(0, Math.min(100, (from - 300) / 1140 * 100));
-  const right = Math.max(left, Math.min(100, (to - 300) / 1140 * 100));
-  return { left: `${left}%`, width: `${right - left}%` };
 }
 
 function kind(dia?: DiaEscala) {
@@ -914,8 +904,7 @@ export function EscalaMensal({ user }: { user: User }) {
                           <tr key={person.ESCFUNC_ID} className={dayCritiques.length || rowCritiques.length ? 'critical' : ''} title={[...rowCritiques, ...dayCritiques].join('\n') || undefined}>
                             <td className="daily-employee"><strong>{person.NOME}</strong><small>{person.CHAPA} · {person.FUNCAO_DESCR || 'Cargo não informado'}{inativo ? ' · Inativo no RM' : ''}</small></td>
                             <td><button className="daily-distribution" type="button" disabled={quickBusy || aposDemissao || inativo} title={aposDemissao ? 'Após desligamento' : inativo ? 'Inativo no RM' : day?.AUSENCIA_PROJETADA ? 'Ausência do RM, ainda não gravada na escala' : undefined} onClick={() => clickDay(person, selectedDate, day)} onDoubleClick={() => doubleClickDay(person, selectedDate, day)} aria-label={`${person.NOME}, ${formatDate(selectedDate)}, ${fixed ? fixed.PROGRAMACAO === 'TRB' ? 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}${dayCritiques.length ? `, ${dayCritiques.length} crítica(s)` : ''}`}>
-                              <div className="daily-shift-track" aria-hidden="true">{hasShift(day) && <>{timeSegment(day?.HR_ENT1, day?.HR_SAI1) && <span style={timeSegment(day?.HR_ENT1, day?.HR_SAI1)!} />}{timeSegment(day?.HR_ENT2, day?.HR_SAI2) && <span style={timeSegment(day?.HR_ENT2, day?.HR_SAI2)!} />}</>}</div>
-                              <span className="daily-shift-times">{hasShift(day) ? shiftLabel(day) : fixed ? fixed.PROGRAMACAO === 'TRB' ? fixed.HR_ENT1 || 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}</span>
+                              {hasShift(day) ? <ShiftTimeline day={day!} /> : <span className="daily-shift-times">{fixed ? fixed.PROGRAMACAO === 'TRB' ? fixed.HR_ENT1 || 'Trabalho fixo' : 'Folga fixa' : shiftLabel(day)}</span>}
                             </button></td>
                             <td><button type="button" className="icon-action" title={`Ações de ${person.NOME}`} aria-label={`Ações de ${person.NOME}`} onClick={(event) => openPersonMenu(event, person)}><MoreVertical size={16} /></button></td>
                           </tr>

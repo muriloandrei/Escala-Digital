@@ -20,6 +20,30 @@ test('progress endpoint rejects roles outside RH, gerente and admin', async () =
   assert.equal(result.code, 403);
 });
 
+test('only admin can request empty sections in the officialization report', async () => {
+  const handle = router.stack.find((layer) => layer.route?.path === '/progresso').route.stack.at(-1).handle;
+  const originalSections = accessService.getSecoesPermitidasUsuario;
+  const originalProgress = officializationService.getProgress;
+  const calls = [];
+  accessService.getSecoesPermitidasUsuario = async () => null;
+  officializationService.getProgress = async (payload) => { calls.push(payload); return { secoes: [] }; };
+  try {
+    for (const perfil of ['ADMIN', 'GERENTE']) {
+      const res = response();
+      await handle({ user: { perfil }, query: { lojaId: '10', mesRef: '2026-11-01', includeEmpty: '1' } }, res,
+        (error) => { throw error; });
+      assert.equal(res.code, 200);
+    }
+    assert.equal(calls[0].includeEmpty, true);
+    assert.equal(calls[0].includeCritiques, false);
+    assert.equal(calls[1].includeEmpty, false);
+    assert.equal(calls[1].includeCritiques, true);
+  } finally {
+    accessService.getSecoesPermitidasUsuario = originalSections;
+    officializationService.getProgress = originalProgress;
+  }
+});
+
 test('leader can officialize only a whole enabled complete section', async () => {
   const handle = router.stack.find((layer) => layer.route?.path === '/oficializar').route.stack.at(-1).handle;
   const originals = {

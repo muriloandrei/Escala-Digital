@@ -226,6 +226,18 @@ a {
 .progress-row-meta a { color: #174fba; font-weight: 650; }
 .progress-critique { color: #a62c35; }
 .store-toggle { display: inline-flex; align-items: center; gap: 8px; }
+.officialization-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.officialization-filters label { display: grid; gap: 5px; min-width: 150px; color: #52657c; font-size: 12px; }
+.officialization-filters input { min-height: 36px; border: 1px solid #cbd7e4; border-radius: 4px; padding: 6px 8px; color: #19334f; }
+.officialization-table .officialization-store { background: #f1f5fa; }
+.officialization-table .officialization-store th { text-align: left; color: #19334f; }
+.officialization-table .officialization-section { padding-left: 30px; }
+.officialization-table .officialization-section a { color: #2055b1; font-weight: 600; }
+.officialization-table .officialization-message { color: #a02f34; }
+.officialization-status { font-weight: 650; }
+.officialization-status.complete { color: #17704e; }
+.officialization-status.pending { color: #9a5d13; }
+.officialization-pages { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 14px; margin-top: 14px; font-size: 12px; color: #52657c; }
 .button.secondary {
   background: #fff;
   color: #25415f;

@@ -24,7 +24,8 @@ function dateKey(value) {
   return String(value || '').slice(0, 10);
 }
 
-function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], suspensoes = [], periodo, lojaId, mesRef }) {
+function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], suspensoes = [], periodo, lojaId, mesRef,
+  includeEmpty = false, includeCritiques = true }) {
   const dates = datesInPeriod(periodo);
   const suspensionByEmployee = new Map();
   for (const suspension of suspensoes) {
@@ -72,7 +73,7 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
       dias: [...(diasPorFuncionario.get(Number(person.ESCFUNC_ID))?.values() || [])]
         .filter((day) => Number(day.ESCSECAO_ID) === escsecaoId)
     }));
-    const criticas = people.length ? validarCriticasEscopo({ lojaId, mesRef, funcionarios }) : [];
+    const criticas = includeCritiques && people.length ? validarCriticasEscopo({ lojaId, mesRef, funcionarios }) : [];
     const completa = expected > 0 && filled === expected;
     return {
       escsecaoId, secao: secao.DESCR, codigo: secao.COD_SECAO,
@@ -82,7 +83,7 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
       oficializada: completa && official === expected,
       podeOficializar: completa && criticas.length === 0 && official !== expected
     };
-  }).filter((section) => section.funcionarios > 0);
+  }).filter((section) => includeEmpty || section.funcionarios > 0);
   return { secoes: results, oficializada: results.length > 0 && results.every((section) => section.oficializada) };
 }
 
@@ -123,7 +124,8 @@ async function setStoreEnabled(lojaId, enabled) {
   });
 }
 
-async function getProgress({ lojaId, mesRef, secoesPermitidas = null, escala = null }) {
+async function getProgress({ lojaId, mesRef, secoesPermitidas = null, escala = null,
+  includeEmpty = false, includeCritiques = true }) {
   const periodo = getOperationalPeriodIso(mesRef);
   const [schedule, secoes, pessoas, suspensoes, enabled] = await Promise.all([
     escala || escalaService.getEscalaMensal({ lojaId, mesRef, secoesPermitidas }),
@@ -134,7 +136,8 @@ async function getProgress({ lojaId, mesRef, secoesPermitidas = null, escala = n
   ]);
   const operacionais = secoes.filter((secao) => isSecaoEscopoOperacional(secao)
     || (Number(lojaId) === 999 && isSecaoFiscalRemoto(secao)));
-  return { ...buildProgress({ escala: schedule, secoes: operacionais, pessoas, suspensoes, periodo, lojaId, mesRef }), habilitada: enabled === true };
+  return { ...buildProgress({ escala: schedule, secoes: operacionais, pessoas, suspensoes, periodo, lojaId, mesRef,
+    includeEmpty, includeCritiques }), habilitada: enabled === true };
 }
 
 module.exports = { buildProgress, getProgress, getStoreEnabled, setStoreEnabled };

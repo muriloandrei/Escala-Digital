@@ -417,10 +417,13 @@ router.get('/progresso', requirePermission('escalas', 'visualizar'), resolveLoja
     }
     const query = z.object({
       lojaId: z.coerce.number().int().positive(),
-      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+      mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      includeEmpty: z.string().optional()
     }).parse(req.query);
     const secoesPermitidas = await getSecoesPermitidas(req, query.lojaId);
-    const progresso = await officializationService.getProgress({ ...query, secoesPermitidas });
+    const relatorioAdmin = String(req.user?.perfil || '').toUpperCase() === 'ADMIN' && query.includeEmpty === '1';
+    const progresso = await officializationService.getProgress({ ...query, secoesPermitidas,
+      includeEmpty: relatorioAdmin, includeCritiques: !relatorioAdmin });
     return res.json({ progresso });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Loja ou mes invalidos.' });

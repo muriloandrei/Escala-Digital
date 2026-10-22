@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { _private: { aplicarHorarioBaseNosDias, diasComFixoAtualizado } } = require('../src/services/escalaService');
+const { _private: { aplicarHorarioBaseNosDias, diasComFixoAtualizado, diasSemFixo } } = require('../src/services/escalaService');
 const escalaRouter = require('../src/routes/escalaRoutes');
 
 const horario = { HR_ENT1: '09:00', HR_SAI1: '13:00', HR_ENT2: '14:10', HR_SAI2: '18:58' };
@@ -71,6 +71,22 @@ test('ferias e afastamento nao podem ser substituidos por fixo', () => {
       programacao: 'TRB', hrEnt1: '09:00', hrSai1: '13:00', hrEnt2: '14:10', hrSai2: '18:58'
     }), /nao pode receber horario fixo/i);
   }
+});
+
+test('remover folga fixa preserva o dia como folga comum', () => {
+  const atuais = [jornada('2026-11-02', 'FXF'), jornada('2026-11-03')];
+  const dias = diasSemFixo(atuais, '2026-11-02', { PROGRAMACAO: 'FXF' });
+  assert.equal(dias[0].programacao, 'F');
+  assert.equal(dias[0].hrEnt1, null);
+  assert.equal(dias[1].programacao, 'TRB');
+  assert.equal(atuais[0].PROGRAMACAO, 'FXF');
+});
+
+test('remover trabalho fixo mantem os horarios e nao gera revisao sem mudanca', () => {
+  const atuais = [jornada('2026-11-02')];
+  assert.equal(diasSemFixo(atuais, '2026-11-02', { PROGRAMACAO: 'TRB' }), null);
+  assert.equal(diasSemFixo(atuais, '2026-11-03', { PROGRAMACAO: 'FXF' }), null);
+  assert.equal(atuais[0].HR_ENT1, '08:00');
 });
 
 for (const method of ['post', 'patch']) {

@@ -17,12 +17,13 @@ export function EditarFixoEscala({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
+  const workDay = generatedDay?.PROGRAMACAO === 'TRB' ? generatedDay : reference;
   const [mode, setMode] = useState<'FXF' | 'TRB'>(existing?.PROGRAMACAO === 'TRB' ? 'TRB' : 'FXF');
   const [hours, setHours] = useState<StandardHours>({
-    HR_ENT1: existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT1 || '' : reference?.HR_ENT1 || '',
-    HR_SAI1: existing?.PROGRAMACAO === 'TRB' ? existing.HR_SAI1 || '' : reference?.HR_SAI1 || '',
-    HR_ENT2: existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT2 || '' : reference?.HR_ENT2 || '',
-    HR_SAI2: existing?.PROGRAMACAO === 'TRB' ? existing.HR_SAI2 || '' : reference?.HR_SAI2 || '',
+    HR_ENT1: existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT1 || '' : workDay?.HR_ENT1 || '',
+    HR_SAI1: existing?.PROGRAMACAO === 'TRB' ? existing.HR_SAI1 || '' : workDay?.HR_SAI1 || '',
+    HR_ENT2: existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT2 || '' : workDay?.HR_ENT2 || '',
+    HR_SAI2: existing?.PROGRAMACAO === 'TRB' ? existing.HR_SAI2 || '' : workDay?.HR_SAI2 || '',
   });
   const [justification, setJustification] = useState(existing?.JUSTIFICATIVA || '');
   const [busy, setBusy] = useState(false);
@@ -83,7 +84,19 @@ export function EditarFixoEscala({
     try {
       const result = await postJson<{ result: { removed: boolean } }>('/api/escalas/fixos/remover', base);
       if (!result.result?.removed) throw new Error('O fixo não foi encontrado. Atualize a escala.');
-      onSaved('Fixo removido.');
+      const { escala } = await getJson<{ escala: EscalaMensal }>(
+        `/api/escalas/mensal?${new URLSearchParams({ lojaId, mesRef })}`,
+      );
+      const fixed = escala.fixos?.some((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID)
+        && String(item.DT).slice(0, 10) === date);
+      const day = escala.dias.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID)
+        && String(item.DT).slice(0, 10) === date);
+      const expected = existing.PROGRAMACAO === 'TRB' ? 'TRB' : 'F';
+      if (fixed || (generatedDay && (!day || day.PROGRAMACAO !== expected))) {
+        setUncertain(true);
+        throw new Error('A remoção não foi confirmada na escala. Recarregue antes de tentar novamente.');
+      }
+      onSaved(generatedDay ? `Fixo removido; dia convertido em ${expected === 'F' ? 'folga' : 'trabalho'} normal.` : 'Fixo removido; o dia será preenchido na geração da escala.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Não foi possível remover o fixo.');
     } finally {

@@ -50,6 +50,15 @@ test('full suspension is excluded and partial suspension does not require missin
   assert.deepEqual(full.secoes, []);
 });
 
+test('admin report can include an empty section without treating it as officialized', () => {
+  const result = buildProgress({ escala: { dias: [] }, secoes: [section], pessoas: [],
+    periodo: period, lojaId: 10, mesRef: '2026-11-01', includeEmpty: true });
+  assert.equal(result.secoes.length, 1);
+  assert.equal(result.secoes[0].funcionarios, 0);
+  assert.equal(result.secoes[0].percentual, 0);
+  assert.equal(result.secoes[0].oficializada, false);
+});
+
 test('RM-projected absence is visible without counting as a persisted officialization day', () => {
   const absence = { ESCFUNC_ID: 42, DT_INIC: '2026-11-05', DT_FIM: '2026-11-08' };
   const projected = week().slice(3).map((day) => ({

@@ -1187,6 +1187,17 @@ function diasComFixoAtualizado(diasAtuais, data, fixo) {
   return dias;
 }
 
+function diasSemFixo(diasAtuais, data, fixo) {
+  const dias = diasAtuais.map(normalizeDiaComparavel);
+  const dia = dias.find((item) => item.data === data);
+  if (!dia || !fixo) return null;
+  const programacao = String(fixo.PROGRAMACAO || '').toUpperCase();
+  if (programacao === 'TRB' && dia.programacao === 'TRB') return null;
+  if (programacao !== 'TRB' && dia.programacao !== 'FXF') return null;
+  dia.programacao = programacao === 'TRB' ? 'TRB' : 'F';
+  return dias;
+}
+
 async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, actor }) {
   return withConnection(async (connection) => {
     try {
@@ -1339,6 +1350,14 @@ async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, act
       );
       if (result.rowsAffected) {
         const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+        const diasAtualizados = diasSemFixo(escalaAntes?.dias || [], dt, anterior.rows[0]);
+        if (diasAtualizados) {
+          await saveEscalasFuncionariosRevisionComConnection(connection, {
+            lojaId, mesRef, actor, acao: 'REMOVER_DIA_FIXO',
+            funcionarios: [{ escfuncId: Number(escfuncId), revisaoBase: escalaAntes.revisao,
+              escsecaoId: Number(escsecaoId), dias: diasAtualizados }]
+          });
+        }
         await escalaEventService.appendEvent(connection, {
           operacaoId: escalaEventService.createOperationId(), lojaId, mesRef, escsecaoId, escfuncId,
           actor, acao: 'REMOVER_FIXO_ESCALA', origem: 'USUARIO', situacao: situacaoDaAlteracao(escalaAntes),
@@ -3274,6 +3293,7 @@ module.exports = {
     corrigirPorteiroFuncaoDivergente,
     projetarPortariaNaFrente,
     aplicarHorarioBaseNosDias,
-    diasComFixoAtualizado
+    diasComFixoAtualizado,
+    diasSemFixo
   }
 };

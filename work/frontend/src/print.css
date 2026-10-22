@@ -285,17 +285,26 @@
   margin-top: 5px;
 }
 .print-grid td.rest {
-  background: #c9eaf8;
-  color: #0c577a;
+  background: #218bd1;
+  color: #fff;
 }
-.print-grid td.fixed {
-  background: #e8d6f5;
-  color: #5a3186;
+.print-grid td.fixed-rest {
+  background: #7552a6;
+  color: #fff;
+}
+.print-grid td.fixed-work {
+  background: #e6f1fa;
+  color: #174e71;
 }
 .print-grid td.absence {
-  background: #ffebae;
-  color: #775208;
+  background: #f8d364;
+  color: #543b09;
 }
+.print-four-times { display: grid; justify-items: center; gap: 1px; line-height: 1.05; white-space: nowrap; }
+.print-four-times strong { font-weight: 800; }
+.print-sheet.daily .print-grid .print-person-col { width: 210px; }
+.print-sheet.daily .print-grid td { padding: 10px 24px; }
+.print-sheet.daily .shift-timeline { max-width: 900px; margin: 0 auto; }
 .print-grid td.empty {
   color: #9aa9ba;
 }
@@ -423,7 +432,8 @@
     page-break-inside: avoid;
   }
   .print-grid td.rest,
-  .print-grid td.fixed,
+  .print-grid td.fixed-rest,
+  .print-grid td.fixed-work,
   .print-grid td.absence,
   .print-grid thead th {
     print-color-adjust: exact;

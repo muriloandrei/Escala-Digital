@@ -10,6 +10,7 @@ import {
   type User,
 } from '../api';
 import { compareEmployeesByShift } from '../scheduleOrder';
+import { ShiftTimeline } from '../ShiftTimeline';
 
 type Mode = 'mensal' | 'semanal' | 'diario' | 'periodo';
 type Format = 'juntos' | 'cargos' | 'colaborador';
@@ -58,19 +59,29 @@ function dayKind(day?: DiaEscala) {
   if (!day) return 'empty';
   const code = String(day.PROGRAMACAO || '').toUpperCase();
   if (day.AUSENCIA_OBRIGATORIA || code === 'FER' || code === 'AFA') return 'absence';
-  if (day.FIXO_ESCALA) return 'fixed';
+  if (day.FIXO_ESCALA) return code === 'TRB' ? 'fixed-work' : 'fixed-rest';
   if (code && code !== 'TRB') return 'rest';
   return 'work';
 }
 
 function dayText(day: DiaEscala | undefined, compact: boolean) {
   if (!day) return '–';
-  if (['rest', 'absence'].includes(dayKind(day))) {
+  if (['rest', 'fixed-rest', 'absence'].includes(dayKind(day))) {
     return day.PROGRAMACAO || 'F';
   }
   const first = day.HR_ENT1 || '';
   const last = day.HR_SAI2 || day.HR_SAI1 || '';
   return compact ? first || 'TRB' : [first, last].filter(Boolean).join('–') || 'TRB';
+}
+
+function PrintDayCell({ day, compact, daily }: { day?: DiaEscala; compact: boolean; daily: boolean }) {
+  if (!day || !['work', 'fixed-work'].includes(dayKind(day))) return <>{dayText(day, compact)}</>;
+  if (daily) return <ShiftTimeline day={day} />;
+  if (compact) return <div className="print-four-times">
+    <strong>{day.HR_ENT1 || '–'}</strong><span>{day.HR_SAI1 || '–'}</span>
+    <span>{day.HR_ENT2 || '–'}</span><strong>{day.HR_SAI2 || '–'}</strong>
+  </div>;
+  return <>{dayText(day, false)}</>;
 }
 
 function SelectList({
@@ -158,6 +169,7 @@ function PrintSheet({
   days: Map<string, Map<string, DiaEscala>>;
 }) {
   const compact = sheet.dates.length > 14;
+  const daily = sheet.dates.length === 1;
   const printedAt = new Date().toLocaleString('pt-BR');
   const getDay = (person: Funcionario, date: string) => days.get(String(person.ESCFUNC_ID))?.get(date);
   const heads = sheet.dates.map((date) => (
@@ -168,7 +180,7 @@ function PrintSheet({
     </th>
   ));
   return (
-    <article className={`print-sheet ${compact ? 'compact' : ''}`}>
+    <article className={`print-sheet ${compact ? 'compact' : ''} ${daily ? 'daily' : ''}`}>
       <header className="print-sheet-header">
         <div>
           <h2>Escala de Trabalho · {sheet.title}</h2>
@@ -206,12 +218,12 @@ function PrintSheet({
                 </thead>
                 <tbody>
                   <tr>
-                    <th>{compact ? 'Entrada' : 'Entrada–saída'}</th>
+                    <th>{compact ? 'Horários' : daily ? 'Jornada' : 'Entrada–saída'}</th>
                     {sheet.dates.map((date) => {
                       const day = getDay(person, date);
                       return (
                         <td key={date} className={dayKind(day)}>
-                          {dayText(day, compact)}
+                          <PrintDayCell day={day} compact={compact} daily={daily} />
                         </td>
                       );
                     })}
@@ -243,7 +255,7 @@ function PrintSheet({
                   const day = getDay(person, date);
                   return (
                     <td key={date} className={dayKind(day)}>
-                      {dayText(day, compact)}
+                      <PrintDayCell day={day} compact={compact} daily={daily} />
                     </td>
                   );
                 })}
@@ -258,7 +270,7 @@ function PrintSheet({
                   {
                     sheet.people.filter(
                       (person) =>
-                        ['work', 'fixed'].includes(dayKind(getDay(person, date))) && !!getDay(person, date),
+                        ['work', 'fixed-work'].includes(dayKind(getDay(person, date))) && !!getDay(person, date),
                     ).length
                   }
                 </td>
@@ -270,7 +282,7 @@ function PrintSheet({
                 <td key={date}>
                   {
                     sheet.people.filter((person) =>
-                      ['rest', 'absence'].includes(dayKind(getDay(person, date))),
+                      ['rest', 'fixed-rest', 'absence'].includes(dayKind(getDay(person, date))),
                     ).length
                   }
                 </td>
