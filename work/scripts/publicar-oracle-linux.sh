@@ -37,8 +37,8 @@ command -v flock >/dev/null || { printf 'flock nao encontrado.\n' >&2; exit 1; }
 exec 9>/tmp/escala-app-deploy.lock
 flock -n 9 || { printf 'Outra publicacao esta em andamento.\n' >&2; exit 1; }
 
-git -C "$repo" fetch origin "$ref"
-sha=$(git -C "$repo" rev-parse "origin/$ref")
+git -C "$repo" fetch origin "+refs/heads/$ref:refs/remotes/origin/$ref"
+sha=$(git -C "$repo" rev-parse "refs/remotes/origin/$ref")
 if [[ -n "$expected_sha" && "$sha" != "$expected_sha" ]]; then
   printf 'O remoto mudou: esperado %s, encontrado %s.\n' "$expected_sha" "$sha" >&2
   exit 1
