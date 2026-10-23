@@ -369,6 +369,88 @@
 .print-sheet.compact .print-grid td.fixed-rest,
 .print-sheet.compact .print-grid td.absence { font-size: 10px; }
 
+.print-sheet.roster {
+  width: min(100%, 1160px);
+  min-width: 860px;
+  min-height: 760px;
+  aspect-ratio: 297 / 210;
+  padding: 20px 24px 16px;
+  gap: 8px;
+  color: #162331;
+}
+.print-sheet.roster .print-sheet-header {
+  border: 1px solid #394858;
+  padding: 7px 10px;
+}
+.print-sheet.roster .print-sheet-header h2 { font-size: 15px; }
+.print-roster-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 0;
+}
+.print-roster-person {
+  border: 1px solid #506070;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.print-roster-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 23px;
+  padding: 4px 7px;
+  border-bottom: 1px solid #506070;
+  background: #e9eef2;
+  font-size: 10px;
+}
+.print-roster-heading strong { font-size: 11px; }
+.print-roster-heading span:last-child { white-space: nowrap; }
+.print-roster-grid {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.print-roster-grid th,
+.print-roster-grid td {
+  border-right: 1px solid #9caab6;
+  border-bottom: 1px solid #a6b2bc;
+  padding: 2px 0;
+  text-align: center;
+  white-space: nowrap;
+}
+.print-roster-grid tr:last-child th,
+.print-roster-grid tr:last-child td { border-bottom: 0; }
+.print-roster-grid th:last-child,
+.print-roster-grid td:last-child { border-right: 0; }
+.print-roster-grid th { background: #f2f5f7; font-weight: 600; }
+.print-roster-grid .print-roster-label {
+  width: 96px;
+  padding-right: 4px;
+  text-align: right;
+}
+.print-sheet.roster.compact .print-roster-grid { font-size: 7px; }
+.print-sheet.roster.compact .print-roster-grid .print-roster-label { font-size: 8px; }
+.print-sheet.roster:not(.compact) .print-roster-grid { font-size: 11px; }
+.print-sheet.roster:not(.compact) .print-roster-grid .print-roster-label { width: 145px; }
+.print-roster-grid td.rest,
+.print-roster-grid td.fixed-rest { background: #fce376; font-weight: 700; }
+.print-roster-grid td.absence { background: #dfe9f1; font-weight: 700; }
+.print-roster-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 7px;
+  border-top: 1px solid #506070;
+  font-size: 9px;
+}
+.print-roster-total strong { white-space: nowrap; }
+.print-sheet.roster .print-sheet-footer { margin-top: 0; }
+
 @media (max-width: 1200px) {
   .print-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -395,6 +477,10 @@
 @page {
   size: A3 landscape;
   margin: 10mm;
+}
+@page roster-page {
+  size: A4 landscape;
+  margin: 8mm;
 }
 @media print {
   :root,
@@ -435,6 +521,30 @@
   .print-sheet:last-child {
     break-after: auto;
     page-break-after: auto;
+  }
+  .print-sheet.roster {
+    page: roster-page;
+    width: 100%;
+    min-width: 0;
+    height: 194mm;
+    min-height: 0;
+    aspect-ratio: auto;
+    padding: 0;
+    gap: 3mm;
+  }
+  .print-sheet.roster .print-sheet-header { padding: 2mm; }
+  .print-sheet.roster .print-roster-list { gap: 2mm; }
+  .print-sheet.roster .print-sheet-footer { margin-top: auto; }
+  .print-sheet.roster .print-roster-grid th,
+  .print-sheet.roster .print-roster-grid td { padding: 0.3mm 0; }
+  .print-sheet.roster:not(.compact) .print-roster-grid { font-size: 10px; }
+  .print-roster-heading,
+  .print-roster-grid th,
+  .print-roster-grid td.rest,
+  .print-roster-grid td.fixed-rest,
+  .print-roster-grid td.absence {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
   .print-sheet-header {
     padding-bottom: 6mm;

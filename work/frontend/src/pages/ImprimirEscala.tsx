@@ -11,10 +11,11 @@ import {
 } from '../api';
 import { compareEmployeesByShift } from '../scheduleOrder';
 import { ShiftTimeline } from '../ShiftTimeline';
+import { formatWorkedMinutes, printBatches, printDayLabel, printPageSize, workedMinutes } from '../printSchedule';
 
 type Mode = 'mensal' | 'semanal' | 'diario' | 'periodo';
 type Format = 'juntos' | 'cargos' | 'colaborador';
-type Sheet = { title: string; dates: string[]; people: Funcionario[]; individual: boolean };
+type Sheet = { title: string; dates: string[]; people: Funcionario[]; individual: boolean; roster: boolean };
 
 const modeNames: Record<Mode, string> = {
   mensal: 'Mensal',
@@ -46,12 +47,6 @@ function dateRange(start: string, end: string) {
     result.push(date.toISOString().slice(0, 10));
     date.setUTCDate(date.getUTCDate() + 1);
   }
-  return result;
-}
-
-function chunks<T>(items: T[], size: number) {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
   return result;
 }
 
@@ -174,7 +169,7 @@ function PrintSheet({
     </th>
   ));
   return (
-    <article className={`print-sheet ${compact ? 'compact' : ''} ${daily ? 'daily' : ''}`}>
+    <article className={`print-sheet ${compact ? 'compact' : ''} ${daily ? 'daily' : ''} ${sheet.roster ? 'roster' : ''}`}>
       <header className="print-sheet-header">
         <div>
           <h2>Escala de Trabalho · {sheet.title}</h2>
@@ -192,7 +187,48 @@ function PrintSheet({
         </div>
         <img src="/assets/escala-inteligente-logo-transparent.png" alt="Escala Inteligente" />
       </header>
-      {sheet.individual ? (
+      {sheet.roster ? (
+        <div className="print-roster-list">
+          {sheet.people.map((person) => {
+            const personDays = sheet.dates.map((date) => getDay(person, date));
+            const dailyMinutes = personDays.map(workedMinutes);
+            const totalMinutes = dailyMinutes.reduce((sum, value) => sum + value, 0);
+            return (
+              <section className="print-roster-person" key={person.ESCFUNC_ID}>
+                <div className="print-roster-heading">
+                  <strong>{person.NOME} ({person.CHAPA})</strong>
+                  <span>{person.FUNCAO_DESCR || 'Cargo não informado'}</span>
+                  <span>Ass.: ____________________</span>
+                </div>
+                <table className="print-roster-grid">
+                  <tbody>
+                    <tr><th className="print-roster-label" scope="row">Data</th>{sheet.dates.map((date) => <td key={date}>{date.slice(8, 10)}{date.slice(5, 7) !== sheet.dates[0].slice(5, 7) ? `/${date.slice(5, 7)}` : ''}</td>)}</tr>
+                    <tr><th className="print-roster-label" scope="row">Dia</th>{sheet.dates.map((date) => <td key={date}>{weekday(date)}</td>)}</tr>
+                    {([
+                      ['HR_ENT1', 'Entrada'],
+                      ['HR_SAI1', 'Saída intervalo'],
+                      ['HR_ENT2', 'Retorno'],
+                      ['HR_SAI2', 'Saída'],
+                    ] as const).map(([field, label]) => (
+                      <tr key={field}>
+                        <th className="print-roster-label" scope="row">{label}</th>
+                        {personDays.map((item, index) => {
+                          const kind = dayKind(item);
+                          return <td key={sheet.dates[index]} className={kind}>
+                            {kind === 'work' || kind === 'fixed-work' ? item?.[field] || '–' : printDayLabel(item)}
+                          </td>;
+                        })}
+                      </tr>
+                    ))}
+                    <tr><th className="print-roster-label" scope="row">Horas trabalhadas</th>{dailyMinutes.map((value, index) => <td key={sheet.dates[index]}>{value ? formatWorkedMinutes(value) : ''}</td>)}</tr>
+                  </tbody>
+                </table>
+                <div className="print-roster-total"><span>É responsabilidade de cada funcionário cumprir rigorosamente esta escala.</span><strong>Total de horas: {formatWorkedMinutes(totalMinutes)}</strong></div>
+              </section>
+            );
+          })}
+        </div>
+      ) : sheet.individual ? (
         <div className="print-individual-list">
           {sheet.people.map((person) => (
             <section className="print-person" key={person.ESCFUNC_ID}>
@@ -368,7 +404,7 @@ export function ImprimirEscala({ user }: { user: User }) {
     .filter((person) => !excludedRoles.has(person.FUNCAO_DESCR || 'Cargo não informado'))
     .map((person) => ({ key: String(person.ESCFUNC_ID), label: `${person.CHAPA} | ${person.NOME}` }));
   const allDates = useMemo(() => (data ? dateRange(data.periodo.inicio, data.periodo.fim) : []), [data]);
-  const weeks = useMemo(() => chunks(allDates, 7), [allDates]);
+  const weeks = useMemo(() => printBatches(allDates, 7), [allDates]);
   const selectedDates =
     mode === 'semanal'
       ? weeks[week] || []
@@ -406,19 +442,14 @@ export function ImprimirEscala({ user }: { user: User }) {
         : [{ name: '', people: selectedPeople }];
     const result: Sheet[] = [];
     groups.forEach((group) => {
-      // Two collaborators per sheet keeps weekly and individual reports intact in the PDF.
-      const pageSize =
-        format === 'colaborador' || mode === 'semanal' || mode === 'periodo'
-          ? 2
-          : mode === 'diario'
-            ? 24
-            : 14;
-      chunks(group.people, pageSize).forEach((batch) => {
+      const pageSize = printPageSize(mode, format);
+      printBatches(group.people, pageSize).forEach((batch) => {
         result.push({
           title: `${modeNames[mode]}${group.name ? ` · ${group.name}` : ''}`,
           dates: selectedDates,
           people: batch,
           individual: format === 'colaborador',
+          roster: mode === 'mensal' || mode === 'semanal',
         });
       });
     });
@@ -487,7 +518,10 @@ export function ImprimirEscala({ user }: { user: User }) {
                   className={mode === item ? 'selected' : ''}
                   type="button"
                   aria-pressed={mode === item}
-                  onClick={() => setMode(item)}
+                  onClick={() => {
+                    setMode(item);
+                    if ((item === 'mensal' || item === 'semanal') && format === 'colaborador') setFormat('juntos');
+                  }}
                 >
                   {modeNames[item]}
                 </button>
@@ -579,8 +613,8 @@ export function ImprimirEscala({ user }: { user: User }) {
                   [
                     ['juntos', 'Colaboradores juntos'],
                     ['cargos', 'Cargos separados'],
-                    ['colaborador', 'Por colaborador'],
-                  ] as const
+                    ...(['mensal', 'semanal'].includes(mode) ? [] : [['colaborador', 'Por colaborador']]),
+                  ] as [Format, string][]
                 ).map(([value, title]) => (
                   <label key={value} className={format === value ? 'selected' : ''}>
                     <input

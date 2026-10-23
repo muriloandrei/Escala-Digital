@@ -35,6 +35,7 @@ require('./app-version.test');
 require('./eventos-page.test');
 require('./shift-validation.test');
 require('./frontend-helpers.test');
+require('./print-schedule.test');
 require('./escala-sync-rm.test');
 require('./escala-eventos.test');
 require('./subsection-transfer.test');
