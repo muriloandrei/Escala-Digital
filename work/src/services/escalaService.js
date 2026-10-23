@@ -1226,6 +1226,7 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
         error.statusCode = 422;
         throw error;
       }
+      const demissoes = await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
       const funcionarioDb = await getFuncionarioEscala(connection, escfuncId);
       const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
       if (!funcionarioDb || Number(funcionarioDb.LOJA) !== Number(lojaId)
@@ -1236,7 +1237,6 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
         throw error;
       }
       assertSemDiasFuturosParaInativo([{ data: data.DT || data.dt }], funcionarioDb.STATUS);
-      const demissoes = await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
       assertSemNovaProgramacaoAposDemissao([{ data: data.DT || data.dt }], [], demissoes.get(Number(escfuncId)));
       const programacaoInput = String(data.PROGRAMACAO || data.programacao || 'TRB').trim().toUpperCase();
       const programacao = programacaoInput === 'F' || programacaoInput === 'FOLGA' ? 'FXF' : programacaoInput;
@@ -1334,6 +1334,7 @@ async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, act
         error.statusCode = 422;
         throw error;
       }
+      await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
       const funcionarioDb = await getFuncionarioEscala(connection, escfuncId);
       const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
       if (!funcionarioDb || Number(funcionarioDb.LOJA) !== Number(lojaId)
@@ -1343,7 +1344,6 @@ async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, act
         error.statusCode = 404;
         throw error;
       }
-      await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
       const anterior = await connection.execute(
         `select programacao, hr_ent1, hr_sai1, hr_ent2, hr_sai2, justificativa, status
            from sgn_esc_fixo_escala
