@@ -4,7 +4,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { effectiveDate } = require('../src/services/subsectionTransferService');
-const { _private: { aplicarHistoricoSubsecoes, corrigirPorteiroFuncaoDivergente } } = require('../src/services/escalaService');
+const { _private: { aplicarHistoricoSubsecoes, corrigirPorteiroFuncaoDivergente, filtrarLinhasForaDoEscopoAtual } } = require('../src/services/escalaService');
+
+test('open months hide stale operational days after a move to Deposito', () => {
+  const rows = [
+    { ESCFUNC_ID: 1, CADASTRO_COD_SECAO: '052.02.001', CADASTRO_SECAO_DESCR: 'Deposito' },
+    { ESCFUNC_ID: 2, CADASTRO_COD_SECAO: '052.02.012', CADASTRO_SECAO_DESCR: 'Estacionamento' },
+    { ESCFUNC_ID: 3, CADASTRO_COD_SECAO: '052.02.002', CADASTRO_SECAO_DESCR: 'Frente de Caixa' }
+  ];
+  assert.deepEqual(filtrarLinhasForaDoEscopoAtual(rows, '2099-11-01', 52).map((row) => row.ESCFUNC_ID), [2, 3]);
+  assert.equal(filtrarLinhasForaDoEscopoAtual(rows, '2026-10-01', 52).length, 3);
+});
 
 test('proxima semana comeca na segunda seguinte, inclusive se hoje ja for segunda', () => {
   assert.equal(effectiveDate('PROXIMA_SEMANA', '2026-10-01'), '2026-10-05');

@@ -61,11 +61,14 @@ test('leader can officialize only a whole enabled complete section', async () =>
   accessService.getSecoesPermitidasUsuario = async () => [12];
   accessService.assertSecoesPermitidas = async () => {};
   officializationService.getProgress = async () => ({ habilitada: enabled,
-    secoes: [{ escsecaoId: 12, completa: complete, criticas: 0 }] });
-  rmIntegrationService.validarPreRequisitosRm = async () => ({ errors: [] });
+    secoes: [{ escsecaoId: 12, escfuncIds: [42, 43], completa: complete, criticas: 0 }] });
+  rmIntegrationService.validarPreRequisitosRm = async ({ escfuncIds }) => {
+    assert.deepEqual(escfuncIds, [42, 43]);
+    return { errors: [] };
+  };
   rmIntegrationService.processarOperacaoRm = async () => ({ status: 'PENDENTE' });
   escalaService.oficializarEscala = async (payload) => {
-    assert.equal(payload.escfuncIds, undefined);
+    assert.deepEqual(payload.escfuncIds, [42, 43]);
     writes += 1;
     return { affectedRows: 2, operacaoId: 'operation', revisao: 1 };
   };
@@ -123,17 +126,19 @@ test('officializing Transportes also approves ready linked sections without appr
   officializationService.getProgress = async (params) => {
     assert.deepEqual(params.secoesPermitidas, [1, 2, 3, 4]);
     return { habilitada: true, secoes: [
-      { escsecaoId: 1, codigo: '035.02.002', secao: 'Frente de Caixa', completa: true, criticas: 0, podeOficializar: true },
-      { escsecaoId: 2, codigo: '035.02.004', secao: 'Transportes', completa: true, criticas: 0, podeOficializar: true },
-      { escsecaoId: 3, codigo: '035.03.001', secao: 'Serviços a Clientes', completa: true, criticas: 0, podeOficializar: true },
+      { escsecaoId: 1, escfuncIds: [11], codigo: '035.02.002', secao: 'Frente de Caixa', completa: true, criticas: 0, podeOficializar: true },
+      { escsecaoId: 2, escfuncIds: [22], codigo: '035.02.004', secao: 'Transportes', completa: true, criticas: 0, podeOficializar: true },
+      { escsecaoId: 3, escfuncIds: [33], codigo: '035.03.001', secao: 'Serviços a Clientes', completa: true, criticas: 0, podeOficializar: true },
       { escsecaoId: 4, codigo: '035.02.012', secao: 'Estacionamento', completa: false, criticas: 1, podeOficializar: false },
       { escsecaoId: 5, codigo: '035.03.008', secao: 'Fiscal Remoto', completa: true, criticas: 0, podeOficializar: true }
     ] };
   };
-  rmIntegrationService.validarPreRequisitosRm = async ({ escsecaoId }) => ({
-    errors: escsecaoId === 3 ? ['CPF ausente.'] : []
-  });
-  escalaService.oficializarEscala = async ({ escsecaoId }) => {
+  rmIntegrationService.validarPreRequisitosRm = async ({ escsecaoId, escfuncIds }) => {
+    assert.deepEqual(escfuncIds, { 1: [11], 2: [22], 3: [33] }[escsecaoId]);
+    return { errors: escsecaoId === 3 ? ['CPF ausente.'] : [] };
+  };
+  escalaService.oficializarEscala = async ({ escsecaoId, escfuncIds }) => {
+    assert.deepEqual(escfuncIds, { 1: [11], 2: [22] }[escsecaoId]);
     approved.push(escsecaoId);
     return { affectedRows: 2, revisao: 7, operacaoId: `operation-${escsecaoId}` };
   };
@@ -178,8 +183,8 @@ test('a linked section changed during approval is reported without hiding the pr
   accessService.getSecoesPermitidasUsuario = async () => [1, 2];
   accessService.assertSecoesPermitidas = async () => {};
   officializationService.getProgress = async () => ({ habilitada: true, secoes: [
-    { escsecaoId: 1, codigo: '035.02.002', secao: 'Frente de Caixa', completa: true, criticas: 0, podeOficializar: true },
-    { escsecaoId: 2, codigo: '035.02.004', secao: 'Transportes', completa: true, criticas: 0, podeOficializar: true }
+    { escsecaoId: 1, escfuncIds: [11], codigo: '035.02.002', secao: 'Frente de Caixa', completa: true, criticas: 0, podeOficializar: true },
+    { escsecaoId: 2, escfuncIds: [22], codigo: '035.02.004', secao: 'Transportes', completa: true, criticas: 0, podeOficializar: true }
   ] });
   rmIntegrationService.validarPreRequisitosRm = async () => ({ errors: [] });
   escalaService.oficializarEscala = async ({ escsecaoId }) => {

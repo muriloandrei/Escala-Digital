@@ -879,6 +879,21 @@ function projetarPortariaNaFrente(rows = [], catalogo = [], mesRef) {
   return rows;
 }
 
+function filtrarLinhasForaDoEscopoAtual(rows = [], mesRef, lojaId) {
+  if (isMesFinalizado(mesRef)) return rows;
+  return rows.filter((row) => {
+    const cadastro = {
+      COD_SECAO: pick(row, 'CADASTRO_COD_SECAO', 'cadastro_cod_secao'),
+      DESCR: pick(row, 'CADASTRO_SECAO_DESCR', 'cadastro_secao_descr')
+    };
+    if (!cadastro.COD_SECAO && !cadastro.DESCR) return true;
+    if (isPortariaSection(cadastro)) return true;
+    const descricao = String(cadastro.DESCR || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    if (/FRENTE.*CAIXA|SERVIC.*CLIENT|TRANSPORT/.test(descricao)) return true;
+    return Number(lojaId) === 999 && String(cadastro.COD_SECAO || '').trim() === '999.03.008';
+  });
+}
+
 function filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo = [], rows = []) {
   const secoesDaEscala = new Set((rows || [])
     .map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id')))
@@ -1212,7 +1227,10 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
         throw error;
       }
       const funcionarioDb = await getFuncionarioEscala(connection, escfuncId);
-      if (!funcionarioDb || Number(funcionarioDb.LOJA) !== Number(lojaId) || Number(funcionarioDb.ESCSECAO_ID) !== Number(escsecaoId)) {
+      const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+      if (!funcionarioDb || Number(funcionarioDb.LOJA) !== Number(lojaId)
+        || Number(pick(escalaAntes?.header, 'ESCSECAO_ID', 'escsecao_id')
+          || funcionarioDb.ESCSECAO_ID) !== Number(escsecaoId)) {
         const error = new Error('Funcionario nao encontrado na loja/secao informada.');
         error.statusCode = 404;
         throw error;
@@ -1220,8 +1238,6 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
       assertSemDiasFuturosParaInativo([{ data: data.DT || data.dt }], funcionarioDb.STATUS);
       const demissoes = await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
       assertSemNovaProgramacaoAposDemissao([{ data: data.DT || data.dt }], [], demissoes.get(Number(escfuncId)));
-      const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
-
       const programacaoInput = String(data.PROGRAMACAO || data.programacao || 'TRB').trim().toUpperCase();
       const programacao = programacaoInput === 'F' || programacaoInput === 'FOLGA' ? 'FXF' : programacaoInput;
       const descanso = programacao !== 'TRB';
@@ -1319,7 +1335,10 @@ async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, act
         throw error;
       }
       const funcionarioDb = await getFuncionarioEscala(connection, escfuncId);
-      if (!funcionarioDb || Number(funcionarioDb.LOJA) !== Number(lojaId) || Number(funcionarioDb.ESCSECAO_ID) !== Number(escsecaoId)) {
+      const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+      if (!funcionarioDb || Number(funcionarioDb.LOJA) !== Number(lojaId)
+        || (Number(funcionarioDb.ESCSECAO_ID) !== Number(escsecaoId)
+          && Number(pick(escalaAntes?.header, 'ESCSECAO_ID', 'escsecao_id')) !== Number(escsecaoId))) {
         const error = new Error('Funcionario nao encontrado na loja/secao informada.');
         error.statusCode = 404;
         throw error;
@@ -1349,13 +1368,12 @@ async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, act
         { autoCommit: false }
       );
       if (result.rowsAffected) {
-        const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
         const diasAtualizados = diasSemFixo(escalaAntes?.dias || [], dt, anterior.rows[0]);
         if (diasAtualizados) {
           await saveEscalasFuncionariosRevisionComConnection(connection, {
             lojaId, mesRef, actor, acao: 'REMOVER_DIA_FIXO',
             funcionarios: [{ escfuncId: Number(escfuncId), revisaoBase: escalaAntes.revisao,
-              escsecaoId: Number(escsecaoId), dias: diasAtualizados }]
+              escsecaoId: Number(pick(escalaAntes.header, 'ESCSECAO_ID', 'escsecao_id')), dias: diasAtualizados }]
           });
         }
         await escalaEventService.appendEvent(connection, {
@@ -1492,6 +1510,8 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           p.escfunc_id,
           p.escsecao_id,
           f.escsecao_id as cadastro_secao_id,
+          cs.cod_secao as cadastro_cod_secao,
+          cs.descr as cadastro_secao_descr,
           p.escfuncao_id,
           f.nome,
           ${dtDemissSelect},
@@ -1516,6 +1536,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           end as status
        from sgn_esc_prog p
        left join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
+       left join sgn_esc_secao cs on cs.escsecao_id = f.escsecao_id
        ${subsecaoJoinSql}
        left join sgn_esc_secao s on s.escsecao_id = p.escsecao_id
        left join sgn_esc_funcao fn on fn.escfuncao_id = p.escfuncao_id
@@ -1539,7 +1560,8 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     );
 
     const { rows: rowsProjetadas, pendencias: pendenciasDesligamento } = projetarDemissoesNaEscala(result.rows || []);
-    const rows = filtrarCabecalhosInativosSemDias(rowsProjetadas);
+    const rows = filtrarLinhasForaDoEscopoAtual(filtrarCabecalhosInativosSemDias(rowsProjetadas), mesRef, lojaId);
+    rows.forEach((row) => { row.ESCSECAO_ID_ESCALA = row.ESCSECAO_ID; });
     const funcionariosCatalogoCompleto = await catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }).catch(() => []);
     const funcionariosCatalogo = filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogoCompleto, rows);
     const catalogoPorFuncionario = new Map((funcionariosCatalogo || [])
@@ -1666,6 +1688,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
         CHAPA: pick(funcionario, 'CHAPA', 'chapa') || atual.CHAPA,
         NOME: pick(funcionario, 'NOME', 'nome') || atual.NOME,
         ESCSECAO_ID: preservarAlocacao && atual.ESCSECAO_ID ? atual.ESCSECAO_ID : pick(funcionario, 'ESCSECAO_ID', 'escsecao_id') || atual.ESCSECAO_ID,
+        ESCSECAO_ID_ESCALA: pick(funcionario, 'ESCSECAO_ID_ESCALA', 'escsecao_id_escala') || atual.ESCSECAO_ID_ESCALA || null,
         ESCSUBSECAO_ID: preservarAlocacao && atual.ESCSECAO_ID ? atual.ESCSUBSECAO_ID : pick(funcionario, 'ESCSUBSECAO_ID', 'escsubsecao_id'),
         SUBSECAO_DESCR: preservarAlocacao && atual.ESCSECAO_ID ? atual.SUBSECAO_DESCR : pick(funcionario, 'SUBSECAO_DESCR', 'subsecao_descr'),
         ESCFUNCAO_ID: pick(funcionario, 'ESCFUNCAO_ID', 'escfuncao_id') || atual.ESCFUNCAO_ID,
@@ -3292,6 +3315,7 @@ module.exports = {
     aplicarHistoricoSubsecoes,
     corrigirPorteiroFuncaoDivergente,
     projetarPortariaNaFrente,
+    filtrarLinhasForaDoEscopoAtual,
     aplicarHorarioBaseNosDias,
     diasComFixoAtualizado,
     diasSemFixo

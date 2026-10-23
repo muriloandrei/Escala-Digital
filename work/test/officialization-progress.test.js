@@ -42,6 +42,24 @@ test('section progress does not use historical days from another section', () =>
   assert.equal(result.oficializada, false);
 });
 
+test('progress follows the active physical section during the Portaria migration', () => {
+  const portaria = { ESCSECAO_ID: 13, COD_SECAO: '010.02.012', DESCR: 'Estacionamento' };
+  const people = [{ ...person, ESCSECAO_ID: 13 }];
+  const frontDays = week().map((day) => ({ ...day, OFICIALIZADA: 1 }));
+  const front = buildProgress({ escala: { dias: frontDays }, secoes: [section, portaria],
+    pessoas: people, periodo: period, lojaId: 10, mesRef: '2026-11-01' });
+  assert.equal(front.secoes.length, 1);
+  assert.equal(front.secoes[0].escsecaoId, 12);
+  assert.equal(front.secoes[0].preenchidos, 7);
+  assert.equal(front.secoes[0].oficializada, true);
+
+  const projectedDays = frontDays.map((day) => ({ ...day, ESCSECAO_ID_ESCALA: 13 }));
+  const oldSection = buildProgress({ escala: { dias: projectedDays }, secoes: [section, portaria],
+    pessoas: [{ ...person, ESCSECAO_ID: 12 }], periodo: period, lojaId: 10, mesRef: '2026-11-01' });
+  assert.equal(oldSection.secoes[0].escsecaoId, 13);
+  assert.equal(oldSection.secoes[0].preenchidos, 7);
+});
+
 test('full suspension is excluded and partial suspension does not require missing days', () => {
   const input = { escala: { dias: week().slice(0, 3) }, secoes: [section], pessoas: [person], periodo: period, lojaId: 10, mesRef: '2026-11-01' };
   const partial = buildProgress({ ...input, suspensoes: [{ ESCFUNC_ID: 42, DT_INICIO: '2026-11-05', DT_FIM: '2026-11-08' }] });

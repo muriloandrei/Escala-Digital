@@ -32,7 +32,7 @@ export function EditarFixoEscala({
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
   const base = {
     lojaId: Number(lojaId), mesRef, escfuncId: Number(employee.ESCFUNC_ID),
-    escsecaoId: Number(employee.ESCSECAO_ID), DT: date,
+    escsecaoId: Number(generatedDay?.ESCSECAO_ID_ESCALA || employee.ESCSECAO_ID_ESCALA || existing?.ESCSECAO_ID || employee.ESCSECAO_ID), DT: date,
   };
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -69,7 +69,7 @@ export function EditarFixoEscala({
         setUncertain(true);
         throw new Error('Não foi possível confirmar a atualização na escala. Recarregue antes de tentar novamente.');
       }
-      onSaved(mode === 'FXF' ? 'Folga fixa salva.' : 'Horário fixo salvo.');
+      onSaved(`${mode === 'FXF' ? 'Folga fixa salva.' : 'Horário fixo salvo.'}${Number(generatedDay?.OFICIALIZADA) === 1 ? ' Reoficialização necessária.' : ''}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Não foi possível salvar o fixo.');
     } finally {
@@ -82,7 +82,9 @@ export function EditarFixoEscala({
     setBusy(true);
     setError('');
     try {
-      const result = await postJson<{ result: { removed: boolean } }>('/api/escalas/fixos/remover', base);
+      const result = await postJson<{ result: { removed: boolean } }>('/api/escalas/fixos/remover', {
+        ...base, escsecaoId: Number(existing.ESCSECAO_ID),
+      });
       if (!result.result?.removed) throw new Error('O fixo não foi encontrado. Atualize a escala.');
       const { escala } = await getJson<{ escala: EscalaMensal }>(
         `/api/escalas/mensal?${new URLSearchParams({ lojaId, mesRef })}`,
@@ -96,7 +98,7 @@ export function EditarFixoEscala({
         setUncertain(true);
         throw new Error('A remoção não foi confirmada na escala. Recarregue antes de tentar novamente.');
       }
-      onSaved(generatedDay ? `Fixo removido; dia convertido em ${expected === 'F' ? 'folga' : 'trabalho'} normal.` : 'Fixo removido; o dia será preenchido na geração da escala.');
+      onSaved(generatedDay ? `Fixo removido; dia convertido em ${expected === 'F' ? 'folga' : 'trabalho'} normal.${Number(generatedDay.OFICIALIZADA) === 1 ? ' Reoficialização necessária.' : ''}` : 'Fixo removido; o dia será preenchido na geração da escala.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Não foi possível remover o fixo.');
     } finally {
@@ -109,6 +111,7 @@ export function EditarFixoEscala({
   }}><form className="confirm-dialog day-editor" role="dialog" aria-modal="true" aria-labelledby="fixed-title" onSubmit={save}>
     <h2 id="fixed-title">{existing ? 'Editar fixo' : 'Adicionar fixo'} · {new Date(`${date}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</h2>
     <p><strong>{employee.NOME}</strong> · {employee.CHAPA}</p>
+    {Number(generatedDay?.OFICIALIZADA) === 1 && <div className="notice warning" role="status">Esta alteração criará uma nova revisão. A escala precisará ser oficializada novamente.</div>}
     {holidayName && <div className="notice warning" role="status">Feriado nacional: {holidayName}.</div>}
     <div className="segmented day-editor-mode" role="group" aria-label="Tipo de fixo">
       <button type="button" className={mode === 'FXF' ? 'selected' : ''} onClick={() => { setMode('FXF'); setError(''); }}>Folga fixa</button>

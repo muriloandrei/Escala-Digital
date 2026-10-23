@@ -566,11 +566,12 @@ router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaR
     });
     if (!progresso.habilitada) return res.status(403).json({ error: 'Oficializacao nao habilitada para esta loja.' });
     const secao = progresso.secoes.find((item) => item.escsecaoId === payload.escsecaoId);
-    if (!secao || !secao.completa || secao.criticas) {
+    if (!secao || !secao.completa || secao.criticas || !Array.isArray(secao.escfuncIds) || !secao.escfuncIds.length) {
       return res.status(422).json({ error: 'Gere todos os dias e resolva as criticas da secao antes de oficializar.' });
     }
 
-    const preRequisitosRm = await rmIntegrationService.validarPreRequisitosRm(payload);
+    const preRequisitosRm = await rmIntegrationService.validarPreRequisitosRm({ ...payload,
+      escfuncIds: secao.escfuncIds });
     if (preRequisitosRm.errors?.length) {
       return res.status(422).json({
         error: 'Existem pendencias antes de oficializar a escala no RM.',
@@ -584,10 +585,12 @@ router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaR
     for (const candidata of officializationService.readyLinkedSections(
       progresso.secoes, payload.escsecaoId, payload.lojaId
     )) {
+      if (!Array.isArray(candidata.escfuncIds) || !candidata.escfuncIds.length) continue;
       try {
         await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [candidata.escsecaoId]);
         const requisitos = await rmIntegrationService.validarPreRequisitosRm({
-          lojaId: payload.lojaId, mesRef: payload.mesRef, escsecaoId: candidata.escsecaoId
+          lojaId: payload.lojaId, mesRef: payload.mesRef, escsecaoId: candidata.escsecaoId,
+          escfuncIds: candidata.escfuncIds
         });
         if (requisitos.errors?.length) {
           relacionadas.push({ escsecaoId: candidata.escsecaoId, secao: candidata.secao,
@@ -601,13 +604,13 @@ router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaR
       }
     }
 
-    const result = await escalaService.oficializarEscala({ ...payload, actor: req.user });
+    const result = await escalaService.oficializarEscala({ ...payload, escfuncIds: secao.escfuncIds, actor: req.user });
     if (!result.affectedRows) return res.status(404).json({ error: 'Escala ativa nao encontrada.' });
     const aprovadas = [{ secao, result }];
     for (const candidata of prontas) {
       try {
         const adicional = await escalaService.oficializarEscala({ ...payload,
-          escsecaoId: candidata.escsecaoId, actor: req.user });
+          escsecaoId: candidata.escsecaoId, escfuncIds: candidata.escfuncIds, actor: req.user });
         if (adicional.affectedRows) aprovadas.push({ secao: candidata, result: adicional });
         else relacionadas.push({ escsecaoId: candidata.escsecaoId, secao: candidata.secao,
           status: 'IGNORADA', motivo: 'A escala mudou durante a oficializacao; recarregue o progresso.' });

@@ -478,8 +478,7 @@ export function EscalaMensal({ user }: { user: User }) {
     if (day?.AUSENCIA_OBRIGATORIA || ['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) return;
     const existingFixed = escala?.fixos?.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && iso(item.DT) === date);
     if (day?.FIXO_ESCALA && day) {
-      if (Number(day.OFICIALIZADA) === 1) setActionError('O dia fixo oficializado precisa ser revisado antes de alterar o fixo.');
-      else setFixedCell({ employee, date });
+      setFixedCell({ employee, date });
       return;
     }
     const nextFixed = day ? null : nextFixedState(existingFixed?.PROGRAMACAO);
@@ -554,7 +553,7 @@ export function EscalaMensal({ user }: { user: User }) {
     if (!permiteEscala(employee.STATUS) || (employee.DT_DEMISS && date > iso(employee.DT_DEMISS))) return;
     if (!canEdit(user, 'escalas') || !canEdit(user, 'escalas-funcionarios') || escala?.status === 'FINALIZADA') { setSelectedCell({ employee, date, day }); return; }
     if (day && !day.FIXO_ESCALA && !day.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase())) setEditingCell({ employee, day });
-    else if (date >= localToday() && Number(day?.OFICIALIZADA) !== 1 && !day?.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) setFixedCell({ employee, date });
+    else if (date >= localToday() && !day?.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) setFixedCell({ employee, date });
     else setSelectedCell({ employee, date, day });
   }
 
@@ -963,7 +962,6 @@ export function EscalaMensal({ user }: { user: User }) {
                   {canEdit(user, 'escalas') && escala?.status !== 'FINALIZADA' && selectedCell.date >= localToday() &&
                     !selectedCell.day?.AUSENCIA_OBRIGATORIA &&
                     !['FER', 'AFA'].includes(String(selectedCell.day?.PROGRAMACAO || '').toUpperCase()) &&
-                    Number(selectedCell.day?.OFICIALIZADA) !== 1 &&
                     <button type="button" className="button secondary" onClick={() => setFixedCell({ employee: selectedCell.employee, date: selectedCell.date })}>
                       <Pencil size={15} /> {selectedCell.day?.FIXO_ESCALA ? 'Editar fixo' : 'Adicionar fixo'}
                     </button>}

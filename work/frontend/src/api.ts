@@ -55,6 +55,7 @@ export type Funcionario = {
   CHAPA: string;
   NOME: string;
   ESCSECAO_ID?: number | null;
+  ESCSECAO_ID_ESCALA?: number | null;
   ESCSUBSECAO_ID?: number | null;
   COD_SECAO?: string | null;
   SECAO_DESCR?: string | null;
