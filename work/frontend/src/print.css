@@ -433,13 +433,16 @@
   padding-right: 4px;
   text-align: right;
 }
-.print-sheet.roster.compact .print-roster-grid { font-size: 7px; }
-.print-sheet.roster.compact .print-roster-grid .print-roster-label { font-size: 8px; }
+.print-sheet.roster.compact .print-roster-grid { font-size: 9px; line-height: 1.1; }
+.print-sheet.roster.compact .print-roster-grid .print-roster-label { font-size: 9px; }
 .print-sheet.roster:not(.compact) .print-roster-grid { font-size: 11px; }
 .print-sheet.roster:not(.compact) .print-roster-grid .print-roster-label { width: 145px; }
 .print-roster-grid td.rest,
 .print-roster-grid td.fixed-rest { background: #fce376; font-weight: 700; }
 .print-roster-grid td.absence { background: #dfe9f1; font-weight: 700; }
+.print-sheet.roster.compact .print-roster-grid td.rest,
+.print-sheet.roster.compact .print-roster-grid td.fixed-rest,
+.print-sheet.roster.compact .print-roster-grid td.absence { font-size: 7.5px; }
 .print-roster-total {
   display: flex;
   justify-content: space-between;
@@ -526,7 +529,7 @@
     page: roster-page;
     width: 100%;
     min-width: 0;
-    height: 194mm;
+    height: 188mm;
     min-height: 0;
     aspect-ratio: auto;
     padding: 0;
@@ -536,8 +539,10 @@
   .print-sheet.roster .print-roster-list { gap: 2mm; }
   .print-sheet.roster .print-sheet-footer { margin-top: auto; }
   .print-sheet.roster .print-roster-grid th,
-  .print-sheet.roster .print-roster-grid td { padding: 0.3mm 0; }
-  .print-sheet.roster:not(.compact) .print-roster-grid { font-size: 10px; }
+  .print-sheet.roster .print-roster-grid td { padding: 0.1mm 0; }
+  .print-sheet.roster.compact .print-roster-grid th,
+  .print-sheet.roster.compact .print-roster-grid td { padding: 0.4mm 0; }
+  .print-sheet.roster:not(.compact) .print-roster-grid { font-size: 11px; line-height: 1.1; }
   .print-roster-heading,
   .print-roster-grid th,
   .print-roster-grid td.rest,
