@@ -6,12 +6,34 @@ const officializationService = require('../src/services/officializationService')
 const escalaService = require('../src/services/escalaService');
 const rmIntegrationService = require('../src/services/rmIntegrationService');
 const auditService = require('../src/services/auditService');
+const sectionRolloutService = require('../src/services/sectionRolloutService');
 
 function response() {
   return { code: 200, body: null,
     status(code) { this.code = code; return this; },
     json(body) { this.body = body; return this; } };
 }
+
+test('admin store scope toggle is persisted and audited', async () => {
+  const handle = router.stack.find((layer) => layer.route?.path === '/escopo-secoes-loja').route.stack.at(-1).handle;
+  const originalSet = sectionRolloutService.setStoreEnabled;
+  const originalAudit = auditService.registerAudit;
+  const calls = [];
+  sectionRolloutService.setStoreEnabled = async (...args) => { calls.push(args); return true; };
+  auditService.registerAudit = async (payload) => { calls.push(payload); };
+  try {
+    const res = response();
+    await handle({ body: { lojaId: 64, habilitada: true }, user: { perfil: 'ADMIN', sub: 1 } }, res,
+      (error) => { throw error; });
+    assert.deepEqual(res.body, { ok: true, habilitada: true });
+    assert.deepEqual(calls[0], [64, true]);
+    assert.equal(calls[1].action, 'ALTERAR_ESCOPO_SECOES_LOJA');
+    assert.equal(calls[1].lojaId, 64);
+  } finally {
+    sectionRolloutService.setStoreEnabled = originalSet;
+    auditService.registerAudit = originalAudit;
+  }
+});
 
 test('progress endpoint rejects roles outside RH, gerente and admin', async () => {
   const handle = router.stack.find((layer) => layer.route?.path === '/progresso').route.stack.at(-1).handle;

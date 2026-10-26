@@ -13,6 +13,7 @@ export function Secoes({ user }: { user: User }) {
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
   const loja = params.get('loja') || preferredStore(user, lojas);
+  const escopoAmpliado = Number(lojas.find((item) => String(item.LOJA) === String(loja))?.TODAS_SECOES_HABILITADAS) === 1;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -148,7 +149,8 @@ export function Secoes({ user }: { user: User }) {
                     </td>
                     <td>{counts.get(item.ESCSECAO_ID) || 0}</td>
                     <td>{(item.SUBSECOES || []).filter((sub) => sub.STATUS === 'A').length}</td>
-                    <td>{item.STATUS === 'I' ? 'Inativa' : 'Ativa'}</td>
+                    <td>{item.STATUS !== 'I' ? 'Ativa' : escopoAmpliado && (counts.get(item.ESCSECAO_ID) || 0) > 0
+                      && !/(^|[.])02[.]012$/.test(item.COD_SECAO || '') ? 'Liberada para escala' : 'Inativa'}</td>
                     <td>
                       <Link
                         className="open-link"

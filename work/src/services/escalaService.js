@@ -4,6 +4,7 @@ const escalaEventService = require('./escalaEventService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { isPortariaSection } = require('../domain/portariaSection');
 const { permiteEscala } = require('../domain/employeeStatus');
+const { activeSectionSql } = require('../domain/sectionRollout');
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
 const { validarCriticasEscopo } = require('../rules/escalaRules');
 
@@ -769,7 +770,7 @@ async function getSecaoAtivaProgSql(connection, alias = 'p') {
     select 1
     from sgn_esc_secao s_status
     where s_status.escsecao_id = ${alias}.escsecao_id
-      and nvl(s_status.status, 'A') = 'A'
+      and ${activeSectionSql('s_status', `${alias}.loja`)}
   )`;
 }
 
@@ -879,8 +880,8 @@ function projetarPortariaNaFrente(rows = [], catalogo = [], mesRef) {
   return rows;
 }
 
-function filtrarLinhasForaDoEscopoAtual(rows = [], mesRef, lojaId) {
-  if (isMesFinalizado(mesRef)) return rows;
+function filtrarLinhasForaDoEscopoAtual(rows = [], mesRef, lojaId, todasSecoesHabilitadas = false) {
+  if (isMesFinalizado(mesRef) || todasSecoesHabilitadas) return rows;
   return rows.filter((row) => {
     const cadastro = {
       COD_SECAO: pick(row, 'CADASTRO_COD_SECAO', 'cadastro_cod_secao'),
@@ -1508,6 +1509,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           p.loja,
           p.chapa,
           p.escfunc_id,
+          (select nvl(l.todas_secoes_habilitadas, 0) from sgn_esc_loja l where l.loja = p.loja) as loja_todas_secoes_habilitadas,
           p.escsecao_id,
           f.escsecao_id as cadastro_secao_id,
           cs.cod_secao as cadastro_cod_secao,
@@ -1560,10 +1562,12 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     );
 
     const { rows: rowsProjetadas, pendencias: pendenciasDesligamento } = projetarDemissoesNaEscala(result.rows || []);
-    const rows = filtrarLinhasForaDoEscopoAtual(filtrarCabecalhosInativosSemDias(rowsProjetadas), mesRef, lojaId);
+    const todasSecoesHabilitadas = result.rows.some((row) => Number(row.LOJA_TODAS_SECOES_HABILITADAS) === 1);
+    const rows = filtrarLinhasForaDoEscopoAtual(filtrarCabecalhosInativosSemDias(rowsProjetadas), mesRef, lojaId, todasSecoesHabilitadas);
     rows.forEach((row) => { row.ESCSECAO_ID_ESCALA = row.ESCSECAO_ID; });
     const funcionariosCatalogoCompleto = await catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }).catch(() => []);
-    const funcionariosCatalogo = filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogoCompleto, rows);
+    const funcionariosCatalogo = todasSecoesHabilitadas ? funcionariosCatalogoCompleto
+      : filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogoCompleto, rows);
     const catalogoPorFuncionario = new Map((funcionariosCatalogo || [])
       .map((funcionario) => [String(pick(funcionario, 'ESCFUNC_ID', 'escfunc_id')), funcionario]));
     rows.forEach((row) => {
@@ -1734,6 +1738,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
 
     return {
       revisao: latestRevision,
+      todasSecoesHabilitadas,
       status: getMesStatus(mesRef, latestRevision),
       oficializada: rows.some((row) => Number(pick(row, 'OFICIALIZADA', 'oficializada') || 0) === 1) ? 1 : 0,
       dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id') || row.AUSENCIA_PROJETADA),

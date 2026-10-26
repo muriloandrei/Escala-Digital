@@ -34,7 +34,7 @@ export function preferredStore(user: User, lojas: Loja[]) {
   );
 }
 
-export type Loja = { LOJA: number; ESCLOJA_ID?: number; NOME?: string; DESCR?: string };
+export type Loja = { LOJA: number; ESCLOJA_ID?: number; NOME?: string; DESCR?: string; TODAS_SECOES_HABILITADAS?: number };
 
 export type ResumoEscala = {
   LOJA: number;

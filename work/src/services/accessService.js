@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { withConnection, oracledb } = require('../db/oracle');
+const { activeSectionSql } = require('../domain/sectionRollout');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -427,7 +428,8 @@ async function getUsuarioSecaoColumns(connection) {
 async function listSecoesPorLojaInConnection(connection, lojaId) {
   const lojaColumn = await getSecaoLojaColumn(connection);
   const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
-  const statusSql = secaoColumns.has('STATUS') ? "and nvl(status, 'A') = 'A'" : '';
+  const statusSql = secaoColumns.has('STATUS')
+    ? `and ${activeSectionSql('sgn_esc_secao', ':lojaId')}` : '';
   const result = await connection.execute(
     `select escsecao_id, cod_secao, descr, ${lojaColumn.toLowerCase()} as loja
        from sgn_esc_secao

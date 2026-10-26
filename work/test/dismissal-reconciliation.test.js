@@ -50,6 +50,7 @@ function loadService({ dismissal = '2026-10-15', inactive = false, status = 'A',
       if (name === '../utils/scheduleDiff') return require('../src/utils/scheduleDiff');
       if (name === '../domain/portariaSection') return require('../src/domain/portariaSection');
       if (name === '../domain/employeeStatus') return require('../src/domain/employeeStatus');
+      if (name === '../domain/sectionRollout') return require('../src/domain/sectionRollout');
       if (['./catalogService', '../domain/operationalPeriod', '../rules/escalaRules'].includes(name)) return {};
       throw new Error(`Dependencia inesperada: ${name}`);
     }

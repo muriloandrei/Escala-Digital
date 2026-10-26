@@ -1206,9 +1206,15 @@ async function liberarEscalaLojaMes({
   mesRef,
   hojeIso = formatDateValue(new Date()),
   somenteFrenteCaixa = true,
+  todasSecoesHabilitadas = false,
   dryRun = false
 }) {
-  const secoesLiberacao = somenteFrenteCaixa ? await listSecoesEscopoOperacionalIds(lojaId) : null;
+  const escopoAmpliado = somenteFrenteCaixa && todasSecoesHabilitadas;
+  const secoesLiberacao = somenteFrenteCaixa
+    ? escopoAmpliado
+      ? (await catalogService.listSecoesByLoja(lojaId)).map((secao) => Number(secao.ESCSECAO_ID)).filter(Boolean)
+      : await listSecoesEscopoOperacionalIds(lojaId)
+    : null;
   const incluiFiscalRemoto = Number(lojaId) === 999;
   const escopoOperacionalTexto = incluiFiscalRemoto
     ? 'Frente de Caixa, Servicos a Clientes, Transportes, Portaria e Fiscal Remoto'
@@ -1218,9 +1224,13 @@ async function liberarEscalaLojaMes({
     return { lojaId, mesRef, criada: false, motivo: `Nenhuma secao ativa de ${escopoOperacionalTexto} encontrada para liberacao.` };
   }
 
-  if (await escalaMensalJaExiste(lojaId, mesRef, secoesLiberacao)) {
+  const escalaExiste = await escalaMensalJaExiste(lojaId, mesRef, secoesLiberacao);
+  if (escalaExiste && !escopoAmpliado) {
     return { lojaId, mesRef, criada: false, motivo: 'Escala mensal ja existente.' };
   }
+  const escfuncIdsExistentes = escalaExiste
+    ? new Set((await escalaService.listEscalas({ lojaId, mesRef })).map((row) => Number(row.ESCFUNC_ID)))
+    : new Set();
 
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
@@ -1233,9 +1243,14 @@ async function liberarEscalaLojaMes({
   ]);
 
   const indiceAusencias = criarIndiceAusencias(ausencias);
-  const elegiveis = funcionarios.filter((funcionario) => temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes, indiceAusencias));
+  const elegiveis = funcionarios.filter((funcionario) => !escfuncIdsExistentes.has(Number(funcionario.ESCFUNC_ID))
+    && temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes, indiceAusencias));
   const funcionariosPayload = buildFuncionariosLiberacao(elegiveis, turnos, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes })
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa);
+
+  if (escalaExiste && !funcionariosPayload.length) {
+    return { lojaId, mesRef, criada: false, motivo: 'Todas as secoes elegiveis ja foram liberadas.' };
+  }
 
   if (!funcionariosPayload.length && elegiveis.length === 0) {
     return {
@@ -1255,7 +1270,7 @@ async function liberarEscalaLojaMes({
       criada: false,
       prevista: true,
       funcionarios: funcionariosPayload.length,
-      escopo: somenteFrenteCaixa ? escopoOperacionalTexto : 'Todos os setores',
+      escopo: escopoAmpliado || !somenteFrenteCaixa ? 'Todas as secoes ativas' : escopoOperacionalTexto,
       pendenteGeracao: true
     };
   }
@@ -1273,7 +1288,7 @@ async function liberarEscalaLojaMes({
     mesRef,
     criada: true,
     funcionarios: saved.length,
-    escopo: somenteFrenteCaixa ? escopoOperacionalTexto : 'Todos os setores',
+    escopo: escopoAmpliado || !somenteFrenteCaixa ? 'Todas as secoes ativas' : escopoOperacionalTexto,
     pendenteGeracao: true,
     criticas: []
   };
@@ -1457,11 +1472,15 @@ async function liberarEscalasMensais({
   somenteFrenteCaixa = true,
   dryRun = false
 } = {}) {
-  const lojasBase = lojas || (await catalogService.listLojas()).map((loja) => Number(loja.LOJA)).filter(Boolean);
+  const lojasCatalogo = await catalogService.listLojas();
+  const lojasBase = lojas || lojasCatalogo.map((loja) => Number(loja.LOJA)).filter(Boolean);
+  const habilitadas = new Set(lojasCatalogo.filter((loja) => Number(loja.TODAS_SECOES_HABILITADAS) === 1)
+    .map((loja) => Number(loja.LOJA)));
   const resultados = [];
   for (const lojaId of [...new Set(lojasBase.map(Number).filter(Boolean))]) {
     try {
-      resultados.push(await liberarEscalaLojaMes({ lojaId, mesRef, hojeIso, somenteFrenteCaixa, dryRun }));
+      resultados.push(await liberarEscalaLojaMes({ lojaId, mesRef, hojeIso, somenteFrenteCaixa,
+        todasSecoesHabilitadas: habilitadas.has(lojaId), dryRun }));
     } catch (error) {
       resultados.push({
         lojaId,

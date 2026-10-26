@@ -8,6 +8,7 @@ const auditService = require('../services/auditService');
 const escalaEventService = require('../services/escalaEventService');
 const rmIntegrationService = require('../services/rmIntegrationService');
 const officializationService = require('../services/officializationService');
+const sectionRolloutService = require('../services/sectionRolloutService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { validateStandardShift } = require('../domain/shiftValidation');
 const monthlyReleaseService = require('../services/monthlyReleaseService');
@@ -437,6 +438,20 @@ router.put('/oficializacao-loja', requireAdmin, resolveLojaRequest, requireLojaA
     const found = await officializationService.setStoreEnabled(payload.lojaId, payload.habilitada);
     if (!found) return res.status(404).json({ error: 'Loja nao encontrada.' });
     await auditService.registerAudit({ action: 'ALTERAR_OFICIALIZACAO_LOJA', user: req.user,
+      lojaId: payload.lojaId, details: { habilitada: payload.habilitada } });
+    return res.json({ ok: true, habilitada: payload.habilitada });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Configuracao invalida.' });
+    return next(error);
+  }
+});
+
+router.put('/escopo-secoes-loja', requireAdmin, resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({ lojaId: z.number().int().positive(), habilitada: z.boolean() }).parse(req.body);
+    const found = await sectionRolloutService.setStoreEnabled(payload.lojaId, payload.habilitada);
+    if (!found) return res.status(404).json({ error: 'Loja nao encontrada.' });
+    await auditService.registerAudit({ action: 'ALTERAR_ESCOPO_SECOES_LOJA', user: req.user,
       lojaId: payload.lojaId, details: { habilitada: payload.habilitada } });
     return res.json({ ok: true, habilitada: payload.habilitada });
   } catch (error) {

@@ -6,6 +6,7 @@ const { validarCriticasEscopo } = require('../rules/escalaRules');
 const { permiteEscala } = require('../domain/employeeStatus');
 const { isSecaoEscopoOperacional, isSecaoFiscalRemoto } = require('./monthlyReleaseService');
 const { isPortariaSection } = require('../domain/portariaSection');
+const sectionRolloutService = require('./sectionRolloutService');
 
 function datesInPeriod({ inicio, fim }) {
   const dates = [];
@@ -152,6 +153,11 @@ function readyLinkedSections(secoes, selectedId, lojaId) {
       ? 'Porteiro' : secao.secao }));
 }
 
+function selectProgressSections(secoes, lojaId, todasSecoesEnabled) {
+  return secoes.filter((secao) => todasSecoesEnabled || isSecaoEscopoOperacional(secao)
+    || (Number(lojaId) === 999 && isSecaoFiscalRemoto(secao)));
+}
+
 async function getStoreEnabled(lojaId) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
@@ -192,19 +198,20 @@ async function setStoreEnabled(lojaId, enabled) {
 async function getProgress({ lojaId, mesRef, secoesPermitidas = null, escala = null,
   includeEmpty = false, includeCritiques = true }) {
   const periodo = getOperationalPeriodIso(mesRef);
-  const [schedule, secoes, pessoas, suspensoes, enabled] = await Promise.all([
+  const [schedule, secoes, pessoas, suspensoes, enabled, todasSecoesEnabled] = await Promise.all([
     escala || escalaService.getEscalaMensal({ lojaId, mesRef, secoesPermitidas }),
     catalogService.listSecoesByLoja(lojaId, { secoesPermitidas }),
     catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }),
     getSuspensions(lojaId, periodo),
-    getStoreEnabled(lojaId)
+    getStoreEnabled(lojaId),
+    sectionRolloutService.getStoreEnabled(lojaId)
   ]);
-  const operacionais = secoes.filter((secao) => isSecaoEscopoOperacional(secao)
-    || (Number(lojaId) === 999 && isSecaoFiscalRemoto(secao)));
+  const operacionais = selectProgressSections(secoes, lojaId, todasSecoesEnabled);
   const progress = buildProgress({ escala: schedule, secoes: operacionais, pessoas, suspensoes, periodo, lojaId, mesRef,
     includeEmpty, includeCritiques });
   return { ...progress, grupos: groupProgressSections(progress.secoes, { lojaId,
     finalized: schedule.status === 'FINALIZADA' }), habilitada: enabled === true };
 }
 
-module.exports = { buildProgress, groupProgressSections, readyLinkedSections, getProgress, getStoreEnabled, setStoreEnabled };
+module.exports = { buildProgress, groupProgressSections, readyLinkedSections, selectProgressSections,
+  getProgress, getStoreEnabled, setStoreEnabled };

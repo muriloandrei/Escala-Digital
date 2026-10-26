@@ -48,3 +48,4 @@ require('./quick-edit-routes.test');
 require('./apply-oracle-migration.test');
 require('./officialization-progress.test');
 require('./officialization-routes.test');
+require('./section-rollout.test');

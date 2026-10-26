@@ -1,6 +1,7 @@
 const { withConnection, oracledb } = require('../db/oracle');
 const escalaEventService = require('./escalaEventService');
 const { permiteEscala } = require('../domain/employeeStatus');
+const { activeSectionSql } = require('../domain/sectionRollout');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -16,7 +17,8 @@ function normalizeLoja(row) {
     QTDE_BRIGADISTA_EXIGIDO: pick(row, 'QTDE_BRIGADISTA_EXIGIDO', 'qtde_brigadista_exigido'),
     QTDE_BRIGADISTA_EXIGIDO_DIA: pick(row, 'QTDE_BRIGADISTA_EXIGIDO_DIA', 'qtde_brigadista_exigido_dia'),
     CODCOLIGADA: pick(row, 'CODCOLIGADA', 'codcoligada'),
-    OFICIALIZACAO_HABILITADA: Number(pick(row, 'OFICIALIZACAO_HABILITADA', 'oficializacao_habilitada') || 0)
+    OFICIALIZACAO_HABILITADA: Number(pick(row, 'OFICIALIZACAO_HABILITADA', 'oficializacao_habilitada') || 0),
+    TODAS_SECOES_HABILITADAS: Number(pick(row, 'TODAS_SECOES_HABILITADAS', 'todas_secoes_habilitadas') || 0)
   };
 }
 
@@ -290,8 +292,9 @@ async function listLojas() {
     const columns = await getTableColumns(connection, 'SGN_ESC_LOJA');
     const codcoligadaSelect = columns.has('CODCOLIGADA') ? 'codcoligada' : 'cast(null as number) as codcoligada';
     const oficializacaoSelect = columns.has('OFICIALIZACAO_HABILITADA') ? 'oficializacao_habilitada' : 'cast(0 as number) as oficializacao_habilitada';
+    const todasSecoesSelect = columns.has('TODAS_SECOES_HABILITADAS') ? 'todas_secoes_habilitadas' : 'cast(0 as number) as todas_secoes_habilitadas';
     const result = await connection.execute(
-      `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, ${codcoligadaSelect}, ${oficializacaoSelect}
+      `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, ${codcoligadaSelect}, ${oficializacaoSelect}, ${todasSecoesSelect}
        from sgn_esc_loja
        order by loja`,
       {},
@@ -341,7 +344,8 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
     const progColumns = options.mesRef ? await getTableColumns(connection, 'SGN_ESC_PROG') : new Set();
     const escalaAtivaSql = progColumns.has('ATIVA') ? 'and nvl(p.ativa, 1) = 1' : '';
     const escalaAtivaInnerSql = progColumns.has('ATIVA') ? 'and nvl(px.ativa, 1) = 1' : '';
-    const secaoAtivaWhere = options.includeInactiveSecoes || !secaoColumns.has('STATUS') ? '' : "and nvl(s.status, 'A') = 'A'";
+    const secaoAtivaWhere = options.includeInactiveSecoes || !secaoColumns.has('STATUS') ? ''
+      : `and ${activeSectionSql('s', ':lojaId')}`;
     const cpfSelect = funcionarioColumns.has('CPF')
       ? 'f.cpf'
       : funcionarioColumns.has('CPF_FUNCIONARIO')
@@ -469,7 +473,7 @@ async function listSecoesByLoja(lojaId, options = {}) {
     const lojaCodcoligada = await getLojaCodcoligada(connection, lojaCodigo);
     const secaoSelectList = await buildSecaoSelectList(connection, lojaCodigo);
     const conditions = [];
-    const binds = {};
+    const binds = { lojaId: lojaCodigo };
 
     if (lojaColumn) {
       conditions.push(`${lojaColumn.toLowerCase()} = :lojaId`);
@@ -480,7 +484,7 @@ async function listSecoesByLoja(lojaId, options = {}) {
       binds.codcoligada = lojaCodcoligada;
     }
     if (!options.includeInactive && secaoColumns.has('STATUS')) {
-      conditions.push("nvl(status, 'A') = 'A'");
+      conditions.push(activeSectionSql('sgn_esc_secao', ':lojaId'));
     }
     addSecoesPermitidasFilter(conditions, binds, 'escsecao_id', options.secoesPermitidas);
 
@@ -540,7 +544,7 @@ async function listTurnosByLoja(lojaId, options = {}) {
       binds.codcoligada = lojaCodcoligada;
     }
     if (!options.includeInactive && secaoColumns.has('STATUS')) {
-      conditions.push("nvl(s.status, 'A') = 'A'");
+      conditions.push(activeSectionSql('s', ':lojaId'));
     }
     addSecoesPermitidasFilter(conditions, binds, 's.escsecao_id', options.secoesPermitidas);
 

@@ -13,6 +13,7 @@ test('open months hide stale operational days after a move to Deposito', () => {
     { ESCFUNC_ID: 3, CADASTRO_COD_SECAO: '052.02.002', CADASTRO_SECAO_DESCR: 'Frente de Caixa' }
   ];
   assert.deepEqual(filtrarLinhasForaDoEscopoAtual(rows, '2099-11-01', 52).map((row) => row.ESCFUNC_ID), [2, 3]);
+  assert.deepEqual(filtrarLinhasForaDoEscopoAtual(rows, '2099-11-01', 52, true).map((row) => row.ESCFUNC_ID), [1, 2, 3]);
   assert.equal(filtrarLinhasForaDoEscopoAtual(rows, '2026-10-01', 52).length, 3);
 });
 

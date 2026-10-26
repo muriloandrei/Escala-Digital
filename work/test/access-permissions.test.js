@@ -60,7 +60,9 @@ test('Frente de Caixa leader sees Portaria even with older explicit section gran
     module,
     require: (name) => name === '../db/oracle'
       ? { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } }
-      : require(name)
+      : name === '../domain/sectionRollout'
+        ? require('../src/domain/sectionRollout')
+        : require(name)
   });
   vm.runInContext(source, context);
   vm.runInContext(`getUsuarioSecaoColumns = async () => new Set(['STATUS']); getSecaoLojaColumn = async () => 'LOJA'; getTableColumns = async () => new Set(['STATUS']);`, context);

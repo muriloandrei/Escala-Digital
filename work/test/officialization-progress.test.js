@@ -1,10 +1,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildProgress, groupProgressSections, readyLinkedSections } = require('../src/services/officializationService');
+const { buildProgress, groupProgressSections, readyLinkedSections, selectProgressSections } = require('../src/services/officializationService');
 
 const period = { inicio: '2026-11-02', fim: '2026-11-08' };
 const section = { ESCSECAO_ID: 12, COD_SECAO: '010.02.002', DESCR: 'Frente de Caixa' };
 const person = { ESCFUNC_ID: 42, ESCSECAO_ID: 12, STATUS: 'A', NOME: 'Teste', CHAPA: '42' };
+
+test('store scope flag includes other sections in officialization progress', () => {
+  const sections = [section, { ESCSECAO_ID: 30, COD_SECAO: '010.02.009', DESCR: 'Mercearia' }];
+  assert.deepEqual(selectProgressSections(sections, 10, false).map((item) => item.ESCSECAO_ID), [12]);
+  assert.deepEqual(selectProgressSections(sections, 10, true).map((item) => item.ESCSECAO_ID), [12, 30]);
+});
 
 function week() {
   return Array.from({ length: 7 }, (_, index) => {

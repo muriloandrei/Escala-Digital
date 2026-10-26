@@ -3,7 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getJson, putJson, type Loja } from '../api';
 
-type Store = Loja & { OFICIALIZACAO_HABILITADA?: number };
+type Store = Loja & { OFICIALIZACAO_HABILITADA?: number; TODAS_SECOES_HABILITADAS?: number };
 type SectionProgress = { escsecaoId: number; codigo: string; secao: string; funcionarios: number; percentual: number; oficializada: boolean };
 type ProgressGroup = SectionProgress & { partes: SectionProgress[] };
 type StoreProgress = { secoes: SectionProgress[]; grupos: ProgressGroup[] };
@@ -62,20 +62,22 @@ export function OficializacaoLojas() {
     return () => controller.abort();
   }, [visible, month, reload]);
 
-  async function toggle(store: Store) {
+  async function toggle(store: Store, kind: 'oficializacao' | 'secoes') {
     if (busy !== null) return;
     setBusy(store.LOJA);
     setError('');
     try {
-      const habilitada = Number(store.OFICIALIZACAO_HABILITADA) !== 1;
-      await putJson('/api/escalas/oficializacao-loja', { lojaId: Number(store.LOJA), habilitada });
+      const field = kind === 'oficializacao' ? 'OFICIALIZACAO_HABILITADA' : 'TODAS_SECOES_HABILITADAS';
+      const habilitada = Number(store[field]) !== 1;
+      const path = kind === 'oficializacao' ? '/api/escalas/oficializacao-loja' : '/api/escalas/escopo-secoes-loja';
+      await putJson(path, { lojaId: Number(store.LOJA), habilitada });
       setStores((current) => current.map((item) => item.LOJA === store.LOJA
-        ? { ...item, OFICIALIZACAO_HABILITADA: habilitada ? 1 : 0 } : item));
+        ? { ...item, [field]: habilitada ? 1 : 0 } : item));
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível atualizar a loja.'); }
     finally { setBusy(null); }
   }
 
-  return <main className="content directory-page"><div className="page-heading"><div><h1>Oficialização por loja</h1><p>Acompanhamento das seções e disponibilidade da oficialização.</p></div>
+  return <main className="content directory-page"><div className="page-heading"><div><h1>Oficialização por loja</h1></div>
     <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}><RefreshCw size={16} /> Atualizar</button></div>
     {error && <div className="notice error" role="alert">{error}</div>}
     <div className="officialization-filters">
@@ -83,7 +85,7 @@ export function OficializacaoLojas() {
       <label>Loja<input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Número ou nome" /></label>
     </div>
     <section className="list-surface" aria-label="Relatório de oficialização por seção">
-      {loading ? <div className="empty-state" role="status">Carregando lojas...</div> : <div className="table-scroll"><table className="officialization-table"><thead><tr><th>Loja / seção</th><th>Funcionários</th><th>Situação</th><th>Oficialização</th></tr></thead>
+      {loading ? <div className="empty-state" role="status">Carregando lojas...</div> : <div className="table-scroll"><table className="officialization-table"><thead><tr><th>Loja / seção</th><th>Funcionários</th><th>Situação</th><th>Oficialização</th><th>Todas as seções</th></tr></thead>
         <tbody>{visible.map((store) => {
           const result = progress[store.LOJA];
           const failure = progressErrors[store.LOJA];
@@ -94,12 +96,13 @@ export function OficializacaoLojas() {
           return <Fragment key={store.LOJA}>
             <tr className="officialization-store"><th scope="row">Loja {store.LOJA}{store.NOME ? ` · ${store.NOME}` : ''}</th><td>{result ? staffed.reduce((sum, section) => sum + section.funcionarios, 0) : '–'}</td><td>{situation}</td><td>
               <label className="store-toggle"><input type="checkbox" checked={Number(store.OFICIALIZACAO_HABILITADA) === 1} disabled={busy !== null}
-                onChange={() => toggle(store)} /> Habilitada</label>
-            </td></tr>
-            {failure && <tr><td colSpan={4} className="officialization-message" role="alert">{failure}</td></tr>}
+                onChange={() => toggle(store, 'oficializacao')} /> Habilitada</label>
+            </td><td><label className="store-toggle"><input type="checkbox" checked={Number(store.TODAS_SECOES_HABILITADAS) === 1} disabled={busy !== null}
+              onChange={() => toggle(store, 'secoes')} /> Liberadas</label></td></tr>
+            {failure && <tr><td colSpan={5} className="officialization-message" role="alert">{failure}</td></tr>}
             {result?.grupos.map((group) => <Fragment key={group.escsecaoId}>
-              <tr><td className="officialization-section">{group.partes.length > 1 ? `${group.codigo} · ${group.secao}` : <Link to={`/escalas/${store.LOJA}/${month}-01?secao=${group.escsecaoId}`}>{group.codigo} · {group.secao}</Link>}</td><td>{group.funcionarios}</td><td><span className={`officialization-status ${group.oficializada ? 'complete' : 'pending'}`}>{!group.funcionarios ? 'Sem funcionários' : group.oficializada ? 'Oficializada' : `${group.percentual}% preenchida`}</span></td><td>–</td></tr>
-              {group.partes.length > 1 && group.partes.map((part) => <tr key={part.escsecaoId}><td className="officialization-part"><Link to={`/escalas/${store.LOJA}/${month}-01?secao=${part.escsecaoId}`}>{part.codigo} · {part.secao}</Link></td><td>{part.funcionarios}</td><td><span className={`officialization-status ${part.oficializada ? 'complete' : 'pending'}`}>{!part.funcionarios ? 'Sem funcionários' : part.oficializada ? 'Oficializada' : `${part.percentual}% preenchida`}</span></td><td>–</td></tr>)}
+              <tr><td className="officialization-section">{group.partes.length > 1 ? `${group.codigo} · ${group.secao}` : <Link to={`/escalas/${store.LOJA}/${month}-01?secao=${group.escsecaoId}`}>{group.codigo} · {group.secao}</Link>}</td><td>{group.funcionarios}</td><td><span className={`officialization-status ${group.oficializada ? 'complete' : 'pending'}`}>{!group.funcionarios ? 'Sem funcionários' : group.oficializada ? 'Oficializada' : `${group.percentual}% preenchida`}</span></td><td>–</td><td>–</td></tr>
+              {group.partes.length > 1 && group.partes.map((part) => <tr key={part.escsecaoId}><td className="officialization-part"><Link to={`/escalas/${store.LOJA}/${month}-01?secao=${part.escsecaoId}`}>{part.codigo} · {part.secao}</Link></td><td>{part.funcionarios}</td><td><span className={`officialization-status ${part.oficializada ? 'complete' : 'pending'}`}>{!part.funcionarios ? 'Sem funcionários' : part.oficializada ? 'Oficializada' : `${part.percentual}% preenchida`}</span></td><td>–</td><td>–</td></tr>)}
             </Fragment>)}
           </Fragment>;
         })}</tbody></table></div>}

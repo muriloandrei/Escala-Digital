@@ -1517,6 +1517,61 @@ test('monthly release includes Fiscal Remoto only for loja 999', async () => {
   }
 });
 
+test('store scope rollout adds only missing employees to an existing month', async () => {
+  const originals = {
+    listSecoesByLoja: catalogService.listSecoesByLoja,
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listEscalasResumo: escalaService.listEscalasResumo,
+    listEscalas: escalaService.listEscalas,
+    listFixosEscala: escalaService.listFixosEscala,
+    saveEscalasBatch: escalaService.saveEscalasBatch
+  };
+  const person = (id, section) => ({ ESCFUNC_ID: id, CHAPA: String(id), NOME: `Funcionario ${id}`,
+    LOJA: 64, ESCSECAO_ID: section, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' });
+  let saved = null;
+  catalogService.listSecoesByLoja = async () => [
+    { ESCSECAO_ID: 20, DESCR: 'Frente de Caixa' },
+    { ESCSECAO_ID: 21, DESCR: 'Mercearia' }
+  ];
+  catalogService.listFuncionariosByLoja = async (_loja, options) => {
+    assert.deepEqual(options.secoesPermitidas, [20, 21]);
+    return [person(801, 20), person(802, 21)];
+  };
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listEscalasResumo = async () => [{ LOJA: 64 }];
+  escalaService.listEscalas = async () => [{ ESCFUNC_ID: 801, OFICIALIZADA: 1 }];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.saveEscalasBatch = async (payload) => { saved = payload; return payload.funcionarios; };
+  try {
+    const preview = await monthlyReleaseService.liberarEscalaLojaMes({ lojaId: 64, mesRef: '2026-11-01',
+      hojeIso: '2026-10-26', todasSecoesHabilitadas: true, dryRun: true });
+    assert.equal(preview.funcionarios, 1);
+    assert.equal(saved, null);
+    const result = await monthlyReleaseService.liberarEscalaLojaMes({ lojaId: 64, mesRef: '2026-11-01',
+      hojeIso: '2026-10-26', todasSecoesHabilitadas: true });
+    assert.equal(result.criada, true);
+    assert.deepEqual(saved.funcionarios.map((item) => item.escfuncId), [802]);
+    assert.equal(saved.criarRevisao, false);
+  } finally {
+    Object.assign(catalogService, {
+      listSecoesByLoja: originals.listSecoesByLoja,
+      listFuncionariosByLoja: originals.listFuncionariosByLoja,
+      listTurnosByLoja: originals.listTurnosByLoja,
+      listAusenciasByLojaMes: originals.listAusenciasByLojaMes
+    });
+    Object.assign(escalaService, {
+      listEscalasResumo: originals.listEscalasResumo,
+      listEscalas: originals.listEscalas,
+      listFixosEscala: originals.listFixosEscala,
+      saveEscalasBatch: originals.saveEscalasBatch
+    });
+  }
+});
+
 test('monthly scale detail adds active Portaria to an existing scale without unrelated sections', () => {
   const rows = [
     { ESCFUNC_ID: 1, ESCSECAO_ID: 20, SECAO_DESCR: 'Frente de Caixa' }
