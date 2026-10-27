@@ -47,8 +47,15 @@ automaticamente um registro persistente do `DBMS_SCHEDULER`.
 - `SGN_USUARIO` nao informa atividade. Conta nova e criada com `STATUS='A'` e
   conta existente preserva seu status atual na Escala, inclusive `I`.
 - Lider de Frente de Caixa recebe Frente de Caixa, Servicos a Clientes, Transportes
-  e Portaria ativos da loja. Outros lideres sao vinculados a secao unica do
-  colaborador identificado por `CODCOLIGADA`, `CHAPA` e loja; ambiguidades sao ignoradas.
+  e Portaria ativos da loja. Outros lideres mantem as secoes ja atribuidas
+  manualmente; sem vinculos ativos, sao vinculados a secao unica do colaborador
+  identificado por `CODCOLIGADA`, `CHAPA` e loja. Nas lojas com
+  `TODAS_SECOES_HABILITADAS=1`, essa busca tambem aceita secoes inativas no
+  cadastro antigo, exceto `02.012`. Ambiguidades sao ignoradas.
+- Para inspecionar os vinculos e a disponibilidade das secoes, no checkout do
+  release rode `ESCALA_ENV_FILE=/opt/escala-app/work/.env npm run
+  lideres:diagnosticar-acesso -- --loja=64 --mes=2026-11`. O comando e somente
+  de leitura e nao executa a integracao diaria.
 - Senha MD5 nova substitui o hash local quando diferente ou quando
   `DT_HR_ULT_SENHA` avanca. O login da Escala ja converte MD5 para bcrypt.
 - Contas `ADMIN` e `CONTROLADORIA` existentes nao sao alteradas.

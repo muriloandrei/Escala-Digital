@@ -69,3 +69,32 @@ test('Frente de Caixa leader sees Portaria even with older explicit section gran
   const permitted = await module.exports.getSecoesPermitidasUsuario({ sub: 7, login: 'lider.frente35', perfil: 'LIDER', lojas: [35] }, 35);
   assert.deepEqual(Array.from(permitted), [20, 25]);
 });
+
+test('leader of another section sees only the explicitly assigned section', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/accessService.js'), 'utf8');
+  const module = { exports: {} };
+  const connection = {
+    execute: async (sql) => {
+      if (sql.includes('from sgn_esc_usuario_secao us')) {
+        assert.match(sql, /s\.codfilial = :lojaId/);
+        assert.match(sql, /nvl\(us\.status, 'A'\) = 'A'/);
+        assert.doesNotMatch(sql, /s\.status = 'A'/);
+        return { rows: [{ ESCSECAO_ID: 6402 }] };
+      }
+      throw new Error(`SQL inesperado: ${sql}`);
+    }
+  };
+  const context = vm.createContext({
+    module,
+    require: (name) => name === '../db/oracle'
+      ? { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } }
+      : name === '../domain/sectionRollout'
+        ? require('../src/domain/sectionRollout')
+        : require(name)
+  });
+  vm.runInContext(source, context);
+  vm.runInContext(`getUsuarioSecaoColumns = async () => new Set(['STATUS']); getSecaoLojaColumn = async () => 'CODFILIAL';`, context);
+  const permitted = await module.exports.getSecoesPermitidasUsuario(
+    { sub: 64, login: 'lider.estoque64', perfil: 'LIDER', lojas: [64] }, 64);
+  assert.deepEqual(Array.from(permitted), [6402]);
+});

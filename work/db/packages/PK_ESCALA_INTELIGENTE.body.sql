@@ -16,6 +16,8 @@ create or replace package body PK_ESCALA_INTELIGENTE is
     v_total             number;
     v_secao_id          number;
     v_secao_total       number;
+    v_secoes_ampliadas  number;
+    v_preservar_vinculos number;
     v_trocar_senha      number;
     v_inseridos         number := 0;
     v_atualizados       number := 0;
@@ -40,7 +42,9 @@ create or replace package body PK_ESCALA_INTELIGENTE is
       end if;
 
       v_loja := to_number(v_loja_texto);
-      select count(*) into v_total from ESCALAINT.SGN_ESC_LOJA where loja = v_loja;
+      select count(*), nvl(max(todas_secoes_habilitadas), 0)
+        into v_total, v_secoes_ampliadas
+        from ESCALAINT.SGN_ESC_LOJA where loja = v_loja;
       if v_total <> 1 then
         v_ignorados := v_ignorados + 1;
         dbms_output.put_line('USUARIO IGNORADO: ' || v_login || ' - loja ' || v_loja || ' nao cadastrada.');
@@ -56,6 +60,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
 
       v_secao_id := null;
       v_secao_total := 0;
+      v_preservar_vinculos := 0;
       if v_perfil = 'LIDER' then
         if (instr(v_login, 'FRENTE') > 0 or instr(v_login, 'CAIXA') > 0)
            and instr(v_login, 'FISCAL') = 0 and instr(v_login, 'REMOTO') = 0 then
@@ -63,14 +68,35 @@ create or replace package body PK_ESCALA_INTELIGENTE is
             from ESCALAINT.SGN_ESC_SECAO
            where codfilial = v_loja and status = 'A'
              and regexp_like(upper(descr), 'FRENTE.*CAIXA|SERVI.*CLIENT|TRANSP|PORTARIA');
-        elsif rec.chapa is not null and rec.codcoligada is not null then
-          select count(distinct f.escsecao_id), min(f.escsecao_id)
-            into v_secao_total, v_secao_id
-            from ESCALAINT.SGN_ESC_FUNCIONARIO f
-            join ESCALAINT.SGN_ESC_SECAO s on s.escsecao_id = f.escsecao_id
-           where f.loja = v_loja and f.codcoligada = rec.codcoligada
-             and f.chapa = rec.chapa and s.codfilial = v_loja and s.status = 'A'
-             and (f.dt_demiss is null or f.dt_demiss >= trunc(sysdate));
+        else
+          select count(*) into v_secao_total
+            from ESCALAINT.SGN_ESC_USUARIO_SECAO us
+            join ESCALAINT.SGN_ESC_SECAO s on s.escsecao_id = us.escsecao_id
+           where us.usuario_id = rec.usuario_id and us.status = 'A'
+             and s.codfilial = v_loja
+             and (s.status = 'A' or
+                  (v_secoes_ampliadas = 1
+                   and not regexp_like(trim(nvl(s.cod_secao, ' ')), '(^|[.])02[.]012$')
+                   and exists (
+                     select 1 from ESCALAINT.SGN_ESC_FUNCIONARIO f
+                      where f.escsecao_id = s.escsecao_id and f.loja = v_loja
+                        and f.dt_demiss is null
+                        and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P'))));
+          if v_secao_total > 0 then
+            v_preservar_vinculos := 1;
+          elsif rec.chapa is not null and rec.codcoligada is not null then
+            select count(distinct f.escsecao_id), min(f.escsecao_id)
+              into v_secao_total, v_secao_id
+              from ESCALAINT.SGN_ESC_FUNCIONARIO f
+              join ESCALAINT.SGN_ESC_SECAO s on s.escsecao_id = f.escsecao_id
+             where f.loja = v_loja and f.codcoligada = rec.codcoligada
+               and f.chapa = rec.chapa and s.codfilial = v_loja
+               and f.dt_demiss is null
+               and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P')
+               and (s.status = 'A' or
+                    (v_secoes_ampliadas = 1
+                     and not regexp_like(trim(nvl(s.cod_secao, ' ')), '(^|[.])02[.]012$')));
+          end if;
         end if;
         if v_secao_total = 0 or (v_secao_id is not null and v_secao_total <> 1) then
           v_ignorados := v_ignorados + 1;
@@ -143,7 +169,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
         insert into ESCALAINT.SGN_ESC_USUARIO_LOJA (usuario_id, loja) values (v_usuario_id, v_loja);
       end if;
 
-      if v_perfil = 'LIDER' then
+      if v_perfil = 'LIDER' and v_preservar_vinculos = 0 then
         delete from ESCALAINT.SGN_ESC_USUARIO_SECAO
          where usuario_id = v_usuario_id
            and escsecao_id not in (
