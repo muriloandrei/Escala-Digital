@@ -9,14 +9,16 @@ const DOMINGO_SEGUINTE = '2026-11-08';
 
 function parseArgs(args) {
   const lojaArg = args.find((arg) => /^--loja=[1-9]\d*$/.test(arg));
+  const all = args.includes('--all');
   const apply = args.includes('--apply');
   const actorArg = args.find((arg) => /^--by=[\w.@-]{2,80}$/.test(arg));
   const includeOfficialized = args.includes('--include-officialized');
   const valid = args.length === (1 + Number(apply) + Number(Boolean(actorArg)) + Number(includeOfficialized))
-    && lojaArg && Number.isSafeInteger(Number(lojaArg.slice(7)))
+    && Boolean(lojaArg) !== all && (!lojaArg || Number.isSafeInteger(Number(lojaArg.slice(7))))
     && (!apply || actorArg) && (apply || !actorArg);
-  if (!valid) throw new Error('Use --loja=NUMERO [--include-officialized] [--apply --by=OPERADOR].');
-  return { loja: Number(lojaArg.slice(7)), apply, actor: actorArg?.slice(5) || null, includeOfficialized };
+  if (!valid) throw new Error('Use --loja=NUMERO ou --all [--include-officialized] [--apply --by=OPERADOR].');
+  return { loja: lojaArg ? Number(lojaArg.slice(7)) : null, all,
+    apply, actor: actorArg?.slice(5) || null, includeOfficialized };
 }
 
 function dayFromRow(row) {
@@ -121,38 +123,66 @@ async function loadRows(connection, loja) {
   return [...grouped.values()];
 }
 
+async function loadStores(connection) {
+  const result = await connection.execute(
+    `select distinct loja from sgn_esc_prog
+      where mes_ref = date '2026-11-01' and nvl(ativa, 1) = 1
+      order by loja`, {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  return (result.rows || []).map((row) => Number(row.LOJA));
+}
+
+async function processStore(args, loja, todayIso) {
+  const groups = await withConnection((connection) => loadRows(connection, loja));
+  const plans = groups.map((rows) => planEmployee(rows, { includeOfficialized: args.includeOfficialized, todayIso }));
+  const candidatos = plans.filter((item) => item.acao === 'COMPLETAR');
+  const bloqueados = plans.filter((item) => item.acao === 'BLOQUEADA');
+  const jaPresentes = plans.filter((item) => item.acao === 'JA_PRESENTE').length;
+  console.log(JSON.stringify({ modo: args.apply ? 'APLICACAO' : 'PREVIA', loja,
+    mesRef: MES_REF, candidatos: candidatos.length, bloqueados: bloqueados.length,
+    jaPresentes, detalhes: args.all ? bloqueados : plans.map(({ payload, ...item }) => item) }, null, 2));
+  let aplicadas = 0;
+  let falhas = 0;
+  if (args.apply) {
+    for (const plan of candidatos) {
+      try {
+        await escalaService.completarDomingoNovembro2026({ lojaId: loja, mesRef: MES_REF,
+          funcionarios: [plan.payload], oficializada: 0, actor: { login: args.actor },
+          acao: 'COMPLETAR_DOMINGO_NOVEMBRO_2026' });
+        aplicadas += 1;
+        if (!args.all) console.log(`COMPLETADA chapa=${plan.chapa} dia=${PRIMEIRO_DIA} programacao=${plan.programacao}`);
+      } catch (error) {
+        falhas += 1;
+        console.error(`FALHA loja=${loja} chapa=${plan.chapa}: ${error.message}`);
+      }
+    }
+    console.log(`Loja ${loja}: ${aplicadas} aplicada(s), ${bloqueados.length} bloqueada(s), ${falhas} falha(s).`);
+  }
+  return { loja, candidatos: candidatos.length, bloqueados: bloqueados.length,
+    jaPresentes, aplicadas, falhas };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   try {
-    const groups = await withConnection((connection) => loadRows(connection, args.loja));
     const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo',
       year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
     const localDate = Object.fromEntries(parts.map((part) => [part.type, part.value]));
     const todayIso = `${localDate.year}-${localDate.month}-${localDate.day}`;
-    const plans = groups.map((rows) => planEmployee(rows, { includeOfficialized: args.includeOfficialized, todayIso }));
-    console.log(JSON.stringify({ modo: args.apply ? 'APLICACAO' : 'PREVIA', loja: args.loja,
-      mesRef: MES_REF, candidatos: plans.filter((item) => item.acao === 'COMPLETAR').length,
-      bloqueados: plans.filter((item) => item.acao === 'BLOQUEADA').length,
-      jaPresentes: plans.filter((item) => item.acao === 'JA_PRESENTE').length,
-      detalhes: plans.map(({ payload, ...item }) => item) }, null, 2));
-    if (!args.apply) return;
-    let aplicadas = 0;
-    let falhas = 0;
-    for (const plan of plans.filter((item) => item.acao === 'COMPLETAR')) {
+    const stores = args.all ? await withConnection(loadStores) : [args.loja];
+    const results = [];
+    for (const loja of stores) {
       try {
-        await escalaService.completarDomingoNovembro2026({ lojaId: args.loja, mesRef: MES_REF,
-          funcionarios: [plan.payload], oficializada: 0, actor: { login: args.actor },
-          acao: 'COMPLETAR_DOMINGO_NOVEMBRO_2026' });
-        aplicadas += 1;
-        console.log(`COMPLETADA chapa=${plan.chapa} dia=${PRIMEIRO_DIA} programacao=${plan.programacao}`);
+        results.push(await processStore(args, loja, todayIso));
       } catch (error) {
-        falhas += 1;
-        console.error(`FALHA chapa=${plan.chapa}: ${error.message}`);
+        results.push({ loja, candidatos: 0, bloqueados: 0, jaPresentes: 0, aplicadas: 0, falhas: 1 });
+        console.error(`FALHA loja=${loja}: ${error.message}`);
       }
     }
-    const bloqueadas = plans.filter((item) => item.acao === 'BLOQUEADA').length;
-    console.log(`Resumo: ${aplicadas} aplicada(s), ${bloqueadas} bloqueada(s), ${falhas} falha(s).`);
-    if (bloqueadas || falhas) process.exitCode = 1;
+    const total = (key) => results.reduce((sum, item) => sum + item[key], 0);
+    console.log(`Resumo geral: ${stores.length} loja(s), ${total('candidatos')} candidata(s), ` +
+      `${total('aplicadas')} aplicada(s), ${total('bloqueados')} bloqueada(s), ${total('falhas')} falha(s).`);
+    if (total('falhas') || (args.apply && total('bloqueados'))) process.exitCode = 1;
   } finally {
     await closeOraclePool();
   }
@@ -163,4 +193,4 @@ if (require.main === module) main().catch((error) => {
   process.exitCode = 1;
 });
 
-module.exports = { parseArgs, planEmployee };
+module.exports = { parseArgs, planEmployee, loadStores };

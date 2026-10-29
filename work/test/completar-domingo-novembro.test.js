@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArgs, planEmployee } = require('../scripts/completar-domingo-novembro-2026');
+const { parseArgs, planEmployee, loadStores } = require('../scripts/completar-domingo-novembro-2026');
 const escalaService = require('../src/services/escalaService');
 
 const shift = { HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };
@@ -15,11 +15,27 @@ const rows = [
 ];
 
 test('script exige loja e operador somente na aplicacao', () => {
-  assert.deepEqual(parseArgs(['--loja=35']), { loja: 35, apply: false, actor: null, includeOfficialized: false });
+  assert.deepEqual(parseArgs(['--loja=35']), { loja: 35, all: false,
+    apply: false, actor: null, includeOfficialized: false });
+  assert.deepEqual(parseArgs(['--all']), { loja: null, all: true,
+    apply: false, actor: null, includeOfficialized: false });
   assert.equal(parseArgs(['--loja=35', '--include-officialized']).includeOfficialized, true);
   assert.equal(parseArgs(['--loja=35', '--apply', '--by=opc']).apply, true);
+  assert.equal(parseArgs(['--all', '--apply', '--by=opc', '--include-officialized']).apply, true);
   assert.throws(() => parseArgs(['--loja=35', '--apply']), /Use --loja/);
   assert.throws(() => parseArgs(['--loja=0']), /Use --loja/);
+  assert.throws(() => parseArgs(['--all', '--loja=35']), /Use --loja/);
+});
+
+test('modo geral descobre somente lojas com escala ativa de novembro', async () => {
+  let sql;
+  const lojas = await loadStores({ async execute(query) {
+    sql = query;
+    return { rows: [{ LOJA: 2 }, { LOJA: 64 }] };
+  } });
+  assert.deepEqual(lojas, [2, 64]);
+  assert.match(sql, /mes_ref = date '2026-11-01'/);
+  assert.match(sql, /nvl\(ativa, 1\) = 1/);
 });
 
 test('completa 01/11 de forma oposta a 08/11 e preserva os dias existentes', () => {
