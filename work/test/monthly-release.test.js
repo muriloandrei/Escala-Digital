@@ -119,8 +119,8 @@ test('monthly release uses complete operational weeks from first Monday to last 
   const rascunho = buildFuncionarioRascunho(funcionario, turno, '2026-10-01', '2026-01-01');
 
   assert.equal(rascunho.dias[0].data, '2026-10-05');
-  assert.equal(rascunho.dias.at(-1).data, '2026-11-01');
-  assert.equal(rascunho.dias.length, 28);
+  assert.equal(rascunho.dias.at(-1).data, '2026-10-31');
+  assert.equal(rascunho.dias.length, 27);
 });
 
 test('monthly release distributes 5x2 rests without consecutive Sunday work', () => {
@@ -753,6 +753,23 @@ test('monthly release alternates Sunday rests across shifts in the same section'
     assert.ok(programacoes.includes('F'), `${domingo.data} sem folga`);
     assert.ok(programacoes.includes('TRB'), `${domingo.data} sem trabalho`);
   }
+});
+
+test('November 2026 draft includes November 1 and alternates its rest with November 8', () => {
+  const employee = {
+    ESCFUNC_ID: 991, CHAPA: '0991', NOME: 'Domingo de Transicao',
+    LOJA: 10, ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  };
+  const [draft] = buildFuncionariosRascunhoBalanceado([employee], [], '2026-11-01', '2026-10-29');
+  assert.equal(draft.dias.length, 36);
+  assert.equal(draft.dias[0].data, '2026-11-01');
+  const firstSunday = draft.dias.find((day) => day.data === '2026-11-01');
+  const nextSunday = draft.dias.find((day) => day.data === '2026-11-08');
+  assert.notEqual(firstSunday.programacao === 'TRB', nextSunday.programacao === 'TRB');
+  const errors = validateEscalaPayload({ lojaId: 10, mesRef: '2026-11-01', funcionarios: [draft] });
+  assert.ok(errors.every((error) => !error.includes('dois domingos consecutivos')));
+  assert.ok(errors.every((error) => !error.includes('semana iniciada em 2026-10-26')));
 });
 
 test('monthly release balances Sundays within each subsection', () => {
@@ -1666,7 +1683,7 @@ test('full-period absence excludes employee, while partial absence and vacation 
   };
   const fullPeriod = { ESCFUNC_ID: 801, DT_INIC: '2026-10-05', DT_FIM: '2026-11-01' };
   const fullAbsence = { ...fullPeriod, MOTIVO: 'AFASTAMENTO' };
-  const partialAbsence = { ...fullAbsence, DT_FIM: '2026-10-31' };
+  const partialAbsence = { ...fullAbsence, DT_FIM: '2026-10-30' };
   const fullVacation = { ...fullPeriod, MOTIVO: 'FERIAS' };
   const options = (ausencia) => ({ ausencias: [ausencia] });
 
@@ -1750,7 +1767,7 @@ test('individual generation diagnoses status, absence, dismissal, suspension and
     motivoGeracaoFuncionario(item, 20, month, date, suspensions, absences);
   assert.match(reason({ ...employee, STATUS: 'I' }), /Status.*I/);
   assert.match(reason(employee, today, noSuspension, criarIndiceAusencias([{
-    ESCFUNC_ID: 9, DT_INIC: '2026-11-02', DT_FIM: '2026-12-06', MOTIVO: 'AFASTAMENTO'
+    ESCFUNC_ID: 9, DT_INIC: '2026-11-01', DT_FIM: '2026-12-06', MOTIVO: 'AFASTAMENTO'
   }])), /Afastamento/);
   assert.match(reason({ ...employee, DT_DEMISS: '2026-10-31' }), /Desligamento/);
   assert.match(reason(employee, today, new Map([[9, { inicio: '2026-11-02', fim: '2026-12-06' }]])), /Suspensao/);

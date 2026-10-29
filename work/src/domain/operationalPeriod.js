@@ -5,7 +5,8 @@ function formatLocalDate(date) {
   return `${year}-${month}-${day}`;
 }
 
-function firstMonday(year, month) {
+function firstOperationalDay(year, month) {
+  if (year === 2026 && month === 10) return new Date(2026, 10, 1);
   const date = new Date(year, month, 1);
   date.setDate(date.getDate() + ((8 - date.getDay()) % 7));
   return date;
@@ -18,8 +19,8 @@ function getOperationalPeriodIso(mesRef) {
   }
   const year = Number(match[1]);
   const month = Number(match[2]) - 1;
-  const inicio = firstMonday(year, month);
-  const nextStart = firstMonday(year, month + 1);
+  const inicio = firstOperationalDay(year, month);
+  const nextStart = firstOperationalDay(year, month + 1);
   const fim = new Date(nextStart);
   fim.setDate(fim.getDate() - 1);
   return { inicio: formatLocalDate(inicio), fim: formatLocalDate(fim) };

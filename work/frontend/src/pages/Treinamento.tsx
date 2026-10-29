@@ -40,15 +40,20 @@ const people: { name: Person; chapa: string; cargo: string; start: string }[] = 
 ];
 
 function dateKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
-function firstMonday(year: number, month: number) { const date = new Date(year, month, 1); date.setDate(date.getDate() + ((8 - date.getDay()) % 7)); return date; }
+function firstOperationalDay(year: number, month: number) {
+  if (year === 2026 && month === 10) return new Date(2026, 10, 1);
+  const date = new Date(year, month, 1);
+  date.setDate(date.getDate() + ((8 - date.getDay()) % 7));
+  return date;
+}
 function trainingPeriod() {
   const now = new Date();
   let year = now.getFullYear(); let month = now.getMonth();
-  let start = firstMonday(year, month); let next = firstMonday(year, month + 1);
+  let start = firstOperationalDay(year, month); let next = firstOperationalDay(year, month + 1);
   if (next.getTime() - now.getTime() < 10 * 86400000) {
     const following = new Date(year, month + 1, 1);
     year = following.getFullYear(); month = following.getMonth();
-    start = firstMonday(year, month); next = firstMonday(year, month + 1);
+    start = firstOperationalDay(year, month); next = firstOperationalDay(year, month + 1);
   }
   const dates: string[] = [];
   for (const date = new Date(start); date < next; date.setDate(date.getDate() + 1)) dates.push(dateKey(date));

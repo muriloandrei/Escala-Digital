@@ -22,8 +22,8 @@ test('proxima semana comeca na segunda seguinte, inclusive se hoje ja for segund
   assert.equal(effectiveDate('PROXIMA_SEMANA', '2026-10-05'), '2026-10-12');
 });
 
-test('proximo mes comeca na primeira segunda operacional', () => {
-  assert.equal(effectiveDate('PROXIMO_MES', '2026-10-01'), '2026-11-02');
+test('proximo mes usa o inicio operacional, inclusive o domingo excepcional de novembro', () => {
+  assert.equal(effectiveDate('PROXIMO_MES', '2026-10-01'), '2026-11-01');
   assert.equal(effectiveDate('PROXIMO_MES', '2026-12-31'), '2027-01-04');
 });
 

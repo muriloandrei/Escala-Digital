@@ -33,25 +33,26 @@ test('VT conta o periodo informado da compra sem usar revisoes antigas', () => {
   assert.doesNotMatch(dias, /nvl\(d\.programacao, 'TRB'\) = 'TRB'/i);
 });
 
-test('compra inteligente usa semanas completas e mantem 01/11 na transicao', () => {
+test('compra inteligente atribui 01/11 a novembro sem consultar outubro', () => {
   const disponibilidade = body.slice(body.indexOf('FUNCTION FKG_ESCALA_OK'), body.indexOf('FUNCTION FKG_QTDE_COMPRA'));
   const dias = body.slice(body.indexOf('PROCEDURE PKB_APURA_DIAS_TRAB'), body.indexOf('FUNCTION FKG_DIAS_TRAB'));
   const compra = body.slice(body.indexOf('PROCEDURE PKB_INCLUI_FUNC_SOLIC'));
-  assert.deepEqual(getOperationalPeriodIso('2026-11-01'), { inicio: '2026-11-02', fim: '2026-12-06' });
+  assert.deepEqual(getOperationalPeriodIso('2026-11-01'), { inicio: '2026-11-01', fim: '2026-12-06' });
   assert.deepEqual(getOperationalPeriodIso('2026-12-01'), { inicio: '2026-12-07', fim: '2027-01-03' });
   assert.match(body, /return trunc\(trunc\(ed_dt_ref, 'MM'\) \+ 6, 'IW'\)/i);
+  assert.match(body, /if trunc\(ed_dt_ref, 'MM'\) = date '2026-11-01' then\s+return date '2026-11-01'/i);
   assert.match(body, /return FKG_INICIO_PERIODO_OPERACIONAL\(add_months\(trunc\(ed_dt_ref, 'MM'\), 1\)\) - 1/i);
   assert.match(disponibilidade, /p\.mes_ref = trunc\(ed_dt_ref, 'MM'\)/i);
   assert.match(disponibilidade, /p\.oficializada = 1/i);
   assert.match(disponibilidade, /select count\(\*\) into vn_pendentes/i);
+  assert.match(disponibilidade, /p\.mes_ref = trunc\(ed_dt_ref, 'MM'\)\s+and p\.ativa = 1 and p\.oficializada = 0/i);
   assert.match(disponibilidade, /vd_inicio_periodo := FKG_INICIO_PERIODO_OPERACIONAL\(ed_dt_ref\)/i);
   assert.match(disponibilidade, /vd_fim_periodo := FKG_FIM_PERIODO_OPERACIONAL\(ed_dt_ref\)/i);
   assert.match(disponibilidade, /d\.dt >= vd_inicio_periodo\s+and d\.dt < vd_fim_periodo \+ 1/i);
   assert.doesNotMatch(disponibilidade, /d\.dt\s*[<>]=?\s*FKG_(INICIO|FIM)_PERIODO_OPERACIONAL/i);
-  assert.match(dias, /p\.oficializada = 1 or \(/i);
-  assert.match(dias, /trunc\(ed_dt_inic, 'MM'\) = date '2026-11-01'\s+and p\.mes_ref = date '2026-10-01'\s+and trunc\(d\.dt\) = date '2026-11-01'/i);
-  assert.match(dias, /pm\.mes_ref = date '2026-11-01'\s+and pm\.ativa = 1 and pm\.oficializada = 1/i);
-  assert.match(dias, /select max\(pmx\.revisao\)/i);
+  assert.match(dias, /p\.oficializada = 1/i);
+  assert.match(dias, /not \(p\.mes_ref = date '2026-10-01' and trunc\(d\.dt\) = date '2026-11-01'\)/i);
+  assert.doesNotMatch(dias, /pm\.mes_ref = date '2026-11-01'/i);
   assert.match(compra, /if vv_fonte_escala = 'INTELIGENTE' then\s+vd_dt_inic_escala := FKG_INICIO_PERIODO_OPERACIONAL\(v_reg\.dt_ref\);\s+vd_dt_fim_escala := FKG_FIM_PERIODO_OPERACIONAL\(v_reg\.dt_ref\)/i);
   assert.match(compra, /if trunc\(v_reg\.dt_ref, 'MM'\) = date '2026-11-01' then\s+vd_dt_inic_escala := date '2026-11-01'/i);
   assert.match(compra, /else\s+if v_reg\.tipo_carga = 1 then\s+vd_dt_inic_escala := fg_get_date/i);

@@ -118,7 +118,7 @@ function assertSemDiasFuturosParaInativo(dias = [], status, hojeIso = getHojeIso
   throw error;
 }
 
-function assertPreservaDatasEscala(diasAtuais = [], diasNovos = []) {
+function assertPreservaDatasEscala(diasAtuais = [], diasNovos = [], datasAdicionaisPermitidas = []) {
   const datasNovas = (diasNovos || []).map((dia) => normalizeDiaComparavel(dia).data);
   if (datasNovas.some((data) => !/^\d{4}-\d{2}-\d{2}$/.test(data)) || new Set(datasNovas).size !== datasNovas.length) {
     const error = new Error('O rascunho contem datas invalidas ou repetidas. Recarregue a escala antes de salvar.');
@@ -135,7 +135,8 @@ function assertPreservaDatasEscala(diasAtuais = [], diasNovos = []) {
   const atuais = new Set(datasAtuais);
   const novas = new Set(datasNovas);
   const faltantes = [...atuais].filter((data) => !novas.has(data));
-  const extras = [...novas].filter((data) => !atuais.has(data));
+  const permitidas = new Set(datasAdicionaisPermitidas);
+  const extras = [...novas].filter((data) => !atuais.has(data) && !permitidas.has(data));
   if (!faltantes.length && !extras.length) return;
   const error = new Error('O rascunho nao contem os mesmos dias da escala gravada. Recarregue antes de salvar para nao perder programacoes.');
   error.statusCode = 422;
@@ -2485,7 +2486,8 @@ async function saveEscalasBatch({ lojaId, mesRef, funcionarios, oficializada = 0
 
 async function saveEscalasFuncionariosRevisionComConnection(connection, {
   lojaId, mesRef, funcionarios, oficializada = 0, actor,
-  acao = 'EDITAR_ESCALA_FUNCIONARIO', operacaoId = escalaEventService.createOperationId()
+  acao = 'EDITAR_ESCALA_FUNCIONARIO', operacaoId = escalaEventService.createOperationId(),
+  datasAdicionaisPermitidas = []
 }) {
   assertUniqueFuncionarios(funcionarios);
   if (isMesFinalizado(mesRef)) {
@@ -2523,7 +2525,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
     const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
     assertSemNovaProgramacaoAposDemissao(funcionario.dias || [], atual?.dias || [], demissoes.get(escfuncId));
     assertSemDiasFuturosParaInativo(funcionario.dias || [], situacoes.get(escfuncId));
-    assertPreservaDatasEscala(atual?.dias || [], funcionario.dias || []);
+    assertPreservaDatasEscala(atual?.dias || [], funcionario.dias || [], datasAdicionaisPermitidas);
     assertSemAlteracaoEmDiasBloqueados(atual?.dias || [], funcionario.dias || []);
     const revisaoQualquer = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
     const novo = await insertEscalaOracle(connection, {
@@ -2541,11 +2543,13 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
   return saved;
 }
 
-async function saveEscalasFuncionariosRevision(payload) {
+async function saveEscalasFuncionariosRevisionInterno(payload, datasAdicionaisPermitidas = []) {
   return withConnection(async (connection) => {
     try {
       const operacaoId = payload.operacaoId || escalaEventService.createOperationId();
-      const saved = await saveEscalasFuncionariosRevisionComConnection(connection, { ...payload, operacaoId });
+      const saved = await saveEscalasFuncionariosRevisionComConnection(connection, {
+        ...payload, operacaoId, datasAdicionaisPermitidas
+      });
       await escalaEventService.appendEvent(connection, {
         operacaoId, lojaId: payload.lojaId, mesRef: payload.mesRef,
         actor: payload.actor, acao: 'CONFIRMAR_RASCUNHO', origem: 'USUARIO', situacao: 'RASCUNHO',
@@ -2561,6 +2565,17 @@ async function saveEscalasFuncionariosRevision(payload) {
       throw normalizeOracleSaveError(error);
     }
   });
+}
+
+async function saveEscalasFuncionariosRevision(payload) {
+  return saveEscalasFuncionariosRevisionInterno(payload);
+}
+
+async function completarDomingoNovembro2026(payload) {
+  if (payload.mesRef !== '2026-11-01' || payload.oficializada !== 0) {
+    throw new Error('A correcao so aceita revisoes pendentes de novembro/2026.');
+  }
+  return saveEscalasFuncionariosRevisionInterno(payload, ['2026-11-01']);
 }
 
 async function getCommittedDraftOperation({ lojaId, mesRef, operacaoId, usuarioId }) {
@@ -3288,6 +3303,7 @@ module.exports = {
   saveEscala,
   saveEscalasBatch,
   saveEscalasFuncionariosRevision,
+  completarDomingoNovembro2026,
   getCommittedDraftOperation,
   previewHorarioFuncionarioEscala,
   updateHorarioFuncionarioEscala,

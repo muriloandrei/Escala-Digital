@@ -20,18 +20,16 @@ desligamento. Nao foi compilado contra o Oracle de producao. Compare-o com o
   nao substitui revisao atual pendente.
 - Para as secoes migradas, a compra de cada `DT_REF` cobre uma unica vez o
   periodo operacional completo: da primeira segunda-feira do mes ate o domingo
-  anterior a primeira segunda-feira do mes seguinte. Novembro/2026 cobre
-  02/11 a 06/12; dezembro/2026 cobre 07/12 a 03/01/2027. Nao ha sobreposicao
+  anterior a primeira segunda-feira do mes seguinte, com excecao da transicao
+  de novembro/2026. Novembro/2026 cobre 01/11 a 06/12; outubro/2026 termina
+  em 31/10; dezembro/2026 cobre 07/12 a 03/01/2027. Nao ha sobreposicao
   entre as duas compras. Lojas e secoes APEX continuam no mes calendario.
 - `FKG_DIAS_TRAB` conta datas `TRB` dentro do intervalo informado pela compra.
   Dias repetidos sao contados uma vez. Regras de gratuidade e exclusao permanecem.
-- Excecao de transicao: a compra completa de novembro/2026 tambem inclui
-  01/11/2026, vindo do mes operacional de outubro, que ja esta encerrado.
-  Esse unico dia pode ser contado pela ultima revisao ativa de outubro mesmo
-  sem oficializacao propria, mas somente depois que a ultima revisao ativa
-  de novembro do mesmo funcionario estiver oficializada. Uma carga parcial
-  iniciada depois de 01/11 nao inclui esse dia. Nos demais dias e meses, a
-  programacao que fornece o dia deve estar oficializada.
+- Excecao de transicao: 01/11/2026 pertence a escala de novembro, como semana
+  isolada. O dia so entra na compra quando a ultima revisao ativa de novembro
+  do funcionario estiver oficializada. Nenhum dia de outubro e usado como
+  substituto, e uma compra parcial iniciada depois de 01/11 nao inclui o dia.
 - Cada compra nova guarda os dias usados no calculo. O desligamento das lojas
   migradas usa esse retrato, inclusive os dias do mes seguinte comprados na
   referencia anterior, e nao a escala que pode ter sido alterada depois.
@@ -102,17 +100,18 @@ select l.nro loja, c.vtcompra_id, c.dt_ref, c.status,
 
 ## Validacao
 
-Compile como dono de `PK_VT` e confirme `USER_ERRORS` vazio e package body
-`VALID`. Compare `FKG_ESCALA_OK` e `FKG_DIAS_TRAB` para um empregado de uma loja
-migrada e outro de uma loja APEX. Teste 01/11/2026 vindo da escala operacional
-de outubro antes e depois de oficializar novembro, 02/11 a 06/12 na compra
-de novembro, 07/12 a 03/01 na compra de dezembro, uma revisao nova nao
+Compile como dono de `PK_VT` com `@compilar_pk_vt_novembro_2026.sql` e confirme
+`USER_ERRORS` vazio e package body `VALID`. Compare `FKG_ESCALA_OK` e
+`FKG_DIAS_TRAB` para um empregado de uma loja migrada e outro de uma loja
+APEX. Teste 01/11/2026 na revisao de novembro antes e depois de oficializa-la,
+01/11 a 06/12 na compra de novembro, 07/12 a 03/01 na compra de dezembro,
+uma revisao nova nao
 oficializada, folga/FER/AFA, compra parcial e gratuidade. Faca uma compra de
 teste transacional e confira
 `SGN_VT_ESCALA_SNAPSHOT` e `SGN_VT_ESCALA_SNAPSHOT_DIA`.
 
 ```sql
-select trunc(date '2026-11-01' + 6, 'IW') inicio_nov,
+select date '2026-11-01' inicio_nov,
        trunc(add_months(date '2026-11-01', 1) + 6, 'IW') - 1 fim_nov,
        trunc(date '2026-12-01' + 6, 'IW') inicio_dez,
        trunc(add_months(date '2026-12-01', 1) + 6, 'IW') - 1 fim_dez

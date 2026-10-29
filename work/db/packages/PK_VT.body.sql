@@ -154,6 +154,9 @@ end FKG_USA_ESCALA_INTELIGENTE;
 
 FUNCTION FKG_INICIO_PERIODO_OPERACIONAL (ed_dt_ref in date) return date is
 begin
+   if trunc(ed_dt_ref, 'MM') = date '2026-11-01' then
+      return date '2026-11-01';
+   end if;
    return trunc(trunc(ed_dt_ref, 'MM') + 6, 'IW');
 end FKG_INICIO_PERIODO_OPERACIONAL;
 
@@ -224,6 +227,7 @@ BEGIN
            join ESCALAINT.SGN_ESC_PROG_DIA d on d.escprog_id = p.escprog_id
            join ESCALAINT.SGN_ESC_SECAO s on s.escsecao_id = p.escsecao_id
           where p.loja = en_nroempresa and p.chapa = ev_chapa
+            and p.mes_ref = trunc(ed_dt_ref, 'MM')
             and p.ativa = 1 and p.oficializada = 0
             and p.revisao = (
               select max(px.revisao) from ESCALAINT.SGN_ESC_PROG px
@@ -2188,24 +2192,8 @@ begin
                   and px.mes_ref = p.mes_ref and px.ativa = 1)
              and d.programacao = 'TRB'
              and d.dt >= trunc(ed_dt_inic) and d.dt < trunc(ed_dt_fim) + 1
-             and (p.oficializada = 1 or (
-               trunc(ed_dt_inic, 'MM') = date '2026-11-01'
-               and p.mes_ref = date '2026-10-01'
-               and trunc(d.dt) = date '2026-11-01'
-               and exists (
-                 select 1 from ESCALAINT.SGN_ESC_PROG pm
-                 join ESCALAINT.SGN_ESC_SECAO sm on sm.escsecao_id = pm.escsecao_id
-                  where pm.loja = p.loja and pm.escfunc_id = p.escfunc_id
-                    and pm.mes_ref = date '2026-11-01'
-                    and pm.ativa = 1 and pm.oficializada = 1
-                    and pm.revisao = (
-                      select max(pmx.revisao) from ESCALAINT.SGN_ESC_PROG pmx
-                       where pmx.loja = pm.loja and pmx.escfunc_id = pm.escfunc_id
-                         and pmx.mes_ref = pm.mes_ref and pmx.ativa = 1)
-                    and (regexp_like(upper(nvl(sm.descr, ' ')), 'FRENTE.*CAIXA|SERVI[CÇ]OS?.*CLIENT|TRANSPORT|PORTARIA')
-                         or regexp_like(trim(sm.cod_secao), '(^|[.])02[.]012$'))
-               )
-             ))
+             and p.oficializada = 1
+             and not (p.mes_ref = date '2026-10-01' and trunc(d.dt) = date '2026-11-01')
              and (regexp_like(upper(nvl(s.descr, ' ')), 'FRENTE.*CAIXA|SERVI[CÇ]OS?.*CLIENT|TRANSPORT|PORTARIA')
                   or regexp_like(trim(s.cod_secao), '(^|[.])02[.]012$'))
         ) dias

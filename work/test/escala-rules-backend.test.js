@@ -139,6 +139,15 @@ test('backend rejects two consecutive worked Sundays', () => {
   assert.ok(errors.some((error) => error.includes('dois domingos consecutivos')));
 });
 
+test('November 1 is a standalone week without two mandatory rests, but keeps Sunday 1x1', () => {
+  assert.deepEqual(validateEscalaPayload(buildPayload([trabalho('2026-11-01')])), []);
+  const errors = validateEscalaPayload(buildPayload([
+    trabalho('2026-11-01'), trabalho('2026-11-08')
+  ]));
+  assert.ok(errors.some((error) => error.includes('dois domingos consecutivos')));
+  assert.ok(errors.every((error) => !error.includes('minimo esperado no 5x2')));
+});
+
 test('backend rejects interjornada lower than 11 hours', () => {
   const errors = validateEscalaPayload(buildPayload([
     trabalho('2026-09-01', { hrEnt1: '12:00', hrSai1: '16:00', hrEnt2: '17:10', hrSai2: '21:58' }),
