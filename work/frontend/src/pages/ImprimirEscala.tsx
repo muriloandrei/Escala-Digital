@@ -12,6 +12,7 @@ import {
 import { compareEmployeesByShift } from '../scheduleOrder';
 import { ShiftTimeline } from '../ShiftTimeline';
 import { formatWorkedMinutes, printBatches, printDayLabel, printPageSize, workedMinutes } from '../printSchedule';
+import { groupScheduleWeeks } from '../scheduleWeeks';
 
 type Mode = 'mensal' | 'semanal' | 'diario' | 'periodo';
 type Format = 'juntos' | 'cargos' | 'colaborador';
@@ -404,7 +405,7 @@ export function ImprimirEscala({ user }: { user: User }) {
     .filter((person) => !excludedRoles.has(person.FUNCAO_DESCR || 'Cargo não informado'))
     .map((person) => ({ key: String(person.ESCFUNC_ID), label: `${person.CHAPA} | ${person.NOME}` }));
   const allDates = useMemo(() => (data ? dateRange(data.periodo.inicio, data.periodo.fim) : []), [data]);
-  const weeks = useMemo(() => printBatches(allDates, 7), [allDates]);
+  const weeks = useMemo(() => groupScheduleWeeks(allDates), [allDates]);
   const selectedDates =
     mode === 'semanal'
       ? weeks[week] || []

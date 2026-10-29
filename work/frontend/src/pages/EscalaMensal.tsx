@@ -26,6 +26,7 @@ import { quickShift } from '../quickShift';
 import { nextFixedState } from '../quickFixedCycle';
 import { compareEmployeesByShift } from '../scheduleOrder';
 import { groupScheduleSections } from '../scheduleSections';
+import { isWeekStart } from '../scheduleWeeks';
 import { permiteEscala } from '../employeeStatus';
 import { ProgressoEscalaModal } from './ProgressoEscala';
 
@@ -827,22 +828,22 @@ export function EscalaMensal({ user }: { user: User }) {
                 >
                   <table className="monthly-grid">
                     <thead>
-                      <tr className="monthly-coverage-row"><th className="employee-col">Qualidade (%)</th>{coverage.map((item, index) => <th key={dates[index]} className={index % 7 === 0 ? 'week-start' : ''} title={`${item.working} trabalhando, ${item.rests} em folga`}>{item.quality === null ? '–' : `${item.quality}%`}</th>)}</tr>
-                      <tr className="monthly-count-row"><th className="employee-col">Folgas</th>{coverage.map((item, index) => <th key={dates[index]} className={index % 7 === 0 ? 'week-start' : ''}><span className="rest-count">{item.rests} F</span></th>)}</tr>
-                      <tr className="monthly-count-row"><th className="employee-col">Trabalhando</th>{coverage.map((item, index) => <th key={dates[index]} className={index % 7 === 0 ? 'week-start' : ''}><span className="work-count">{item.working} T</span></th>)}</tr>
+                      <tr className="monthly-coverage-row"><th className="employee-col">Qualidade (%)</th>{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''} title={`${item.working} trabalhando, ${item.rests} em folga`}>{item.quality === null ? '–' : `${item.quality}%`}</th>)}</tr>
+                      <tr className="monthly-count-row"><th className="employee-col">Folgas</th>{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}><span className="rest-count">{item.rests} F</span></th>)}</tr>
+                      <tr className="monthly-count-row"><th className="employee-col">Trabalhando</th>{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}><span className="work-count">{item.working} T</span></th>)}</tr>
                       <tr>
                         <th rowSpan={2} className="employee-col">
                           Funcionário
                         </th>
                         {dates.map((date, index) => (
-                          <th key={date} className={`${index % 7 === 0 ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>
+                          <th key={date} className={`${isWeekStart(date, index) ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>
                             {weekday(date)}{holidays[date] ? ' *' : ''}
                           </th>
                         ))}
                       </tr>
                       <tr>
                         {dates.map((date, index) => (
-                          <th key={date} className={`${index % 7 === 0 ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>
+                          <th key={date} className={`${isWeekStart(date, index) ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>
                             {date.slice(8, 10)}
                             {date.slice(5, 7) !== mesRef?.slice(5, 7) ? `/${date.slice(5, 7)}` : ''}
                           </th>
@@ -870,7 +871,7 @@ export function EscalaMensal({ user }: { user: User }) {
                             return (
                               <td
                                 key={date}
-                                className={`${fixed ? 'fixed' : kind(day)} ${index % 7 === 0 ? 'week-start' : ''} ${dayCritiques.length ? 'critical' : ''}`}
+                                className={`${fixed ? 'fixed' : kind(day)} ${isWeekStart(date, index) ? 'week-start' : ''} ${dayCritiques.length ? 'critical' : ''}`}
                               >
                                 <button
                                   type="button"

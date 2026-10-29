@@ -17,6 +17,21 @@ test('frontend includes status P in employees eligible for schedules', async () 
   assert.equal(permiteEscala('I'), false);
 });
 
+test('November 1 is a standalone visual week followed by Monday-to-Sunday weeks', async () => {
+  const { isWeekStart, groupScheduleWeeks } = await loadFrontendHelper('scheduleWeeks.ts');
+  const dates = Array.from({ length: 16 }, (_, index) =>
+    new Date(Date.UTC(2026, 10, index + 1)).toISOString().slice(0, 10));
+  const weeks = groupScheduleWeeks(dates);
+  assert.deepEqual(weeks.map((week) => [week[0], week[week.length - 1]]), [
+    ['2026-11-01', '2026-11-01'],
+    ['2026-11-02', '2026-11-08'],
+    ['2026-11-09', '2026-11-15'],
+    ['2026-11-16', '2026-11-16']
+  ]);
+  assert.equal(isWeekStart('2026-11-02', 1), true);
+  assert.equal(isWeekStart('2026-11-08', 7), false);
+});
+
 test('operation id uses secure random values when randomUUID is unavailable on HTTP', async () => {
   const { createOperationId } = await loadFrontendHelper('operationId.ts');
   assert.match(createOperationId({ getRandomValues: (buffer) => buffer.fill(42) }), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
