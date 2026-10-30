@@ -84,6 +84,26 @@ test('ausencia confirmada pode ser materializada apos 01/11 sem alterar outros d
   assert.equal(planEmployee(rows, { todayIso: '2026-11-03', onlyAbsences: true }).acao, 'IGNORADA');
 });
 
+test('AFA ou FER confirmada prevalece sobre fixo de 01/11 sem perder revisao oficializada', () => {
+  for (const programacao of ['AFA', 'FER']) {
+    const absent = rows.map((row) => ({ ...row, AUSENCIA_01: programacao,
+      FIXO_01: 1, OFICIALIZADA: 1 }));
+    const plan = planEmployee(absent, { todayIso: '2026-11-03', onlyAbsences: true,
+      includeOfficialized: true });
+    assert.equal(plan.acao, 'COMPLETAR');
+    assert.equal(plan.programacao, programacao);
+    assert.equal(plan.payload.revisaoBase, 9);
+    assert.equal(plan.payload.dias[0].programacao, programacao);
+    assert.deepEqual(plan.payload.dias.slice(1).map((day) => day.data),
+      ['2026-11-02', '2026-11-08']);
+  }
+  const fixed = rows.map((row) => ({ ...row, FIXO_01: 1 }));
+  assert.match(planEmployee(fixed, { todayIso: '2026-10-29' }).motivo, /fixo/);
+  const suspended = rows.map((row) => ({ ...row, FIXO_01: 1,
+    AUSENCIA_01: 'AFA', SUSPENSAO_01: 1 }));
+  assert.match(planEmployee(suspended, { todayIso: '2026-10-29' }).motivo, /Suspensao/);
+});
+
 test('dia passado fica bloqueado para revisao manual', () => {
   assert.match(planEmployee(rows, { todayIso: '2026-11-02' }).motivo, /ja passou/);
 });

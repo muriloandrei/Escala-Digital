@@ -66,7 +66,8 @@ function blocker(row) {
   if (Number(row.ESCSECAO_ID) !== Number(row.SECAO_ESCALA)) return 'Secao do fixo difere da escala ativa.';
   if (row.DT_DEMISS && row.DT_DEMISS < DIA) return 'Funcionario desligado antes de 01/11.';
   if (!['A', 'F', 'P'].includes(String(row.FUNCIONARIO_STATUS || '').trim().toUpperCase())) return 'Funcionario inativo.';
-  if (Number(row.AUSENCIA_01) || Number(row.SUSPENSAO_01)) return 'Ausencia ou suspensao em 01/11 requer revisao individual.';
+  if (Number(row.SUSPENSAO_01)) return 'Suspensao em 01/11 requer revisao individual.';
+  if (Number(row.AUSENCIA_01)) return 'Ausencia em 01/11: use a rotina de completar domingo com --only-absences.';
   if (!['FXF', 'TRB'].includes(String(row.PROGRAMACAO || '').toUpperCase())) return 'Programacao do fixo invalida.';
   return null;
 }

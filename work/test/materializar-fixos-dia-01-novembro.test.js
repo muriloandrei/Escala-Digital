@@ -18,6 +18,6 @@ test('materializacao bloqueia cadastros ambiguos, desligados ou afastados', () =
   assert.match(blocker({ ...valid, FIXOS_NA_DATA: 2 }), /Mais de um fixo/);
   assert.match(blocker({ ...valid, PROGRAMACOES_NA_REVISAO: 2 }), /Mais de uma programacao/);
   assert.match(blocker({ ...valid, DT_DEMISS: '2026-10-31' }), /desligado/);
-  assert.match(blocker({ ...valid, AUSENCIA_01: 1 }), /Ausencia/);
-  assert.match(blocker({ ...valid, SUSPENSAO_01: 1 }), /suspensao/);
+  assert.match(blocker({ ...valid, AUSENCIA_01: 1 }), /--only-absences/);
+  assert.match(blocker({ ...valid, SUSPENSAO_01: 1 }), /suspensao/i);
 });

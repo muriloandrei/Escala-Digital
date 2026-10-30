@@ -52,8 +52,9 @@ function planEmployee(rows, { includeOfficialized = false, onlyAbsences = false,
   if (!permiteEscala(head.FUNCIONARIO_STATUS) || (head.DT_DEMISS && head.DT_DEMISS < PRIMEIRO_DIA)) {
     return reason('Funcionario inativo ou desligado antes de 01/11.');
   }
-  if (Number(head.SUSPENSAO_01) || Number(head.FIXO_01)) {
-    return reason('Suspensao ou dia fixo em 01/11 requer revisao individual.');
+  if (Number(head.SUSPENSAO_01)) return reason('Suspensao em 01/11 requer revisao individual.');
+  if (Number(head.FIXO_01) && !head.AUSENCIA_01) {
+    return reason('Dia fixo em 01/11 requer revisao individual.');
   }
   if (Number(head.OUTUBRO_OFICIAL_01)) return reason('01/11 ja foi oficializado na escala de outubro.');
   const nextSunday = days.find((day) => day.data === DOMINGO_SEGUINTE);
