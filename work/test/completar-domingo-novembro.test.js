@@ -16,9 +16,12 @@ const rows = [
 
 test('script exige loja e operador somente na aplicacao', () => {
   assert.deepEqual(parseArgs(['--loja=35']), { loja: 35, all: false,
-    apply: false, actor: null, includeOfficialized: false, onlyAbsences: false });
+    escfuncId: null, apply: false, actor: null, includeOfficialized: false, onlyAbsences: false });
   assert.deepEqual(parseArgs(['--all']), { loja: null, all: true,
-    apply: false, actor: null, includeOfficialized: false, onlyAbsences: false });
+    escfuncId: null, apply: false, actor: null, includeOfficialized: false, onlyAbsences: false });
+  assert.equal(parseArgs(['--loja=303', '--escfunc=23504']).escfuncId, 23504);
+  assert.throws(() => parseArgs(['--all', '--escfunc=23504']), /Use --loja/);
+  assert.throws(() => parseArgs(['--loja=303', '--escfunc=0']), /Use --loja/);
   assert.equal(parseArgs(['--loja=35', '--include-officialized']).includeOfficialized, true);
   assert.equal(parseArgs(['--all', '--only-absences']).onlyAbsences, true);
   assert.equal(parseArgs(['--loja=35', '--apply', '--by=opc']).apply, true);

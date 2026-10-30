@@ -9,16 +9,19 @@ const DOMINGO_SEGUINTE = '2026-11-08';
 
 function parseArgs(args) {
   const lojaArg = args.find((arg) => /^--loja=[1-9]\d*$/.test(arg));
+  const escfuncArg = args.find((arg) => /^--escfunc=[1-9]\d*$/.test(arg));
   const all = args.includes('--all');
   const apply = args.includes('--apply');
   const actorArg = args.find((arg) => /^--by=[\w.@-]{2,80}$/.test(arg));
   const includeOfficialized = args.includes('--include-officialized');
   const onlyAbsences = args.includes('--only-absences');
-  const valid = args.length === (1 + Number(apply) + Number(Boolean(actorArg)) + Number(includeOfficialized) + Number(onlyAbsences))
+  const valid = args.length === (1 + Number(Boolean(escfuncArg)) + Number(apply) + Number(Boolean(actorArg)) + Number(includeOfficialized) + Number(onlyAbsences))
     && Boolean(lojaArg) !== all && (!lojaArg || Number.isSafeInteger(Number(lojaArg.slice(7))))
+    && (!escfuncArg || (Boolean(lojaArg) && Number.isSafeInteger(Number(escfuncArg.slice(10)))))
     && (!apply || actorArg) && (apply || !actorArg);
-  if (!valid) throw new Error('Use --loja=NUMERO ou --all [--only-absences] [--include-officialized] [--apply --by=OPERADOR].');
+  if (!valid) throw new Error('Use --loja=NUMERO [--escfunc=ID] ou --all [--only-absences] [--include-officialized] [--apply --by=OPERADOR].');
   return { loja: lojaArg ? Number(lojaArg.slice(7)) : null, all,
+    escfuncId: escfuncArg ? Number(escfuncArg.slice(10)) : null,
     apply, actor: actorArg?.slice(5) || null, includeOfficialized, onlyAbsences };
 }
 
@@ -84,7 +87,7 @@ function planEmployee(rows, { includeOfficialized = false, onlyAbsences = false,
     payload };
 }
 
-async function loadRows(connection, loja) {
+async function loadRows(connection, loja, escfuncId = null) {
   const result = await connection.execute(
     `select p.escprog_id, p.escfunc_id, p.escsecao_id, p.escfuncao_id,
             p.loja, p.chapa, p.revisao, p.oficializada, f.nome,
@@ -116,12 +119,13 @@ async function loadRows(connection, loja) {
        from sgn_esc_prog p
        join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
        left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
-      where p.loja = :loja and p.mes_ref = date '2026-11-01' and nvl(p.ativa, 1) = 1
+      where p.loja = :loja and (:escfuncId is null or p.escfunc_id = :escfuncId)
+        and p.mes_ref = date '2026-11-01' and nvl(p.ativa, 1) = 1
         and p.revisao = (select max(px.revisao) from sgn_esc_prog px
           where px.loja = p.loja and px.mes_ref = p.mes_ref
             and px.escfunc_id = p.escfunc_id and nvl(px.ativa, 1) = 1)
       order by p.escfunc_id, d.dt`,
-    { loja }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    { loja, escfuncId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
   const grouped = new Map();
   for (const row of result.rows || []) {
@@ -141,7 +145,7 @@ async function loadStores(connection) {
 }
 
 async function processStore(args, loja, todayIso) {
-  const groups = await withConnection((connection) => loadRows(connection, loja));
+  const groups = await withConnection((connection) => loadRows(connection, loja, args.escfuncId));
   const plans = groups.map((rows) => planEmployee(rows, { includeOfficialized: args.includeOfficialized,
     onlyAbsences: args.onlyAbsences, todayIso }));
   const candidatos = plans.filter((item) => item.acao === 'COMPLETAR');
