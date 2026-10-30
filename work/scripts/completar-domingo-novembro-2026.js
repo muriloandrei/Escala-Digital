@@ -13,12 +13,13 @@ function parseArgs(args) {
   const apply = args.includes('--apply');
   const actorArg = args.find((arg) => /^--by=[\w.@-]{2,80}$/.test(arg));
   const includeOfficialized = args.includes('--include-officialized');
-  const valid = args.length === (1 + Number(apply) + Number(Boolean(actorArg)) + Number(includeOfficialized))
+  const onlyAbsences = args.includes('--only-absences');
+  const valid = args.length === (1 + Number(apply) + Number(Boolean(actorArg)) + Number(includeOfficialized) + Number(onlyAbsences))
     && Boolean(lojaArg) !== all && (!lojaArg || Number.isSafeInteger(Number(lojaArg.slice(7))))
     && (!apply || actorArg) && (apply || !actorArg);
-  if (!valid) throw new Error('Use --loja=NUMERO ou --all [--include-officialized] [--apply --by=OPERADOR].');
+  if (!valid) throw new Error('Use --loja=NUMERO ou --all [--only-absences] [--include-officialized] [--apply --by=OPERADOR].');
   return { loja: lojaArg ? Number(lojaArg.slice(7)) : null, all,
-    apply, actor: actorArg?.slice(5) || null, includeOfficialized };
+    apply, actor: actorArg?.slice(5) || null, includeOfficialized, onlyAbsences };
 }
 
 function dayFromRow(row) {
@@ -32,7 +33,8 @@ function dayFromRow(row) {
   };
 }
 
-function planEmployee(rows, { includeOfficialized = false, todayIso = new Date().toISOString().slice(0, 10) } = {}) {
+function planEmployee(rows, { includeOfficialized = false, onlyAbsences = false,
+  todayIso = new Date().toISOString().slice(0, 10) } = {}) {
   const head = rows[0];
   const reason = (motivo) => ({ escfuncId: Number(head.ESCFUNC_ID), chapa: head.CHAPA, acao: 'BLOQUEADA', motivo });
   if (rows.some((row) => Number(row.ESCPROG_ID) !== Number(head.ESCPROG_ID))) return reason('Mais de uma programacao ativa na revisao atual.');
@@ -40,7 +42,12 @@ function planEmployee(rows, { includeOfficialized = false, todayIso = new Date()
   if (days.some((day) => day.data === PRIMEIRO_DIA)) {
     return { escfuncId: Number(head.ESCFUNC_ID), chapa: head.CHAPA, acao: 'JA_PRESENTE' };
   }
-  if (todayIso > PRIMEIRO_DIA) return reason('01/11 ja passou; ajuste historico exige revisao manual.');
+  if (onlyAbsences && !head.AUSENCIA_01) {
+    return { escfuncId: Number(head.ESCFUNC_ID), chapa: head.CHAPA, acao: 'IGNORADA' };
+  }
+  if (todayIso > PRIMEIRO_DIA && (!onlyAbsences || !head.AUSENCIA_01)) {
+    return reason('01/11 ja passou; ajuste historico de ausencia exige --only-absences.');
+  }
   if (Number(head.OFICIALIZADA) === 1 && !includeOfficialized) return reason('Escala oficializada; use --include-officialized apos aprovar nova revisao pendente.');
   if (!permiteEscala(head.FUNCIONARIO_STATUS) || (head.DT_DEMISS && head.DT_DEMISS < PRIMEIRO_DIA)) {
     return reason('Funcionario inativo ou desligado antes de 01/11.');
@@ -134,13 +141,15 @@ async function loadStores(connection) {
 
 async function processStore(args, loja, todayIso) {
   const groups = await withConnection((connection) => loadRows(connection, loja));
-  const plans = groups.map((rows) => planEmployee(rows, { includeOfficialized: args.includeOfficialized, todayIso }));
+  const plans = groups.map((rows) => planEmployee(rows, { includeOfficialized: args.includeOfficialized,
+    onlyAbsences: args.onlyAbsences, todayIso }));
   const candidatos = plans.filter((item) => item.acao === 'COMPLETAR');
   const bloqueados = plans.filter((item) => item.acao === 'BLOQUEADA');
   const jaPresentes = plans.filter((item) => item.acao === 'JA_PRESENTE').length;
+  const ignorados = plans.filter((item) => item.acao === 'IGNORADA').length;
   console.log(JSON.stringify({ modo: args.apply ? 'APLICACAO' : 'PREVIA', loja,
     mesRef: MES_REF, candidatos: candidatos.length, bloqueados: bloqueados.length,
-    jaPresentes, detalhes: args.all ? bloqueados : plans.map(({ payload, ...item }) => item) }, null, 2));
+    jaPresentes, ignorados, detalhes: args.all ? bloqueados : plans.map(({ payload, ...item }) => item) }, null, 2));
   let aplicadas = 0;
   let falhas = 0;
   if (args.apply) {
@@ -159,7 +168,7 @@ async function processStore(args, loja, todayIso) {
     console.log(`Loja ${loja}: ${aplicadas} aplicada(s), ${bloqueados.length} bloqueada(s), ${falhas} falha(s).`);
   }
   return { loja, candidatos: candidatos.length, bloqueados: bloqueados.length,
-    jaPresentes, aplicadas, falhas };
+    jaPresentes, ignorados, aplicadas, falhas };
 }
 
 async function main() {
@@ -175,13 +184,14 @@ async function main() {
       try {
         results.push(await processStore(args, loja, todayIso));
       } catch (error) {
-        results.push({ loja, candidatos: 0, bloqueados: 0, jaPresentes: 0, aplicadas: 0, falhas: 1 });
+        results.push({ loja, candidatos: 0, bloqueados: 0, jaPresentes: 0, ignorados: 0, aplicadas: 0, falhas: 1 });
         console.error(`FALHA loja=${loja}: ${error.message}`);
       }
     }
     const total = (key) => results.reduce((sum, item) => sum + item[key], 0);
     console.log(`Resumo geral: ${stores.length} loja(s), ${total('candidatos')} candidata(s), ` +
-      `${total('aplicadas')} aplicada(s), ${total('bloqueados')} bloqueada(s), ${total('falhas')} falha(s).`);
+      `${total('aplicadas')} aplicada(s), ${total('ignorados')} ignorada(s), ` +
+      `${total('bloqueados')} bloqueada(s), ${total('falhas')} falha(s).`);
     if (total('falhas') || (args.apply && total('bloqueados'))) process.exitCode = 1;
   } finally {
     await closeOraclePool();

@@ -16,12 +16,13 @@ const rows = [
 
 test('script exige loja e operador somente na aplicacao', () => {
   assert.deepEqual(parseArgs(['--loja=35']), { loja: 35, all: false,
-    apply: false, actor: null, includeOfficialized: false });
+    apply: false, actor: null, includeOfficialized: false, onlyAbsences: false });
   assert.deepEqual(parseArgs(['--all']), { loja: null, all: true,
-    apply: false, actor: null, includeOfficialized: false });
+    apply: false, actor: null, includeOfficialized: false, onlyAbsences: false });
   assert.equal(parseArgs(['--loja=35', '--include-officialized']).includeOfficialized, true);
+  assert.equal(parseArgs(['--all', '--only-absences']).onlyAbsences, true);
   assert.equal(parseArgs(['--loja=35', '--apply', '--by=opc']).apply, true);
-  assert.equal(parseArgs(['--all', '--apply', '--by=opc', '--include-officialized']).apply, true);
+  assert.equal(parseArgs(['--all', '--only-absences', '--apply', '--by=opc', '--include-officialized']).apply, true);
   assert.throws(() => parseArgs(['--loja=35', '--apply']), /Use --loja/);
   assert.throws(() => parseArgs(['--loja=0']), /Use --loja/);
   assert.throws(() => parseArgs(['--all', '--loja=35']), /Use --loja/);
@@ -64,6 +65,23 @@ test('ferias em 01/11 sao preenchidas sem solicitar horario', () => {
     { todayIso: '2026-10-29' });
   assert.equal(plan.acao, 'COMPLETAR');
   assert.equal(plan.payload.dias[0].programacao, 'FER');
+});
+
+test('ausencia confirmada pode ser materializada apos 01/11 sem alterar outros dias', () => {
+  for (const programacao of ['FER', 'AFA']) {
+    const absent = rows.map((row) => ({ ...row, AUSENCIA_01: programacao }));
+    assert.match(planEmployee(absent, { todayIso: '2026-11-03' }).motivo, /--only-absences/);
+    const plan = planEmployee(absent, { todayIso: '2026-11-03', onlyAbsences: true });
+    assert.equal(plan.acao, 'COMPLETAR');
+    assert.equal(plan.payload.dias[0].data, '2026-11-01');
+    assert.equal(plan.payload.dias[0].programacao, programacao);
+    assert.deepEqual(plan.payload.dias.slice(1), rows.map((row) => ({
+      data: row.DT, hrEnt1: row.HR_ENT1, hrSai1: row.HR_SAI1,
+      hrEnt2: row.HR_ENT2, hrSai2: row.HR_SAI2, programacao: row.PROGRAMACAO
+    })));
+  }
+  assert.equal(planEmployee(rows, { todayIso: '2026-10-29', onlyAbsences: true }).acao, 'IGNORADA');
+  assert.equal(planEmployee(rows, { todayIso: '2026-11-03', onlyAbsences: true }).acao, 'IGNORADA');
 });
 
 test('dia passado fica bloqueado para revisao manual', () => {

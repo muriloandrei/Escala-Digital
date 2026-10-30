@@ -55,6 +55,19 @@ test('01/11 so libera oficializacao quando integra a revisao, nao apenas os fixo
   assert.equal(comDia.podeOficializar, true);
 });
 
+test('ferias e afastamento gravados em 01/11 contam para a oficializacao', () => {
+  const input = { secoes: [section], pessoas: [person],
+    periodo: { inicio: '2026-11-01', fim: '2026-11-08' }, lojaId: 10, mesRef: '2026-11-01' };
+  for (const programacao of ['FER', 'AFA']) {
+    const domingo = { ...week()[0], DT: '2026-11-01', PROGRAMACAO: programacao,
+      HR_ENT1: programacao, HR_SAI1: programacao, HR_ENT2: programacao, HR_SAI2: programacao };
+    const sectionProgress = buildProgress({ ...input,
+      escala: { dias: [domingo, ...week()] } }).secoes[0];
+    assert.equal(sectionProgress.preenchidos, 8);
+    assert.equal(sectionProgress.podeOficializar, true);
+  }
+});
+
 test('section progress does not use historical days from another section', () => {
   const dias = week().map((day) => ({ ...day, ESCSECAO_ID: 99, OFICIALIZADA: 1 }));
   const result = buildProgress({ escala: { dias }, secoes: [section], pessoas: [person], periodo: period, lojaId: 10, mesRef: '2026-11-01' });
