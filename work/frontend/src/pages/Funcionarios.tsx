@@ -158,7 +158,7 @@ export function Funcionarios({ user }: { user: User }) {
     deepLinkOpened.current = `${loja}:${id}`;
     setSearch(employee.CHAPA);
     setSelected(employee.ESCFUNC_ID);
-    if (canEdit(user, 'escalas') && !employee.DT_DEMISS && !/APRENDIZ/i.test(employee.FUNCAO_DESCR || '')) {
+    if (canEdit(user, 'escalas') && !employee.DT_DEMISS) {
       setShiftTarget({ employee, month: /^\d{4}-\d{2}$/.test(params.get('mes') || '') ? params.get('mes')! : currentMonth() });
     }
   }, [funcionarios, loja, params, user]);
@@ -188,8 +188,7 @@ export function Funcionarios({ user }: { user: User }) {
               <h2>{detail.NOME}</h2>
               <p>{detail.CHAPA} · {detail.FUNCAO_DESCR || 'Cargo não informado'}</p>
             </div>
-            {canEdit(user, 'escalas') && !detail.DT_DEMISS && permiteEscala(detail.STATUS) &&
-              !/APRENDIZ/i.test(detail.FUNCAO_DESCR || '') && (
+            {canEdit(user, 'escalas') && !detail.DT_DEMISS && permiteEscala(detail.STATUS) && (
                 <button type="button" className="button primary" onClick={() => openShift(detail)}>
                   <Pencil size={15} /> Editar horário
                 </button>

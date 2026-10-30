@@ -10,7 +10,7 @@ const rmIntegrationService = require('../services/rmIntegrationService');
 const officializationService = require('../services/officializationService');
 const sectionRolloutService = require('../services/sectionRolloutService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
-const { validateStandardShift } = require('../domain/shiftValidation');
+const { validateStandardShift, validateApprenticeShift } = require('../domain/shiftValidation');
 const monthlyReleaseService = require('../services/monthlyReleaseService');
 const { REGRAS_VIGENTES, validateEscalaPayload, validarCriticasEscopo, agruparCriticasPorSubsecao } = require('../rules/escalaRules');
 const { buildDiaAlteracoes, normalizeScheduleDay } = require('../utils/scheduleDiff');
@@ -76,8 +76,8 @@ const horarioFuncionarioSchema = z.object({
   aplicarNaEscala: z.boolean().optional().default(true),
   HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
   HR_SAI1: z.string().regex(/^\d{2}:\d{2}$/),
-  HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/),
-  HR_SAI2: z.string().regex(/^\d{2}:\d{2}$/)
+  HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
+  HR_SAI2: z.string().regex(/^\d{2}:\d{2}$/).nullable()
 }).strict();
 const fixoEscalaSchema = z.object({
   lojaId: z.number().int().positive(),
@@ -190,22 +190,10 @@ router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest
     const payload = fixoEscalaSchema.parse(req.body);
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
     if (String(payload.PROGRAMACAO).toUpperCase() === 'TRB') {
-      const funcionario = await getFuncionarioParaEdicaoHorario(req, payload, { permitirAprendiz: true });
-      if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) {
-        const horarioCadastro = String(funcionario.HR_ENT1 || '08:00');
-        const horarioValido = /^\d{2}:\d{2}$/.test(horarioCadastro)
-          && Number(horarioCadastro.slice(0, 2)) < 24 && Number(horarioCadastro.slice(3)) < 60;
-        const esperado = horarioValido ? horarioCadastro : '08:00';
-        const inicio = Number(esperado.slice(0, 2)) * 60 + Number(esperado.slice(3));
-        const fim = /^\d{2}:\d{2}$/.test(String(payload.HR_SAI1 || ''))
-          ? Number(payload.HR_SAI1.slice(0, 2)) * 60 + Number(payload.HR_SAI1.slice(3)) : null;
-        if (payload.HR_ENT1 !== esperado || fim - inicio !== 315 || payload.HR_ENT2 || payload.HR_SAI2) {
-          return res.status(422).json({ error: 'Horario fixo do aprendiz deve manter 05:15 sem segundo periodo.' });
-        }
-      } else {
-        const errors = validateStandardShift(payload);
-        if (errors.length) return res.status(422).json({ error: 'Horario fixo invalido.', details: errors });
-      }
+      const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
+      const aprendiz = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''));
+      const errors = aprendiz ? validateApprenticeShift(payload) : validateStandardShift(payload);
+      if (errors.length) return res.status(422).json({ error: 'Horario fixo invalido.', details: errors });
     }
     const fixo = await escalaService.saveFixoEscala({
       lojaId: payload.lojaId,
@@ -862,7 +850,7 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
   }
 });
 
-async function getFuncionarioParaEdicaoHorario(req, payload, { permitirAprendiz = false } = {}) {
+async function getFuncionarioParaEdicaoHorario(req, payload) {
   const secoesPermitidas = await getSecoesPermitidas(req, payload.lojaId);
   const funcionarios = await catalogService.listFuncionariosByLoja(payload.lojaId, {
     mesRef: payload.mesRef, secoesPermitidas
@@ -874,11 +862,6 @@ async function getFuncionarioParaEdicaoHorario(req, payload, { permitirAprendiz 
     throw error;
   }
   await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [Number(funcionario.ESCSECAO_ID)]);
-  if (!permitirAprendiz && /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) {
-    const error = new Error('O horario do aprendiz e fixo e nao pode ser alterado.');
-    error.statusCode = 422;
-    throw error;
-  }
   return funcionario;
 }
 
@@ -889,9 +872,10 @@ router.post('/funcionario/horario/preview', requirePermission('escalas', 'editar
     }
     const payload = horarioFuncionarioSchema.parse(req.body);
     if (!isEditableMonth(payload.mesRef)) return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
-    const errors = validateStandardShift(payload, { exactInterval: true });
+    const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
+    const errors = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))
+      ? validateApprenticeShift(payload) : validateStandardShift(payload, { exactInterval: true });
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
-    await getFuncionarioParaEdicaoHorario(req, payload);
     const impacto = await escalaService.previewHorarioFuncionarioEscala({
       lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: payload.escfuncId,
       horario: payload
@@ -910,9 +894,10 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
     }
     const payload = horarioFuncionarioSchema.parse(req.body);
     if (!isEditableMonth(payload.mesRef)) return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
-    const errors = validateStandardShift(payload, { exactInterval: true });
-    if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
     const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
+    const errors = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))
+      ? validateApprenticeShift(payload) : validateStandardShift(payload, { exactInterval: true });
+    if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
 
     const horario = {
       HR_ENT1: payload.HR_ENT1,

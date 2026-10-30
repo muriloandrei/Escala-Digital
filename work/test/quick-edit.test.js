@@ -22,6 +22,9 @@ test('quick edit keeps apprentice shift at 05:15', () => {
   const rest = { DT: '2026-10-12', PROGRAMACAO: 'F' };
   const employee = { funcao: 'JOVEM APRENDIZ', dias: [{ data: '2026-10-12', programacao: 'TRB', hrEnt1: '08:00', hrSai1: '13:15', hrEnt2: null, hrSai2: null }] };
   assert.equal(validateQuickRestWorkEdit(employee, [rest]), '');
+  employee.dias[0].hrEnt1 = '09:00';
+  employee.dias[0].hrSai1 = '14:15';
+  assert.equal(validateQuickRestWorkEdit(employee, [rest]), '');
   employee.dias[0].hrSai1 = '14:00';
   assert.match(validateQuickRestWorkEdit(employee, [rest]), /05:15/);
 });

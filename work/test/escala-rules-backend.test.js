@@ -301,6 +301,9 @@ test('backend validates apprentice with fixed 05:15 first period only', () => {
   ], { funcao: 'JOVEM APRENDIZ', aprendiz: true }));
 
   assert.deepEqual(errors, []);
+  assert.deepEqual(validateEscalaPayload(buildPayload([
+    trabalho('2026-09-01', { hrEnt1: '09:00', hrSai1: '14:15', hrEnt2: null, hrSai2: null })
+  ], { funcao: 'JOVEM APRENDIZ', aprendiz: true })), []);
 });
 
 test('backend rejects continuous period greater than 06:00', () => {

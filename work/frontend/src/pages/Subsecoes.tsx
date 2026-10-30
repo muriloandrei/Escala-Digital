@@ -109,13 +109,12 @@ export function Subsecoes({ user }: { user: User }) {
       !subsecoes.some((sub) => Number(sub.ESCSUBSECAO_ID) === Number(item.ESCSUBSECAO_ID)),
   ).length;
   const linkCandidates = sectionPeople.filter((item) =>
-    !/APRENDIZ/i.test(item.FUNCAO_DESCR || '') &&
     String(item.ESCSUBSECAO_ID) !== selected &&
     `${item.CHAPA} ${item.NOME} ${item.FUNCAO_DESCR || ''}`.toLocaleLowerCase('pt-BR')
       .includes(linkSearch.toLocaleLowerCase('pt-BR').trim()),
   );
-  const transferablePeople = visiblePeople.filter((item) => !/APRENDIZ/i.test(item.FUNCAO_DESCR || ''));
-  const selectedPeople = scopedPeople.filter((item) => selectedIds.has(Number(item.ESCFUNC_ID)) && !/APRENDIZ/i.test(item.FUNCAO_DESCR || ''));
+  const transferablePeople = visiblePeople;
+  const selectedPeople = scopedPeople.filter((item) => selectedIds.has(Number(item.ESCFUNC_ID)));
   const activeDestinations = subsecoes.filter((item) => item.STATUS !== 'I' && String(item.ESCSUBSECAO_ID) !== selected);
 
   useEffect(() => {
@@ -500,7 +499,7 @@ export function Subsecoes({ user }: { user: User }) {
                   <tbody>
                     {visiblePeople.map((item) => (
                       <tr key={item.ESCFUNC_ID}>
-                        {canManage && <td><input type="checkbox" aria-label={`Selecionar ${item.NOME}`} disabled={/APRENDIZ/i.test(item.FUNCAO_DESCR || '')} checked={selectedIds.has(Number(item.ESCFUNC_ID))} onChange={(event) => {
+                        {canManage && <td><input type="checkbox" aria-label={`Selecionar ${item.NOME}`} checked={selectedIds.has(Number(item.ESCFUNC_ID))} onChange={(event) => {
                           const next = new Set(selectedIds);
                           if (event.target.checked) next.add(Number(item.ESCFUNC_ID));
                           else next.delete(Number(item.ESCFUNC_ID));
@@ -517,11 +516,9 @@ export function Subsecoes({ user }: { user: User }) {
                             : item.HR_ENT1 || '–'}
                         </td>
                         {canManage && <td>
-                          {!/APRENDIZ/i.test(item.FUNCAO_DESCR || '') && (
-                            <button type="button" className="icon-action" title={`Transferir ${item.NOME}`} aria-label={`Transferir ${item.NOME}`} onClick={() => setTransferTarget(item)}>
-                              <ArrowRightLeft size={16} />
-                            </button>
-                          )}
+                          <button type="button" className="icon-action" title={`Transferir ${item.NOME}`} aria-label={`Transferir ${item.NOME}`} onClick={() => setTransferTarget(item)}>
+                            <ArrowRightLeft size={16} />
+                          </button>
                           {selected !== 'sem' && <button type="button" className="icon-action" title={`Remover ${item.NOME} da subseção`} aria-label={`Remover ${item.NOME} da subseção`} onClick={() => setUnlinkTarget(item)}><X size={16} /></button>}
                         </td>}
                       </tr>

@@ -1,5 +1,5 @@
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
-const { validateStandardShift } = require('./shiftValidation');
+const { validateStandardShift, validateApprenticeShift } = require('./shiftValidation');
 
 function validateQuickRestWorkEdit(funcionario, diasAnteriores = [], { allowShiftChange = false } = {}) {
   const alteracoes = buildDiaAlteracoes(diasAnteriores, funcionario.dias || []);
@@ -18,12 +18,8 @@ function validateQuickRestWorkEdit(funcionario, diasAnteriores = [], { allowShif
     return '';
   }
   if (/APRENDIZ/i.test(String(funcionario.funcao || funcionario.FUNCAO_DESCR || '')) || funcionario.aprendiz) {
-    const toMinutes = (value) => /^\d{2}:\d{2}$/.test(String(value || ''))
-      ? Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5)) : null;
-    const inicio = toMinutes(novo.hrEnt1);
-    const fim = toMinutes(novo.hrSai1);
-    return inicio !== null && fim - inicio === 315 && !novo.hrEnt2 && !novo.hrSai2
-      ? '' : 'O aprendiz deve cumprir 05:15 sem segundo periodo.';
+    return validateApprenticeShift({ HR_ENT1: novo.hrEnt1, HR_SAI1: novo.hrSai1,
+      HR_ENT2: novo.hrEnt2, HR_SAI2: novo.hrSai2 })[0] || '';
   }
   const errors = validateStandardShift({ HR_ENT1: novo.hrEnt1, HR_SAI1: novo.hrSai1,
     HR_ENT2: novo.hrEnt2, HR_SAI2: novo.hrSai2 });

@@ -39,4 +39,13 @@ function validateStandardShift(data, { exactInterval = false } = {}) {
   return errors;
 }
 
-module.exports = { validateStandardShift };
+function validateApprenticeShift(data) {
+  const entrada = timeToMinutes(data.HR_ENT1);
+  const saida = timeToMinutes(data.HR_SAI1);
+  if (entrada === null || saida === null) return ['Informe entrada e saida no formato HH:MM.'];
+  if (data.HR_ENT2 || data.HR_SAI2) return ['O aprendiz nao pode ter segundo periodo.'];
+  if (saida - entrada !== 315) return ['A jornada do aprendiz deve ser exatamente 05:15.'];
+  return [];
+}
+
+module.exports = { validateStandardShift, validateApprenticeShift };

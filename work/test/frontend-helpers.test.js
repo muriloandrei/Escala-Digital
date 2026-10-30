@@ -76,6 +76,16 @@ test('interactive editor accepts only a 01:10 interval', async () => {
   assert.match(validateStandardHours({ HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:20', HR_SAI2: '18:08' }), /exatamente 01:10/);
 });
 
+test('apprentice editor adjusts both times while preserving 05:15', async () => {
+  const { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } = await loadFrontendHelper('apprenticeHours.ts');
+  const shifted = { HR_ENT1: '09:00', HR_SAI1: '14:15', HR_ENT2: '', HR_SAI2: '' };
+  assert.deepEqual(apprenticeHoursFromStart('09:00'), shifted);
+  assert.deepEqual(autofillApprenticeHours('HR_SAI1', '14:15'), shifted);
+  assert.equal(validateApprenticeHours(shifted), '');
+  assert.match(validateApprenticeHours({ ...shifted, HR_SAI1: '14:30' }), /05:15/);
+  assert.equal(autofillApprenticeHours('HR_ENT1', '20:00'), null);
+});
+
 test('fixed schedule click cycle returns to empty after rest and work', async () => {
   const { nextFixedState } = await loadFrontendHelper('quickFixedCycle.ts');
   assert.equal(nextFixedState(null), 'FXF');

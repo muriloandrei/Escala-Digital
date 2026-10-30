@@ -48,6 +48,7 @@ function loadService({ dismissal = '2026-10-15', inactive = false, status = 'A',
         }
       };
       if (name === '../utils/scheduleDiff') return require('../src/utils/scheduleDiff');
+      if (name === '../domain/shiftValidation') return require('../src/domain/shiftValidation');
       if (name === '../domain/portariaSection') return require('../src/domain/portariaSection');
       if (name === '../domain/employeeStatus') return require('../src/domain/employeeStatus');
       if (name === '../domain/sectionRollout') return require('../src/domain/sectionRollout');

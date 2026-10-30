@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { patchJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { autofillStandardHours } from '../shiftAutofill';
 import { validateStandardHours } from '../shiftValidation';
+import { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
 
 type Impact = { diasAlterados: number; diasManuais: number; possuiEscala: boolean; mesesImpactados: string[]; mesesParaReoficializar: string[] };
 
@@ -20,19 +21,23 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
 }) {
   const minimumMonth = currentMonth();
   const [month, setMonth] = useState(initialMonth < minimumMonth ? minimumMonth : initialMonth);
-  const [hours, setHours] = useState({
-    HR_ENT1: employee.HR_ENT1 || currentDay?.HR_ENT1 || '', HR_SAI1: employee.HR_SAI1 || currentDay?.HR_SAI1 || '',
-    HR_ENT2: employee.HR_ENT2 || currentDay?.HR_ENT2 || '', HR_SAI2: employee.HR_SAI2 || currentDay?.HR_SAI2 || '',
-  });
+  const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
+  const [hours, setHours] = useState(() => apprentice
+    ? apprenticeHoursFromStart(employee.HR_ENT1 || currentDay?.HR_ENT1 || '08:00') || apprenticeHoursFromStart('08:00')!
+    : {
+      HR_ENT1: employee.HR_ENT1 || currentDay?.HR_ENT1 || '', HR_SAI1: employee.HR_SAI1 || currentDay?.HR_SAI1 || '',
+      HR_ENT2: employee.HR_ENT2 || currentDay?.HR_ENT2 || '', HR_SAI2: employee.HR_SAI2 || currentDay?.HR_SAI2 || '',
+    });
   const [impact, setImpact] = useState<Impact | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const payload = () => ({ lojaId: Number(lojaId), escfuncId: Number(employee.ESCFUNC_ID),
-    mesRef: `${month}-01`, aplicarNaEscala: true, ...hours });
+    mesRef: `${month}-01`, aplicarNaEscala: true, ...hours,
+    HR_ENT2: apprentice ? null : hours.HR_ENT2, HR_SAI2: apprentice ? null : hours.HR_SAI2 });
 
   async function preview() {
     if (month < currentMonth()) { setError('Horários de meses anteriores não podem ser alterados.'); return; }
-    const invalid = validateStandardHours(hours);
+    const invalid = apprentice ? validateApprenticeHours(hours) : validateStandardHours(hours);
     if (invalid) { setError(invalid); return; }
     setBusy(true); setError('');
     try {
@@ -59,12 +64,13 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
       <h2 id="shift-title">Editar horário · {employee.NOME}</h2>
       <p>{employee.CHAPA} · {employee.FUNCAO_DESCR || 'Cargo não informado'}</p>
       {currentDay && <p>Na escala: {[currentDay.HR_ENT1, currentDay.HR_SAI1, currentDay.HR_ENT2, currentDay.HR_SAI2].filter(Boolean).join(' · ')}</p>}
-      <div className="shift-fields">{(['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'] as const).map((field, index) =>
-        <label key={field}>{['Entrada', 'Saída intervalo', 'Retorno', 'Última saída'][index]}
+      <div className="shift-fields">{(apprentice ? ['HR_ENT1', 'HR_SAI1'] as const : ['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'] as const).map((field, index) =>
+        <label key={field}>{apprentice ? ['Entrada', 'Saída'][index] : ['Entrada', 'Saída intervalo', 'Retorno', 'Última saída'][index]}
           <input type="time" value={hours[field]} onChange={(event) => {
-            const next = autofillStandardHours(hours, field, event.target.value);
+            const next = apprentice ? autofillApprenticeHours(field as 'HR_ENT1' | 'HR_SAI1', event.target.value)
+              : autofillStandardHours(hours, field, event.target.value);
             if (next) { setHours(next); setError(''); }
-            else setError('O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.');
+            else setError(apprentice ? 'O horário não cabe no mesmo dia mantendo 05:15 de trabalho.' : 'O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.');
             setImpact(null);
           }} required />
         </label>)}</div>

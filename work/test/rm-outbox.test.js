@@ -126,6 +126,7 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
     '../domain/portariaSection': require('../src/domain/portariaSection'),
     '../domain/employeeStatus': require('../src/domain/employeeStatus'),
     '../domain/sectionRollout': require('../src/domain/sectionRollout'),
+    '../domain/shiftValidation': require('../src/domain/shiftValidation'),
     '../utils/scheduleDiff': { buildDiaAlteracoes: () => [] },
     '../rules/escalaRules': { validarCriticasEscopo: () => criticas }
   };
@@ -219,6 +220,7 @@ test('edicao apos oficializacao supera envio pendente na mesma transacao', async
     '../domain/portariaSection': require('../src/domain/portariaSection'),
     '../domain/employeeStatus': require('../src/domain/employeeStatus'),
     '../domain/sectionRollout': require('../src/domain/sectionRollout'),
+    '../domain/shiftValidation': require('../src/domain/shiftValidation'),
     '../utils/scheduleDiff': { buildDiaAlteracoes: () => [{ data: '2026-10-05' }] },
     '../rules/escalaRules': { validarCriticasEscopo: () => [] }
   };

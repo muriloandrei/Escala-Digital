@@ -19,6 +19,7 @@ function loadService(connection, appendEvent) {
       if (name === '../domain/employeeStatus') return require('../src/domain/employeeStatus');
       if (name === '../domain/sectionRollout') return require('../src/domain/sectionRollout');
       if (name === '../utils/scheduleDiff') return {};
+      if (name === '../domain/shiftValidation') return require('../src/domain/shiftValidation');
       if (name === '../rules/escalaRules') return {};
       throw new Error(`Dependencia inesperada: ${name}`);
     }

@@ -3,6 +3,7 @@ import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '.
 import { createOperationId } from '../operationId';
 import { autofillStandardHours } from '../shiftAutofill';
 import { validateStandardHours } from '../shiftValidation';
+import { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
 
 type Shift = { hrEnt1: string; hrSai1: string; hrEnt2: string; hrSai2: string };
 export type PayloadDay = {
@@ -63,11 +64,18 @@ export function EditarDiaEscala({
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
   const reference = days.find((item) => !isRest(item) && item.HR_ENT1) || day;
   const [mode, setMode] = useState<'TRB' | 'F'>(isRest(day) ? 'F' : 'TRB');
-  const [shift, setShift] = useState<Shift>({
-    hrEnt1: (isRest(day) ? reference.HR_ENT1 : day.HR_ENT1) || '08:00',
-    hrSai1: (isRest(day) ? reference.HR_SAI1 : day.HR_SAI1) || '12:00',
-    hrEnt2: (isRest(day) ? reference.HR_ENT2 : day.HR_ENT2) || (apprentice ? '' : '13:10'),
-    hrSai2: (isRest(day) ? reference.HR_SAI2 : day.HR_SAI2) || (apprentice ? '' : '17:58'),
+  const [shift, setShift] = useState<Shift>(() => {
+    if (apprentice) {
+      const hours = apprenticeHoursFromStart((isRest(day) ? reference.HR_ENT1 : day.HR_ENT1) || employee.HR_ENT1 || '08:00')
+        || apprenticeHoursFromStart('08:00')!;
+      return { hrEnt1: hours.HR_ENT1, hrSai1: hours.HR_SAI1, hrEnt2: '', hrSai2: '' };
+    }
+    return {
+      hrEnt1: (isRest(day) ? reference.HR_ENT1 : day.HR_ENT1) || '08:00',
+      hrSai1: (isRest(day) ? reference.HR_SAI1 : day.HR_SAI1) || '12:00',
+      hrEnt2: (isRest(day) ? reference.HR_ENT2 : day.HR_ENT2) || '13:10',
+      hrSai2: (isRest(day) ? reference.HR_SAI2 : day.HR_SAI2) || '17:58',
+    };
   });
   const [justification, setJustification] = useState(day.JUSTIFICATIVA_ALTERACAO || '');
   const [busy, setBusy] = useState(false);
@@ -84,9 +92,10 @@ export function EditarDiaEscala({
 
   function setHour(key: keyof Shift, value: string) {
     const field = ({ hrEnt1: 'HR_ENT1', hrSai1: 'HR_SAI1', hrEnt2: 'HR_ENT2', hrSai2: 'HR_SAI2' } as const)[key];
-    const next = autofillStandardHours({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
-      HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, field, value);
-    if (!next) { setError('O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.'); return; }
+    const next = apprentice ? autofillApprenticeHours(field as 'HR_ENT1' | 'HR_SAI1', value)
+      : autofillStandardHours({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
+        HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, field, value);
+    if (!next) { setError(apprentice ? 'O horário não cabe no mesmo dia mantendo 05:15 de trabalho.' : 'O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.'); return; }
     setShift({ hrEnt1: next.HR_ENT1, hrSai1: next.HR_SAI1, hrEnt2: next.HR_ENT2, hrSai2: next.HR_SAI2 });
     setError('');
   }
@@ -94,9 +103,9 @@ export function EditarDiaEscala({
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editable || busy || uncertain) return;
-    if (mode === 'TRB' && !apprentice) {
-      const invalid = validateStandardHours({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
-        HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 });
+    if (mode === 'TRB') {
+      const hours = { HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1, HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 };
+      const invalid = apprentice ? validateApprenticeHours(hours) : validateStandardHours(hours);
       if (invalid) { setError(invalid); return; }
     }
     const form = new FormData(event.currentTarget);
@@ -226,7 +235,6 @@ export function EditarDiaEscala({
               <button
                 type="button"
                 className={mode === 'TRB' ? 'selected' : ''}
-                disabled={apprentice && (!reference.HR_ENT1 || isRest(reference))}
                 onClick={() => {
                   setMode('TRB');
                 }}
@@ -246,12 +254,15 @@ export function EditarDiaEscala({
             {mode === 'TRB' && (
               <div className="day-editor-times">
                 {(
-                  [
+                  (apprentice ? [
+                    ['hrEnt1', 'Entrada'],
+                    ['hrSai1', 'Saída'],
+                  ] : [
                     ['hrEnt1', 'Entrada'],
                     ['hrSai1', 'Saída intervalo'],
                     ['hrEnt2', 'Retorno'],
                     ['hrSai2', 'Saída'],
-                  ] as const
+                  ]) as readonly (readonly [keyof Shift, string])[]
                 ).map(([key, label]) => (
                   <label key={key}>
                     {label}
@@ -259,10 +270,9 @@ export function EditarDiaEscala({
                       type="time"
                       name={key}
                       value={shift[key]}
-                      disabled={apprentice}
                       onInput={(event) => setHour(key, event.currentTarget.value)}
                       onChange={(event) => setHour(key, event.target.value)}
-                      required={!apprentice}
+                      required
                     />
                   </label>
                 ))}

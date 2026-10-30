@@ -1005,12 +1005,12 @@ export function EscalaMensal({ user }: { user: User }) {
               if (day) setSelectedCell({ employee: personMenu.employee, date: iso(day.DT), day });
               setPersonMenu(null);
             }}>Ver detalhes</button>
-            {escala?.status !== 'FINALIZADA' && permiteEscala(personMenu.employee.STATUS) && canEdit(user, 'escalas-funcionarios') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && <button type="button" role="menuitem" onClick={() => { setShiftTarget(personMenu.employee); setPersonMenu(null); }}>Editar horário-base</button>}
+            {escala?.status !== 'FINALIZADA' && permiteEscala(personMenu.employee.STATUS) && canEdit(user, 'escalas-funcionarios') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && <button type="button" role="menuitem" onClick={() => { setShiftTarget(personMenu.employee); setPersonMenu(null); }}>Editar horário-base</button>}
             {escala?.status !== 'FINALIZADA' && permiteEscala(personMenu.employee.STATUS) && !fullAbsenceIds.has(Number(personMenu.employee.ESCFUNC_ID)) && canEdit(user, 'escalas') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
               setIndividualTarget(personMenu.employee);
               setPersonMenu(null);
             }}>Gerar escala individual</button>}
-            {escala?.status !== 'FINALIZADA' && permiteEscala(personMenu.employee.STATUS) && canEdit(user, 'escalas') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !/APRENDIZ/i.test(personMenu.employee.FUNCAO_DESCR || '') && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
+            {escala?.status !== 'FINALIZADA' && permiteEscala(personMenu.employee.STATUS) && canEdit(user, 'escalas') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
               setTransferTarget(personMenu.employee);
               setPersonMenu(null);
             }}>Transferir de subseção</button>}

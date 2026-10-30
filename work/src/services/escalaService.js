@@ -6,6 +6,7 @@ const { isPortariaSection } = require('../domain/portariaSection');
 const { permiteEscala } = require('../domain/employeeStatus');
 const { activeSectionSql } = require('../domain/sectionRollout');
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
+const { validateApprenticeShift } = require('../domain/shiftValidation');
 const { validarCriticasEscopo } = require('../rules/escalaRules');
 
 // O planejamento de novembro encerrou antecipadamente setembro e outubro de 2026.
@@ -2512,6 +2513,14 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
   }
   const demissoes = new Map(locked.rows.map((row) => [Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')), pick(row, 'DT_DEMISS', 'dt_demiss')]));
   const situacoes = new Map(locked.rows.map((row) => [Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')), pick(row, 'STATUS', 'status') || 'A']));
+  const funcoesResult = await connection.execute(
+    `select f.escfunc_id, fn.descr as funcao_descr
+       from sgn_esc_funcionario f
+       join sgn_esc_funcao fn on fn.escfuncao_id = f.escfuncao_id
+      where f.loja = :lojaId and f.escfunc_id in (${ids.map((_, index) => `:func${index}`).join(', ')})`,
+    { lojaId, ...lockBinds }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  );
+  const funcoes = new Map((funcoesResult.rows || []).map((row) => [Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')), pick(row, 'FUNCAO_DESCR', 'funcao_descr')]));
   const saved = [];
   for (const funcionario of funcionarios) {
     const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
@@ -2523,6 +2532,20 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
     }
     assertRevisaoBase(funcionario, revisaoAtual);
     const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+    if (/APRENDIZ/i.test(String(funcoes.get(escfuncId) || ''))) {
+      for (const alteracao of buildDiaAlteracoes(atual?.dias || [], funcionario.dias || [])) {
+        if (alteracao.novo.programacao !== 'TRB') continue;
+        const errors = validateApprenticeShift({
+          HR_ENT1: alteracao.novo.hrEnt1, HR_SAI1: alteracao.novo.hrSai1,
+          HR_ENT2: alteracao.novo.hrEnt2, HR_SAI2: alteracao.novo.hrSai2
+        });
+        if (errors.length) {
+          const error = new Error(`${alteracao.data}: ${errors[0]}`);
+          error.statusCode = 422;
+          throw error;
+        }
+      }
+    }
     assertSemNovaProgramacaoAposDemissao(funcionario.dias || [], atual?.dias || [], demissoes.get(escfuncId));
     assertSemDiasFuturosParaInativo(funcionario.dias || [], situacoes.get(escfuncId));
     assertPreservaDatasEscala(atual?.dias || [], funcionario.dias || [], datasAdicionaisPermitidas);

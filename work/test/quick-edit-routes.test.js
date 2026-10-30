@@ -242,7 +242,7 @@ test('fixed rest can be saved on a holiday', async () => {
   }
 });
 
-test('fixed apprentice work accepts only the existing 05:15 shift', async () => {
+test('fixed apprentice work accepts a different start with 05:15 shift', async () => {
   const originals = {
     assertSecoesPermitidas: accessService.assertSecoesPermitidas,
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
@@ -260,6 +260,9 @@ test('fixed apprentice work accepts only the existing 05:15 shift', async () => 
     const accepted = response();
     await handler('/fixos')({ body, user: { sub: 1 } }, accepted, (error) => { throw error; });
     assert.equal(accepted.code, 201);
+    const shifted = response();
+    await handler('/fixos')({ body: { ...body, HR_ENT1: '09:00', HR_SAI1: '14:15' }, user: { sub: 1 } }, shifted, (error) => { throw error; });
+    assert.equal(shifted.code, 201);
     const denied = response();
     await handler('/fixos')({ body: { ...body, HR_SAI1: '14:00' }, user: { sub: 1 } }, denied, (error) => { throw error; });
     assert.equal(denied.code, 422);
@@ -267,6 +270,53 @@ test('fixed apprentice work accepts only the existing 05:15 shift', async () => 
     accessService.assertSecoesPermitidas = originals.assertSecoesPermitidas;
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
     escalaService.saveFixoEscala = originals.saveFixoEscala;
+    auditService.registerAudit = originals.registerAudit;
+  }
+});
+
+test('apprentice base-hour preview and update accept a different 05:15 shift', async () => {
+  const originals = {
+    getSecoesPermitidasUsuario: accessService.getSecoesPermitidasUsuario,
+    assertSecoesPermitidas: accessService.assertSecoesPermitidas,
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    previewHorarioFuncionarioEscala: escalaService.previewHorarioFuncionarioEscala,
+    updateHorarioFuncionarioEscala: escalaService.updateHorarioFuncionarioEscala,
+    registerAudit: auditService.registerAudit
+  };
+  accessService.getSecoesPermitidasUsuario = async () => [20];
+  accessService.assertSecoesPermitidas = async () => {};
+  catalogService.listFuncionariosByLoja = async () => [{ ESCFUNC_ID: 10, ESCSECAO_ID: 20,
+    FUNCAO_DESCR: 'JOVEM APRENDIZ', HR_ENT1: '08:00' }];
+  escalaService.previewHorarioFuncionarioEscala = async () => ({ diasAlterados: 2 });
+  let saved = 0;
+  escalaService.updateHorarioFuncionarioEscala = async ({ horario }) => {
+    saved += 1;
+    assert.equal(horario.HR_ENT1, '09:00');
+    assert.equal(horario.HR_ENT2, null);
+    return { funcionario: {}, saved: null, diasAlterados: 2, mesesAtualizados: ['2099-11-01'] };
+  };
+  auditService.registerAudit = async () => {};
+  const body = { lojaId: 10, mesRef: '2099-11-01', escfuncId: 10, aplicarNaEscala: true,
+    HR_ENT1: '09:00', HR_SAI1: '14:15', HR_ENT2: null, HR_SAI2: null };
+  const patch = router.stack.find((layer) => layer.route?.path === '/funcionario/horario'
+    && layer.route.methods.patch).route.stack.at(-1).handle;
+  try {
+    const preview = response();
+    await handler('/funcionario/horario/preview')({ body, user: { sub: 1 } }, preview, (error) => { throw error; });
+    assert.equal(preview.code, 200);
+    const invalid = response();
+    await patch({ body: { ...body, HR_SAI1: '14:16' }, user: { sub: 1 } }, invalid, (error) => { throw error; });
+    assert.equal(invalid.code, 422);
+    const updated = response();
+    await patch({ body, user: { sub: 1 } }, updated, (error) => { throw error; });
+    assert.equal(updated.code, 200);
+    assert.equal(saved, 1);
+  } finally {
+    Object.assign(accessService, { getSecoesPermitidasUsuario: originals.getSecoesPermitidasUsuario,
+      assertSecoesPermitidas: originals.assertSecoesPermitidas });
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    escalaService.previewHorarioFuncionarioEscala = originals.previewHorarioFuncionarioEscala;
+    escalaService.updateHorarioFuncionarioEscala = originals.updateHorarioFuncionarioEscala;
     auditService.registerAudit = originals.registerAudit;
   }
 });
