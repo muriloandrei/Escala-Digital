@@ -499,6 +499,11 @@ export function EscalaMensal({ user }: { user: User }) {
         if (!readback || (nextFixed ? recorded?.PROGRAMACAO !== nextFixed : Boolean(recorded))) {
           throw new Error('A leitura de volta não confirmou o fixo. Atualize a escala antes de tentar novamente.');
         }
+        if (nextFixed && (escala?.dias || []).some((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID))
+          && !readback.escala.dias.some((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID)
+            && iso(item.DT) === date && String(item.PROGRAMACAO || '').toUpperCase() === nextFixed)) {
+          throw new Error('O fixo foi salvo, mas o dia não entrou na revisão da escala. Atualize antes de oficializar.');
+        }
         setEscala(readback.escala);
         setProgress(readback.progresso);
       } else {

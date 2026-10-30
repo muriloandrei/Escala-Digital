@@ -41,6 +41,20 @@ test('section progress requires every employee day and individual critiques to b
   assert.equal(approved.oficializada, true);
 });
 
+test('01/11 so libera oficializacao quando integra a revisao, nao apenas os fixos', () => {
+  const input = { secoes: [section], pessoas: [person],
+    periodo: { inicio: '2026-11-01', fim: '2026-11-08' }, lojaId: 10, mesRef: '2026-11-01' };
+  const domingo = { ...week()[0], DT: '2026-11-01', PROGRAMACAO: 'FXF',
+    HR_ENT1: null, HR_SAI1: null, HR_ENT2: null, HR_SAI2: null };
+  const fixos = [{ ESCFUNC_ID: 42, DT: '2026-11-01', PROGRAMACAO: 'FXF' }];
+  const semDia = buildProgress({ ...input, escala: { dias: week(), fixos } }).secoes[0];
+  assert.equal(semDia.preenchidos, 7);
+  assert.equal(semDia.podeOficializar, false);
+  const comDia = buildProgress({ ...input, escala: { dias: [domingo, ...week()], fixos } }).secoes[0];
+  assert.equal(comDia.preenchidos, 8);
+  assert.equal(comDia.podeOficializar, true);
+});
+
 test('section progress does not use historical days from another section', () => {
   const dias = week().map((day) => ({ ...day, ESCSECAO_ID: 99, OFICIALIZADA: 1 }));
   const result = buildProgress({ escala: { dias }, secoes: [section], pessoas: [person], periodo: period, lojaId: 10, mesRef: '2026-11-01' });

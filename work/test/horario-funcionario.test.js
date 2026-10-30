@@ -55,11 +55,21 @@ test('edicao de horario fixo altera o dia gerado e preserva os demais', () => {
   assert.equal(atuais[1].HR_ENT1, '08:00');
 });
 
-test('fixo sem dia gerado ou sem mudanca de horario nao cria revisao', () => {
+test('fixo em dia vazio de escala existente passa a compor uma nova revisao', () => {
   const atuais = [jornada('2026-11-02')];
-  assert.equal(diasComFixoAtualizado(atuais, '2026-11-03', {
+  const dias = diasComFixoAtualizado(atuais, '2026-11-01', {
     programacao: 'TRB', hrEnt1: '09:00', hrSai1: '13:00', hrEnt2: '14:10', hrSai2: '18:58'
-  }), null);
+  });
+  assert.deepEqual(dias.map((dia) => dia.data), ['2026-11-01', '2026-11-02']);
+  assert.equal(dias[0].hrEnt1, '09:00');
+  assert.equal(atuais.length, 1);
+  const folga = diasComFixoAtualizado(atuais, '2026-11-01', { programacao: 'FXF' });
+  assert.equal(folga[0].programacao, 'FXF');
+  assert.equal(diasComFixoAtualizado([], '2026-11-01', { programacao: 'FXF' }), null);
+});
+
+test('fixo identico ao dia gerado nao cria revisao', () => {
+  const atuais = [jornada('2026-11-02')];
   assert.equal(diasComFixoAtualizado(atuais, '2026-11-02', {
     programacao: 'TRB', hrEnt1: '08:00', hrSai1: '12:00', hrEnt2: '13:10', hrSai2: '17:58'
   }), null);

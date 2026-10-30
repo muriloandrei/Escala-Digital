@@ -12,3 +12,11 @@ test('additional sections depend on a store flag and an active employee', () => 
   assert.match(sql, /02\[\.\]012\$/);
   assert.match(activeSectionSql('s', ':lojaId'), /nvl\(s\.status, 'A'\) = 'A' or/);
 });
+
+test('Gerencia 01.001 fica fora do escopo mesmo ativa ou com liberacao ampliada', () => {
+  const additional = enabledAdditionalSectionSql('s', ':lojaId');
+  const active = activeSectionSql('s', ':lojaId');
+  assert.match(additional, /not regexp_like\(trim\(nvl\(s\.cod_secao, ' '\)\), '\(\^\|\[\.\]\)01\[\.\]001\$'\)/);
+  assert.match(active, /not regexp_like\(trim\(nvl\(s\.cod_secao, ' '\)\), '\(\^\|\[\.\]\)01\[\.\]001\$'\)/);
+  assert.match(active, /and \(nvl\(s\.status, 'A'\) = 'A' or/);
+});

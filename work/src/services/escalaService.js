@@ -1186,8 +1186,12 @@ async function listFixosEscala({ lojaId, mesRef, escsecaoId = null }) {
 
 function diasComFixoAtualizado(diasAtuais, data, fixo) {
   const dias = diasAtuais.map(normalizeDiaComparavel);
-  const dia = dias.find((item) => item.data === data);
-  if (!dia) return null;
+  let dia = dias.find((item) => item.data === data);
+  if (!dia && !dias.length) return null;
+  if (!dia) {
+    dia = { data };
+    dias.push(dia);
+  }
   if (['FER', 'AFA'].includes(dia.programacao)) {
     const error = new Error('Dia de ferias ou afastamento nao pode receber horario fixo.');
     error.statusCode = 422;
@@ -1202,7 +1206,7 @@ function diasComFixoAtualizado(diasAtuais, data, fixo) {
     hrSai2: fixo.hrSai2
   });
   if (diasSaoIguais(anterior, dia)) return null;
-  return dias;
+  return dias.sort((left, right) => left.data.localeCompare(right.data));
 }
 
 function diasSemFixo(diasAtuais, data, fixo) {
@@ -1300,8 +1304,16 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
       );
       const diasAtualizados = diasComFixoAtualizado(escalaAntes?.dias || [], binds.dt, binds);
       if (diasAtualizados) {
+        const { inicio, fim } = getOperationalPeriodIso(mesRef);
+        if (binds.dt < inicio || binds.dt > fim) {
+          const error = new Error('O dia fixo esta fora do periodo da escala e nao pode compor esta revisao.');
+          error.statusCode = 422;
+          throw error;
+        }
+        const diaJaGerado = (escalaAntes?.dias || []).some((dia) => formatDateValue(dia.DT) === binds.dt);
         await saveEscalasFuncionariosRevisionComConnection(connection, {
           lojaId, mesRef, actor, acao: 'EDITAR_DIA_FIXO',
+          datasAdicionaisPermitidas: diaJaGerado ? [] : [binds.dt],
           funcionarios: [{ escfuncId: Number(escfuncId), revisaoBase: escalaAntes.revisao,
             escsecaoId: Number(escsecaoId), dias: diasAtualizados }]
         });
