@@ -13,6 +13,14 @@ test('national holiday calendar includes 12 October and 20 November across an op
   assert.equal(getNationalHoliday('2026-11-20').abrangencia, 'NACIONAL');
 });
 
+test('December operational period includes Christmas and New Year', () => {
+  assert.deepEqual(listNationalHolidays('2026-12-07', '2027-01-03')
+    .map((item) => [item.data, item.nome]), [
+      ['2026-12-25', 'Natal'],
+      ['2027-01-01', 'Confraternizacao Universal']
+    ]);
+});
+
 test('automatic rest generation may place a rest on a national holiday', () => {
   const draft = buildFuncionarioRascunho(funcionario, turno, '2026-10-01', '2026-10-05');
   assert.equal(draft.dias.find((day) => day.data === '2026-10-12')?.programacao, 'F');

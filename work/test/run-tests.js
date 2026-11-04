@@ -1,6 +1,7 @@
 require('./rules-core.test');
 require('./modal-service.test');
 require('./operational-period.test');
+require('./previous-sunday.test');
 require('./escala-rules-backend.test');
 
 require('./escala-status.test');
@@ -10,6 +11,7 @@ require('./schedule-diff.test');
 require('./monthly-release.test');
 require('./dismissal-reconciliation.test');
 require('./liberar-escalas-novembro.test');
+require('./liberar-escalas-mensais.test');
 require('./error-handler.test');
 require('./mutation-diagnostics.test');
 require('./csrf.test');

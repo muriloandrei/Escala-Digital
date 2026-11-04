@@ -8,6 +8,7 @@ const auditService = require('../services/auditService');
 const escalaEventService = require('../services/escalaEventService');
 const rmIntegrationService = require('../services/rmIntegrationService');
 const officializationService = require('../services/officializationService');
+const previousSundayService = require('../services/previousSundayService');
 const sectionRolloutService = require('../services/sectionRolloutService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { validateStandardShift, validateApprenticeShift } = require('../domain/shiftValidation');
@@ -393,7 +394,9 @@ router.get('/mensal', requirePermission('escalas', 'visualizar'), resolveLojaReq
     const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
     const escala = await escalaService.getEscalaMensal({ lojaId, mesRef, secoesPermitidas });
     const progresso = await officializationService.getProgress({ lojaId, mesRef, secoesPermitidas, escala });
-    return res.json({ escala, periodo: getOperationalPeriodIso(mesRef), progresso });
+    const domingoAnterior = await previousSundayService.getPriorSunday({ lojaId, mesRef,
+      employeeIds: (escala.funcionarios || []).map((person) => Number(person.ESCFUNC_ID)) });
+    return res.json({ escala, periodo: getOperationalPeriodIso(mesRef), progresso, domingoAnterior });
   } catch (error) {
     return next(error);
   }

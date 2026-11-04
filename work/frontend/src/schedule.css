@@ -331,6 +331,17 @@
 .monthly-grid .week-start {
   border-left: 2px solid #3676bd;
 }
+.monthly-grid thead th.context-sunday,
+.monthly-grid td.context-sunday {
+  background: #e8ebef;
+  color: #536170;
+  border-right: 1px solid #aab3bd;
+}
+.monthly-grid td.context-sunday span {
+  display: block;
+  line-height: 30px;
+  font-weight: 650;
+}
 .monthly-grid td button {
   display: block;
   width: 100%;
