@@ -11,8 +11,8 @@ function minutes(value: string) {
 }
 
 function clock(value: number) {
-  if (value < 0 || value >= 1440) return null;
-  return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+  const wrapped = ((value % 1440) + 1440) % 1440;
+  return `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`;
 }
 
 export function autofillStandardHours(current: StandardHours, field: Field, value: string): StandardHours | null {
@@ -20,20 +20,20 @@ export function autofillStandardHours(current: StandardHours, field: Field, valu
   if (edited === null) return null;
   const entry = minutes(current.HR_ENT1);
   const breakStart = minutes(current.HR_SAI1);
-  const morning = entry !== null && breakStart !== null && breakStart > entry
-    ? Math.min(360, Math.max(168, breakStart - entry)) : 240;
+  const morning = entry !== null && breakStart !== null
+    ? Math.min(360, Math.max(168, (breakStart - entry + 1440) % 1440)) : 240;
   let first: number;
   let firstPeriod: number;
   if (field === 'HR_ENT1') {
     first = edited;
-    const preserved = breakStart !== null ? breakStart - first : 0;
+    const preserved = breakStart !== null ? (breakStart - first + 1440) % 1440 : 0;
     firstPeriod = preserved >= 168 && preserved <= 360 ? preserved : morning;
   } else if (field === 'HR_SAI1') {
     first = entry ?? edited - morning;
-    firstPeriod = edited - first;
+    firstPeriod = (edited - first + 1440) % 1440;
   } else if (field === 'HR_ENT2') {
     first = entry ?? edited - BREAK_MINUTES - morning;
-    firstPeriod = edited - BREAK_MINUTES - first;
+    firstPeriod = (edited - BREAK_MINUTES - first + 1440) % 1440;
   } else {
     first = edited - BREAK_MINUTES - WORK_MINUTES;
     firstPeriod = morning;

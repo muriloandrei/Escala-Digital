@@ -130,7 +130,7 @@ export function EditarFixoEscala({
           ? autofillApprenticeHours(key as 'HR_ENT1' | 'HR_SAI1', event.target.value)
           : autofillStandardHours(hours, key, event.target.value);
           if (next) { setHours(next); setError(''); }
-          else setError(apprentice ? 'O horário não cabe no mesmo dia mantendo 05:15 de trabalho.' : 'O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.'); }} /></label>)}
+          else setError(apprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível ajustar o horário mantendo 08:48 de trabalho e 01:10 de intervalo.'); }} /></label>)}
     </div>}
     <label className="day-editor-justification">Justificativa<input maxLength={500} value={justification} onChange={(event) => setJustification(event.target.value)} placeholder="Opcional" /></label>
     {error && <div className="notice error" role="alert">{error}</div>}

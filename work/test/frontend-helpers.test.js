@@ -67,13 +67,19 @@ test('editing any shift time keeps 08:48 work and 01:10 break', async () => {
     const value = { HR_ENT1: '09:00', HR_SAI1: '12:30', HR_ENT2: '13:00', HR_SAI2: '18:00' }[field];
     assert.deepEqual({ ...autofillStandardHours(base, field, value) }, output);
   }
-  assert.equal(autofillStandardHours(base, 'HR_ENT1', '20:00'), null);
+  const overnight = { HR_ENT1: '20:00', HR_SAI1: '00:00', HR_ENT2: '01:10', HR_SAI2: '05:58' };
+  assert.deepEqual(autofillStandardHours(base, 'HR_ENT1', '20:00'), overnight);
+  assert.deepEqual(autofillStandardHours(overnight, 'HR_SAI1', '00:00'), overnight);
+  assert.deepEqual(autofillStandardHours(overnight, 'HR_ENT2', '01:10'), overnight);
+  assert.deepEqual(autofillStandardHours(base, 'HR_SAI2', '05:58'), overnight);
 });
 
 test('interactive editor accepts only a 01:10 interval', async () => {
   const { validateStandardHours } = await loadFrontendHelper('shiftValidation.ts');
   assert.equal(validateStandardHours({ HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' }), '');
   assert.match(validateStandardHours({ HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:20', HR_SAI2: '18:08' }), /exatamente 01:10/);
+  assert.equal(validateStandardHours({ HR_ENT1: '20:00', HR_SAI1: '00:00', HR_ENT2: '01:10', HR_SAI2: '05:58' }), '');
+  assert.match(validateStandardHours({ HR_ENT1: '20:00', HR_SAI1: '19:00', HR_ENT2: '20:10', HR_SAI2: '01:00' }), /24 horas/);
 });
 
 test('apprentice editor adjusts both times while preserving 05:15', async () => {

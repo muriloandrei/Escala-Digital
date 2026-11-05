@@ -26,6 +26,7 @@ test('printed hours add both work periods but ignore rest and absence', async ()
   const { workedMinutes, formatWorkedMinutes, printDayLabel } = await loadPrintSchedule();
   const shift = { PROGRAMACAO: 'TRB', HR_ENT1: '07:20', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '16:30' };
   assert.equal(formatWorkedMinutes(workedMinutes(shift)), '08:00');
+  assert.equal(formatWorkedMinutes(workedMinutes({ ...shift, HR_ENT1: '20:00', HR_SAI1: '00:00', HR_ENT2: '01:10', HR_SAI2: '05:58' })), '08:48');
   assert.equal(workedMinutes({ ...shift, PROGRAMACAO: 'F' }), 0);
   assert.equal(workedMinutes({ ...shift, AUSENCIA_OBRIGATORIA: 1 }), 0);
   assert.equal(workedMinutes({ ...shift, HR_SAI2: null }), 0);

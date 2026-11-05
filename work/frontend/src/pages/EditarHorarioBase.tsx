@@ -70,7 +70,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
             const next = apprentice ? autofillApprenticeHours(field as 'HR_ENT1' | 'HR_SAI1', event.target.value)
               : autofillStandardHours(hours, field, event.target.value);
             if (next) { setHours(next); setError(''); }
-            else setError(apprentice ? 'O horário não cabe no mesmo dia mantendo 05:15 de trabalho.' : 'O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.');
+            else setError(apprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível ajustar o horário mantendo 08:48 de trabalho e 01:10 de intervalo.');
             setImpact(null);
           }} required />
         </label>)}</div>

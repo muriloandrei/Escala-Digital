@@ -157,6 +157,16 @@ test('backend rejects interjornada lower than 11 hours', () => {
   assert.ok(errors.some((error) => error.includes('interjornada menor que 11h')));
 });
 
+test('night shift is valid but next morning must respect 11 hours after its exit', () => {
+  const night = trabalho('2026-09-01', { hrEnt1: '20:00', hrSai1: '00:00', hrEnt2: '01:10', hrSai2: '05:58' });
+  assert.deepEqual(validateEscalaPayload(buildPayload([night])), []);
+  const errors = validateEscalaPayload(buildPayload([
+    night, trabalho('2026-09-02', { hrEnt1: '08:00', hrSai1: '12:00', hrEnt2: '13:10', hrSai2: '17:58' })
+  ]));
+  assert.ok(errors.some((error) => error.includes('interjornada menor que 11h')));
+  assert.ok(errors.every((error) => !error.includes('horarios fora de ordem')));
+});
+
 test('backend rejects more than five consecutive worked days in 5x2', () => {
   const errors = validateEscalaPayload(buildPayload([
     trabalho('2026-09-01'),

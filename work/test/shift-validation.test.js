@@ -8,6 +8,12 @@ test('validador unico aceita limite de seis horas ja permitido pela escala', () 
   }), []);
 });
 
+test('validador aceita turno que atravessa a meia-noite', () => {
+  const shift = { HR_ENT1: '20:00', HR_SAI1: '00:00', HR_ENT2: '01:10', HR_SAI2: '05:58' };
+  assert.deepEqual(validateStandardShift(shift, { exactInterval: true }), []);
+  assert.match(validateStandardShift({ ...shift, HR_SAI2: '20:00' }).join(' '), /24 horas/);
+});
+
 test('validador unico rejeita jornada acima do limite e horario invalido', () => {
   assert.match(validateStandardShift({
     HR_ENT1: '08:00', HR_SAI1: '14:01', HR_ENT2: '15:11', HR_SAI2: '17:58'

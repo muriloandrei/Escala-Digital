@@ -233,7 +233,7 @@ export function Treinamento({ user, onComplete }: { user: User; onComplete?: () 
   function updateTime(field: keyof StandardHours, value: string) {
     const next = autofillStandardHours(times, field, value);
     if (next) { setTimes(next); setFormError(''); }
-    else setFormError('O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.');
+    else setFormError('Não foi possível ajustar o horário mantendo 08:48 de trabalho e 01:10 de intervalo.');
   }
 
   if (loading) return <main className="content schedule-page"><div className="empty-state" role="status">Carregando treinamento...</div></main>;

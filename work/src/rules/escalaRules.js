@@ -1,3 +1,5 @@
+const { unfoldShiftMinutes } = require('../domain/shiftValidation');
+
 const REGRAS_VIGENTES = [
   { codigo: 'DOMINGO_1X1', titulo: 'Domingo 1x1', descricao: 'O colaborador nao deve trabalhar dois domingos consecutivos.' },
   { codigo: 'INTERJORNADA_11H', titulo: 'Interjornada minima', descricao: 'Entre o fim de um dia trabalhado e o inicio do proximo deve haver ao menos 11 horas.' },
@@ -93,13 +95,16 @@ function getSemanasExcecaoPosFerias(dias = []) {
   return semanas;
 }
 
-function getHorarioDia(dia) {
-  return {
-    entrada: timeToMinutes(dia.hrEnt1 ?? dia.HR_ENT1),
-    saidaIntervalo: timeToMinutes(dia.hrSai1 ?? dia.HR_SAI1),
-    retornoIntervalo: timeToMinutes(dia.hrEnt2 ?? dia.HR_ENT2),
-    saida: timeToMinutes(dia.hrSai2 ?? dia.HR_SAI2)
-  };
+function getHorarioDia(dia, apprentice = false) {
+  const values = [dia.hrEnt1 ?? dia.HR_ENT1, dia.hrSai1 ?? dia.HR_SAI1,
+    dia.hrEnt2 ?? dia.HR_ENT2, dia.hrSai2 ?? dia.HR_SAI2];
+  if (apprentice || (!values[2] && !values[3])) {
+    return { entrada: timeToMinutes(values[0]), saidaIntervalo: timeToMinutes(values[1]),
+      retornoIntervalo: null, saida: null };
+  }
+  const timeline = unfoldShiftMinutes(values);
+  return { entrada: timeline?.[0] ?? null, saidaIntervalo: timeline?.[1] ?? null,
+    retornoIntervalo: timeline?.[2] ?? null, saida: timeline?.[3] ?? null };
 }
 
 function validarTurnoDia(funcionarioLabel, dia) {
@@ -109,7 +114,7 @@ function validarTurnoDia(funcionarioLabel, dia) {
   const errors = [];
 
   if ([horario.entrada, horario.saidaIntervalo, horario.retornoIntervalo, horario.saida].some((value) => value === null)) {
-    errors.push(`${funcionarioLabel}: horario incompleto em ${data}.`);
+    errors.push(`${funcionarioLabel}: horario incompleto ou turno superior a 24h em ${data}.`);
     return errors;
   }
   if (!(horario.entrada < horario.saidaIntervalo && horario.saidaIntervalo < horario.retornoIntervalo && horario.retornoIntervalo < horario.saida)) {
@@ -143,7 +148,7 @@ function isFuncionarioAprendiz(funcionario = {}) {
 function validarTurnoAprendiz(funcionarioLabel, dia) {
   if (isDescanso(dia)) return [];
   const data = formatDate(dia.data || dia.DT);
-  const horario = getHorarioDia(dia);
+  const horario = getHorarioDia(dia, true);
   const errors = [];
   if (horario.entrada === null || horario.saidaIntervalo === null) {
     errors.push(`${funcionarioLabel}: horario de aprendiz incompleto em ${data}.`);
@@ -210,7 +215,7 @@ function validarRegrasFuncionario(funcionario, onCritica) {
       addCritica(`${label}: trabalhou ${diasTrabalhadosConsecutivos} dias consecutivos ate ${dataIso}; limite permitido no 5x2: ${maxDiasConsecutivos}.`, [dataIso]);
     }
 
-    const horario = getHorarioDia(dia);
+    const horario = getHorarioDia(dia, isFuncionarioAprendiz(funcionario));
     if (ultimoTrabalho && horario.entrada !== null && ultimoTrabalho.saida !== null) {
       const diffDias = Math.round((data - ultimoTrabalho.data) / 86400000);
       const descansoMin = ((diffDias - 1) * 1440) + (1440 - ultimoTrabalho.saida) + horario.entrada;

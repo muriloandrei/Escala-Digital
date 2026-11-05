@@ -14,14 +14,26 @@ function minutesToTime(totalMinutes) {
   return `${hours}:${minutes}`;
 }
 
+function unfoldShiftMinutes(values) {
+  const clockTimes = values.map(timeToMinutes);
+  if (clockTimes.some((value) => value === null)) return null;
+  const timeline = [clockTimes[0]];
+  for (const time of clockTimes.slice(1)) {
+    let next = time;
+    while (next <= timeline[timeline.length - 1]) next += 1440;
+    timeline.push(next);
+  }
+  return timeline[3] - timeline[0] < 1440 ? timeline : null;
+}
+
 function validateStandardShift(data, { exactInterval = false } = {}) {
-  const ent1 = timeToMinutes(data.HR_ENT1);
-  const sai1 = timeToMinutes(data.HR_SAI1);
-  const ent2 = timeToMinutes(data.HR_ENT2);
-  const sai2 = timeToMinutes(data.HR_SAI2);
-  if ([ent1, sai1, ent2, sai2].some((value) => value === null)) {
+  const values = [data.HR_ENT1, data.HR_SAI1, data.HR_ENT2, data.HR_SAI2];
+  if (values.some((value) => timeToMinutes(value) === null)) {
     return ['Informe todos os horarios no formato HH:MM.'];
   }
+  const timeline = unfoldShiftMinutes(values);
+  if (!timeline) return ['O turno deve terminar em menos de 24 horas.'];
+  const [ent1, sai1, ent2, sai2] = timeline;
 
   const primeiraJornada = sai1 - ent1;
   const intervalo = ent2 - sai1;
@@ -48,4 +60,4 @@ function validateApprenticeShift(data) {
   return [];
 }
 
-module.exports = { validateStandardShift, validateApprenticeShift };
+module.exports = { validateStandardShift, validateApprenticeShift, unfoldShiftMinutes };

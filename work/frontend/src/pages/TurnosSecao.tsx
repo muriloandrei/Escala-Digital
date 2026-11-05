@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pencil, Plus, RefreshCw, Search } from 'lucide-react';
+import { unfoldShiftMinutes } from '../shiftValidation';
 import { canCreate, canEdit, getJson, postJson, preferredStore, putJson, type Loja, type Secao, type User } from '../api';
 
 type Turno = {
@@ -15,15 +16,10 @@ type Turno = {
 };
 type Form = Pick<Turno, 'ESCSECAO_ID' | 'HR_ENT1' | 'HR_SAI1' | 'HR_ENT2' | 'HR_SAI2' | 'QTDE_COLABORADORES'>;
 
-function minutes(value: string) {
-  if (!/^\d{2}:\d{2}$/.test(value)) return NaN;
-  const [hours, mins] = value.split(':').map(Number);
-  return hours < 24 && mins < 60 ? hours * 60 + mins : NaN;
-}
-
 function duration(form: Form) {
-  const [entry, breakStart, breakEnd, exit] = [form.HR_ENT1, form.HR_SAI1, form.HR_ENT2, form.HR_SAI2].map(minutes);
-  if ([entry, breakStart, breakEnd, exit].some(Number.isNaN) || !(entry < breakStart && breakStart < breakEnd && breakEnd < exit)) return null;
+  const timeline = unfoldShiftMinutes([form.HR_ENT1, form.HR_SAI1, form.HR_ENT2, form.HR_SAI2]);
+  if (!timeline) return null;
+  const [entry, breakStart, breakEnd, exit] = timeline;
   return { work: breakStart - entry + exit - breakEnd, rest: breakEnd - breakStart };
 }
 

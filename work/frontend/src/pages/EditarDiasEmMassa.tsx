@@ -195,7 +195,7 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
           ? autofillApprenticeHours(key as 'HR_ENT1' | 'HR_SAI1', event.target.value)
           : autofillStandardHours(hours, key, event.target.value);
           if (next) { setHours(next); setError(''); setIssues([]); }
-          else setError(selectedApprentice ? 'O horário não cabe no mesmo dia mantendo 05:15 de trabalho.' : 'O horário não cabe no mesmo dia mantendo 08:48 de trabalho e 01:10 de intervalo.'); }} /></label>)}
+          else setError(selectedApprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível ajustar o horário mantendo 08:48 de trabalho e 01:10 de intervalo.'); }} /></label>)}
       <span>Jornada do dia: {selectedApprentice ? '05:15' : '08:48'}. O horário-base do funcionário não muda.</span>
     </div>}
     {!futureDates.length && <div className="notice error">Não há dias futuros neste período.</div>}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pencil, Plus, RefreshCw, Search } from 'lucide-react';
+import { unfoldShiftMinutes } from '../shiftValidation';
 import { ApiError, canCreate, canEdit, getJson, patchJson, postJson, type User } from '../api';
 
 type Regra = { codigo: string; titulo: string; descricao: string };
@@ -10,15 +11,10 @@ type Horario = {
 type Form = Pick<Horario, 'DESCR' | 'HR_ENT1' | 'HR_SAI1' | 'HR_ENT2' | 'HR_SAI2' | 'STATUS'>;
 const emptyForm: Form = { DESCR: '', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58', STATUS: 'A' };
 
-function minutes(value: string) {
-  if (!/^\d{2}:\d{2}$/.test(value)) return NaN;
-  const [hours, mins] = value.split(':').map(Number);
-  return hours < 24 && mins < 60 ? hours * 60 + mins : NaN;
-}
-
 function durations(form: Form) {
-  const [start, breakStart, breakEnd, end] = [form.HR_ENT1, form.HR_SAI1, form.HR_ENT2, form.HR_SAI2].map(minutes);
-  if ([start, breakStart, breakEnd, end].some(Number.isNaN) || !(start < breakStart && breakStart < breakEnd && breakEnd < end)) return null;
+  const timeline = unfoldShiftMinutes([form.HR_ENT1, form.HR_SAI1, form.HR_ENT2, form.HR_SAI2]);
+  if (!timeline) return null;
+  const [start, breakStart, breakEnd, end] = timeline;
   return { work: breakStart - start + end - breakEnd, interval: breakEnd - breakStart };
 }
 
