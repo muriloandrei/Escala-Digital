@@ -314,7 +314,8 @@ router.get('/resumo', requirePermission('escalas', 'visualizar'), resolveLojaReq
     const mesRef = req.query.mesRef || null;
     const lojasPermitidas = getLojasPermitidasParaConsulta(req);
     const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
-    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas });
+    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas,
+      escopoPorLoja: accessService.isLeaderUser(req.user) });
     return res.json({ escalas });
   } catch (error) {
     return next(error);
@@ -474,7 +475,8 @@ router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaR
         dias: (escala.dias || []).filter((dia) => Number(dia.ESCFUNC_ID) === Number(funcionario.ESCFUNC_ID))
       }));
     const criticas = validarCriticasEscopo({ lojaId: query.lojaId, mesRef: query.mesRef, funcionarios });
-    const grupos = agruparCriticasPorSubsecao({ escala });
+    const grupos = agruparCriticasPorSubsecao({ escala })
+      .filter((grupo) => Number(grupo.escsecaoId) === query.escsecaoId);
     return res.json({ criticas, grupos });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Filtros de criticas invalidos.' });
@@ -689,7 +691,8 @@ router.get('/', requirePermission('escalas', 'visualizar'), resolveLojaRequest, 
     if (!lojaId || !mesRef) {
       const lojasPermitidas = getLojasPermitidasParaConsulta(req);
       const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
-      const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas });
+      const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas,
+        escopoPorLoja: accessService.isLeaderUser(req.user) });
       return res.json({ escalas });
     }
 

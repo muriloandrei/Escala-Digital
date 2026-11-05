@@ -19,6 +19,7 @@ require('./auth-md5-password.test');
 require('./oracle-package-user-sync.test');
 require('./vt-escala-inteligente.test');
 require('./access-permissions.test');
+require('./leader-schedule-scope.test');
 require('./portaria-section.test');
 require('./diagnosticar-loja.test');
 require('./diagnosticar-portarias.test');

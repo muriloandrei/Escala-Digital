@@ -45,7 +45,6 @@ export type ResumoEscala = {
   SECOES?: number;
   FUNCIONARIOS?: number;
   MODIFICADA_EM?: string;
-  MODIFICADO_POR?: string;
 };
 
 export type Funcionario = {

@@ -245,7 +245,6 @@ export function EscalasLiberadas({ user }: { user: User }) {
                   <th>Secoes</th>
                   <th>Funcionarios</th>
                   <th>Modificada em</th>
-                  <th>Modificada por</th>
                   <th>
                     <span className="sr-only">Acoes</span>
                   </th>
@@ -270,7 +269,6 @@ export function EscalasLiberadas({ user }: { user: User }) {
                       <td>{item.SECOES ?? 0}</td>
                       <td>{item.FUNCIONARIOS ?? 0}</td>
                       <td>{displayDate(item.MODIFICADA_EM)}</td>
-                      <td>{item.MODIFICADO_POR || 'Sistema'}</td>
                       <td>
                         <Link
                           className="open-link"

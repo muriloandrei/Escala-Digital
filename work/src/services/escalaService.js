@@ -814,6 +814,12 @@ async function getLatestRevision(connection, { lojaId, mesRef, includeInactive =
   return value === null || value === undefined ? null : Number(value);
 }
 
+async function getRevisaoLiberadaParaEscopo(connection, { lojaId, mesRef, secoesPermitidas }) {
+  const revisaoEscopo = await getLatestRevision(connection, { lojaId, mesRef, secoesPermitidas });
+  if (revisaoEscopo !== null || !Array.isArray(secoesPermitidas) || !secoesPermitidas.length) return revisaoEscopo;
+  return getLatestRevision(connection, { lojaId, mesRef });
+}
+
 function aplicarHistoricoSubsecoes(rows = [], transfers = []) {
   const byEmployee = new Map();
   for (const transfer of transfers) {
@@ -1026,10 +1032,11 @@ async function listEscalas({ lojaId, mesRef, secoesPermitidas = null }) {
   });
 }
 
-async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesPermitidas = null }) {
+async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesPermitidas = null, escopoPorLoja = false }) {
   return withConnection(async (connection) => {
     const binds = {};
     const filters = [];
+    let agregacaoSecaoSql = null;
     if (lojaId) {
       binds.lojaId = lojaId;
       filters.push('p.loja = :lojaId');
@@ -1046,7 +1053,21 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesP
       binds.mesRef = mesRef;
       filters.push(`p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')`);
     }
-    addSecoesPermitidasFilter(filters, binds, 'p.escsecao_id', secoesPermitidas);
+    if (escopoPorLoja && Array.isArray(secoesPermitidas)) {
+      const secaoFilters = [];
+      addSecoesPermitidasFilter(secaoFilters, binds, 's_permitida.escsecao_id', secoesPermitidas);
+      const agregacaoFilters = [];
+      addSecoesPermitidasFilter(agregacaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
+      agregacaoSecaoSql = agregacaoFilters.join(' and ');
+      filters.push(`exists (
+        select 1 from sgn_esc_secao s_permitida
+         where s_permitida.codfilial = p.loja
+           and ${activeSectionSql('s_permitida', 'p.loja')}
+           and ${secaoFilters.join(' and ')}
+      )`);
+    } else {
+      addSecoesPermitidasFilter(filters, binds, 'p.escsecao_id', secoesPermitidas);
+    }
 
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
@@ -1061,7 +1082,18 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesP
         and ${ativaSubSql}
     )`);
     const whereSql = filters.length ? `where ${filters.join(' and ')}` : '';
-    const auditJoin = await getAuditJoinSql(connection, 'p');
+    const oficializadaSql = agregacaoSecaoSql
+      ? `nvl(min(case when ${agregacaoSecaoSql} then nvl(p.oficializada, 0) end), 0)`
+      : 'min(nvl(p.oficializada, 0))';
+    const oficializadaAlgumaSql = agregacaoSecaoSql
+      ? `nvl(max(case when ${agregacaoSecaoSql} then nvl(p.oficializada, 0) end), 0)`
+      : 'max(nvl(p.oficializada, 0))';
+    const secoesSql = agregacaoSecaoSql
+      ? `count(distinct case when ${agregacaoSecaoSql} then p.escsecao_id end)`
+      : 'count(distinct p.escsecao_id)';
+    const funcionariosSql = agregacaoSecaoSql
+      ? `count(distinct case when ${agregacaoSecaoSql} then p.escfunc_id end)`
+      : 'count(distinct p.escfunc_id)';
     const result = await connection.execute(
       `select
           p.mes_ref,
@@ -1069,11 +1101,10 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesP
           min(p.dt_hr_incl) as data_inicio,
           max(p.dt_hr_incl) as modificada_em,
           max(p.revisao) as revisao,
-          min(nvl(p.oficializada, 0)) as oficializada,
-          max(nvl(p.oficializada, 0)) as oficializada_alguma,
-          count(distinct p.escsecao_id) as secoes,
-          count(distinct p.escfunc_id) as funcionarios,
-          ${auditJoin.selectSql}
+          ${oficializadaSql} as oficializada,
+          ${oficializadaAlgumaSql} as oficializada_alguma,
+          ${secoesSql} as secoes,
+          ${funcionariosSql} as funcionarios,
           case
             when ${MES_FINALIZADO_SQL} then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
@@ -1081,7 +1112,6 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesP
             else 'ATIVA'
           end as status
        from sgn_esc_prog p
-       ${auditJoin.joinSql}
        ${whereSql}
        group by p.mes_ref, p.loja
        order by p.mes_ref desc, p.loja`,
@@ -1498,8 +1528,8 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
   return withConnection(async (connection) => {
     // A primeira leitura apos a sincronizacao do RM aplica o recorte pendente antes de montar a escala.
     const ajustesDesligamento = await reconciliarDesligamentosComConnection(connection, { lojaId, mesRef, secoesPermitidas });
-    const latestRevision = await getLatestRevision(connection, { lojaId, mesRef, secoesPermitidas });
-    if (latestRevision === null) return { revisao: null, status: null, dias: [], funcionarios: [], secoes: [], ajustesDesligamento };
+    const revisaoLoja = await getRevisaoLiberadaParaEscopo(connection, { lojaId, mesRef, secoesPermitidas });
+    if (revisaoLoja === null) return { revisao: null, status: null, dias: [], funcionarios: [], secoes: [], ajustesDesligamento };
     const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
     const hasFuncionarioSubsecao = funcionarioColumns.has('ESCSUBSECAO_ID');
     const dtDemissSelect = funcionarioColumns.has('DT_DEMISS') ? 'f.dt_demiss' : 'cast(null as date) as dt_demiss';
@@ -1576,7 +1606,14 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     );
 
     const { rows: rowsProjetadas, pendencias: pendenciasDesligamento } = projetarDemissoesNaEscala(result.rows || []);
-    const todasSecoesHabilitadas = result.rows.some((row) => Number(row.LOJA_TODAS_SECOES_HABILITADAS) === 1);
+    let todasSecoesHabilitadas = result.rows.some((row) => Number(row.LOJA_TODAS_SECOES_HABILITADAS) === 1);
+    if (!result.rows.length) {
+      const lojaResult = await connection.execute(
+        'select nvl(todas_secoes_habilitadas, 0) as habilitada from sgn_esc_loja where loja = :lojaId',
+        { lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      todasSecoesHabilitadas = Number(lojaResult.rows[0]?.HABILITADA || 0) === 1;
+    }
     const rows = filtrarLinhasForaDoEscopoAtual(filtrarCabecalhosInativosSemDias(rowsProjetadas), mesRef, lojaId, todasSecoesHabilitadas);
     rows.forEach((row) => { row.ESCSECAO_ID_ESCALA = row.ESCSECAO_ID; });
     const funcionariosCatalogoCompleto = await catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }).catch(() => []);
@@ -1751,9 +1788,9 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     }
 
     return {
-      revisao: latestRevision,
+      revisao: revisaoLoja,
       todasSecoesHabilitadas,
-      status: getMesStatus(mesRef, latestRevision),
+      status: getMesStatus(mesRef, revisaoLoja),
       oficializada: rows.some((row) => Number(pick(row, 'OFICIALIZADA', 'oficializada') || 0) === 1) ? 1 : 0,
       dias: rows.filter((row) => pick(row, 'ESCPROGDIA_ID', 'escprogdia_id') || row.AUSENCIA_PROJETADA),
       pendenciasDesligamento,
@@ -3354,6 +3391,7 @@ module.exports = {
     assertPreservaDatasEscala,
     isDiaBloqueadoParaEdicao,
     escolherRevisaoParaUpsertSemNovaRevisao,
+    getRevisaoLiberadaParaEscopo,
     buildHistoricoAuditoriaQuery,
     filtrarFuncionariosCatalogoPorSecoesEscala,
     filtrarCabecalhosInativosSemDias,
