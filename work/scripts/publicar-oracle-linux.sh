@@ -10,7 +10,7 @@ ref=main
 apply=false
 operator=
 expected_sha=
-package_confirmed=false
+keep_oracle_package=false
 
 for arg in "$@"; do
   case "$arg" in
@@ -18,7 +18,7 @@ for arg in "$@"; do
     --sha=*) expected_sha=${arg#*=} ;;
     --apply) apply=true ;;
     --by=*) operator=${arg#*=} ;;
-    --package-confirmed) package_confirmed=true ;;
+    --keep-oracle-package|--package-confirmed) keep_oracle_package=true ;;
     *) printf 'Argumento desconhecido: %s\n' "$arg" >&2; exit 2 ;;
   esac
 done
@@ -100,11 +100,12 @@ fi
 
 new_packages=$(git -C "$release" diff --name-only "$running_sha" "$sha" -- 'work/db/packages/*.sql')
 if [[ -n "$new_packages" ]]; then
-  printf 'Packages Oracle alteradas desde o release ativo:\n%s\n' "$new_packages"
-  if [[ "$package_confirmed" != true ]]; then
-    printf 'Compare o corpo com o banco, compile e confirme USER_ERRORS vazio e STATUS VALID.\n'
+  printf 'Arquivos de package diferentes no Git desde o release ativo:\n%s\n' "$new_packages"
+  printf 'Este publicador nao aplica, compila nem substitui packages no Oracle.\n'
+  if [[ "$keep_oracle_package" != true ]]; then
+    printf 'Confirme que o corpo em uso no Oracle pode permanecer como esta neste release. Verifique STATUS VALID e ALL_ERRORS vazio.\n'
     if [[ "$apply" == true ]]; then
-      printf 'Para publicar, repita com --package-confirmed apos validar a package no Oracle.\n' >&2
+      printf 'Para manter a package atual, repita com --keep-oracle-package apos validar sua compatibilidade.\n' >&2
       exit 1
     fi
   fi
@@ -113,7 +114,7 @@ fi
 printf 'Preflight concluido. Ativo: %s. Candidato: %s.\n' "$running_sha" "$sha"
 if [[ "$apply" != true ]]; then
   package_flag=
-  if [[ -n "$new_packages" ]]; then package_flag=' --package-confirmed'; fi
+  if [[ -n "$new_packages" ]]; then package_flag=' --keep-oracle-package'; fi
   printf 'Nenhuma troca feita. Para publicar, repita com --sha=%s --apply --by=LOGIN%s.\n' "$sha" "$package_flag"
   exit 0
 fi

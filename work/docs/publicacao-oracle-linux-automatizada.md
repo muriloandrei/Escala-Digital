@@ -27,6 +27,15 @@ no registro Oracle, com o mesmo checksum do arquivo versionado. Revise a
 migration, confirme o backup e aplique-a pelo executor aprovado antes de
 repetir o preflight. O script de publicacao nao executa SQL.
 
+Quando um arquivo em `db/packages/*.sql` difere do release ativo, o script
+mostra um aviso e exige confirmacao explicita. Ele nao aplica nem compila
+packages. Se o corpo que ja esta no Oracle deve permanecer, confira
+`ALL_OBJECTS.STATUS = 'VALID'`, `ALL_ERRORS` vazio e sua compatibilidade com
+o release; depois repita o comando de publicacao com
+`--keep-oracle-package`. A opcao antiga `--package-confirmed` continua
+aceita por compatibilidade. Nao substitua um corpo personalizado apenas
+porque o arquivo versionado mudou.
+
 O script verifica `/ready` apos reiniciar. Se falhar, restaura o drop-in anterior
 do systemd e reinicia a versao anterior. Isso nao reverte alteracoes no banco.
 Depois da publicacao, valide login, listagem e uma escala real com um usuario
