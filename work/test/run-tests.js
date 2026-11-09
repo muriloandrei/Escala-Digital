@@ -33,6 +33,7 @@ require('./rm-integration.test');
 require('./rm-outbox.test');
 require('./horario-funcionario.test');
 require('./draft-confirmation.test');
+require('./retroactive-admin.test');
 require('./rascunho-datas.test');
 require('./completar-domingo-novembro.test');
 require('./materializar-fixos-dia-01-novembro.test');

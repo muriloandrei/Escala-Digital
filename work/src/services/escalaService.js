@@ -587,6 +587,10 @@ function isMesFinalizado(mesRef) {
   return getMesStatus(mesRef, 1) === 'FINALIZADA';
 }
 
+function podeEditarRetroativamente(actor) {
+  return actor?.perfil === 'ADMIN';
+}
+
 function isUniqueConstraintError(error) {
   return error?.errorNum === 1 || error?.code === 'ORA-00001';
 }
@@ -1253,12 +1257,12 @@ function diasSemFixo(diasAtuais, data, fixo) {
 async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, actor }) {
   return withConnection(async (connection) => {
     try {
-      if (isMesFinalizado(mesRef)) {
+      if (isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
         const error = new Error('Escala finalizada nao pode ser editada.');
         error.statusCode = 422;
         throw error;
       }
-      if (isDiaBloqueadoParaEdicao(data.DT || data.dt)) {
+      if (isDiaBloqueadoParaEdicao(data.DT || data.dt) && !podeEditarRetroativamente(actor)) {
         const error = new Error('Dias ja passados nao podem receber fixos de escala.');
         error.statusCode = 422;
         throw error;
@@ -1369,12 +1373,12 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
 async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, actor }) {
   return withConnection(async (connection) => {
     try {
-      if (isMesFinalizado(mesRef)) {
+      if (isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
         const error = new Error('Escala finalizada nao pode ser editada.');
         error.statusCode = 422;
         throw error;
       }
-      if (isDiaBloqueadoParaEdicao(dt)) {
+      if (isDiaBloqueadoParaEdicao(dt) && !podeEditarRetroativamente(actor)) {
         const error = new Error('Dias ja passados nao podem ter fixos de escala removidos.');
         error.statusCode = 422;
         throw error;
@@ -1946,7 +1950,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       const loja = Number(pick(header, 'LOJA', 'loja'));
       const revisaoAtual = Number(pick(header, 'REVISAO', 'revisao'));
       const escfuncId = Number(pick(header, 'ESCFUNC_ID', 'escfunc_id'));
-      if (isMesFinalizado(mesRef)) {
+      if (isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
         const error = new Error('Escala finalizada nao pode ser editada.');
         error.statusCode = 422;
         throw error;
@@ -1983,7 +1987,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       const targetDate = pick(targetDay, 'DT', 'dt');
       assertSemNovaProgramacaoAposDemissao([{ data: targetDate }], [], pick(locked.rows[0], 'DT_DEMISS', 'dt_demiss'));
       assertSemDiasFuturosParaInativo([{ data: targetDate }], pick(locked.rows[0], 'STATUS', 'status'));
-      if (isDiaBloqueadoParaEdicao(targetDate)) {
+      if (isDiaBloqueadoParaEdicao(targetDate) && !podeEditarRetroativamente(actor)) {
         const error = new Error('Dias ja passados nao podem ser alterados manualmente.');
         error.statusCode = 422;
         throw error;
@@ -2540,7 +2544,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
   datasAdicionaisPermitidas = []
 }) {
   assertUniqueFuncionarios(funcionarios);
-  if (isMesFinalizado(mesRef)) {
+  if (isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
     const error = new Error('Escala finalizada nao pode ser editada.');
     error.statusCode = 422;
     throw error;
@@ -2598,7 +2602,9 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
     assertSemNovaProgramacaoAposDemissao(funcionario.dias || [], atual?.dias || [], demissoes.get(escfuncId));
     assertSemDiasFuturosParaInativo(funcionario.dias || [], situacoes.get(escfuncId));
     assertPreservaDatasEscala(atual?.dias || [], funcionario.dias || [], datasAdicionaisPermitidas);
-    assertSemAlteracaoEmDiasBloqueados(atual?.dias || [], funcionario.dias || []);
+    if (!podeEditarRetroativamente(actor)) {
+      assertSemAlteracaoEmDiasBloqueados(atual?.dias || [], funcionario.dias || []);
+    }
     const revisaoQualquer = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
     const novo = await insertEscalaOracle(connection, {
       lojaId, mesRef, funcionario, dias: funcionario.dias || [], oficializada,
@@ -2935,7 +2941,7 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
 async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias, oficializada = 0, actor }) {
   return withConnection(async (connection) => {
     try {
-      if (isMesFinalizado(mesRef)) {
+      if (isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
         const error = new Error('Escala finalizada nao pode ser editada.');
         error.statusCode = 422;
         throw error;
@@ -2968,7 +2974,9 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
       assertRevisaoBase(funcionario, latestFuncionarioRevision);
       const escalaAtualFuncionario = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
       assertSemNovaProgramacaoAposDemissao(dias || [], escalaAtualFuncionario?.dias || [], pick(locked.rows[0], 'DT_DEMISS', 'dt_demiss'));
-      assertSemAlteracaoEmDiasBloqueados(escalaAtualFuncionario?.dias || [], dias || []);
+      if (!podeEditarRetroativamente(actor)) {
+        assertSemAlteracaoEmDiasBloqueados(escalaAtualFuncionario?.dias || [], dias || []);
+      }
       const latestAnyFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
       const nextRevision = latestAnyFuncionarioRevision === null ? latestFuncionarioRevision + 1 : latestAnyFuncionarioRevision + 1;
       const ativaSql = await getAtivaSql(connection, 'p');
@@ -3470,6 +3478,7 @@ module.exports = {
   inativarEscala,
   validateAusencias,
   _private: {
+    podeEditarRetroativamente,
     getAlteracoesDiasBloqueados,
     assertSemNovaProgramacaoAposDemissao,
     assertSemDiasFuturosParaInativo,

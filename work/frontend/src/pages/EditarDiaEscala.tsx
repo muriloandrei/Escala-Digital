@@ -49,6 +49,7 @@ export function EditarDiaEscala({
   day,
   days,
   holidayName,
+  allowRetroactive = false,
   onClose,
   onSaved,
 }: {
@@ -58,6 +59,7 @@ export function EditarDiaEscala({
   day: DiaEscala;
   days: DiaEscala[];
   holidayName?: string;
+  allowRetroactive?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -88,7 +90,7 @@ export function EditarDiaEscala({
       day.FIXO_ESCALA ||
       ['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase()),
   );
-  const editable = date >= localToday() && !protectedDay && Number.isInteger(Number(day.REVISAO));
+  const editable = (allowRetroactive || date >= localToday()) && !protectedDay && Number.isInteger(Number(day.REVISAO));
 
   function setHour(key: keyof Shift, value: string) {
     const field = ({ hrEnt1: 'HR_ENT1', hrSai1: 'HR_SAI1', hrEnt2: 'HR_ENT2', hrSai2: 'HR_SAI2' } as const)[key];

@@ -38,13 +38,14 @@ function sameHours(day: DiaEscala | undefined, hours: StandardHours) {
     && (day.HR_ENT2 || null) === (hours.HR_ENT2 || null) && (day.HR_SAI2 || null) === (hours.HR_SAI2 || null);
 }
 
-export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, initialDate, holidays, onClose, onSaved }: {
+export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, initialDate, holidays, allowRetroactive = false, onClose, onSaved }: {
   lojaId: string; mesRef: string; dates: string[]; people: Funcionario[]; allDays: DiaEscala[];
   holidays: Record<string, string>;
+  allowRetroactive?: boolean;
   initialDate: string; onClose: () => void; onSaved: (count: number) => void;
 }) {
-  const futureDates = dates.filter((date) => date >= today());
-  const [selectedDates, setSelectedDates] = useState<string[]>([futureDates.includes(initialDate) ? initialDate : futureDates[0]].filter(Boolean));
+  const editableDates = dates.filter((date) => allowRetroactive || date >= today());
+  const [selectedDates, setSelectedDates] = useState<string[]>([editableDates.includes(initialDate) ? initialDate : editableDates[0]].filter(Boolean));
   const [mode, setMode] = useState<'F' | 'TRB' | 'HORARIO' | 'TROCA'>('F');
   const [hours, setHours] = useState<StandardHours>({ HR_ENT1: '08:00', HR_SAI1: '12:30', HR_ENT2: '13:40', HR_SAI2: '17:58' });
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -198,9 +199,9 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
           else setError(selectedApprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível ajustar o horário mantendo 08:48 de trabalho e 01:10 de intervalo.'); }} /></label>)}
       <span>Jornada do dia: {selectedApprentice ? '05:15' : '08:48'}. O horário-base do funcionário não muda.</span>
     </div>}
-    {!futureDates.length && <div className="notice error">Não há dias futuros neste período.</div>}
+    {!editableDates.length && <div className="notice error">Não há dias editáveis neste período.</div>}
     <fieldset className="bulk-dates" disabled={busy || uncertain || !selectedId}><legend>Dias ({selectedDates.length}/{mode === 'TROCA' ? 2 : 7})</legend><div className="bulk-calendar">
-      {dates.map((item) => { const day = selectedDays.find((entry) => onlyDate(entry.DT) === item); const code = String(day?.PROGRAMACAO || '').toUpperCase(); const protectedDay = day && isProtected(day); return <button key={item} type="button" className={`${selectedDates.includes(item) ? 'selected' : ''} ${code === 'TRB' ? 'work' : code ? 'rest' : ''}`} disabled={item < today() || !day || Boolean(protectedDay)} aria-pressed={selectedDates.includes(item)} title={`${item}${holidays[item] ? ` · ${holidays[item]}` : ''}${protectedDay ? ' · protegido' : ''}`} onClick={() => toggleDate(item)}><small>{new Date(`${item}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC', weekday: 'short' })}</small><strong>{item.slice(8)}/{item.slice(5, 7)}</strong><span>{code === 'TRB' ? day?.HR_ENT1 || 'TRB' : code || '–'}</span></button>; })}
+      {dates.map((item) => { const day = selectedDays.find((entry) => onlyDate(entry.DT) === item); const code = String(day?.PROGRAMACAO || '').toUpperCase(); const protectedDay = day && isProtected(day); return <button key={item} type="button" className={`${selectedDates.includes(item) ? 'selected' : ''} ${code === 'TRB' ? 'work' : code ? 'rest' : ''}`} disabled={(!allowRetroactive && item < today()) || !day || Boolean(protectedDay)} aria-pressed={selectedDates.includes(item)} title={`${item}${holidays[item] ? ` · ${holidays[item]}` : ''}${protectedDay ? ' · protegido' : ''}`} onClick={() => toggleDate(item)}><small>{new Date(`${item}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC', weekday: 'short' })}</small><strong>{item.slice(8)}/{item.slice(5, 7)}</strong><span>{code === 'TRB' ? day?.HR_ENT1 || 'TRB' : code || '–'}</span></button>; })}
     </div></fieldset>
     {selectedId && !selected && selectedDates.length > 0 && <div className="notice warning">{candidates.find((item) => Number(item.person.ESCFUNC_ID) === selectedId)?.reason}</div>}
     <label className="bulk-search">Justificativa<input value={justification} maxLength={500} disabled={busy || uncertain} onChange={(event) => setJustification(event.target.value)} placeholder="Motivo da alteração" /></label>

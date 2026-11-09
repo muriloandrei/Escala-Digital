@@ -567,6 +567,9 @@ router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaR
     if (!['ADMIN', 'LIDER', 'GERENTE'].includes(String(req.user?.perfil || '').toUpperCase())) {
       return res.status(403).json({ error: 'Perfil sem permissao para oficializar.' });
     }
+    if (!isEditableMonth(payload.mesRef) && req.user.perfil !== 'ADMIN') {
+      return res.status(403).json({ error: 'Somente Admin pode reoficializar escalas de meses anteriores.' });
+    }
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
     const progresso = await officializationService.getProgress({
       lojaId: payload.lojaId, mesRef: payload.mesRef,
