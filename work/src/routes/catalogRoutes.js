@@ -5,6 +5,7 @@ const catalogService = require('../services/catalogService');
 const accessService = require('../services/accessService');
 const pendenciaFuncionarioService = require('../services/pendenciaFuncionarioService');
 const subsectionTransferService = require('../services/subsectionTransferService');
+const escalaService = require('../services/escalaService');
 const auditService = require('../services/auditService');
 const { validateStandardShift } = require('../domain/shiftValidation');
 
@@ -527,19 +528,14 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId/subsecao', resolveLojaParam
       return res.status(409).json({ error: 'Existe transferencia pendente ou em falha. Resolva-a antes de mudar a subsecao.' });
     }
 
-    const funcionario = await catalogService.updateFuncionarioEscala({
-      lojaId,
-      escfuncId,
-      data: { ESCSUBSECAO_ID: data.ESCSUBSECAO_ID },
-      actor: req.user,
-      mesRef: data.MES_REF,
-      vigencia: data.VIGENCIA
+    const transferencia = await escalaService.transferirSubsecaoFuncionario({
+      lojaId, escfuncId, escsecaoId, destinoId: data.ESCSUBSECAO_ID,
+      mesRef: data.MES_REF, actor: req.user
     });
-    if (!funcionario) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja.' });
-    return res.json({ funcionario });
+    return res.json({ transferencia });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Campos de funcionario invalidos.', details: error.errors });
-    if (error.statusCode === 422) return res.status(422).json({ error: error.message });
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
     return next(error);
   }
 });

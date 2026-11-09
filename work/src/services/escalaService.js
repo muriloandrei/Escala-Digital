@@ -2643,6 +2643,90 @@ async function saveEscalasFuncionariosRevision(payload) {
   return saveEscalasFuncionariosRevisionInterno(payload);
 }
 
+async function transferirSubsecaoFuncionario({ lojaId, mesRef, escfuncId, escsecaoId, destinoId, actor }) {
+  return withConnection(async (connection) => {
+    try {
+      const employee = await connection.execute(
+        `select escfunc_id, escsecao_id, escsubsecao_id, escfuncao_id, chapa, status, dt_demiss
+           from sgn_esc_funcionario
+          where loja = :lojaId and escfunc_id = :escfuncId for update wait 5`,
+        { lojaId, escfuncId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const current = employee.rows[0];
+      if (!current || Number(current.ESCSECAO_ID) !== Number(escsecaoId)) {
+        const error = new Error('Cadastro do funcionario mudou. Atualize a escala antes de transferir.');
+        error.statusCode = 409;
+        throw error;
+      }
+      const destination = await connection.execute(
+        `select escsubsecao_id from sgn_esc_subsecao
+          where escsubsecao_id = :destinoId and escsecao_id = :escsecaoId and status = 'A'`,
+        { destinoId, escsecaoId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      if (!destination.rows.length || Number(current.ESCSUBSECAO_ID) === Number(destinoId)) {
+        const error = new Error('Subsecao de destino indisponivel para este funcionario.');
+        error.statusCode = 422;
+        throw error;
+      }
+      if (!permiteEscala(current.STATUS) || (current.DT_DEMISS && formatDateValue(current.DT_DEMISS) <= getHojeIso())) {
+        const error = new Error('Funcionario inativo ou desligado nao pode ser transferido.');
+        error.statusCode = 422;
+        throw error;
+      }
+
+      if (mesRef && isMesFinalizado(mesRef)) {
+        const error = new Error(`Escala ${mesRef} finalizada nao pode ser transferida retroativamente.`);
+        error.statusCode = 422;
+        throw error;
+      }
+      const operacaoId = escalaEventService.createOperationId();
+      const meses = [...new Set([
+        ...(mesRef ? [mesRef] : []),
+        ...await listarMesesComDiasFuturosFuncionario(connection, { lojaId, escfuncId })
+      ])].filter((mes) => !isMesFinalizado(mes));
+      const revisoesPendentes = [];
+      for (const mes of meses) {
+        const atualMes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef: mes, escfuncId });
+        if (Number(pick(atualMes?.header, 'OFICIALIZADA', 'oficializada') || 0) !== 1) continue;
+        const dias = (atualMes.dias || []).map((dia) => ({
+          data: formatDateValue(dia.DT), programacao: dia.PROGRAMACAO,
+          hrEnt1: dia.HR_ENT1, hrSai1: dia.HR_SAI1,
+          hrEnt2: dia.HR_ENT2, hrSai2: dia.HR_SAI2
+        }));
+        const [nova] = await saveEscalasFuncionariosRevisionComConnection(connection, {
+          lojaId, mesRef: mes, actor, operacaoId, acao: 'TRANSFERIR_SUBSECAO',
+          funcionarios: [{
+            escfuncId, escsecaoId, escfuncaoId: current.ESCFUNCAO_ID,
+            chapa: current.CHAPA, revisaoBase: atualMes.revisao, dias
+          }]
+        });
+        revisoesPendentes.push({ mesRef: mes, revisao: nova.revisao });
+      }
+
+      await connection.execute(
+        `update sgn_esc_funcionario set escsubsecao_id = :destinoId
+          where loja = :lojaId and escfunc_id = :escfuncId`,
+        { destinoId, lojaId, escfuncId }, { autoCommit: false }
+      );
+      await escalaEventService.appendEvent(connection, {
+        operacaoId, lojaId, mesRef: mesRef || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`,
+        escfuncId, escsecaoId, actor, acao: 'TRANSFERIR_SUBSECAO',
+        origem: 'USUARIO', situacao: revisoesPendentes.length ? 'RASCUNHO' : 'CADASTRO',
+        detalhe: {
+          chapa: current.CHAPA, vigencia: 'IMEDIATO',
+          anterior: { escsecaoId, escsubsecaoId: current.ESCSUBSECAO_ID },
+          novo: { escsecaoId, escsubsecaoId: destinoId }
+        }
+      });
+      await connection.commit();
+      return { revisaoPendente: revisoesPendentes.some((item) => item.mesRef === mesRef), revisoesPendentes };
+    } catch (error) {
+      await connection.rollback();
+      throw normalizeOracleSaveError(error);
+    }
+  });
+}
+
 async function completarDomingoNovembro2026(payload) {
   if (payload.mesRef !== '2026-11-01' || payload.oficializada !== 0) {
     throw new Error('A correcao so aceita revisoes pendentes de novembro/2026.');
@@ -3375,6 +3459,7 @@ module.exports = {
   saveEscala,
   saveEscalasBatch,
   saveEscalasFuncionariosRevision,
+  transferirSubsecaoFuncionario,
   completarDomingoNovembro2026,
   getCommittedDraftOperation,
   previewHorarioFuncionarioEscala,

@@ -1028,7 +1028,7 @@ export function EscalaMensal({ user }: { user: User }) {
               setIndividualTarget(personMenu.employee);
               setPersonMenu(null);
             }}>Gerar escala individual</button>}
-            {escala?.status !== 'FINALIZADA' && permiteEscala(personMenu.employee.STATUS) && canEdit(user, 'escalas') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && !Array.from(daysByEmployee.get(String(personMenu.employee.ESCFUNC_ID))?.values() || []).some((day) => Number(day.OFICIALIZADA) === 1) && <button type="button" role="menuitem" onClick={() => {
+            {escala?.status !== 'FINALIZADA' && permiteEscala(personMenu.employee.STATUS) && canEdit(user, 'escalas') && !(personMenu.employee.DT_DEMISS && iso(personMenu.employee.DT_DEMISS) <= localToday()) && <button type="button" role="menuitem" onClick={() => {
               setTransferTarget(personMenu.employee);
               setPersonMenu(null);
             }}>Transferir de subseção</button>}
@@ -1037,14 +1037,24 @@ export function EscalaMensal({ user }: { user: User }) {
       )}
       {transferTarget && lojaId && mesRef && <TransferirSubsecao
         lojaId={lojaId} mesRef={mesRef} employee={transferTarget}
-        subsecoes={sectionCatalog?.SUBSECOES || []}
+        sourceSectionId={Number(isPortariaView ? sectionGroups.front?.ESCSECAO_ID : sectionId)}
+        hasOfficializedDays={Array.from(daysByEmployee.get(String(transferTarget.ESCFUNC_ID))?.values() || [])
+          .some((day) => Number(day.OFICIALIZADA) === 1)}
+        subsecoes={isPortariaView ? frontSubsections : sectionCatalog?.SUBSECOES || []}
         canRetry={user.perfil === 'ADMIN'}
         onClose={() => setTransferTarget(null)}
-        onTransferred={({ destination, warning, scheduled }) => {
+        onTransferred={({ destination, warning, scheduled, reapprovalRequired }) => {
           setTransferTarget(null);
           setReload((value) => value + 1);
-          if (!scheduled) updateFilter('subsecao', destination);
-          setActionMessage(warning || (scheduled ? `Transferência agendada para ${scheduled}. A escala atual não foi alterada.` : 'Funcionário transferido e escala individual regenerada.'));
+          if (!scheduled) {
+            if (isPortariaView) selectSubsectionInFront(destination);
+            else updateFilter('subsecao', destination);
+          }
+          setActionMessage(warning || (scheduled
+            ? `Transferência agendada para ${scheduled}. A escala atual não foi alterada.`
+            : reapprovalRequired
+              ? 'Funcionário transferido. A escala foi preservada em nova revisão pendente de oficialização.'
+              : 'Funcionário transferido e escala individual regenerada.'));
         }}
       />}
       {shiftTarget && lojaId && mesRef && <EditarHorarioBase key={`${shiftTarget.ESCFUNC_ID}-${mesRef}`} employee={shiftTarget} lojaId={lojaId} initialMonth={mesRef.slice(0, 7)} currentDay={Array.from(daysByEmployee.get(String(shiftTarget.ESCFUNC_ID))?.values() || []).find((day) => hasShift(day) && iso(day.DT) >= localToday())} onClose={() => setShiftTarget(null)} onSaved={(message) => { setShiftTarget(null); setActionMessage(message); setReload((value) => value + 1); }} />}

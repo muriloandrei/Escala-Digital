@@ -570,6 +570,7 @@ export function Subsecoes({ user }: { user: User }) {
         <TransferirSubsecao
           lojaId={lojaId}
           employee={transferTarget}
+          sourceSectionId={Number(transferTarget.ESCSECAO_ID)}
           subsecoes={subsecoes}
           canRetry={user.perfil === 'ADMIN'}
           initialDestination={selected !== 'sem' ? selected : undefined}

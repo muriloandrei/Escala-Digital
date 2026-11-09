@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getJson, patchJson, postJson, type Funcionario, type Subsecao } from '../api';
 
-type TransferResult = { destination: string; warning?: string; scheduled?: string };
+type TransferResult = { destination: string; warning?: string; scheduled?: string; reapprovalRequired?: boolean };
 type ScheduledTransfer = {
   TRANSF_ID: number;
   VIGENCIA: string;
@@ -14,6 +14,8 @@ export function TransferirSubsecao({
   lojaId,
   mesRef,
   employee,
+  sourceSectionId,
+  hasOfficializedDays = false,
   subsecoes,
   initialDestination,
   canRetry = false,
@@ -23,14 +25,18 @@ export function TransferirSubsecao({
   lojaId: string;
   mesRef?: string;
   employee: Funcionario;
+  sourceSectionId: number;
+  hasOfficializedDays?: boolean;
   subsecoes: Subsecao[];
   initialDestination?: string;
   canRetry?: boolean;
   onClose: () => void;
   onTransferred: (result: TransferResult) => void;
 }) {
+  const [currentEmployee, setCurrentEmployee] = useState<Funcionario | null>(null);
+  const [loadingEmployee, setLoadingEmployee] = useState(true);
   const destinations = subsecoes.filter(
-    (item) => item.STATUS !== 'I' && Number(item.ESCSUBSECAO_ID) !== Number(employee.ESCSUBSECAO_ID),
+    (item) => item.STATUS !== 'I' && Number(item.ESCSUBSECAO_ID) !== Number(currentEmployee?.ESCSUBSECAO_ID),
   );
   const [destination, setDestination] = useState(
     destinations.some((item) => String(item.ESCSUBSECAO_ID) === initialDestination)
@@ -58,30 +64,46 @@ export function TransferirSubsecao({
 
   useEffect(() => {
     const controller = new AbortController();
+    setLoadingEmployee(true);
+    getJson<{ funcionarios: Funcionario[] }>(
+      `/api/catalog/lojas/${encodeURIComponent(lojaId)}/funcionarios`, controller.signal,
+    ).then(({ funcionarios }) => {
+      const current = funcionarios.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID));
+      if (!current || Number(current.ESCSECAO_ID) !== Number(sourceSectionId)) {
+        setError('O cadastro atual não está vinculado a esta seção. Atualize a escala antes de transferir.');
+        return;
+      }
+      setCurrentEmployee(current);
+      const available = subsecoes.filter((item) => item.STATUS !== 'I'
+        && Number(item.ESCSUBSECAO_ID) !== Number(current.ESCSUBSECAO_ID));
+      setDestination((value) => available.some((item) => String(item.ESCSUBSECAO_ID) === value)
+        ? value : String(available[0]?.ESCSUBSECAO_ID || ''));
+    }).catch((reason) => { if (reason.name !== 'AbortError') setError(reason.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoadingEmployee(false); });
     getJson<{ transferencias: ScheduledTransfer[] }>(
       `/api/catalog/lojas/${encodeURIComponent(lojaId)}/funcionarios/${employee.ESCFUNC_ID}/transferencias`,
       controller.signal,
     ).then((data) => setScheduled(data.transferencias || []))
       .catch((reason) => { if (reason.name !== 'AbortError') setError(reason.message); });
     return () => controller.abort();
-  }, [lojaId, employee.ESCFUNC_ID]);
+  }, [lojaId, employee.ESCFUNC_ID, sourceSectionId, subsecoes]);
 
   async function transfer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!destination || busy) return;
+    if (!destination || busy || !currentEmployee) return;
     setBusy(true);
     setError('');
     try {
-      const response = await patchJson<{ agendamento?: { vigencia: string } }>(
+      const response = await patchJson<{ agendamento?: { vigencia: string }; transferencia?: { revisaoPendente: boolean } }>(
         `/api/catalog/lojas/${encodeURIComponent(lojaId)}/funcionarios/${employee.ESCFUNC_ID}/subsecao`,
         {
-          ESCSECAO_ID: Number(employee.ESCSECAO_ID),
+          ESCSECAO_ID: Number(currentEmployee.ESCSECAO_ID),
           ESCSUBSECAO_ID: Number(destination),
           ...(mesRef ? { MES_REF: mesRef } : {}),
           VIGENCIA: vigencia,
         },
       );
-      const result: TransferResult = { destination };
+      const result: TransferResult = { destination, reapprovalRequired: response.transferencia?.revisaoPendente === true };
       if (response.agendamento) {
         result.scheduled = response.agendamento.vigencia;
         onTransferred(result);
@@ -100,12 +122,12 @@ export function TransferirSubsecao({
         setWarning(result);
         return;
       }
-      if (mesRef) {
+      if (mesRef && !result.reapprovalRequired) {
         try {
           await postJson('/api/escalas/gerar-secao', {
             lojaId: Number(lojaId),
             mesRef,
-            escsecaoId: Number(employee.ESCSECAO_ID),
+            escsecaoId: Number(currentEmployee.ESCSECAO_ID),
             escfuncIds: [Number(employee.ESCFUNC_ID)],
           });
         } catch (reason) {
@@ -138,19 +160,21 @@ export function TransferirSubsecao({
         ) : (
           <>
             <p>{vigencia === 'IMEDIATO'
-              ? `A vinculação muda imediatamente. ${mesRef ? 'A escala deste funcionário será recalculada somente de hoje em diante.' : 'Escalas existentes não serão recalculadas nesta tela.'}`
+              ? hasOfficializedDays
+                ? 'A vinculação muda imediatamente. Os dias aprovados serão preservados em uma nova revisão, que precisará de oficialização.'
+                : `A vinculação muda imediatamente. ${mesRef ? 'A escala deste funcionário será recalculada somente de hoje em diante.' : 'Escalas existentes não serão recalculadas nesta tela.'}`
               : 'A vinculação permanece como está até a data de vigência. Depois, o sistema regerará somente os dias futuros deste funcionário.'}</p>
             <label className="transfer-field">Nova subseção
-              <select required value={destination} onChange={(event) => setDestination(event.target.value)} disabled={busy}>
-                {!destinations.length && <option value="">Nenhuma subseção disponível</option>}
+              <select required value={destination} onChange={(event) => setDestination(event.target.value)} disabled={busy || loadingEmployee || !currentEmployee}>
+                {loadingEmployee ? <option value="">Carregando subseções...</option> : !destinations.length && <option value="">Nenhuma subseção disponível</option>}
                 {destinations.map((item) => <option key={item.ESCSUBSECAO_ID} value={item.ESCSUBSECAO_ID}>{item.DESCR}</option>)}
               </select>
             </label>
             <label className="transfer-field">A partir de quando?
-              <select value={vigencia} onChange={(event) => setVigencia(event.target.value)} disabled={busy || scheduled.some((item) => ['P', 'E', 'F'].includes(item.STATUS))}>
+              <select value={vigencia} onChange={(event) => setVigencia(event.target.value)} disabled={busy || hasOfficializedDays || scheduled.some((item) => ['P', 'E', 'F'].includes(item.STATUS))}>
                 <option value="IMEDIATO">Imediatamente</option>
-                <option value="PROXIMA_SEMANA">Próxima semana completa</option>
-                <option value="PROXIMO_MES">Próximo mês operacional</option>
+                {!hasOfficializedDays && <option value="PROXIMA_SEMANA">Próxima semana completa</option>}
+                {!hasOfficializedDays && <option value="PROXIMO_MES">Próximo mês operacional</option>}
               </select>
             </label>
             {scheduled.filter((item) => ['P', 'E', 'F'].includes(item.STATUS)).map((item) => (
@@ -163,7 +187,7 @@ export function TransferirSubsecao({
             {error && <div className="notice error" role="alert">{error}</div>}
             <div className="confirm-actions">
               <button className="button secondary" type="button" disabled={busy} onClick={onClose}>Cancelar</button>
-              <button className="button primary" type="submit" disabled={busy || !destination || scheduled.some((item) => ['P', 'E', 'F'].includes(item.STATUS))}>{busy ? 'Aguarde...' : vigencia === 'IMEDIATO' ? 'Confirmar transferência' : 'Agendar transferência'}</button>
+              <button className="button primary" type="submit" disabled={busy || loadingEmployee || !currentEmployee || !destination || scheduled.some((item) => ['P', 'E', 'F'].includes(item.STATUS))}>{busy ? 'Aguarde...' : vigencia === 'IMEDIATO' ? 'Confirmar transferência' : 'Agendar transferência'}</button>
             </div>
           </>
         )}
