@@ -21,7 +21,7 @@ test('package existente chama a integracao de usuarios apos funcionarios sem mud
   assert.ok((packageBody.match(/\(\^\|\[\.\]\)02\[\.\]012\$/g) || []).length >= 1);
   assert.match(packageBody, /max\(todas_secoes_habilitadas\)/i);
   assert.match(packageBody, /v_secoes_ampliadas = 1/i);
-  assert.match(packageBody, /upper\(trim\(nvl\(f\.status, 'A'\)\)\) in \('A', 'F', 'P', 'Z'\)/i);
+  assert.match(packageBody, /upper\(trim\(nvl\(f\.status, 'A'\)\)\) in \('A', 'F', 'P'\)/i);
   assert.match(packageBody, /if v_perfil = 'LIDER' and v_preservar_vinculos = 0 then/i);
   assert.match(packageBody, /'FÉRIAS', 'FER'/);
 });
