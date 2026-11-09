@@ -18,10 +18,10 @@ function loadService({ dismissal = '2026-10-15', inactive = false, status = 'A',
           assert.match(sql, /p\.escsecao_id in \(:secaoPermitida0\)/i);
           assert.equal(binds.secaoPermitida0, 20);
         }
-        assert.match(sql, /upper\(trim\(nvl\(f\.status, 'A'\)\)\) not in \('A', 'F', 'P'\)/i);
+        assert.match(sql, /upper\(trim\(nvl\(f\.status, 'A'\)\)\) not in \('A', 'F', 'P', 'Z'\)/i);
         const funcionarioStatus = inactive ? 'I' : status;
         const hasCut = state.days.some((day) => (dismissal && day > dismissal)
-          || (!['A', 'F', 'P'].includes(funcionarioStatus) && day >= binds.hojeIso));
+          || (!['A', 'F', 'P', 'Z'].includes(funcionarioStatus) && day >= binds.hojeIso));
         return { rows: state.active && hasCut ? [{ ESCFUNC_ID: 90, FUNCIONARIO_STATUS: funcionarioStatus }] : [] };
       }
       if (/update sgn_esc_rm_envio/i.test(sql)) return { rowsAffected: 1 };
@@ -155,6 +155,7 @@ test('inactive employee cannot receive new days but historical days remain valid
   assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'A', '2026-10-15'));
   assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'F', '2026-10-15'));
   assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'P', '2026-10-15'));
+  assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'Z', '2026-10-15'));
   assert.throws(() => validate([{ data: '2026-10-15' }], 'S', '2026-10-15'), /inativo/i);
 });
 
@@ -182,16 +183,29 @@ test('status P does not remove existing future schedule days', async () => {
   assert.equal(calls.some(({ sql }) => /^update/i.test(sql)), false);
 });
 
+test('status Z does not remove existing future schedule days', async () => {
+  const { service, connection, state, calls } = loadService({
+    dismissal: null, status: 'Z', days: ['2026-11-02', '2026-11-03']
+  });
+  const result = await service._private.reconciliarDesligamentosComConnection(connection, {
+    lojaId: 10, mesRef: '2026-11-01', hojeIso: '2026-10-15'
+  });
+  assert.equal(result.funcionarios, 0);
+  assert.deepEqual(state.days, ['2026-11-02', '2026-11-03']);
+  assert.equal(calls.some(({ sql }) => /^update/i.test(sql)), false);
+});
+
 test('future inactive header is hidden while historical days remain visible', () => {
   const { service } = loadService();
   const rows = [
     { ESCFUNC_ID: 90, FUNCIONARIO_STATUS: 'I', ESCPROGDIA_ID: null },
     { ESCFUNC_ID: 91, FUNCIONARIO_STATUS: 'S', ESCPROGDIA_ID: 12 },
     { ESCFUNC_ID: 92, FUNCIONARIO_STATUS: 'F', ESCPROGDIA_ID: null },
-    { ESCFUNC_ID: 93, FUNCIONARIO_STATUS: 'P', ESCPROGDIA_ID: null }
+    { ESCFUNC_ID: 93, FUNCIONARIO_STATUS: 'P', ESCPROGDIA_ID: null },
+    { ESCFUNC_ID: 94, FUNCIONARIO_STATUS: 'Z', ESCPROGDIA_ID: null }
   ];
   const visible = service._private.filtrarCabecalhosInativosSemDias(rows);
-  assert.deepEqual(visible.map((row) => row.ESCFUNC_ID), [91, 92, 93]);
+  assert.deepEqual(visible.map((row) => row.ESCFUNC_ID), [91, 92, 93, 94]);
 });
 
 test('empty header from a previous section is hidden after an employee changes section', () => {

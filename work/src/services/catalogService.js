@@ -365,7 +365,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
           : 'cast(null as date) as dt_nasc';
     const ativoWhere = options.includeInactive ? '' : [
       funcionarioColumns.has('DT_DEMISS') ? 'and f.dt_demiss is null' : '',
-      funcionarioColumns.has('STATUS') ? "and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P')" : ''
+      funcionarioColumns.has('STATUS') ? "and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P', 'Z')" : ''
     ].filter(Boolean).join(' ');
     const statusSelect = funcionarioColumns.has('STATUS') ? 'f.status' : "'A' as status";
     const subsecaoJoinSql = hasFuncionarioSubsecao && hasSubsecaoTable

@@ -10,10 +10,12 @@ async function loadFrontendHelper(filename) {
   return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 }
 
-test('frontend includes status P in employees eligible for schedules', async () => {
+test('frontend includes statuses P and Z in employees eligible for schedules', async () => {
   const { permiteEscala } = await loadFrontendHelper('employeeStatus.ts');
   assert.equal(permiteEscala('P'), true);
   assert.equal(permiteEscala(' p '), true);
+  assert.equal(permiteEscala('Z'), true);
+  assert.equal(permiteEscala(' z '), true);
   assert.equal(permiteEscala('I'), false);
 });
 

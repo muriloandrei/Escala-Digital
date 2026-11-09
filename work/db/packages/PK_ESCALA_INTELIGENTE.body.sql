@@ -81,7 +81,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
                      select 1 from ESCALAINT.SGN_ESC_FUNCIONARIO f
                       where f.escsecao_id = s.escsecao_id and f.loja = v_loja
                         and f.dt_demiss is null
-                        and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P'))));
+                        and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P', 'Z'))));
           if v_secao_total > 0 then
             v_preservar_vinculos := 1;
           elsif rec.chapa is not null and rec.codcoligada is not null then
@@ -92,7 +92,7 @@ create or replace package body PK_ESCALA_INTELIGENTE is
              where f.loja = v_loja and f.codcoligada = rec.codcoligada
                and f.chapa = rec.chapa and s.codfilial = v_loja
                and f.dt_demiss is null
-               and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P')
+               and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P', 'Z')
                and (s.status = 'A' or
                     (v_secoes_ampliadas = 1
                      and not regexp_like(trim(nvl(s.cod_secao, ' ')), '(^|[.])02[.]012$')));

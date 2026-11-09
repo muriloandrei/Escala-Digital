@@ -2178,7 +2178,7 @@ async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRe
        from sgn_esc_prog p
        join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
       where p.loja = :lojaId and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-        and (f.dt_demiss is not null or upper(trim(nvl(f.status, 'A'))) not in ('A', 'F', 'P'))
+        and (f.dt_demiss is not null or upper(trim(nvl(f.status, 'A'))) not in ('A', 'F', 'P', 'Z'))
         and ${ativaSql}
         ${filtroSecoes}
         and p.revisao = (
@@ -2190,7 +2190,7 @@ async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRe
           select 1 from sgn_esc_prog_dia d
            where d.escprog_id = p.escprog_id
              and ((f.dt_demiss is not null and trunc(d.dt) > trunc(f.dt_demiss))
-               or (upper(trim(nvl(f.status, 'A'))) not in ('A', 'F', 'P') and trunc(d.dt) >= to_date(:hojeIso, 'YYYY-MM-DD')))
+               or (upper(trim(nvl(f.status, 'A'))) not in ('A', 'F', 'P', 'Z') and trunc(d.dt) >= to_date(:hojeIso, 'YYYY-MM-DD')))
         )`,
     binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );

@@ -9,7 +9,7 @@ function enabledAdditionalSectionSql(sectionAlias, lojaSql) {
                  where rollout_func.escsecao_id = ${sectionAlias}.escsecao_id
                    and rollout_func.loja = ${lojaSql}
                    and rollout_func.dt_demiss is null
-                   and upper(trim(nvl(rollout_func.status, 'A'))) in ('A', 'F', 'P'))
+                   and upper(trim(nvl(rollout_func.status, 'A'))) in ('A', 'F', 'P', 'Z'))
   )`;
 }
 
