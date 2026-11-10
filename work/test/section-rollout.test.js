@@ -1,6 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { activeSectionSql, enabledAdditionalSectionSql } = require('../src/domain/sectionRollout');
+
+test('catalogo inclui status Z na lista de funcionarios ativos', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/catalogService.js'), 'utf8');
+  assert.match(source, /funcionarioColumns\.has\('STATUS'\)\s*\?\s*"and upper\(trim\(nvl\(f\.status, 'A'\)\)\) in \('A', 'F', 'P', 'Z'\)"/);
+});
 
 test('additional sections depend on a store flag and an active employee', () => {
   const sql = enabledAdditionalSectionSql('s', ':lojaId');
