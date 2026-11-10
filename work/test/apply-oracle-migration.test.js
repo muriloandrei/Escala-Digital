@@ -12,6 +12,13 @@ test('executor accepts only the approved mirrored single-block migrations', () =
   }
 });
 
+test('Sunday 6h migration compiles before the new column exists', () => {
+  const { sql } = readMigration('20261105_domingo_6h_lojas.sql');
+  assert.match(sql, /execute immediate 'update sgn_esc_loja set domingo_6h_habilitado = 1/i);
+  assert.doesNotMatch(sql, /^\s*update sgn_esc_loja set domingo_6h_habilitado/gim);
+  assert.match(sql, /from user_constraints/);
+});
+
 test('Portaria unification preserves officialized records and loja 999', () => {
   const { sql } = readMigration('20261016_unificar_portaria_porteiro.sql');
   assert.match(sql, /p\.oficializada = 0/);

@@ -7,9 +7,12 @@ begin
    where table_name = 'SGN_ESC_LOJA' and column_name = 'DOMINGO_6H_HABILITADO';
   if v_total = 0 then
     execute immediate 'alter table sgn_esc_loja add (domingo_6h_habilitado number(1) default 0 not null)';
+  end if;
+  select count(*) into v_total from user_constraints
+   where table_name = 'SGN_ESC_LOJA' and constraint_name = 'SGN_ESC_LOJA_DOM6H_CK';
+  if v_total = 0 then
     execute immediate 'alter table sgn_esc_loja add constraint sgn_esc_loja_dom6h_ck check (domingo_6h_habilitado in (0, 1))';
   end if;
-  update sgn_esc_loja set domingo_6h_habilitado = 1 where loja in (18, 21);
-  commit;
+  execute immediate 'update sgn_esc_loja set domingo_6h_habilitado = 1 where loja in (18, 21)';
 end;
 /
