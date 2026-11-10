@@ -66,6 +66,7 @@ function getEnv() {
       retries: Number(process.env.RM_API_RETRIES || 2),
       funcionarioPath: process.env.RM_API_FUNCIONARIO_PATH || '/api/framework/v1/consultaSQLServer/RealizaConsulta/INTEG_ESCALA/0/P',
       folgasPath: process.env.RM_API_FOLGAS_PATH || '/rmsrestdataserver/rest/PtoAdtTabFolgaData',
+      folgasMasterPath: process.env.RM_API_FOLGAS_MASTER_PATH || '/rmsrestdataserver/rest/PtoTabFolgaData',
       folgasPostCodcoligada: process.env.RM_API_FOLGAS_POST_CODCOLIGADA || '0',
       timezoneOffset: process.env.RM_API_TIMEZONE_OFFSET || '-03:00'
     },

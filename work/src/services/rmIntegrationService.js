@@ -1,3 +1,4 @@
+const { randomUUID } = require('node:crypto');
 const { getEnv } = require('../config/env');
 const { withConnection, oracledb } = require('../db/oracle');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
@@ -82,6 +83,10 @@ function describeNetworkError(error, timeoutMs) {
   if (Array.isArray(error?.cause?.errors)) error.cause.errors.forEach(collect);
 
   return [...new Set(details)].join('; ');
+}
+
+function isEscritaIncertaRm(erro) {
+  return /Timeout de escrita|Falha ao chamar RM em (POST|DELETE).*timeout/i.test(String(erro || ''));
 }
 
 function toArrayResult(body) {
@@ -261,7 +266,8 @@ async function requestRm(path, options = {}) {
   }
   const baseUrl = rmConfig.baseUrl.replace(/\/$/, '');
   const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
-  const method = options.method || 'GET';
+  const { returnStatus = false, ...requestOptions } = options;
+  const method = requestOptions.method || 'GET';
   const maxRetries = ['GET', 'HEAD'].includes(String(method).toUpperCase()) ? rmConfig.retries : 0;
   const logPath = maskRmPath(path);
   let lastError;
@@ -271,12 +277,12 @@ async function requestRm(path, options = {}) {
     const timeout = setTimeout(() => controller.abort(), rmConfig.timeoutMs);
     try {
       const response = await fetch(url, {
-        ...options,
+        ...requestOptions,
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           ...buildAuthHeader(rmConfig),
-          ...(options.headers || {})
+          ...(requestOptions.headers || {})
         }
       });
       const text = await response.text();
@@ -295,11 +301,13 @@ async function requestRm(path, options = {}) {
         error.body = body;
         throw error;
       }
-      return body;
+      return returnStatus ? { status: response.status, body } : body;
     } catch (error) {
       const detail = describeNetworkError(error, rmConfig.timeoutMs);
       lastError = new Error(`Falha ao chamar RM em ${method} ${logPath}: ${error.message}${detail ? ` (${detail})` : ''}`);
       lastError.cause = error;
+      lastError.statusCode = error.statusCode;
+      lastError.body = error.body;
       if (attempt >= maxRetries) break;
     } finally {
       clearTimeout(timeout);
@@ -442,10 +450,31 @@ function planejarFolgasRm({ existentesRows, funcionario, codColigada, codTabFolg
 async function postFolgas(payload) {
   if (!payload.length) return null;
   const rmConfig = getEnv().rm;
-  return requestRm(`${rmConfig.folgasPath}?codcoligada=${encodeURIComponent(rmConfig.folgasPostCodcoligada)}`, {
-    method: 'POST',
-    body: JSON.stringify(payload)
+  const parametroColigada = `?codcoligada=${encodeURIComponent(rmConfig.folgasPostCodcoligada)}`;
+  const enviarDetalhes = () => requestRm(`${rmConfig.folgasPath}${parametroColigada}`, {
+    method: 'POST', body: JSON.stringify(payload)
   });
+  try {
+    return { body: await enviarDetalhes(), cabecalhoCriado: false };
+  } catch (error) {
+    const violacaoFk = error.statusCode === 500 && Array.isArray(error.body?.messages)
+      && error.body.messages.some((message) => String(message.code) === '0007'
+        && /chave estrangeira|foreign key/i.test(String(message.detail || '')));
+    if (!violacaoFk) throw error;
+  }
+
+  const { CODCOLIGADA, CODTABFOLGA } = payload[0];
+  if (payload.some((folga) => folga.CODCOLIGADA !== CODCOLIGADA || folga.CODTABFOLGA !== CODTABFOLGA)) {
+    throw new Error('Folgas de mais de uma tabela no mesmo POST; cabecalho RM nao foi criado.');
+  }
+  const cabecalho = await requestRm(`${rmConfig.folgasMasterPath}${parametroColigada}`, {
+    method: 'POST', returnStatus: true,
+    body: JSON.stringify([{ CODCOLIGADA, CODTABFOLGA, DESCRICAO: 'Folga API Escala' }])
+  });
+  if (cabecalho.status !== 201) {
+    throw new Error(`RM retornou HTTP ${cabecalho.status} ao criar cabecalho da tabela de folga; detalhes nao reenviados.`);
+  }
+  return { body: await enviarDetalhes(), cabecalhoCriado: true };
 }
 
 async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId = null, escfuncIds = null, apenasOficializada = false, apenasNaoOficializada = false }) {
@@ -649,14 +678,14 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
           await requestRm(deletePath, { method: 'DELETE' });
           removidas += 1;
         }
-        await postFolgas(payloadInclusao);
+        const postResultado = await postFolgas(payloadInclusao);
 
         enviados += funcionario.eventos.length;
         await registrarRmLog(connection, {
           loja: lojaId, mesRef, revisao: funcionario.revisao ?? revisao, escfuncId: funcionario.escfuncId, chapa: funcionario.chapa, cpf: mask(cpf),
           acao: 'RM_ENVIAR_DESCANSOS', status: 'SUCESSO',
           mensagem: `${funcionario.eventos.length} evento(s) sincronizado(s); ${funcionario.fdoDatas.length} FDO ignorada(s) no RM.`,
-          payloadResumo: `chapa=${funcionario.chapa}; codtabfolga=${codTabFolga}; incluir=${payloadInclusao.length}; remover=${removidas}; existentes=${existentesRows.length}; fdo_ignorada=${funcionario.fdoDatas.length}`
+          payloadResumo: `chapa=${funcionario.chapa}; codtabfolga=${codTabFolga}; incluir=${payloadInclusao.length}; remover=${removidas}; existentes=${existentesRows.length}; fdo_ignorada=${funcionario.fdoDatas.length}; cabecalho_criado=${postResultado?.cabecalhoCriado ? 1 : 0}`
         });
       } catch (error) {
         falhas += 1;
@@ -804,7 +833,7 @@ async function processarEnvioRm(envio, { manual = false, retry = false } = {}) {
 
   let rm;
   // Apos timeout de escrita, apenas consultar: o RM pode ter aplicado o POST/DELETE.
-  let somenteVerificar = false;
+  let somenteVerificar = isEscritaIncertaRm(pick(envio, 'ERRO', 'erro'));
   for (let tentativa = 0; tentativa < 3; tentativa += 1) {
     try {
       rm = await oficializarNoRm({
@@ -870,6 +899,130 @@ async function processarPendenciasRm({ lojaId = null, limit = 100, incertos = fa
     }
   }
   return resultados;
+}
+
+async function listarGruposRmComErro({ lojaId = null, afterId = 0, maxId = null, limit = 100 } = {}) {
+  const binds = { afterId, limite: Math.min(500, Math.max(1, limit)) };
+  const filtroLoja = lojaId ? 'and e.loja = :lojaId' : '';
+  const filtroMaximo = maxId != null ? 'and e.envio_id <= :maxId' : '';
+  if (lojaId) binds.lojaId = lojaId;
+  if (maxId != null) binds.maxId = maxId;
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select * from (
+         select min(e.envio_id) primeiro_envio_id, e.loja, e.mes_ref, e.escfunc_id,
+                count(*) total_erros
+           from sgn_esc_rm_envio e
+          where e.status in ('INCERTO', 'FALHA')
+                ${filtroMaximo} ${filtroLoja}
+          group by e.loja, e.mes_ref, e.escfunc_id
+         having min(e.envio_id) > :afterId
+          order by min(e.envio_id)
+       ) where rownum <= :limite`,
+      binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows || [];
+  });
+}
+
+async function getMaiorEnvioErroId({ lojaId = null } = {}) {
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select max(envio_id) maior_id from sgn_esc_rm_envio
+        where status in ('INCERTO', 'FALHA') ${lojaId ? 'and loja = :lojaId' : ''}`,
+      lojaId ? { lojaId } : {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return Number(pick(result.rows?.[0], 'MAIOR_ID', 'maior_id') || 0);
+  });
+}
+
+async function prepararGrupoRmComErro(grupo) {
+  const lojaId = Number(pick(grupo, 'LOJA', 'loja'));
+  const mesRef = formatDate(pick(grupo, 'MES_REF', 'mes_ref'));
+  const escfuncId = Number(pick(grupo, 'ESCFUNC_ID', 'escfunc_id'));
+  return withConnection(async (connection) => {
+    const programacoes = await connection.execute(
+      `select p.escsecao_id, p.revisao, p.oficializada,
+              (select count(*) from sgn_esc_prog_dia d where d.escprog_id = p.escprog_id) dias
+         from sgn_esc_prog p
+        where p.loja = :lojaId and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          and p.escfunc_id = :escfuncId and nvl(p.ativa, 1) = 1
+          and p.revisao = (
+            select max(px.revisao) from sgn_esc_prog px
+             where px.loja = p.loja and px.mes_ref = p.mes_ref
+               and px.escfunc_id = p.escfunc_id and nvl(px.ativa, 1) = 1
+          )`,
+      { lojaId, mesRef, escfuncId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    if (programacoes.rows?.length !== 1) return { acao: 'BLOQUEADO', motivo: 'Escala atual ausente ou ambigua.' };
+    const prog = programacoes.rows[0];
+    if (Number(pick(prog, 'OFICIALIZADA', 'oficializada')) !== 1 || Number(pick(prog, 'DIAS', 'dias')) < 1) {
+      return { acao: 'BLOQUEADO', motivo: 'Revisao atual nao oficializada ou sem dias.' };
+    }
+    const revisao = Number(pick(prog, 'REVISAO', 'revisao'));
+    const escsecaoId = Number(pick(prog, 'ESCSECAO_ID', 'escsecao_id'));
+    const envios = await connection.execute(
+      `select envio_id, loja, mes_ref, escsecao_id, escfunc_id, revisao, status, erro
+         from sgn_esc_rm_envio
+        where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          and escfunc_id = :escfuncId and escsecao_id = :escsecaoId and revisao = :revisao`,
+      { lojaId, mesRef, escfuncId, escsecaoId, revisao }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    if (envios.rows?.length > 1) return { acao: 'BLOQUEADO', motivo: 'Mais de um envio na revisao atual.' };
+    const envio = envios.rows?.[0];
+    const status = String(pick(envio, 'STATUS', 'status') || '');
+    const acao = status === 'ENVIADO' ? 'JA_ENVIADO'
+      : !envio ? 'CRIAR_PENDENCIA'
+        : ['PENDENTE', 'INCERTO', 'FALHA'].includes(status) ? 'REPROCESSAR' : 'BLOQUEADO';
+    return { acao, motivo: acao === 'BLOQUEADO' ? `Status atual ${status} exige revisao individual.` : null,
+      modo: isEscritaIncertaRm(pick(envio, 'ERRO', 'erro')) ? 'SOMENTE_VERIFICAR' : 'RECONCILIAR',
+      lojaId, mesRef, escfuncId, escsecaoId, revisao, envio };
+  });
+}
+
+async function reprocessarGrupoRmComErro(grupo) {
+  if (!getEnv().rm.enabled) throw new Error('Integracao RM desabilitada.');
+  const plano = await prepararGrupoRmComErro(grupo);
+  if (plano.acao === 'BLOQUEADO') return plano;
+  const { lojaId, mesRef, escfuncId, escsecaoId, revisao } = plano;
+  if (plano.acao !== 'JA_ENVIADO') {
+    let envio = plano.envio;
+    if (!envio) {
+      envio = await withConnection(async (connection) => {
+        const result = await connection.execute(
+          `insert into sgn_esc_rm_envio
+             (envio_id, operacao_id, loja, mes_ref, escsecao_id, escfunc_id, revisao,
+              status, tentativas, dt_hr_incl, dt_hr_alter)
+           values (sgn_esc_rm_envio_seq.nextval, :operacaoId, :lojaId,
+              to_date(:mesRef, 'YYYY-MM-DD'), :escsecaoId, :escfuncId, :revisao,
+              'PENDENTE', 0, sysdate, sysdate)
+           returning envio_id into :envioId`,
+          { operacaoId: randomUUID(), lojaId, mesRef, escsecaoId, escfuncId, revisao,
+            envioId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } },
+          { autoCommit: false }
+        );
+        await connection.commit();
+        return { ENVIO_ID: result.outBinds.envioId[0], LOJA: lojaId, MES_REF: mesRef,
+          ESCSECAO_ID: escsecaoId, ESCFUNC_ID: escfuncId, REVISAO: revisao, STATUS: 'PENDENTE' };
+      });
+    }
+    const resultado = await processarEnvioRm(envio, { retry: true });
+    if (resultado.status !== 'ENVIADO') return { ...plano, acao: resultado.status || 'IGNORADO',
+      motivo: resultado.erros?.[0] || null };
+  }
+  await withConnection(async (connection) => {
+    await connection.execute(
+      `update sgn_esc_rm_envio set status = 'SUPERADO',
+              erro = 'Revisao atual reconciliada no RM; envio antigo nao deve ser repetido.',
+              dt_hr_alter = sysdate
+        where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          and escfunc_id = :escfuncId and status in ('INCERTO', 'FALHA')
+          and (revisao < :revisao or (revisao = :revisao and escsecao_id <> :escsecaoId))`,
+      { lojaId, mesRef, escfuncId, revisao, escsecaoId }, { autoCommit: false }
+    );
+    await connection.commit();
+  });
+  return { ...plano, acao: plano.acao === 'JA_ENVIADO' ? 'JA_ENVIADO' : 'ENVIADO' };
 }
 
 async function reprocessarEnvioRm({ lojaId, mesRef, revisao, escfuncId, envioId = null }) {
@@ -943,6 +1096,10 @@ module.exports = {
   processarOperacaoRm,
   listPendenciasRm,
   processarPendenciasRm,
+  listarGruposRmComErro,
+  getMaiorEnvioErroId,
+  prepararGrupoRmComErro,
+  reprocessarGrupoRmComErro,
   reprocessarEnvioRm,
   listEnviosRm,
   consultarFolgasFuncionarioMes,
@@ -950,6 +1107,7 @@ module.exports = {
   validarPreRequisitosRm,
   _private: {
     requestRm,
+    postFolgas,
     getEscalaParaRm,
     agruparPorFuncionario,
     buildDeleteFolgaPath,

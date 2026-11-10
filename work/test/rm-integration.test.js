@@ -199,6 +199,80 @@ test('RM does not repeat uncertain writes but can retry read requests', async ()
   }
 });
 
+async function simularPostFolgas(respostas, validar) {
+  const fetchAnterior = global.fetch;
+  const variaveis = ['RM_API_BASE_URL', 'RM_API_FOLGAS_POST_CODCOLIGADA'];
+  const anteriores = Object.fromEntries(variaveis.map((nome) => [nome, process.env[nome]]));
+  const chamadas = [];
+  process.env.RM_API_BASE_URL = 'http://localhost:1';
+  process.env.RM_API_FOLGAS_POST_CODCOLIGADA = '1';
+  global.fetch = async (url, options) => {
+    chamadas.push({ url, options });
+    const resposta = respostas[chamadas.length - 1];
+    if (!resposta) throw new Error('Chamada RM inesperada');
+    return { ok: resposta.status >= 200 && resposta.status < 300,
+      status: resposta.status, text: async () => JSON.stringify(resposta.body || {}) };
+  };
+  try {
+    await validar(chamadas);
+  } finally {
+    global.fetch = fetchAnterior;
+    for (const nome of variaveis) {
+      if (anteriores[nome] === undefined) delete process.env[nome];
+      else process.env[nome] = anteriores[nome];
+    }
+  }
+}
+
+const folgaParaPost = [{
+  CODCOLIGADA: 1, CODTABFOLGA: '063.0651', DATA: '2026-11-08T00:00:00-03:00',
+  HORAINICIO: 0, HORAFIM: 1440, HORAINICIOSTR: '00:00', HORAFIMSTR: '24:00', CONSEXTRAINTER: 1
+}];
+const erroMestreAusente = { messages: [{ code: '0007', type: 'error', detail: 'Violação de chave estrangeira' }], length: 0, data: null };
+
+test('cria cabecalho RM apos FK 0007 e repete POST de detalhes somente uma vez', async () => {
+  await simularPostFolgas([
+    { status: 500, body: erroMestreAusente }, { status: 201 }, { status: 201 }
+  ], async (chamadas) => {
+    const result = await _private.postFolgas(folgaParaPost);
+    assert.equal(result.cabecalhoCriado, true);
+    assert.equal(chamadas.length, 3);
+    assert.match(chamadas[0].url, /PtoAdtTabFolgaData\?codcoligada=1$/);
+    assert.match(chamadas[1].url, /PtoTabFolgaData\?codcoligada=1$/);
+    assert.equal(chamadas[2].url, chamadas[0].url);
+    assert.deepEqual(JSON.parse(chamadas[1].options.body), [{
+      CODCOLIGADA: 1, CODTABFOLGA: '063.0651', DESCRICAO: 'Folga API Escala'
+    }]);
+    assert.equal(chamadas[2].options.body, chamadas[0].options.body);
+    assert.equal('returnStatus' in chamadas[1].options, false);
+  });
+});
+
+test('nao cria cabecalho por HTTP 500 sem violacao FK 0007', async () => {
+  await simularPostFolgas([{ status: 500, body: { messages: [{ code: '9999', detail: 'Erro interno' }] } }], async (chamadas) => {
+    await assert.rejects(_private.postFolgas(folgaParaPost), /HTTP 500/);
+    assert.equal(chamadas.length, 1);
+  });
+});
+
+test('nao repete detalhes quando mestre falha ou nao retorna 201', async () => {
+  for (const resposta of [{ status: 500 }, { status: 200 }]) {
+    await simularPostFolgas([{ status: 500, body: erroMestreAusente }, resposta], async (chamadas) => {
+      await assert.rejects(_private.postFolgas(folgaParaPost), /HTTP (500|200)/);
+      assert.equal(chamadas.length, 2);
+    });
+  }
+});
+
+test('nao cria outro mestre quando repeticao dos detalhes falha', async () => {
+  await simularPostFolgas([
+    { status: 500, body: erroMestreAusente }, { status: 201 }, { status: 500, body: erroMestreAusente }
+  ], async (chamadas) => {
+    await assert.rejects(_private.postFolgas(folgaParaPost), /HTTP 500/);
+    assert.equal(chamadas.length, 3);
+  });
+});
+
 test('RM reads only revisions up to the approved revision', async () => {
   let query;
   const connection = {

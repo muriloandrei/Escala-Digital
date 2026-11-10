@@ -128,6 +128,7 @@ RM_API_TIMEOUT_MS=15000
 RM_API_RETRIES=2
 RM_API_FUNCIONARIO_PATH=/api/framework/v1/consultaSQLServer/RealizaConsulta/INTEG_ESCALA/0/P
 RM_API_FOLGAS_PATH=/rmsrestdataserver/rest/PtoAdtTabFolgaData
+RM_API_FOLGAS_MASTER_PATH=/rmsrestdataserver/rest/PtoTabFolgaData
 RM_API_FOLGAS_POST_CODCOLIGADA=0
 RM_API_TIMEZONE_OFFSET=-03:00
 ```
@@ -187,6 +188,21 @@ A migration `20260826_usuario_loja_principal.sql` adiciona o campo de loja princ
 A migration `20260831_fixos_pre_geracao.sql` cria `SGN_ESC_FIXO_ESCALA` e `SGN_ESC_FIXO_ESCALA_SEQ`, usados para distribuir/remover folgas fixas e horarios fixos antes da geracao da escala por secao.
 
 A migration `20260903_funcionario_subsecao.sql` adiciona o campo `SGN_ESC_FUNCIONARIO.ESCSUBSECAO_ID`, usado pela tela master-detail de subsecoes para vincular, remover e transferir funcionarios entre subsetores da Frente de Caixa.
+
+Para reconciliar envios RM com status `INCERTO` ou `FALHA`, rode primeiro a previa no release ativo:
+
+```bash
+export ESCALA_ENV_FILE=/opt/escala-app/work/.env
+npm run rm:reprocessar-erros -- --all
+```
+
+Anote o `envio_id` maximo mostrado na primeira linha. Depois de revisar os bloqueios, aplique o mesmo recorte:
+
+```bash
+npm run rm:reprocessar-erros -- --all --apply --by=OPERADOR --max-id=ID_DA_PREVIA
+```
+
+Use `--loja=NUMERO` no lugar de `--all` para testar uma loja. O lote consulta a ultima revisao ativa oficializada, nao repete revisoes antigas e nao refaz uma escrita cujo timeout ainda nao foi confirmado pelo RM. Linhas bloqueadas ou incertas permanecem identificadas no resumo.
 
 ## 8. Teste manual antes do servico
 

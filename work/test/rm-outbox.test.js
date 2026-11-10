@@ -4,18 +4,24 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function loadService({ enabled, rows, scheduleRows = [], fetchImpl = null }) {
+function loadService({ enabled, rows, scheduleRows = [], fetchImpl = null,
+  programacoesRows = [], currentEnviosRows = [] }) {
   const statements = [];
   const connection = {
     async execute(sql, binds) {
       statements.push({ sql, binds });
       if (/from sgn_esc_rm_envio where operacao_id/i.test(sql)) return { rows };
+      if (/select max\(envio_id\) maior_id/i.test(sql)) return { rows: [{ MAIOR_ID: 100 }] };
+      if (/min\(e\.envio_id\) primeiro_envio_id/i.test(sql)) return { rows };
       if (/from sgn_esc_rm_envio e/i.test(sql)) return { rows };
       if (/from sgn_esc_rm_envio e\s+left join sgn_esc_funcionario/i.test(sql)) return { rows };
+      if (/select envio_id, loja, mes_ref, escsecao_id, escfunc_id, revisao, status, erro/i.test(sql)) return { rows: currentEnviosRows };
       if (/select max\(p\.revisao\) revisao_atual/i.test(sql)) return { rows: [{ REVISAO_ATUAL: 7, OFICIALIZADA: scheduleRows.length ? 1 : 0 }] };
       if (/update sgn_esc_rm_envio/i.test(sql)) return { rowsAffected: 1 };
+      if (/insert into sgn_esc_rm_envio/i.test(sql)) return { outBinds: { envioId: [101] }, rowsAffected: 1 };
       if (/insert into sgn_esc_rm_log/i.test(sql)) return { rowsAffected: 1 };
       if (/user_tab_columns/i.test(sql)) return { rows: [{ COLUMN_NAME: 'CPF' }, { COLUMN_NAME: 'ATIVA' }] };
+      if (/select p\.escsecao_id, p\.revisao, p\.oficializada/i.test(sql)) return { rows: programacoesRows };
       if (/from sgn_esc_prog p/i.test(sql)) return { rows: scheduleRows };
       throw new Error(`Unexpected SQL: ${sql}`);
     },
@@ -23,12 +29,15 @@ function loadService({ enabled, rows, scheduleRows = [], fetchImpl = null }) {
   };
   const module = { exports: {} };
   const dependencies = {
+    'node:crypto': { randomUUID: () => 'op-test' },
     '../config/env': { getEnv: () => ({ rm: {
       enabled, baseUrl: 'http://localhost:1', retries: 0, timeoutMs: 1000,
-      funcionarioPath: '/funcionario', folgasPath: '/folgas',
+      funcionarioPath: '/funcionario', folgasPath: '/folgas', folgasMasterPath: '/folgas-mestre',
       folgasPostCodcoligada: '0', timezoneOffset: '-03:00'
     } }) },
-    '../db/oracle': { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } },
+    '../db/oracle': { withConnection: async (work) => work(connection), oracledb: {
+      OUT_FORMAT_OBJECT: 1, BIND_OUT: 2, NUMBER: 3
+    } },
     '../domain/operationalPeriod': { getOperationalPeriodIso: () => ({ inicio: '2026-10-05', fim: '2026-11-01' }) }
   };
   const source = fs.readFileSync(path.join(__dirname, '../src/services/rmIntegrationService.js'), 'utf8');
@@ -80,6 +89,63 @@ test('diagnostico de incertos filtra somente erro CODTABFOLGA e mostra revisao a
   assert.match(query.sql, /revisao_atual/);
   assert.equal(query.binds.erroTipo, '%CODTABFOLGA%');
   assert.equal(query.binds.lojaId, 35);
+});
+
+const grupoErro = { PRIMEIRO_ENVIO_ID: 41, LOJA: 35, MES_REF: '2026-10-01', ESCFUNC_ID: 90, TOTAL_ERROS: 2 };
+const programacaoAtual = { ESCSECAO_ID: 2003, REVISAO: 7, OFICIALIZADA: 1, DIAS: 28 };
+
+test('lote de erros usa cursor por grupo e congela o maior envio', async () => {
+  const { service, statements } = loadService({ enabled: false, rows: [grupoErro] });
+  assert.equal(await service.getMaiorEnvioErroId({ lojaId: 35 }), 100);
+  const grupos = await service.listarGruposRmComErro({ lojaId: 35, afterId: 40, maxId: 100 });
+  assert.equal(grupos.length, 1);
+  const query = statements.find(({ sql }) => /primeiro_envio_id/i.test(sql));
+  assert.match(query.sql, /having min\(e\.envio_id\) > :afterId/i);
+  assert.equal(query.binds.maxId, 100);
+  assert.equal(query.binds.afterId, 40);
+});
+
+test('lote bloqueia revisao atual nao oficializada sem criar pendencia', async () => {
+  const { service, statements } = loadService({ enabled: true, rows: [],
+    programacoesRows: [{ ...programacaoAtual, OFICIALIZADA: 0 }] });
+  const plano = await service.prepararGrupoRmComErro(grupoErro);
+  assert.equal(plano.acao, 'BLOQUEADO');
+  assert.equal(statements.some(({ sql }) => /insert into sgn_esc_rm_envio/i.test(sql)), false);
+});
+
+test('lote reconhece revisao atual ja enviada e supera somente erros antigos', async () => {
+  const atual = { ...envio, MES_REF: '2026-10-01', STATUS: 'ENVIADO', ERRO: null };
+  const { service, statements } = loadService({ enabled: true, rows: [],
+    programacoesRows: [programacaoAtual], currentEnviosRows: [atual] });
+  const resultado = await service.reprocessarGrupoRmComErro(grupoErro);
+  assert.equal(resultado.acao, 'JA_ENVIADO');
+  const updates = statements.filter(({ sql }) => /update sgn_esc_rm_envio/i.test(sql));
+  assert.equal(updates.length, 1);
+  assert.match(updates[0].sql, /status = 'SUPERADO'/);
+  assert.equal(statements.some(({ sql }) => /insert into sgn_esc_rm_envio/i.test(sql)), false);
+});
+
+test('lote cria pendencia para revisao atual oficializada sem envio e reconcilia no RM', async () => {
+  const scheduleRows = [{ ESCFUNC_ID: 90, CHAPA: '035.0090', CPF: '12345678901', CODCOLIGADA: 1,
+    REVISAO: 7, DT: '2026-10-05', PROGRAMACAO: 'F', APOS_DEMISSAO: 0 }];
+  let posts = 0;
+  const fetchImpl = async (url, options) => {
+    if (url.includes('/funcionario')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([{
+        CPF: '12345678901', CODCOLIGADA: 1, CHAPA: '035.0090', CODSITUACAO: 'A'
+      }]) };
+    }
+    if ((options.method || 'GET') === 'POST') posts += 1;
+    const body = posts ? {} : { messages: [{ code: '0003', type: 'info' }], data: null, length: 0 };
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
+  const { service, statements } = loadService({ enabled: true, rows: [], scheduleRows,
+    programacoesRows: [programacaoAtual], fetchImpl });
+  const resultado = await service.reprocessarGrupoRmComErro(grupoErro);
+  assert.equal(resultado.acao, 'ENVIADO');
+  assert.equal(posts, 1);
+  assert.equal(statements.filter(({ sql }) => /insert into sgn_esc_rm_envio/i.test(sql)).length, 1);
+  assert.equal(statements.filter(({ sql }) => /update sgn_esc_rm_envio/i.test(sql)).length, 3);
 });
 
 test('revisao aprovada ausente fica incerta e nao e marcada como enviada', async () => {
@@ -221,6 +287,32 @@ test('timeout no POST nao repete escrita quando GET ainda nao confirma', async (
   const updates = statements.filter(({ sql }) => /update sgn_esc_rm_envio/i.test(sql));
   assert.equal(updates[1].binds.status, 'INCERTO');
   assert.match(updates[1].binds.erro, /Timeout de escrita/);
+});
+
+test('lote de INCERTO por timeout anterior apenas verifica, sem novo POST', async () => {
+  const row = {
+    ESCFUNC_ID: 90, CHAPA: '035.0090', CPF: '12345678901', CODCOLIGADA: 1,
+    REVISAO: 7, DT: '2026-10-05', PROGRAMACAO: 'F', APOS_DEMISSAO: 0
+  };
+  let posts = 0;
+  const fetchImpl = async (url, options) => {
+    if ((options.method || 'GET') === 'POST') posts += 1;
+    const body = url.includes('/funcionario')
+      ? [{ CPF: '12345678901', CODCOLIGADA: 1, CHAPA: '035.0090', CODSITUACAO: 'A' }]
+      : { messages: [{ code: '0003', type: 'info' }], data: null, length: 0 };
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
+  const incerto = { ...envio, MES_REF: '2026-10-01', STATUS: 'INCERTO',
+    ERRO: 'Falha ao chamar RM em POST /folgas: timeout apos 1000ms' };
+  const { service, statements } = loadService({ enabled: true, rows: [], scheduleRows: [row],
+    programacoesRows: [programacaoAtual], currentEnviosRows: [incerto], fetchImpl });
+  const plano = await service.prepararGrupoRmComErro(grupoErro);
+  assert.equal(plano.modo, 'SOMENTE_VERIFICAR');
+  const resultado = await service.reprocessarGrupoRmComErro(grupoErro);
+  assert.equal(resultado.acao, 'INCERTO');
+  assert.equal(posts, 0);
+  const updates = statements.filter(({ sql }) => /update sgn_esc_rm_envio/i.test(sql));
+  assert.equal(updates[1].binds.status, 'INCERTO');
 });
 
 function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], dismissalDate = null,
