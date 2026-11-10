@@ -31,7 +31,7 @@ async function diagnosticar(connection, { loja, mesRef }) {
               (select count(*) from sgn_esc_funcionario f
                 where f.escsecao_id = s.escsecao_id and f.loja = :loja
                   and f.dt_demiss is null
-                  and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P')) as funcionarios_aptos,
+                  and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P', 'Z')) as funcionarios_aptos,
               (select count(distinct p.escfunc_id) from sgn_esc_prog p
                 where p.escsecao_id = s.escsecao_id and p.loja = :loja
                   and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')

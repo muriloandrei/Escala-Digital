@@ -20,7 +20,7 @@ test('previous Sunday uses November active schedule and only current visible emp
     ] };
   } };
   const result = await loadPriorSunday(connection, { lojaId: 35, employeeIds: [1, 2, 3, 4, 5] });
-  assert.equal(result.data, '2026-12-06');
+  assert.equal(result.data, '2026-11-29');
   assert.deepEqual(result.dias.map((day) => [day.ESCFUNC_ID, day.PROGRAMACAO]),
     [[1, 'TRB'], [2, 'FER'], [3, 'FXF'], [4, 'AFA']]);
   assert.equal(result.dias[0].HR_ENT1, '08:00');
@@ -32,7 +32,7 @@ test('previous Sunday uses November active schedule and only current visible emp
 });
 
 test('ambiguous prior Sunday is not presented as a definite shift', () => {
-  const result = buildPriorSunday({ date: '2026-12-06', employeeIds: [1],
+  const result = buildPriorSunday({ date: '2026-11-29', employeeIds: [1],
     schedules: [{ ESCFUNC_ID: 1, PROGRAMACAO: 'TRB' }, { ESCFUNC_ID: 1, PROGRAMACAO: 'F' }],
     fixedDays: [{ ESCFUNC_ID: 1, PROGRAMACAO: 'FXF' }], absences: [] });
   assert.deepEqual(result.dias, []);

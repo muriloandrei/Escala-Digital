@@ -7,7 +7,9 @@ const { validateEscalaPayload } = require('../src/rules/escalaRules');
 const catalogService = require('../src/services/catalogService');
 const escalaService = require('../src/services/escalaService');
 const pendenciaFuncionarioService = require('../src/services/pendenciaFuncionarioService');
+const sundayShiftService = require('../src/services/sundayShiftService');
 pendenciaFuncionarioService.listarIntervalosSuspensos = async () => new Map();
+sundayShiftService.getStoreEnabled = async () => false;
 
 test('monthly release builds draft only from today onward', () => {
   const funcionario = {
@@ -34,6 +36,19 @@ test('monthly release builds draft only from today onward', () => {
   assert.equal(rascunho.dias.at(-1).data, '2026-09-06');
   assert.equal(rascunho.dias.some((dia) => dia.programacao === 'F'), true);
   assert.equal(rascunho.dias.some((dia) => dia.programacao === 'TRB'), true);
+});
+
+test('12x36 draft alternates duty and rest without 5x2 balancing', () => {
+  const employee = {
+    ESCFUNC_ID: 7001, CHAPA: '700.0001', NOME: 'Plantao', ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    REGIME_ESCALA: '12X36', DT_ANCORA_12X36: '2026-12-01',
+    HR_ENT1: '20:00', HR_SAI1: '01:30', HR_ENT2: '02:30', HR_SAI2: '08:00'
+  };
+  const draft = buildFuncionarioRascunho(employee, null, '2026-12-01', '2026-12-01');
+  assert.equal(draft.regimeEscala, '12X36');
+  assert.deepEqual(draft.dias.slice(0, 4).map((day) => day.programacao), ['TRB', 'F', 'TRB', 'F']);
+  assert.equal(draft.dias[0].hrEnt1, '20:00');
+  assert.deepEqual(validateEscalaPayload({ lojaId: 700, mesRef: '2026-12-01', funcionarios: [draft] }), []);
 });
 
 test('monthly release uses the employee schedule before the section shift', () => {
@@ -762,7 +777,7 @@ test('November 2026 draft includes November 1 and alternates its rest with Novem
     HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
   };
   const [draft] = buildFuncionariosRascunhoBalanceado([employee], [], '2026-11-01', '2026-10-29');
-  assert.equal(draft.dias.length, 36);
+  assert.equal(draft.dias.length, 30);
   assert.equal(draft.dias[0].data, '2026-11-01');
   const firstSunday = draft.dias.find((day) => day.data === '2026-11-01');
   const nextSunday = draft.dias.find((day) => day.data === '2026-11-08');
@@ -789,7 +804,7 @@ test('monthly release balances Sundays within each subsection', () => {
   }));
   const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, [], '2026-11-01', '2026-11-02');
 
-  for (const data of ['2026-11-08', '2026-11-15', '2026-11-22', '2026-11-29', '2026-12-06']) {
+  for (const data of ['2026-11-08', '2026-11-15', '2026-11-22', '2026-11-29']) {
     for (const subsecaoId of [1, 2]) {
       const pessoas = funcionarios.filter((item) => item.ESCSUBSECAO_ID === subsecaoId);
       const trabalhando = pessoas.filter((item) => rascunhos.find((rascunho) => rascunho.escfuncId === item.ESCFUNC_ID)
@@ -1693,7 +1708,7 @@ test('full-period absence excludes employee, while partial absence and vacation 
   assert.ok(buildFuncionarioRascunho(funcionario, null, '2026-10-01', '2026-10-05', 0, null, options(fullVacation)).dias.length > 0);
 });
 
-test('statuses F and P remain eligible while inactive statuses do not', () => {
+test('statuses F, P and Z remain eligible while inactive statuses do not', () => {
   const base = {
     ESCFUNC_ID: 901, CHAPA: '901', NOME: 'Funcionario em ferias', LOJA: 10,
     ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
@@ -1708,6 +1723,8 @@ test('statuses F and P remain eligible while inactive statuses do not', () => {
   assert.ok(ferias.dias.some((dia) => dia.programacao === 'TRB'));
   assert.equal(monthlyReleaseService._private.temDiasElegiveis({ ...base, STATUS: 'P' }, '2026-11-01', '2026-11-02'), true);
   assert.ok(buildFuncionariosLiberacao([{ ...base, STATUS: 'P' }], [], '2026-11-01', '2026-11-02', comFixo)[0].dias.length > 0);
+  assert.equal(monthlyReleaseService._private.temDiasElegiveis({ ...base, STATUS: 'Z' }, '2026-11-01', '2026-11-02'), true);
+  assert.ok(buildFuncionariosLiberacao([{ ...base, STATUS: 'Z' }], [], '2026-11-01', '2026-11-02', comFixo)[0].dias.length > 0);
   for (const status of ['I', 'S', 'D']) {
     assert.equal(monthlyReleaseService._private.temDiasElegiveis({ ...base, STATUS: status }, '2026-11-01', '2026-11-02'), false);
     assert.deepEqual(buildFuncionariosLiberacao([{ ...base, STATUS: status }], [], '2026-11-01', '2026-11-02', comFixo)[0].dias, []);

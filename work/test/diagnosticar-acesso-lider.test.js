@@ -16,10 +16,13 @@ test('diagnostico mostra apenas vinculos de cada lider e escala do mes', async (
         { USUARIO_ID: 1, LOGIN: 'LIDERESTOQUE64', STATUS: 'A' },
         { USUARIO_ID: 2, LOGIN: 'LIDERPADARIA64', STATUS: 'A' }
       ] };
-      if (sql.includes('from sgn_esc_secao s') && sql.includes('funcionarios_aptos')) return { rows: [
-        { ESCSECAO_ID: 10, COD_SECAO: '064.03.001', DESCR: 'Estoque', STATUS: 'I',
-          FUNCIONARIOS_APTOS: 2, FUNCIONARIOS_COM_ESCALA: 2 }
-      ] };
+      if (sql.includes('from sgn_esc_secao s') && sql.includes('funcionarios_aptos')) {
+        assert.match(sql, /'A', 'F', 'P', 'Z'/);
+        return { rows: [
+          { ESCSECAO_ID: 10, COD_SECAO: '064.03.001', DESCR: 'Estoque', STATUS: 'I',
+            FUNCIONARIOS_APTOS: 2, FUNCIONARIOS_COM_ESCALA: 2 }
+        ] };
+      }
       if (sql.includes('from sgn_esc_usuario_secao us')) return { rows: [
         { USUARIO_ID: 1, ESCSECAO_ID: 10, STATUS: 'A' }
       ] };

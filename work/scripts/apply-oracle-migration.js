@@ -24,7 +24,11 @@ const migrationNames = [
   '20261016_oficializacao_por_loja.sql',
   '20261016_unificar_portaria_porteiro.sql',
   '20261019_limpar_porteiro_funcao_divergente.sql',
-  '20261026_escala_todas_secoes_por_loja.sql'
+  '20261026_escala_todas_secoes_por_loja.sql',
+  '20261105_retificacoes_rh.sql',
+  '20261105_domingo_6h_lojas.sql',
+  '20261109_regime_12x36_funcionario.sql',
+  '20261109_postos_horarios_padrao.sql'
 ];
 
 function parseSinglePlsqlBlock(source) {

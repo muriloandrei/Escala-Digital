@@ -1,6 +1,9 @@
 require('./rules-core.test');
 require('./modal-service.test');
 require('./operational-period.test');
+require('./fixed-carry.test');
+require('./december-transfer.test');
+require('./work-regime.test');
 require('./previous-sunday.test');
 require('./escala-rules-backend.test');
 
@@ -33,6 +36,7 @@ require('./rm-integration.test');
 require('./rm-outbox.test');
 require('./horario-funcionario.test');
 require('./draft-confirmation.test');
+require('./retroactive-admin.test');
 require('./rascunho-datas.test');
 require('./completar-domingo-novembro.test');
 require('./materializar-fixos-dia-01-novembro.test');
@@ -43,6 +47,7 @@ require('./frontend-helpers.test');
 require('./print-schedule.test');
 require('./escala-sync-rm.test');
 require('./escala-eventos.test');
+require('./rh-retifications.test');
 require('./subsection-transfer.test');
 require('./training-progress.test');
 require('./editable-month.test');

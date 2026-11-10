@@ -8,7 +8,7 @@ test('additional sections depend on a store flag and an active employee', () => 
   assert.match(sql, /todas_secoes_habilitadas, 0\) = 1/);
   assert.match(sql, /rollout_func\.escsecao_id = s\.escsecao_id/);
   assert.match(sql, /rollout_func\.dt_demiss is null/);
-  assert.match(sql, /'A', 'F', 'P'/);
+  assert.match(sql, /'A', 'F', 'P', 'Z'/);
   assert.match(sql, /02\[\.\]012\$/);
   assert.match(activeSectionSql('s', ':lojaId'), /nvl\(s\.status, 'A'\) = 'A' or/);
 });

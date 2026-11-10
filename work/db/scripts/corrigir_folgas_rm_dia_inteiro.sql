@@ -1,0 +1,128 @@
+-- Execute no SQL Server do RM, no banco que contem dbo.APARFUN e dbo.ADTTABFOLGA.
+-- Exige revisao e backup aprovados pela equipe responsavel pelo RM.
+-- PREVIA por padrao. Cole abaixo somente as linhas geradas pelo SELECT Oracle.
+-- Altere @Aplicar para 1 apenas depois de conferir o diagnostico e os bloqueios.
+-- Atualiza apenas linhas no formato antigo conhecido (08:00-12:00, 0) ou
+-- 00:00-24:00 com CONSEXTRAINTER=0. Outros formatos ficam intocados.
+
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+
+DECLARE @Aplicar bit = 0;
+
+IF COL_LENGTH(N'dbo.APARFUN', N'CODTABFOLGA') IS NULL
+   OR COL_LENGTH(N'dbo.ADTTABFOLGA', N'CONSEXTRAINTER') IS NULL
+   OR COL_LENGTH(N'dbo.ADTTABFOLGA', N'HORAINICIOSTR') IS NULL
+   OR COL_LENGTH(N'dbo.ADTTABFOLGA', N'HORAFIMSTR') IS NULL
+  THROW 50001, 'Esquema do RM nao corresponde ao esperado; nenhuma alteracao feita.', 1;
+
+CREATE TABLE #Alvos (
+  CODCOLIGADA int NOT NULL,
+  CHAPA nvarchar(20) NOT NULL,
+  DATA date NOT NULL,
+  CONSTRAINT PK_Alvos PRIMARY KEY (CODCOLIGADA, CHAPA, DATA)
+);
+
+-- INICIO DAS LINHAS COMANDO_SQL_SERVER EXPORTADAS DO ORACLE
+-- INSERT INTO #Alvos (CODCOLIGADA, CHAPA, DATA) VALUES (1, N'035.1499', CONVERT(date, '2026-11-08', 23));
+-- FIM DAS LINHAS EXPORTADAS
+
+IF NOT EXISTS (SELECT 1 FROM #Alvos)
+  THROW 50002, 'Nenhum alvo informado. Cole as linhas exportadas do Oracle.', 1;
+
+SELECT a.CODCOLIGADA, a.CHAPA, a.DATA,
+       MIN(ap.CODTABFOLGA) AS CODTABFOLGA,
+       COUNT(ap.CODTABFOLGA) AS QTD_VINCULOS
+  INTO #Mapa
+  FROM #Alvos a
+  LEFT JOIN dbo.APARFUN ap
+    ON ap.CODCOLIGADA = a.CODCOLIGADA AND ap.CHAPA = a.CHAPA
+ GROUP BY a.CODCOLIGADA, a.CHAPA, a.DATA;
+
+SELECT m.CODCOLIGADA, m.CHAPA, m.DATA, m.CODTABFOLGA, m.QTD_VINCULOS,
+       COUNT(r.CODTABFOLGA) AS QTD_FOLGAS_RM,
+       SUM(CASE WHEN r.HORAINICIO = 480 AND r.HORAFIM = 720
+                 AND r.HORAINICIOSTR = '08:00' AND r.HORAFIMSTR = '12:00'
+                 AND r.CONSEXTRAINTER = 0 THEN 1 ELSE 0 END) AS QTD_LEGADO,
+       SUM(CASE WHEN r.HORAINICIO = 0 AND r.HORAFIM = 1440
+                 AND r.HORAINICIOSTR = '00:00' AND r.HORAFIMSTR = '24:00'
+                 AND r.CONSEXTRAINTER = 0 THEN 1 ELSE 0 END) AS QTD_SO_INTERVALO,
+       SUM(CASE WHEN r.HORAINICIO = 0 AND r.HORAFIM = 1440
+                 AND r.HORAINICIOSTR = '00:00' AND r.HORAFIMSTR = '24:00'
+                 AND r.CONSEXTRAINTER = 1 THEN 1 ELSE 0 END) AS QTD_CORRETO
+  INTO #Diagnostico
+  FROM #Mapa m
+  LEFT JOIN dbo.ADTTABFOLGA r
+    ON r.CODCOLIGADA = m.CODCOLIGADA AND r.CODTABFOLGA = m.CODTABFOLGA
+   AND r.DATA >= m.DATA AND r.DATA < DATEADD(day, 1, m.DATA)
+ GROUP BY m.CODCOLIGADA, m.CHAPA, m.DATA, m.CODTABFOLGA, m.QTD_VINCULOS;
+
+SELECT *,
+       CASE
+         WHEN QTD_VINCULOS <> 1 THEN 'BLOQUEADO_VINCULO'
+         WHEN QTD_FOLGAS_RM = 0 THEN 'SEM_FOLGA_RM'
+         WHEN QTD_FOLGAS_RM > 1 THEN 'BLOQUEADO_MULTIPLAS_FOLGAS'
+         WHEN QTD_CORRETO = 1 THEN 'JA_CORRETO'
+         WHEN QTD_LEGADO = 1 OR QTD_SO_INTERVALO = 1 THEN 'CORRIGIR'
+         ELSE 'BLOQUEADO_FORMATO_DIFERENTE'
+       END AS ACAO
+  FROM #Diagnostico
+ ORDER BY CODCOLIGADA, CHAPA, DATA;
+
+SELECT COUNT(*) AS TOTAL_ALVOS,
+       SUM(CASE WHEN QTD_VINCULOS = 1 AND QTD_FOLGAS_RM = 1
+                 AND (QTD_LEGADO = 1 OR QTD_SO_INTERVALO = 1) THEN 1 ELSE 0 END) AS CORRIGIVEIS,
+       SUM(CASE WHEN QTD_VINCULOS <> 1 OR QTD_FOLGAS_RM > 1
+                 OR (QTD_FOLGAS_RM = 1 AND QTD_LEGADO = 0
+                     AND QTD_SO_INTERVALO = 0 AND QTD_CORRETO = 0) THEN 1 ELSE 0 END) AS BLOQUEADOS
+  FROM #Diagnostico;
+
+IF @Aplicar = 1
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM #Diagnostico
+     WHERE QTD_VINCULOS <> 1 OR QTD_FOLGAS_RM > 1
+  ) THROW 50003, 'Ha vinculos ou folgas ambiguas. Revise antes de aplicar.', 1;
+
+  CREATE TABLE #Alterados (
+    CODCOLIGADA int, CODTABFOLGA nvarchar(40), DATA date,
+    HORAINICIO_ANTERIOR int, HORAFIM_ANTERIOR int, CONSEXTRAINTER_ANTERIOR int
+  );
+
+  BEGIN TRY
+    BEGIN TRANSACTION;
+
+    UPDATE r
+       SET HORAINICIO = 0,
+           HORAFIM = 1440,
+           HORAINICIOSTR = '00:00',
+           HORAFIMSTR = '24:00',
+           CONSEXTRAINTER = 1
+      OUTPUT deleted.CODCOLIGADA, deleted.CODTABFOLGA, deleted.DATA,
+             deleted.HORAINICIO, deleted.HORAFIM, deleted.CONSEXTRAINTER
+        INTO #Alterados
+      FROM dbo.ADTTABFOLGA r
+      JOIN #Diagnostico d
+        ON d.CODCOLIGADA = r.CODCOLIGADA AND d.CODTABFOLGA = r.CODTABFOLGA
+       AND r.DATA >= d.DATA AND r.DATA < DATEADD(day, 1, d.DATA)
+     WHERE d.QTD_VINCULOS = 1 AND d.QTD_FOLGAS_RM = 1
+       AND (d.QTD_LEGADO = 1 OR d.QTD_SO_INTERVALO = 1)
+       AND ((r.HORAINICIO = 480 AND r.HORAFIM = 720
+             AND r.HORAINICIOSTR = '08:00' AND r.HORAFIMSTR = '12:00' AND r.CONSEXTRAINTER = 0)
+         OR (r.HORAINICIO = 0 AND r.HORAFIM = 1440
+             AND r.HORAINICIOSTR = '00:00' AND r.HORAFIMSTR = '24:00' AND r.CONSEXTRAINTER = 0));
+
+    IF (SELECT COUNT(*) FROM #Alterados) <>
+       (SELECT COUNT(*) FROM #Diagnostico
+         WHERE QTD_VINCULOS = 1 AND QTD_FOLGAS_RM = 1
+           AND (QTD_LEGADO = 1 OR QTD_SO_INTERVALO = 1))
+      THROW 50004, 'Quantidade alterada diverge da previa. Transacao revertida.', 1;
+
+    COMMIT TRANSACTION;
+    SELECT * FROM #Alterados ORDER BY CODCOLIGADA, CODTABFOLGA, DATA;
+  END TRY
+  BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    THROW;
+  END CATCH;
+END;

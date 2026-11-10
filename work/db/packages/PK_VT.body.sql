@@ -154,8 +154,8 @@ end FKG_USA_ESCALA_INTELIGENTE;
 
 FUNCTION FKG_INICIO_PERIODO_OPERACIONAL (ed_dt_ref in date) return date is
 begin
-   if trunc(ed_dt_ref, 'MM') = date '2026-11-01' then
-      return date '2026-11-01';
+   if trunc(ed_dt_ref, 'MM') in (date '2026-11-01', date '2026-12-01') then
+      return trunc(ed_dt_ref, 'MM');
    end if;
    return trunc(trunc(ed_dt_ref, 'MM') + 6, 'IW');
 end FKG_INICIO_PERIODO_OPERACIONAL;

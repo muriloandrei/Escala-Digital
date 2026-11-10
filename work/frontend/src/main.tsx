@@ -15,7 +15,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { canView, getJson, type User } from './api';
+import { canView, getJson, preferredStore, type User } from './api';
 import { EscalasLiberadas } from './pages/EscalasLiberadas';
 import { EscalaMensal } from './pages/EscalaMensal';
 import { ImprimirEscala } from './pages/ImprimirEscala';
@@ -23,6 +23,7 @@ import { Funcionarios } from './pages/Funcionarios';
 import { Secoes } from './pages/Secoes';
 import { Subsecoes } from './pages/Subsecoes';
 import { Alteracoes } from './pages/Alteracoes';
+import { RetificacoesRh } from './pages/RetificacoesRh';
 import { Treinamento } from './pages/Treinamento';
 import { EscalasFuncionarios } from './pages/EscalasFuncionarios';
 import { Historico } from './pages/Historico';
@@ -37,12 +38,34 @@ import './responsive.css';
 import './schedule.css';
 import './directory.css';
 import './print.css';
+import './retificacoes.css';
 
 const LAST_TRAINING_STAGE = 16;
 
 function LegacyProgressRedirect() {
   const { lojaId, mesRef } = useParams();
   return <Navigate replace to={`/escalas/${encodeURIComponent(lojaId || '')}/${encodeURIComponent(mesRef || '')}?progresso=1`} />;
+}
+
+function RhPendingBadge({ user }: { user: User }) {
+  const [count, setCount] = useState<number | null>(null);
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const { lojas } = await getJson<{ lojas: { LOJA: number }[] }>('/api/catalog/lojas');
+        const loja = preferredStore(user, lojas);
+        if (!loja) return;
+        const mesRef = `${new Date().toLocaleDateString('sv-SE').slice(0, 7)}-01`;
+        const { summary } = await getJson<{ summary: { pendentes: number } }>(`/api/escalas/retificacoes-rh?${new URLSearchParams({ lojaId: loja, mesRef, limit: '1' })}`);
+        if (active) setCount(summary.pendentes);
+      } catch { if (active) setCount(null); }
+    }
+    load();
+    window.addEventListener('rh-retificacoes-updated', load);
+    return () => { active = false; window.removeEventListener('rh-retificacoes-updated', load); };
+  }, [user]);
+  return count ? <span className="rh-sidebar-badge" aria-label={`${count} retificações pendentes`}>{count}</span> : null;
 }
 
 function App() {
@@ -133,7 +156,8 @@ function App() {
           )}
           {canSeeEscalas && (
             <NavLink to="/alteracoes">
-              <History size={18} /> Alterações
+              <History size={18} /> {['RH', 'ADMIN'].includes(user.perfil) ? 'Retificações' : 'Alterações'}
+              {['RH', 'ADMIN'].includes(user.perfil) && <RhPendingBadge user={user} />}
             </NavLink>
           )}
           {user.perfil === 'ADMIN' && (
@@ -204,7 +228,8 @@ function App() {
           {canSeeEscalas && (
             <Route path="/escalas/:lojaId/:mesRef/imprimir" element={<ImprimirEscala user={user} />} />
           )}
-          {canSeeEscalas && <Route path="/alteracoes" element={<Alteracoes user={user} />} />}
+          {canSeeEscalas && <Route path="/alteracoes" element={['RH', 'ADMIN'].includes(user.perfil)
+            ? <RetificacoesRh user={user} /> : <Alteracoes user={user} />} />}
           {user.perfil === 'ADMIN' && <Route path="/historico" element={<Historico user={user} />} />}
           {canSeeFuncionarios && <Route path="/funcionarios" element={<Funcionarios user={user} />} />}
           {canSeeSecoes && <Route path="/secoes" element={<Secoes user={user} />} />}

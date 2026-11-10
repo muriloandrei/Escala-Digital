@@ -1,6 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildProgress, groupProgressSections, readyLinkedSections, selectProgressSections } = require('../src/services/officializationService');
+const { buildProgress: buildProgressForDate, groupProgressSections, readyLinkedSections, selectProgressSections } = require('../src/services/officializationService');
+
+function buildProgress(input) {
+  return buildProgressForDate({ todayIso: '2026-11-01', ...input });
+}
 
 const period = { inicio: '2026-11-02', fim: '2026-11-08' };
 const section = { ESCSECAO_ID: 12, COD_SECAO: '010.02.002', DESCR: 'Frente de Caixa' };
@@ -41,7 +45,7 @@ test('section progress requires every employee day and individual critiques to b
   assert.equal(approved.oficializada, true);
 });
 
-test('01/11 so libera oficializacao quando integra a revisao, nao apenas os fixos', () => {
+test('01/11 nao bloqueia oficializacao de novembro mesmo sem dia gerado', () => {
   const input = { secoes: [section], pessoas: [person],
     periodo: { inicio: '2026-11-01', fim: '2026-11-08' }, lojaId: 10, mesRef: '2026-11-01' };
   const domingo = { ...week()[0], DT: '2026-11-01', PROGRAMACAO: 'FXF',
@@ -49,13 +53,13 @@ test('01/11 so libera oficializacao quando integra a revisao, nao apenas os fixo
   const fixos = [{ ESCFUNC_ID: 42, DT: '2026-11-01', PROGRAMACAO: 'FXF' }];
   const semDia = buildProgress({ ...input, escala: { dias: week(), fixos } }).secoes[0];
   assert.equal(semDia.preenchidos, 7);
-  assert.equal(semDia.podeOficializar, false);
+  assert.equal(semDia.podeOficializar, true);
   const comDia = buildProgress({ ...input, escala: { dias: [domingo, ...week()], fixos } }).secoes[0];
-  assert.equal(comDia.preenchidos, 8);
+  assert.equal(comDia.preenchidos, 7);
   assert.equal(comDia.podeOficializar, true);
 });
 
-test('ferias e afastamento gravados em 01/11 contam para a oficializacao', () => {
+test('ferias e afastamento gravados em 01/11 nao mudam o progresso', () => {
   const input = { secoes: [section], pessoas: [person],
     periodo: { inicio: '2026-11-01', fim: '2026-11-08' }, lojaId: 10, mesRef: '2026-11-01' };
   for (const programacao of ['FER', 'AFA']) {
@@ -63,9 +67,32 @@ test('ferias e afastamento gravados em 01/11 contam para a oficializacao', () =>
       HR_ENT1: programacao, HR_SAI1: programacao, HR_ENT2: programacao, HR_SAI2: programacao };
     const sectionProgress = buildProgress({ ...input,
       escala: { dias: [domingo, ...week()] } }).secoes[0];
-    assert.equal(sectionProgress.preenchidos, 8);
+    assert.equal(sectionProgress.preenchidos, 7);
     assert.equal(sectionProgress.podeOficializar, true);
   }
+});
+
+test('lacuna retroativa sem critica nao bloqueia, mas lacuna futura continua obrigatoria', () => {
+  const dias = week().filter((day) => day.DT !== '2026-11-03');
+  const input = { escala: { dias }, secoes: [section], pessoas: [person],
+    periodo: period, lojaId: 10, mesRef: '2026-11-01' };
+  const retroativo = buildProgress({ ...input, todayIso: '2026-11-09' }).secoes[0];
+  assert.equal(retroativo.previstos, 6);
+  assert.equal(retroativo.preenchidos, 6);
+  assert.equal(retroativo.podeOficializar, true);
+  const futuro = buildProgress({ ...input, todayIso: '2026-11-03' }).secoes[0];
+  assert.equal(futuro.previstos, 7);
+  assert.equal(futuro.completa, false);
+  assert.equal(futuro.podeOficializar, false);
+});
+
+test('desligado confirmado sai do escopo sem esconder demissao futura', () => {
+  const input = { escala: { dias: week() }, secoes: [section], periodo: period,
+    lojaId: 10, mesRef: '2026-11-01' };
+  assert.deepEqual(buildProgress({ ...input, pessoas: [{ ...person, DT_DEMISS: '2026-11-03' }],
+    todayIso: '2026-11-09' }).secoes, []);
+  assert.equal(buildProgress({ ...input, pessoas: [{ ...person, DT_DEMISS: '2026-11-03' }],
+    todayIso: '2026-11-02' }).secoes[0].funcionarios, 1);
 });
 
 test('section progress does not use historical days from another section', () => {

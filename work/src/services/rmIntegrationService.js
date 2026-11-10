@@ -2,6 +2,14 @@ const { getEnv } = require('../config/env');
 const { withConnection, oracledb } = require('../db/oracle');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 
+const FOLGA_RM = Object.freeze({
+  horaInicio: 0,
+  horaFim: 1440,
+  horaInicioStr: '00:00',
+  horaFimStr: '24:00',
+  consextrainter: 1
+});
+
 function pick(row, ...keys) {
   for (const key of keys) {
     if (row?.[key] !== undefined) return row[key];
@@ -150,6 +158,30 @@ function getFolgaHoraInicioValue(folga) {
     'ADTTABFOLGA.HORAINICIO',
     'ADTTABFOLGA_HORAINICIO'
   );
+}
+
+function isFolgaRmCompleta(folga) {
+  return Number(pick(folga, 'HORAINICIO', 'ADTTABFOLGA.HORAINICIO')) === FOLGA_RM.horaInicio
+    && Number(pick(folga, 'HORAFIM', 'ADTTABFOLGA.HORAFIM')) === FOLGA_RM.horaFim
+    && String(pick(folga, 'HORAINICIOSTR', 'ADTTABFOLGA.HORAINICIOSTR') || '') === FOLGA_RM.horaInicioStr
+    && String(pick(folga, 'HORAFIMSTR', 'ADTTABFOLGA.HORAFIMSTR') || '') === FOLGA_RM.horaFimStr
+    && Number(pick(folga, 'CONSEXTRAINTER', 'ADTTABFOLGA.CONSEXTRAINTER')) === FOLGA_RM.consextrainter;
+}
+
+function assertFolgasRmVerificaveis(folgas, eventos) {
+  const datasDesejadas = new Set(eventos.map((evento) => evento.data));
+  const chaves = new Set();
+  for (const folga of folgas) {
+    const chave = getFolgaKey(folga);
+    if (!chave) throw new Error('RM retornou folga sem data ou hora inicial. Nenhuma folga foi reconciliada.');
+    if (!datasDesejadas.has(chave.split('|')[0])) continue;
+    if (chaves.has(chave)) throw new Error('RM retornou folgas duplicadas para a mesma data e hora. Nenhuma folga foi reconciliada.');
+    chaves.add(chave);
+    if (Number(getFolgaHoraInicioValue(folga)) === FOLGA_RM.horaInicio
+      && ['HORAFIM', 'HORAINICIOSTR', 'HORAFIMSTR', 'CONSEXTRAINTER'].some((campo) => pick(folga, campo, `ADTTABFOLGA.${campo}`) == null)) {
+      throw new Error('RM nao retornou os campos necessarios para conferir a folga de dia inteiro. Nenhuma folga foi reconciliada.');
+    }
+  }
 }
 
 function getFolgaCodColigadaValue(folga) {
@@ -341,7 +373,9 @@ async function consultarFolgasFuncionarioMes({ cpf, inicio, fim, codColigadaFall
 function getFolgaKey(folga) {
   const data = formatDate(getFolgaDateValue(folga));
   if (!data) return null;
-  const horaInicio = Number(getFolgaHoraInicioValue(folga) ?? getEnv().rm.folgaHoraInicio);
+  const horaInicioValue = getFolgaHoraInicioValue(folga);
+  if (horaInicioValue === null || horaInicioValue === undefined || horaInicioValue === '') return null;
+  const horaInicio = Number(horaInicioValue);
   if (!Number.isFinite(horaInicio)) return null;
   return `${data}|${horaInicio}`;
 }
@@ -352,7 +386,9 @@ function buildDeleteFolgaPath(folga, defaults) {
   const codTabFolga = getFolgaCodTabFolgaValue(folga) || defaults.codTabFolga;
   const dataValue = getFolgaDateValue(folga);
   const data = dataValue ? formatRmDate(dataValue) : null;
-  const horaInicio = Number(getFolgaHoraInicioValue(folga) ?? rmConfig.folgaHoraInicio);
+  const horaInicioValue = getFolgaHoraInicioValue(folga);
+  if (horaInicioValue === null || horaInicioValue === undefined || horaInicioValue === '') return null;
+  const horaInicio = Number(horaInicioValue);
   if (!codColigada || !codTabFolga || !data || !Number.isFinite(horaInicio)) return null;
   const id = `${codColigada}$_$${codTabFolga}$_$${data}$_$${horaInicio}`;
   return `${rmConfig.folgasPath}/${id}`;
@@ -364,16 +400,39 @@ function buildFolgaPayload({ evento, codColigada, codTabFolga }) {
     CODCOLIGADA: Number(codColigada),
     CODTABFOLGA: String(codTabFolga),
     DATA: formatRmDate(evento.data, { offset: rmConfig.timezoneOffset }),
-    HORAINICIO: rmConfig.folgaHoraInicio,
-    HORAFIM: rmConfig.folgaHoraFim,
-    HORAINICIOSTR: rmConfig.folgaHoraInicioStr,
-    HORAFIMSTR: rmConfig.folgaHoraFimStr,
-    CONSEXTRAINTER: 0,
+    HORAINICIO: FOLGA_RM.horaInicio,
+    HORAFIM: FOLGA_RM.horaFim,
+    HORAINICIOSTR: FOLGA_RM.horaInicioStr,
+    HORAFIMSTR: FOLGA_RM.horaFimStr,
+    CONSEXTRAINTER: FOLGA_RM.consextrainter,
     RECCREATEDBY: null,
     RECCREATEDON: null,
     RECMODIFIEDBY: null,
     RECMODIFIEDON: null
   };
+}
+
+function planejarFolgasRm({ existentesRows, funcionario, codColigada, codTabFolga }) {
+  assertFolgasRmVerificaveis(existentesRows, funcionario.eventos);
+  const diasCobertos = new Set(funcionario.diasCobertos);
+  const desejadas = new Set(funcionario.eventos.map((evento) => `${evento.data}|${FOLGA_RM.horaInicio}`));
+  const deletePaths = [];
+
+  for (const folga of existentesRows) {
+    const folgaKey = getFolgaKey(folga);
+    if (!diasCobertos.has(folgaKey.split('|')[0])) continue;
+    if (desejadas.has(folgaKey) && isFolgaRmCompleta(folga)) continue;
+    const deletePath = buildDeleteFolgaPath(folga, { codColigada, codTabFolga });
+    if (!deletePath) throw new Error('RM retornou folga sem chave completa para exclusao. Nenhuma folga foi reconciliada.');
+    deletePaths.push(deletePath);
+  }
+
+  const payloadInclusao = funcionario.eventos
+    .filter((evento) => !existentesRows.some((folga) => getFolgaKey(folga) === `${evento.data}|${FOLGA_RM.horaInicio}`
+      && isFolgaRmCompleta(folga)))
+    .map((evento) => buildFolgaPayload({ evento, codColigada, codTabFolga }));
+
+  return { deletePaths, payloadInclusao };
 }
 
 async function postFolgas(payload) {
@@ -461,18 +520,21 @@ function agruparPorFuncionario(rows) {
         codcoligada: pick(row, 'CODCOLIGADA', 'codcoligada'),
         revisao: pick(row, 'REVISAO', 'revisao'),
         diasCobertos: [],
-        eventos: []
+        eventos: [],
+        fdoDatas: []
       });
     }
     const data = pick(row, 'DT', 'dt');
     if (data) {
       const dataIso = formatDate(data);
       const programacao = String(pick(row, 'PROGRAMACAO', 'programacao') || '').toUpperCase();
-      if (!['FER', 'FERIAS', 'AFA', 'AFASTAMENTO'].includes(programacao)) {
+      if (!['FER', 'FERIAS', 'AFA', 'AFASTAMENTO', 'FDO'].includes(programacao)) {
         map.get(key).diasCobertos.push(dataIso);
       }
       if (['F', 'FOLGA', 'FXF', 'FOLGA_FIXA'].includes(programacao)) {
         map.get(key).eventos.push({ data: dataIso, programacao });
+      } else if (programacao === 'FDO') {
+        map.get(key).fdoDatas.push(dataIso);
       }
     }
   });
@@ -547,6 +609,16 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
     const erros = [];
     for (const funcionario of agruparPorFuncionario(rows)) {
       try {
+        if (!funcionario.eventos.length && !funcionario.diasCobertos.length) {
+          await registrarRmLog(connection, {
+            loja: lojaId, mesRef, revisao: funcionario.revisao ?? revisao,
+            escfuncId: funcionario.escfuncId, chapa: funcionario.chapa,
+            acao: 'RM_ENVIAR_DESCANSOS', status: 'IGNORADO',
+            mensagem: `${funcionario.fdoDatas.length} FDO ignorada(s); nenhum dia reconciliavel no RM.`,
+            payloadResumo: `chapa=${funcionario.chapa}; fdo_ignorada=${funcionario.fdoDatas.length}`
+          });
+          continue;
+        }
         const cpf = sanitizeCpf(funcionario.cpf);
         if (!cpf) {
           throw new Error(`CPF nao cadastrado para o funcionario ${funcionario.chapa}. Atualize SGN_ESC_FUNCIONARIO.CPF antes de oficializar no RM.`);
@@ -561,35 +633,14 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
 
         const { inicio, fim } = getOperationalPeriodIso(mesRef);
         const existentesRows = await getFolgasExistentes({ codTabFolga, inicio, fim });
-        const diasCobertos = new Set(funcionario.diasCobertos);
-        const desejadas = new Set(funcionario.eventos.map((evento) => `${evento.data}|${rmConfig.folgaHoraInicio}`));
+        const { deletePaths, payloadInclusao } = planejarFolgasRm({
+          existentesRows, funcionario, codColigada: codColigadaRm, codTabFolga
+        });
         let removidas = 0;
-        let ignoradas = 0;
 
-        for (const folga of existentesRows) {
-          const folgaKey = getFolgaKey(folga);
-          if (!folgaKey) {
-            ignoradas += 1;
-            continue;
-          }
-          if (!diasCobertos.has(folgaKey.split('|')[0])) continue;
-          if (!desejadas.has(folgaKey)) {
-            const deletePath = buildDeleteFolgaPath(folga, { codColigada: codColigadaRm, codTabFolga });
-            if (!deletePath) {
-              ignoradas += 1;
-              continue;
-            }
-            await requestRm(deletePath, { method: 'DELETE' });
-            removidas += 1;
-          }
-        }
-
-        const payloadInclusao = [];
-        for (const evento of funcionario.eventos) {
-          const alreadyExists = existentesRows.some((folga) => getFolgaKey(folga) === `${evento.data}|${rmConfig.folgaHoraInicio}`);
-          if (!alreadyExists) {
-            payloadInclusao.push(buildFolgaPayload({ evento, codColigada: codColigadaRm, codTabFolga }));
-          }
+        for (const deletePath of deletePaths) {
+          await requestRm(deletePath, { method: 'DELETE' });
+          removidas += 1;
         }
         await postFolgas(payloadInclusao);
 
@@ -597,8 +648,8 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
         await registrarRmLog(connection, {
           loja: lojaId, mesRef, revisao: funcionario.revisao ?? revisao, escfuncId: funcionario.escfuncId, chapa: funcionario.chapa, cpf: mask(cpf),
           acao: 'RM_ENVIAR_DESCANSOS', status: 'SUCESSO',
-          mensagem: `${funcionario.eventos.length} evento(s) sincronizado(s).`,
-          payloadResumo: `chapa=${funcionario.chapa}; codtabfolga=${codTabFolga}; incluir=${payloadInclusao.length}; remover=${removidas}; ignorar=${ignoradas}; existentes=${existentesRows.length}`
+          mensagem: `${funcionario.eventos.length} evento(s) sincronizado(s); ${funcionario.fdoDatas.length} FDO ignorada(s) no RM.`,
+          payloadResumo: `chapa=${funcionario.chapa}; codtabfolga=${codTabFolga}; incluir=${payloadInclusao.length}; remover=${removidas}; existentes=${existentesRows.length}; fdo_ignorada=${funcionario.fdoDatas.length}`
         });
       } catch (error) {
         falhas += 1;
@@ -840,6 +891,10 @@ module.exports = {
     buildDeleteFolgaPath,
     getFuncionarioRmData,
     getFolgaKey,
+    buildFolgaPayload,
+    planejarFolgasRm,
+    isFolgaRmCompleta,
+    assertFolgasRmVerificaveis,
     extrairFolgasConsultadasRm,
     validarFolgasConsultadasRm,
     pick

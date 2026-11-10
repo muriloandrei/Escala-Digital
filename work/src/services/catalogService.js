@@ -18,7 +18,8 @@ function normalizeLoja(row) {
     QTDE_BRIGADISTA_EXIGIDO_DIA: pick(row, 'QTDE_BRIGADISTA_EXIGIDO_DIA', 'qtde_brigadista_exigido_dia'),
     CODCOLIGADA: pick(row, 'CODCOLIGADA', 'codcoligada'),
     OFICIALIZACAO_HABILITADA: Number(pick(row, 'OFICIALIZACAO_HABILITADA', 'oficializacao_habilitada') || 0),
-    TODAS_SECOES_HABILITADAS: Number(pick(row, 'TODAS_SECOES_HABILITADAS', 'todas_secoes_habilitadas') || 0)
+    TODAS_SECOES_HABILITADAS: Number(pick(row, 'TODAS_SECOES_HABILITADAS', 'todas_secoes_habilitadas') || 0),
+    DOMINGO_6H_HABILITADO: Number(pick(row, 'DOMINGO_6H_HABILITADO', 'domingo_6h_habilitado') || 0)
   };
 }
 
@@ -48,6 +49,9 @@ function normalizeFuncionario(row) {
     DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl'),
     DT_DEMISS: pick(row, 'DT_DEMISS', 'dt_demiss'),
     STATUS: pick(row, 'STATUS', 'status') || 'A',
+    REGIME_ESCALA: pick(row, 'REGIME_ESCALA', 'regime_escala') || '5X2',
+    DT_ANCORA_12X36: pick(row, 'DT_ANCORA_12X36', 'dt_ancora_12x36') || null,
+    REGIME_MES_INICIO: pick(row, 'REGIME_MES_INICIO', 'regime_mes_inicio') || null,
     ATIVO: pick(row, 'DT_DEMISS', 'dt_demiss') || !permiteEscala(pick(row, 'STATUS', 'status')) ? 'N' : 'S'
   };
 }
@@ -293,8 +297,9 @@ async function listLojas() {
     const codcoligadaSelect = columns.has('CODCOLIGADA') ? 'codcoligada' : 'cast(null as number) as codcoligada';
     const oficializacaoSelect = columns.has('OFICIALIZACAO_HABILITADA') ? 'oficializacao_habilitada' : 'cast(0 as number) as oficializacao_habilitada';
     const todasSecoesSelect = columns.has('TODAS_SECOES_HABILITADAS') ? 'todas_secoes_habilitadas' : 'cast(0 as number) as todas_secoes_habilitadas';
+    const domingo6hSelect = columns.has('DOMINGO_6H_HABILITADO') ? 'domingo_6h_habilitado' : 'cast(0 as number) as domingo_6h_habilitado';
     const result = await connection.execute(
-      `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, ${codcoligadaSelect}, ${oficializacaoSelect}, ${todasSecoesSelect}
+      `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, ${codcoligadaSelect}, ${oficializacaoSelect}, ${todasSecoesSelect}, ${domingo6hSelect}
        from sgn_esc_loja
        order by loja`,
       {},
@@ -365,7 +370,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
           : 'cast(null as date) as dt_nasc';
     const ativoWhere = options.includeInactive ? '' : [
       funcionarioColumns.has('DT_DEMISS') ? 'and f.dt_demiss is null' : '',
-      funcionarioColumns.has('STATUS') ? "and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P')" : ''
+      funcionarioColumns.has('STATUS') ? "and upper(trim(nvl(f.status, 'A'))) in ('A', 'F', 'P', 'Z')" : ''
     ].filter(Boolean).join(' ');
     const statusSelect = funcionarioColumns.has('STATUS') ? 'f.status' : "'A' as status";
     const subsecaoJoinSql = hasFuncionarioSubsecao && hasSubsecaoTable
@@ -447,12 +452,28 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows.map((row) => ({
-      ...normalizeFuncionario(row),
-      ESCALA_PROGRAMACAO: pick(row, 'ESCALA_PROGRAMACAO', 'escala_programacao'),
-      ESCALA_REVISAO: pick(row, 'ESCALA_REVISAO', 'escala_revisao'),
-      ESCALA_OFICIALIZADA: pick(row, 'ESCALA_OFICIALIZADA', 'escala_oficializada')
-    }));
+    const today = new Date();
+    const regimeMes = options.mesRef || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+    const regimes = lojaCodigo >= 700 && lojaCodigo <= 799
+      ? await require('./workRegimeService').listEffective(connection, { lojaId: lojaCodigo, mesRef: regimeMes })
+      : new Map();
+    return result.rows.map((row) => {
+      const funcionario = normalizeFuncionario(row);
+      const regime = regimes.get(Number(funcionario.ESCFUNC_ID));
+      return {
+        ...funcionario,
+        REGIME_ESCALA: regime?.REGIME || '5X2',
+        DT_ANCORA_12X36: regime?.DT_ANCORA || null,
+        REGIME_MES_INICIO: regime?.MES_INICIO || null,
+        ...(regime?.REGIME === '12X36' ? {
+          HR_ENT1: regime.HR_ENT1, HR_SAI1: regime.HR_SAI1,
+          HR_ENT2: regime.HR_ENT2, HR_SAI2: regime.HR_SAI2
+        } : {}),
+        ESCALA_PROGRAMACAO: pick(row, 'ESCALA_PROGRAMACAO', 'escala_programacao'),
+        ESCALA_REVISAO: pick(row, 'ESCALA_REVISAO', 'escala_revisao'),
+        ESCALA_OFICIALIZADA: pick(row, 'ESCALA_OFICIALIZADA', 'escala_oficializada')
+      };
+    });
   });
 }
 

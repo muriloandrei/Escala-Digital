@@ -1,7 +1,5 @@
 import type { StandardHours } from './shiftValidation';
 
-const WORK_MINUTES = 528;
-const BREAK_MINUTES = 70;
 type Field = keyof StandardHours;
 
 function minutes(value: string) {
@@ -15,31 +13,33 @@ function clock(value: number) {
   return `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`;
 }
 
-export function autofillStandardHours(current: StandardHours, field: Field, value: string): StandardHours | null {
+export function autofillStandardHours(current: StandardHours, field: Field, value: string, workMinutes = 528, intervalMinutes = 70): StandardHours | null {
   const edited = minutes(value);
   if (edited === null) return null;
   const entry = minutes(current.HR_ENT1);
   const breakStart = minutes(current.HR_SAI1);
+  const minFirst = workMinutes <= 360 ? 60 : 168;
+  const maxFirst = Math.min(360, workMinutes - 1);
   const morning = entry !== null && breakStart !== null
-    ? Math.min(360, Math.max(168, (breakStart - entry + 1440) % 1440)) : 240;
+    ? Math.min(maxFirst, Math.max(minFirst, (breakStart - entry + 1440) % 1440)) : workMinutes <= 360 ? 180 : 240;
   let first: number;
   let firstPeriod: number;
   if (field === 'HR_ENT1') {
     first = edited;
     const preserved = breakStart !== null ? (breakStart - first + 1440) % 1440 : 0;
-    firstPeriod = preserved >= 168 && preserved <= 360 ? preserved : morning;
+    firstPeriod = preserved >= minFirst && preserved <= maxFirst ? preserved : morning;
   } else if (field === 'HR_SAI1') {
     first = entry ?? edited - morning;
     firstPeriod = (edited - first + 1440) % 1440;
   } else if (field === 'HR_ENT2') {
-    first = entry ?? edited - BREAK_MINUTES - morning;
-    firstPeriod = (edited - BREAK_MINUTES - first + 1440) % 1440;
+    first = entry ?? edited - intervalMinutes - morning;
+    firstPeriod = (edited - intervalMinutes - first + 1440) % 1440;
   } else {
-    first = edited - BREAK_MINUTES - WORK_MINUTES;
+    first = edited - intervalMinutes - workMinutes;
     firstPeriod = morning;
   }
-  if (firstPeriod < 168 || firstPeriod > 360) return null;
-  const values = [first, first + firstPeriod, first + firstPeriod + BREAK_MINUTES, first + WORK_MINUTES + BREAK_MINUTES]
+  if (firstPeriod < minFirst || firstPeriod > maxFirst) return null;
+  const values = [first, first + firstPeriod, first + firstPeriod + intervalMinutes, first + workMinutes + intervalMinutes]
     .map(clock);
   if (values.some((item) => item === null)) return null;
   return { HR_ENT1: values[0]!, HR_SAI1: values[1]!, HR_ENT2: values[2]!, HR_SAI2: values[3]! };

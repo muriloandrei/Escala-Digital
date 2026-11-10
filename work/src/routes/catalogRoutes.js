@@ -5,7 +5,9 @@ const catalogService = require('../services/catalogService');
 const accessService = require('../services/accessService');
 const pendenciaFuncionarioService = require('../services/pendenciaFuncionarioService');
 const subsectionTransferService = require('../services/subsectionTransferService');
+const escalaService = require('../services/escalaService');
 const auditService = require('../services/auditService');
+const workRegimeService = require('../services/workRegimeService');
 const { validateStandardShift } = require('../domain/shiftValidation');
 
 const router = express.Router();
@@ -19,6 +21,16 @@ const funcionarioEscalaSchema = z.object({
   HR_ENT2: z.string().max(5).nullable().optional(),
   HR_SAI2: z.string().max(5).nullable().optional(),
   DT_DEMISS: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
+}).strict();
+
+const regimeFuncionarioSchema = z.object({
+  mesInicio: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/),
+  regime: z.enum(['5X2', '12X36']),
+  dtAncora: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  hours: z.object({
+    HR_ENT1: z.string(), HR_SAI1: z.string(),
+    HR_ENT2: z.string(), HR_SAI2: z.string()
+  }).strict().nullable().optional()
 }).strict();
 
 const dataIsoSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
@@ -98,8 +110,9 @@ const horarioPadraoSchema = z.object({
 
 router.use(requireAuth);
 
-function assertValidSecaoTurno(data) {
-  const errors = validateStandardShift(data);
+function assertValidSecaoTurno(data, lojaId) {
+  const errors = validateStandardShift(data, { allowProfiles: true,
+    allowPostProfiles: workRegimeService.isPostStore(lojaId) });
   if (!errors.length) return;
   const error = new Error('Campos de turno da secao invalidos.');
   error.statusCode = 422;
@@ -190,6 +203,11 @@ router.get('/horarios-padrao', async (req, res, next) => {
 router.post('/horarios-padrao', requirePermission('horarios-padrao', 'criar'), async (req, res, next) => {
   try {
     const data = horarioPadraoSchema.parse(req.body);
+    const errors = validateStandardShift(data, { allowProfiles: true, allowPostProfiles: true, exactInterval: true });
+    if (errors.length || !['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
+      .includes(`${data.JORNADA_MINUTOS}:${data.INTERVALO_MINUTOS}`)) {
+      return res.status(422).json({ error: 'Horario padrao invalido.', details: errors });
+    }
     const horario = await catalogService.createHorarioPadrao(data);
     return res.status(201).json({ horario });
   } catch (error) {
@@ -203,6 +221,17 @@ router.post('/horarios-padrao', requirePermission('horarios-padrao', 'criar'), a
 router.patch('/horarios-padrao/:horarioId', requirePermission('horarios-padrao', 'editar'), async (req, res, next) => {
   try {
     const data = horarioPadraoSchema.partial().parse(req.body);
+    if (['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2', 'JORNADA_MINUTOS', 'INTERVALO_MINUTOS'].some((key) => key in data)) {
+      const current = (await catalogService.listHorariosPadrao({ includeInactive: true }))
+        .find((item) => Number(item.ESCHORPAD_ID) === Number(req.params.horarioId));
+      if (!current) return res.status(404).json({ error: 'Horario padrao nao encontrado.' });
+      const merged = { ...current, ...data };
+      const errors = validateStandardShift(merged, { allowProfiles: true, allowPostProfiles: true, exactInterval: true });
+      if (errors.length || !['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
+        .includes(`${merged.JORNADA_MINUTOS}:${merged.INTERVALO_MINUTOS}`)) {
+        return res.status(422).json({ error: 'Horario padrao invalido.', details: errors });
+      }
+    }
     const horario = await catalogService.updateHorarioPadrao(Number(req.params.horarioId), data);
     if (!horario) return res.status(404).json({ error: 'Horario padrao nao encontrado.' });
     return res.json({ horario });
@@ -527,19 +556,14 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId/subsecao', resolveLojaParam
       return res.status(409).json({ error: 'Existe transferencia pendente ou em falha. Resolva-a antes de mudar a subsecao.' });
     }
 
-    const funcionario = await catalogService.updateFuncionarioEscala({
-      lojaId,
-      escfuncId,
-      data: { ESCSUBSECAO_ID: data.ESCSUBSECAO_ID },
-      actor: req.user,
-      mesRef: data.MES_REF,
-      vigencia: data.VIGENCIA
+    const transferencia = await escalaService.transferirSubsecaoFuncionario({
+      lojaId, escfuncId, escsecaoId, destinoId: data.ESCSUBSECAO_ID,
+      mesRef: data.MES_REF, actor: req.user
     });
-    if (!funcionario) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja.' });
-    return res.json({ funcionario });
+    return res.json({ transferencia });
   } catch (error) {
     if (error.name === 'ZodError') return res.status(400).json({ error: 'Campos de funcionario invalidos.', details: error.errors });
-    if (error.statusCode === 422) return res.status(422).json({ error: error.message });
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
     return next(error);
   }
 });
@@ -592,7 +616,7 @@ router.get('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, a
 router.post('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, requirePermission('turnos-secao', 'criar'), async (req, res, next) => {
   try {
     const data = turnoSecaoSchema.parse(req.body);
-    assertValidSecaoTurno(data);
+    assertValidSecaoTurno(data, req.params.lojaId);
     const turno = await catalogService.saveSecaoTurno({
       lojaId: Number(req.params.lojaId),
       escsecaoId: data.ESCSECAO_ID,
@@ -618,7 +642,7 @@ router.post('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, 
 router.put('/lojas/:lojaId/turnos-secao/:escsecaoTurnoId', resolveLojaParam, requireLojaAccess, requirePermission('turnos-secao', 'editar'), async (req, res, next) => {
   try {
     const data = turnoSecaoSchema.parse(req.body);
-    assertValidSecaoTurno(data);
+    assertValidSecaoTurno(data, req.params.lojaId);
     const turno = await catalogService.saveSecaoTurno({
       lojaId: Number(req.params.lojaId),
       escsecaoTurnoId: Number(req.params.escsecaoTurnoId),
@@ -645,7 +669,7 @@ router.put('/lojas/:lojaId/turnos-secao/:escsecaoTurnoId', resolveLojaParam, req
 router.patch('/lojas/:lojaId/secoes/:escsecaoId/turno', resolveLojaParam, requireLojaAccess, requirePermission('turnos-secao', 'editar'), async (req, res, next) => {
   try {
     const data = secaoTurnoSchema.parse(req.body);
-    assertValidSecaoTurno(data);
+    assertValidSecaoTurno(data, req.params.lojaId);
     const turno = await catalogService.saveSecaoTurno({
       lojaId: Number(req.params.lojaId),
       escsecaoId: Number(req.params.escsecaoId),
@@ -697,6 +721,23 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, require
     return next(error);
   }
 });
+
+router.post('/lojas/:lojaId/funcionarios/:escfuncId/regime', resolveLojaParam, requireLojaAccess,
+  requirePermission('funcionarios', 'editar'), async (req, res, next) => {
+    try {
+      const data = regimeFuncionarioSchema.parse(req.body);
+      const resultado = await workRegimeService.configure({
+        lojaId: Number(req.params.lojaId), escfuncId: Number(req.params.escfuncId),
+        ...data, actor: req.user
+      });
+      if (!resultado) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja.' });
+      return res.json({ resultado });
+    } catch (error) {
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Configuracao de regime invalida.', details: error.errors });
+      if (error.statusCode === 422) return res.status(422).json({ error: error.message, details: error.details });
+      return next(error);
+    }
+  });
 
 router.get('/lojas/:lojaId/ausencias', resolveLojaParam, requireLojaAccess, async (req, res, next) => {
   try {

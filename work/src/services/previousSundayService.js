@@ -1,7 +1,4 @@
 const { withConnection, oracledb } = require('../db/oracle');
-const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
-
-const NOVEMBER_REF = '2026-11-01';
 const DECEMBER_REF = '2026-12';
 
 function uniqueByEmployee(rows) {
@@ -39,7 +36,7 @@ function buildPriorSunday({ date, employeeIds, schedules, fixedDays, absences })
 }
 
 async function loadPriorSunday(connection, { lojaId, employeeIds }) {
-  const date = getOperationalPeriodIso(NOVEMBER_REF).fim;
+  const date = '2026-11-29';
   if (!employeeIds.length) return { data: date, dias: [] };
   const options = { outFormat: oracledb.OUT_FORMAT_OBJECT };
   const binds = { lojaId };
@@ -48,7 +45,7 @@ async function loadPriorSunday(connection, { lojaId, employeeIds }) {
        from sgn_esc_prog p
        join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
       where p.loja = :lojaId and p.mes_ref = date '2026-11-01'
-        and d.dt = date '2026-12-06' and nvl(p.ativa, 1) = 1
+        and d.dt = date '2026-11-29' and nvl(p.ativa, 1) = 1
         and p.revisao = (select max(px.revisao) from sgn_esc_prog px
           where px.loja = p.loja and px.mes_ref = p.mes_ref
             and px.escfunc_id = p.escfunc_id and nvl(px.ativa, 1) = 1)`, binds, options
@@ -57,11 +54,11 @@ async function loadPriorSunday(connection, { lojaId, employeeIds }) {
     `select escfunc_id, programacao, hr_ent1, hr_sai1, hr_ent2, hr_sai2
        from sgn_esc_fixo_escala
       where loja = :lojaId and mes_ref = date '2026-11-01'
-        and dt = date '2026-12-06' and nvl(status, 'A') = 'A'`, binds, options
+        and dt = date '2026-11-29' and nvl(status, 'A') = 'A'`, binds, options
   );
   const absences = await connection.execute(
     `select escfunc_id, motivo, id_erp from sgn_esc_ausencia
-      where loja = :lojaId and date '2026-12-06'
+      where loja = :lojaId and date '2026-11-29'
         between trunc(dt_inic) and trunc(nvl(dt_fim, date '2099-12-31'))`, binds, options
   );
   return buildPriorSunday({ date, employeeIds, schedules: schedules.rows,
@@ -73,4 +70,8 @@ async function getPriorSunday({ lojaId, mesRef, employeeIds }) {
   return withConnection((connection) => loadPriorSunday(connection, { lojaId, employeeIds }));
 }
 
-module.exports = { getPriorSunday, loadPriorSunday, buildPriorSunday };
+function priorSundayByEmployee(priorSunday) {
+  return new Map((priorSunday?.dias || []).map((day) => [Number(day.ESCFUNC_ID), day]));
+}
+
+module.exports = { getPriorSunday, loadPriorSunday, buildPriorSunday, priorSundayByEmployee };

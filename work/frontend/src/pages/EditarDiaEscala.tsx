@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { createOperationId } from '../operationId';
 import { autofillStandardHours } from '../shiftAutofill';
-import { validateStandardHours } from '../shiftValidation';
+import { validate12x36Hours, validateStandardHours } from '../shiftValidation';
+import { isDutyDay12x36 } from '../workRegime';
+import { ShiftProfileSelect } from '../ShiftProfileSelect';
 import { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
 
 type Shift = { hrEnt1: string; hrSai1: string; hrEnt2: string; hrSai2: string };
@@ -49,6 +51,8 @@ export function EditarDiaEscala({
   day,
   days,
   holidayName,
+  domingo6hHabilitado = false,
+  allowRetroactive = false,
   onClose,
   onSaved,
 }: {
@@ -58,24 +62,35 @@ export function EditarDiaEscala({
   day: DiaEscala;
   days: DiaEscala[];
   holidayName?: string;
+  domingo6hHabilitado?: boolean;
+  allowRetroactive?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
+  const plantao12x36 = employee.REGIME_ESCALA === '12X36';
+  const diaPlantao = plantao12x36 && isDutyDay12x36(employee.DT_ANCORA_12X36 || '', dateOnly(day.DT));
   const reference = days.find((item) => !isRest(item) && item.HR_ENT1) || day;
-  const [mode, setMode] = useState<'TRB' | 'F'>(isRest(day) ? 'F' : 'TRB');
+  const [mode, setMode] = useState<'TRB' | 'F' | 'FDO'>(String(day.PROGRAMACAO).toUpperCase() === 'FDO' ? 'FDO' : isRest(day) ? 'F' : 'TRB');
+  const domingo6h = !plantao12x36 && domingo6hHabilitado && new Date(`${dateOnly(day.DT)}T12:00:00`).getDay() === 0 && !apprentice;
+  const [profile, setProfile] = useState({ work: plantao12x36 ? 660 : domingo6h ? 360 : 528, interval: plantao12x36 ? 60 : 70 });
   const [shift, setShift] = useState<Shift>(() => {
     if (apprentice) {
       const hours = apprenticeHoursFromStart((isRest(day) ? reference.HR_ENT1 : day.HR_ENT1) || employee.HR_ENT1 || '08:00')
         || apprenticeHoursFromStart('08:00')!;
       return { hrEnt1: hours.HR_ENT1, hrSai1: hours.HR_SAI1, hrEnt2: '', hrSai2: '' };
     }
-    return {
-      hrEnt1: (isRest(day) ? reference.HR_ENT1 : day.HR_ENT1) || '08:00',
-      hrSai1: (isRest(day) ? reference.HR_SAI1 : day.HR_SAI1) || '12:00',
-      hrEnt2: (isRest(day) ? reference.HR_ENT2 : day.HR_ENT2) || '13:10',
-      hrSai2: (isRest(day) ? reference.HR_SAI2 : day.HR_SAI2) || '17:58',
+    const base = {
+      hrEnt1: (isRest(day) ? employee.HR_ENT1 || reference.HR_ENT1 : day.HR_ENT1) || (plantao12x36 ? '07:00' : '08:00'),
+      hrSai1: (isRest(day) ? employee.HR_SAI1 || reference.HR_SAI1 : day.HR_SAI1) || (plantao12x36 ? '12:30' : '12:00'),
+      hrEnt2: (isRest(day) ? employee.HR_ENT2 || reference.HR_ENT2 : day.HR_ENT2) || (plantao12x36 ? '13:30' : '13:10'),
+      hrSai2: (isRest(day) ? employee.HR_SAI2 || reference.HR_SAI2 : day.HR_SAI2) || (plantao12x36 ? '19:00' : '17:58'),
     };
+    if (!domingo6h) return base;
+    const next = autofillStandardHours({ HR_ENT1: base.hrEnt1, HR_SAI1: base.hrSai1,
+      HR_ENT2: base.hrEnt2, HR_SAI2: base.hrSai2 }, 'HR_ENT1', base.hrEnt1, 360);
+    return next ? { hrEnt1: next.HR_ENT1, hrSai1: next.HR_SAI1,
+      hrEnt2: next.HR_ENT2, hrSai2: next.HR_SAI2 } : base;
   });
   const [justification, setJustification] = useState(day.JUSTIFICATIVA_ALTERACAO || '');
   const [busy, setBusy] = useState(false);
@@ -88,14 +103,14 @@ export function EditarDiaEscala({
       day.FIXO_ESCALA ||
       ['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase()),
   );
-  const editable = date >= localToday() && !protectedDay && Number.isInteger(Number(day.REVISAO));
+  const editable = (allowRetroactive || date >= localToday()) && !protectedDay && Number.isInteger(Number(day.REVISAO));
 
   function setHour(key: keyof Shift, value: string) {
     const field = ({ hrEnt1: 'HR_ENT1', hrSai1: 'HR_SAI1', hrEnt2: 'HR_ENT2', hrSai2: 'HR_SAI2' } as const)[key];
     const next = apprentice ? autofillApprenticeHours(field as 'HR_ENT1' | 'HR_SAI1', value)
       : autofillStandardHours({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
-        HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, field, value);
-    if (!next) { setError(apprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível ajustar o horário mantendo 08:48 de trabalho e 01:10 de intervalo.'); return; }
+        HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, field, value, profile.work, profile.interval);
+    if (!next) { setError(apprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível manter a jornada e o intervalo selecionados.'); return; }
     setShift({ hrEnt1: next.HR_ENT1, hrSai1: next.HR_SAI1, hrEnt2: next.HR_ENT2, hrSai2: next.HR_SAI2 });
     setError('');
   }
@@ -105,18 +120,19 @@ export function EditarDiaEscala({
     if (!editable || busy || uncertain) return;
     if (mode === 'TRB') {
       const hours = { HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1, HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 };
-      const invalid = apprentice ? validateApprenticeHours(hours) : validateStandardHours(hours);
+      const invalid = apprentice ? validateApprenticeHours(hours) : plantao12x36
+        ? validate12x36Hours(hours) : validateStandardHours(hours, profile.work, profile.interval);
       if (invalid) { setError(invalid); return; }
     }
     const form = new FormData(event.currentTarget);
     const submitted = (key: keyof Shift) => (apprentice ? shift[key] : String(form.get(key) || ''));
     const changed: PayloadDay = {
       data: date,
-      hrEnt1: mode === 'F' ? null : submitted('hrEnt1') || null,
-      hrSai1: mode === 'F' ? null : submitted('hrSai1') || null,
-      hrEnt2: mode === 'F' || apprentice ? null : submitted('hrEnt2') || null,
-      hrSai2: mode === 'F' || apprentice ? null : submitted('hrSai2') || null,
-      programacao: mode === 'F' && isRest(day) ? String(day.PROGRAMACAO || 'F').toUpperCase() : mode,
+      hrEnt1: mode !== 'TRB' ? null : submitted('hrEnt1') || null,
+      hrSai1: mode !== 'TRB' ? null : submitted('hrSai1') || null,
+      hrEnt2: mode !== 'TRB' || apprentice ? null : submitted('hrEnt2') || null,
+      hrSai2: mode !== 'TRB' || apprentice ? null : submitted('hrSai2') || null,
+      programacao: mode,
       justificativa: String(form.get('justificativa') || '').trim() || null,
     };
     if (JSON.stringify(changed) === JSON.stringify(toPayloadDay(day))) {
@@ -225,6 +241,7 @@ export function EditarDiaEscala({
           <strong>{employee.NOME}</strong> · {employee.CHAPA}
         </p>
         {holidayName && <div className="notice warning" role="status">Feriado nacional: {holidayName}.</div>}
+        {plantao12x36 && <div className="notice" role="status">{diaPlantao ? 'Dia de plantão 12x36.' : 'Dia de descanso 12x36.'}</div>}
         {!editable ? (
           <div className="notice error" role="alert">
             Este dia é anterior a hoje, protegido ou não tem revisão disponível para edição.
@@ -235,6 +252,7 @@ export function EditarDiaEscala({
               <button
                 type="button"
                 className={mode === 'TRB' ? 'selected' : ''}
+                disabled={plantao12x36 && !diaPlantao}
                 onClick={() => {
                   setMode('TRB');
                 }}
@@ -244,15 +262,22 @@ export function EditarDiaEscala({
               <button
                 type="button"
                 className={mode === 'F' ? 'selected' : ''}
+                disabled={plantao12x36 && diaPlantao}
                 onClick={() => {
                   setMode('F');
                 }}
               >
                 Folga
               </button>
+              {holidayName && <button type="button" className={mode === 'FDO' ? 'selected' : ''} onClick={() => setMode('FDO')}>Folga de feriado (FDO)</button>}
             </div>
             {mode === 'TRB' && (
-              <div className="day-editor-times">
+              <><div className="day-editor-times">
+                {!apprentice && !plantao12x36 && <ShiftProfileSelect sundayOnly={domingo6h} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+                  setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
+                  setShift({ hrEnt1: item.HR_ENT1, hrSai1: item.HR_SAI1, hrEnt2: item.HR_ENT2, hrSai2: item.HR_SAI2 });
+                  setError('');
+                }} />}
                 {(
                   (apprentice ? [
                     ['hrEnt1', 'Entrada'],
@@ -276,7 +301,7 @@ export function EditarDiaEscala({
                     />
                   </label>
                 ))}
-              </div>
+              </div></>
             )}
             <label className="day-editor-justification">
               Justificativa

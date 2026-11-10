@@ -29,6 +29,7 @@ const actionNames: Record<string, string> = {
   ENCERRAR_PENDENCIA_FUNCIONARIO: 'Encerramento de suspensão',
   ATUALIZAR_FUNCIONARIO: 'Atualização de funcionário',
   TRANSFERIR_SUBSECAO: 'Transferência de subseção',
+  RETIFICACAO_CONTESTADA_RH: 'Contestação do RH',
 };
 
 function displayDate(value: string) {

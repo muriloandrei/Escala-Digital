@@ -7,6 +7,7 @@ function formatLocalDate(date) {
 
 function firstOperationalDay(year, month) {
   if (year === 2026 && month === 10) return new Date(2026, 10, 1);
+  if (year === 2026 && month === 11) return new Date(2026, 11, 1);
   const date = new Date(year, month, 1);
   date.setDate(date.getDate() + ((8 - date.getDay()) % 7));
   return date;

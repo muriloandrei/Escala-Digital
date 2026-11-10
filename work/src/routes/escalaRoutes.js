@@ -6,12 +6,15 @@ const catalogService = require('../services/catalogService');
 const accessService = require('../services/accessService');
 const auditService = require('../services/auditService');
 const escalaEventService = require('../services/escalaEventService');
+const rhRetificationService = require('../services/rhRetificationService');
 const rmIntegrationService = require('../services/rmIntegrationService');
 const officializationService = require('../services/officializationService');
 const previousSundayService = require('../services/previousSundayService');
 const sectionRolloutService = require('../services/sectionRolloutService');
+const sundayShiftService = require('../services/sundayShiftService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
-const { validateStandardShift, validateApprenticeShift } = require('../domain/shiftValidation');
+const { validateStandardShift, validateApprenticeShift, validate12x36Shift } = require('../domain/shiftValidation');
+const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('../domain/workRegime');
 const monthlyReleaseService = require('../services/monthlyReleaseService');
 const { REGRAS_VIGENTES, validateEscalaPayload, validarCriticasEscopo, agruparCriticasPorSubsecao } = require('../rules/escalaRules');
 const { buildDiaAlteracoes, normalizeScheduleDay } = require('../utils/scheduleDiff');
@@ -20,6 +23,11 @@ const { validateQuickRestWorkEdit } = require('../domain/quickEdit');
 const { isEditableMonth } = require('../domain/editableMonth');
 
 const router = express.Router();
+
+function requireRhReview(req, res, next) {
+  return ['ADMIN', 'RH'].includes(String(req.user?.perfil || '').toUpperCase())
+    ? next() : res.status(403).json({ error: 'Conferencia restrita ao RH.' });
+}
 
 const saveSchema = z.object({
   lojaId: z.number().int().positive(),
@@ -190,10 +198,25 @@ router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest
   try {
     const payload = fixoEscalaSchema.parse(req.body);
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+    const funcionario = Number(payload.lojaId) >= 700 && Number(payload.lojaId) <= 799
+      || String(payload.PROGRAMACAO).toUpperCase() === 'TRB'
+      ? await getFuncionarioParaEdicaoHorario(req, payload) : null;
+    const is12x36 = effectiveRegime(funcionario) === TWELVE_THIRTY_SIX;
+    if (is12x36 && String(payload.PROGRAMACAO).toUpperCase() !== 'TRB'
+      && isDutyDay(funcionario.DT_ANCORA_12X36, payload.DT)) {
+      return res.status(422).json({ error: 'Plantao 12x36 previsto neste dia; folga fixa nao e permitida.' });
+    }
     if (String(payload.PROGRAMACAO).toUpperCase() === 'TRB') {
-      const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
       const aprendiz = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''));
-      const errors = aprendiz ? validateApprenticeShift(payload) : validateStandardShift(payload);
+      const domingo6h = await sundayShiftService.getStoreEnabled(payload.lojaId);
+      const sunday = new Date(`${payload.DT}T12:00:00`).getDay() === 0;
+      if (is12x36 && !isDutyDay(funcionario.DT_ANCORA_12X36, payload.DT)) {
+        return res.status(422).json({ error: 'Descanso 12x36 obrigatorio neste dia.' });
+      }
+      const errors = is12x36 ? validate12x36Shift(payload) : aprendiz ? validateApprenticeShift(payload) : validateStandardShift(payload,
+        { workMinutes: domingo6h && sunday ? 360 : 528, exactInterval: domingo6h && sunday,
+          allowProfiles: !(domingo6h && sunday),
+          allowPostProfiles: workRegimeService.isPostStore(payload.lojaId) });
       if (errors.length) return res.status(422).json({ error: 'Horario fixo invalido.', details: errors });
     }
     const fixo = await escalaService.saveFixoEscala({
@@ -306,6 +329,19 @@ async function getSecoesPermitidas(req, lojaId = null) {
 
 async function assertPayloadDentroDoEscopo(req, payload) {
   await accessService.assertFuncionariosPermitidos(req.user, payload.lojaId, payload.funcionarios || []);
+  if (Number(payload.lojaId) < 700 || Number(payload.lojaId) > 799) return;
+  const funcionarios = await catalogService.listFuncionariosByLoja(payload.lojaId, { mesRef: payload.mesRef });
+  const byId = new Map(funcionarios.map((person) => [Number(person.ESCFUNC_ID), person]));
+  for (const item of payload.funcionarios || []) {
+    const person = byId.get(Number(item.escfuncId));
+    if (!person) {
+      const error = new Error('Funcionario nao encontrado no cadastro do posto.');
+      error.statusCode = 404;
+      throw error;
+    }
+    item.regimeEscala = person.REGIME_ESCALA || '5X2';
+    item.dtAncora12x36 = person.DT_ANCORA_12X36 || null;
+  }
 }
 
 router.get('/resumo', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
@@ -349,6 +385,48 @@ router.get('/historico', requireAdmin, requirePermission('historico', 'visualiza
   } catch (error) {
     console.warn('Falha ao consultar historico de escala:', error?.message || error);
     return res.status(503).json({ error: 'Historico de auditoria indisponivel. Tente novamente mais tarde.' });
+  }
+});
+
+router.get('/retificacoes-rh', requireRhReview, resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const query = z.object({
+      lojaId: z.coerce.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/),
+      escsecaoId: z.coerce.number().int().positive().optional(),
+      status: z.enum(['PENDENTE', 'CONFERIDO', 'CONTESTADO', 'TODOS']).optional(),
+      trocaFolga: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+      conferidasHoje: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+      search: z.string().trim().max(100).optional(),
+      limit: z.coerce.number().int().min(1).max(100).optional(),
+      offset: z.coerce.number().int().min(0).optional()
+    }).parse(req.query);
+    return res.json(await rhRetificationService.listRetifications(query));
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Filtros de retificacoes invalidos.' });
+    return next(error);
+  }
+});
+
+router.post('/retificacoes-rh/conferir', requireRhReview, resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const body = z.object({
+      lojaId: z.number().int().positive(),
+      items: z.array(z.object({
+        eventoId: z.number().int().positive(),
+        dia: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+      }).strict()).min(1).max(100),
+      status: z.enum(['CONFERIDO', 'CONTESTADO']),
+      motivo: z.string().trim().min(1).max(80).optional(),
+      observacao: z.string().trim().max(500).optional()
+    }).strict().refine((value) => value.status !== 'CONTESTADO' || (value.items.length === 1 && Boolean(value.motivo)),
+      'Contestacao exige motivo e um unico dia.').parse(req.body);
+    const unique = new Set(body.items.map((item) => `${item.eventoId}|${item.dia}`));
+    if (unique.size !== body.items.length) return res.status(400).json({ error: 'Retificacoes duplicadas na selecao.' });
+    return res.json(await rhRetificationService.reviewRetifications({ ...body, actor: req.user }));
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados de conferencia invalidos.', details: error.issues });
+    return next(error);
   }
 });
 
@@ -397,7 +475,8 @@ router.get('/mensal', requirePermission('escalas', 'visualizar'), resolveLojaReq
     const progresso = await officializationService.getProgress({ lojaId, mesRef, secoesPermitidas, escala });
     const domingoAnterior = await previousSundayService.getPriorSunday({ lojaId, mesRef,
       employeeIds: (escala.funcionarios || []).map((person) => Number(person.ESCFUNC_ID)) });
-    return res.json({ escala, periodo: getOperationalPeriodIso(mesRef), progresso, domingoAnterior });
+    const domingo6hHabilitado = await sundayShiftService.getStoreEnabled(lojaId);
+    return res.json({ escala, periodo: getOperationalPeriodIso(mesRef), progresso, domingoAnterior, domingo6hHabilitado });
   } catch (error) {
     return next(error);
   }
@@ -452,6 +531,20 @@ router.put('/escopo-secoes-loja', requireAdmin, resolveLojaRequest, requireLojaA
   }
 });
 
+router.put('/domingo-6h-loja', requireAdmin, resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({ lojaId: z.number().int().positive(), habilitada: z.boolean() }).parse(req.body);
+    const found = await sundayShiftService.setStoreEnabled(payload.lojaId, payload.habilitada);
+    if (!found) return res.status(404).json({ error: 'Loja nao encontrada.' });
+    await auditService.registerAudit({ action: 'ALTERAR_DOMINGO_6H_LOJA', user: req.user,
+      lojaId: payload.lojaId, details: { habilitada: payload.habilitada } });
+    return res.json({ ok: true, habilitada: payload.habilitada });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Configuracao invalida.' });
+    return next(error);
+  }
+});
+
 router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const query = z.object({
@@ -472,10 +565,16 @@ router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaR
       .map((funcionario) => ({
         escfuncId: Number(funcionario.ESCFUNC_ID), chapa: funcionario.CHAPA,
         nome: funcionario.NOME, funcao: funcionario.FUNCAO_DESCR,
+        regimeEscala: funcionario.REGIME_ESCALA, dtAncora12x36: funcionario.DT_ANCORA_12X36,
         dias: (escala.dias || []).filter((dia) => Number(dia.ESCFUNC_ID) === Number(funcionario.ESCFUNC_ID))
       }));
-    const criticas = validarCriticasEscopo({ lojaId: query.lojaId, mesRef: query.mesRef, funcionarios });
-    const grupos = agruparCriticasPorSubsecao({ escala })
+    const domingo6h = await sundayShiftService.getStoreEnabled(query.lojaId);
+    const domingoAnterior = await previousSundayService.getPriorSunday({ lojaId: query.lojaId, mesRef: query.mesRef,
+      employeeIds: funcionarios.map((person) => person.escfuncId) });
+    const domingoAnteriorPorFuncionario = previousSundayService.priorSundayByEmployee(domingoAnterior);
+    const criticas = validarCriticasEscopo({ lojaId: query.lojaId, mesRef: query.mesRef, funcionarios,
+      domingo6h, domingoAnteriorPorFuncionario });
+    const grupos = agruparCriticasPorSubsecao({ escala, lojaId: query.lojaId, domingo6h, domingoAnteriorPorFuncionario })
       .filter((grupo) => Number(grupo.escsecaoId) === query.escsecaoId);
     return res.json({ criticas, grupos });
   } catch (error) {
@@ -566,6 +665,9 @@ router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaR
 
     if (!['ADMIN', 'LIDER', 'GERENTE'].includes(String(req.user?.perfil || '').toUpperCase())) {
       return res.status(403).json({ error: 'Perfil sem permissao para oficializar.' });
+    }
+    if (!isEditableMonth(payload.mesRef) && req.user.perfil !== 'ADMIN') {
+      return res.status(403).json({ error: 'Somente Admin pode reoficializar escalas de meses anteriores.' });
     }
     await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
     const progresso = await officializationService.getProgress({
@@ -708,7 +810,7 @@ router.post('/validar', requirePermission('escalas', 'editar'), resolveLojaReque
   try {
     const payload = saveSchema.parse(req.body);
     await assertPayloadDentroDoEscopo(req, payload);
-    const ruleErrors = validateEscalaPayload(payload);
+    const ruleErrors = validateEscalaPayload(payload, { domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId) });
     const ausenciaErrors = await escalaService.validateAusencias({
       lojaId: payload.lojaId,
       funcionarios: payload.funcionarios
@@ -740,7 +842,8 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
       })];
       if (!anteriores[0]) return res.status(422).json({ error: 'A edicao rapida exige uma escala existente para um funcionario.' });
       const quickError = validateQuickRestWorkEdit(payload.funcionarios[0], anteriores[0].dias,
-        { allowShiftChange: payload.edicaoPontual === true });
+        { allowShiftChange: payload.edicaoPontual === true, domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId),
+          lojaId: payload.lojaId });
       if (quickError) return res.status(422).json({ error: quickError });
       const alteracao = buildDiaAlteracoes(anteriores[0].dias, payload.funcionarios[0].dias)[0];
       const fixos = await escalaService.listFixosEscala({ lojaId: payload.lojaId, mesRef: payload.mesRef,
@@ -753,7 +856,7 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
         dia.data === alteracao.data ? payload.funcionarios[0].dias[0] : dia);
       payload.funcionarios[0].dias = dias;
     }
-    const errors = validateEscalaPayload(payload);
+    const errors = validateEscalaPayload(payload, { domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId) });
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
     if (ausenciaErrors.length || (!payload.edicaoRapida && !payload.edicaoPontual && errors.length)) return res.status(422).json({ errors: [...errors, ...ausenciaErrors] });
     if (!anteriores) anteriores = await Promise.all(payload.funcionarios.map((funcionario) =>
@@ -762,7 +865,7 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
       })
     ));
     const operacaoId = payload.operacaoId || escalaEventService.createOperationId();
-    const saved = await escalaService.saveEscalasFuncionariosRevision({ ...payload, operacaoId, actor: req.user });
+    const saved = await escalaService.saveEscalasFuncionariosRevision({ ...payload, oficializada: 0, operacaoId, actor: req.user });
     await Promise.all(saved.map((item, index) => auditService.registerAudit({
       action: 'EDITAR_ESCALA_FUNCIONARIO',
       user: req.user,
@@ -810,7 +913,7 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
       return res.status(400).json({ error: 'Informe exatamente um funcionario para a revisao individual.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
-    const ruleErrors = validateEscalaPayload(payload);
+    const ruleErrors = validateEscalaPayload(payload, { domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId) });
     if (ruleErrors.length > 0) return res.status(422).json({ errors: ruleErrors });
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
     if (ausenciaErrors.length > 0) return res.status(422).json({ errors: ausenciaErrors });
@@ -827,7 +930,7 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
       mesRef: payload.mesRef,
       funcionario: funcionarioPayload,
       dias: funcionarioPayload.dias,
-      oficializada: payload.oficializada || 0,
+      oficializada: 0,
       actor: req.user
     });
     await auditService.registerAudit({
@@ -877,14 +980,17 @@ router.post('/funcionario/horario/preview', requirePermission('escalas', 'editar
       return res.status(422).json({ error: 'Informe o mes da escala. O horario-base e os dias editaveis devem ser atualizados juntos.' });
     }
     const payload = horarioFuncionarioSchema.parse(req.body);
-    if (!isEditableMonth(payload.mesRef)) return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
+    if (!isEditableMonth(payload.mesRef) && req.user?.perfil !== 'ADMIN') return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
     const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
+    if (effectiveRegime(funcionario) === TWELVE_THIRTY_SIX) return res.status(422).json({ error: 'Altere o horario 12x36 na configuracao do regime do funcionario.' });
     const errors = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))
-      ? validateApprenticeShift(payload) : validateStandardShift(payload, { exactInterval: true });
+      ? validateApprenticeShift(payload) : validateStandardShift(payload, { allowProfiles: true,
+        allowPostProfiles: workRegimeService.isPostStore(payload.lojaId) });
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
     const impacto = await escalaService.previewHorarioFuncionarioEscala({
       lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: payload.escfuncId,
-      horario: payload
+      horario: payload,
+      actor: req.user
     });
     return res.json({ impacto });
   } catch (error) {
@@ -899,10 +1005,12 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
       return res.status(422).json({ error: 'Informe o mes da escala. O horario-base e os dias editaveis devem ser atualizados juntos.' });
     }
     const payload = horarioFuncionarioSchema.parse(req.body);
-    if (!isEditableMonth(payload.mesRef)) return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
+    if (!isEditableMonth(payload.mesRef) && req.user?.perfil !== 'ADMIN') return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
     const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
+    if (effectiveRegime(funcionario) === TWELVE_THIRTY_SIX) return res.status(422).json({ error: 'Altere o horario 12x36 na configuracao do regime do funcionario.' });
     const errors = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))
-      ? validateApprenticeShift(payload) : validateStandardShift(payload, { exactInterval: true });
+      ? validateApprenticeShift(payload) : validateStandardShift(payload, { allowProfiles: true,
+        allowPostProfiles: workRegimeService.isPostStore(payload.lojaId) });
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
 
     const horario = {
@@ -1085,7 +1193,7 @@ router.post('/', requirePermission('escalas', 'criar'), resolveLojaRequest, requ
       return res.status(403).json({ error: 'Perfil Lider nao pode criar novas escalas.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
-    const ruleErrors = validateEscalaPayload(payload);
+    const ruleErrors = validateEscalaPayload(payload, { domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId) });
     if (ruleErrors.length > 0) {
       return res.status(422).json({ errors: ruleErrors });
     }

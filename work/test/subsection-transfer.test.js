@@ -6,6 +6,77 @@ const vm = require('node:vm');
 const { effectiveDate } = require('../src/services/subsectionTransferService');
 const { _private: { aplicarHistoricoSubsecoes, corrigirPorteiroFuncaoDivergente, filtrarLinhasForaDoEscopoAtual } } = require('../src/services/escalaService');
 
+test('transferencia imediata preserva escala oficializada em nova revisao pendente', async () => {
+  const calls = [];
+  const events = [];
+  let failUpdate = false;
+  const connection = {
+    async execute(sql, binds) {
+      calls.push({ sql, binds });
+      if (failUpdate && /update sgn_esc_funcionario set escsubsecao_id/i.test(sql)) throw new Error('Falha de gravacao');
+      if (/from sgn_esc_funcionario\s+where loja.*for update/i.test(sql)) return { rows: [{
+        ESCFUNC_ID: 91, ESCSECAO_ID: 2002, ESCSUBSECAO_ID: 5,
+        ESCFUNCAO_ID: 40, CHAPA: '302.0479', STATUS: 'A', DT_DEMISS: null
+      }] };
+      if (/from sgn_esc_subsecao/i.test(sql)) return { rows: [{ ESCSUBSECAO_ID: 6 }] };
+      if (/select distinct to_char\(p.mes_ref/i.test(sql)) return { rows: [{ MES_REF: '2099-11-01' }] };
+      if (/from user_tab_columns/i.test(sql)) return { rows: [
+        { COLUMN_NAME: 'ATIVA', DATA_TYPE: 'NUMBER' },
+        { COLUMN_NAME: 'REVISAO', DATA_TYPE: 'NUMBER' },
+        { COLUMN_NAME: 'OFICIALIZADA', DATA_TYPE: 'NUMBER' }
+      ] };
+      if (/select max\(p.revisao\)/i.test(sql)) return { rows: [{ REVISAO: 4 }] };
+      if (/left join sgn_esc_prog_dia/i.test(sql)) return { rows: [{
+        ESCPROG_ID: 100, ESCFUNC_ID: 91, ESCSECAO_ID: 2012, ESCFUNCAO_ID: 40,
+        CHAPA: '302.0479', REVISAO: 4, OFICIALIZADA: 1,
+        ESCPROGDIA_ID: 400, DT: '2099-11-09', PROGRAMACAO: 'TRB',
+        HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+      }] };
+      if (/select escfunc_id, dt_demiss, status from sgn_esc_funcionario/i.test(sql)) return { rows: [{ ESCFUNC_ID: 91, DT_DEMISS: null, STATUS: 'A' }] };
+      if (/select escfunc_id, loja, chapa, escsecao_id, escfuncao_id, status\s+from sgn_esc_funcionario/i.test(sql)) return { rows: [{
+        ESCFUNC_ID: 91, LOJA: 302, CHAPA: '302.0479', ESCSECAO_ID: 2002, ESCFUNCAO_ID: 40, STATUS: 'A'
+      }] };
+      if (/join sgn_esc_funcao/i.test(sql)) return { rows: [{ ESCFUNC_ID: 91, FUNCAO_DESCR: 'PORTEIRO' }] };
+      if (/insert into sgn_esc_prog \(/i.test(sql)) return { outBinds: { escprogId: [500] } };
+      return { rows: [], rowsAffected: 1 };
+    },
+    async executeMany(sql, binds) { calls.push({ sql, binds }); },
+    async commit() { calls.push({ sql: 'COMMIT' }); },
+    async rollback() { calls.push({ sql: 'ROLLBACK' }); }
+  };
+  const loaded = { exports: {} };
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/escalaService.js'), 'utf8');
+  const dependencies = {
+    '../db/oracle': { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1, NUMBER: 2, BIND_OUT: 3 } },
+    './catalogService': {},
+    './escalaEventService': { createOperationId: () => 'transfer-test', appendEvent: async (_connection, event) => events.push(event) }
+  };
+  vm.runInNewContext(source, {
+    module: loaded, require: (name) => dependencies[name] || require(require.resolve(name, { paths: [path.join(__dirname, '../src/services')] })),
+    Date, Intl, Set, Map, JSON, Number, String, Error
+  });
+  const result = await loaded.exports.transferirSubsecaoFuncionario({
+    lojaId: 302, mesRef: '2099-11-01', escfuncId: 91, escsecaoId: 2002,
+    destinoId: 6, actor: { sub: 1, perfil: 'LIDER', login: 'LIDER.FRENTE302' }
+  });
+  assert.equal(result.revisaoPendente, true);
+  assert.equal(result.revisoesPendentes[0].revisao, 5);
+  const insert = calls.find(({ sql }) => /insert into sgn_esc_prog \(/i.test(sql));
+  assert.equal(insert.binds.escsecaoId, 2002);
+  assert.ok(calls.findIndex(({ sql }) => /insert into sgn_esc_prog \(/i.test(sql))
+    < calls.findIndex(({ sql }) => /update sgn_esc_funcionario set escsubsecao_id/i.test(sql)));
+  assert.equal(events[0].acao, 'TRANSFERIR_SUBSECAO');
+  assert.equal(calls.at(-1).sql, 'COMMIT');
+  calls.length = 0;
+  failUpdate = true;
+  await assert.rejects(loaded.exports.transferirSubsecaoFuncionario({
+    lojaId: 302, mesRef: '2099-11-01', escfuncId: 91, escsecaoId: 2002,
+    destinoId: 6, actor: { sub: 1, perfil: 'LIDER', login: 'LIDER.FRENTE302' }
+  }), /Falha de gravacao/);
+  assert.equal(calls.at(-1).sql, 'ROLLBACK');
+  assert.equal(calls.some(({ sql }) => sql === 'COMMIT'), false);
+});
+
 test('open months hide stale operational days after a move to Deposito', () => {
   const rows = [
     { ESCFUNC_ID: 1, CADASTRO_COD_SECAO: '052.02.001', CADASTRO_SECAO_DESCR: 'Deposito' },

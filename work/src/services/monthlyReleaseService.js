@@ -2,9 +2,11 @@ const catalogService = require('./catalogService');
 const escalaService = require('./escalaService');
 const pendenciaFuncionarioService = require('./pendenciaFuncionarioService');
 const { validateEscalaPayload, getCriticasCoberturaMinima } = require('../rules/escalaRules');
+const sundayShiftService = require('./sundayShiftService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { isPortariaSection } = require('../domain/portariaSection');
 const { permiteEscala } = require('../domain/employeeStatus');
+const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('../domain/workRegime');
 
 function formatDateValue(value) {
   if (value instanceof Date) {
@@ -314,6 +316,13 @@ function getHorarioBaseFuncionario(funcionario, turno) {
   return { hrEnt1, hrSai1, hrEnt2, hrSai2 };
 }
 
+function horarioDomingo6h(horario) {
+  const entrada = timeToMinutes(horario.hrEnt1) ?? 480;
+  const relogio = (minutos) => minutesToTime(minutos % 1440);
+  return { hrEnt1: relogio(entrada), hrSai1: relogio(entrada + 180),
+    hrEnt2: relogio(entrada + 250), hrSai2: relogio(entrada + 430) };
+}
+
 function montarFuncionarioRascunho(funcionario, turno, dias, horario) {
   const { hrEnt1, hrSai1, hrEnt2, hrSai2 } = horario;
   return {
@@ -323,6 +332,8 @@ function montarFuncionarioRascunho(funcionario, turno, dias, horario) {
     escsecaoId: Number(funcionario.ESCSECAO_ID),
     escfuncaoId: Number(funcionario.ESCFUNCAO_ID),
     aprendiz: isFuncionarioAprendiz(funcionario),
+    regimeEscala: effectiveRegime(funcionario),
+    dtAncora12x36: funcionario.DT_ANCORA_12X36 || null,
     escsecaoTurnoId: turno?.ESCSECAOTURNO_ID ? Number(turno.ESCSECAOTURNO_ID) : null,
     turnoOficial: {
       escsecaoTurnoId: turno?.ESCSECAOTURNO_ID ? Number(turno.ESCSECAOTURNO_ID) : null,
@@ -378,15 +389,20 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
           justificativa: fixo.justificativa || fixo.JUSTIFICATIVA || 'Horario/folga fixa'
         };
       }
-      const folga = folgas.has(data);
+      const plantao12x36 = effectiveRegime(funcionario) === TWELVE_THIRTY_SIX;
+      const folga = plantao12x36
+        ? !isDutyDay(funcionario.DT_ANCORA_12X36, data) : folgas.has(data);
+      const horarioDia = !plantao12x36 && opcoes.domingo6h && isDomingoIso(data) && !isFuncionarioAprendiz(funcionario)
+        ? horarioDomingo6h(horario) : horario;
       return {
         data,
-        hrEnt1: folga ? 'F' : horario.hrEnt1,
-        hrSai1: folga ? 'F' : horario.hrSai1,
-        hrEnt2: folga ? 'F' : horario.hrEnt2,
-        hrSai2: folga ? 'F' : horario.hrSai2,
+        hrEnt1: folga ? 'F' : horarioDia.hrEnt1,
+        hrSai1: folga ? 'F' : horarioDia.hrSai1,
+        hrEnt2: folga ? 'F' : horarioDia.hrEnt2,
+        hrSai2: folga ? 'F' : horarioDia.hrSai2,
         programacao: folga ? 'F' : 'TRB',
-        justificativa: folga ? 'Folga 5x2 automatica' : 'Liberacao automatica mensal'
+        justificativa: folga ? (plantao12x36 ? 'Descanso 12x36 automatico' : 'Folga 5x2 automatica')
+          : 'Liberacao automatica mensal'
       };
     });
 
@@ -394,6 +410,9 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
 }
 
 function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), funcionarioIndex = 0, padraoFolga = null, opcoes = {}) {
+  if (effectiveRegime(funcionario) === TWELVE_THIRTY_SIX) {
+    return buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, [], opcoes);
+  }
   const folgasCiclo = new Set(padraoFolga || getPadraoFolgaPorIndice(funcionarioIndex));
   const datasGeradas = getMonthDays(mesRef)
     .filter((date) => formatDateValue(date) >= hojeIso)
@@ -755,7 +774,8 @@ function escolherPadraoBalanceado({
   domingosTrabalhoAlvo = [],
   indiceAusencias = null,
   diasFixos = new Map(),
-  intervaloSuspensao = null
+  intervaloSuspensao = null,
+  domingo6h = false
 }) {
   const datasGeradas = getDatasGeradas(diasMes, hojeIso)
     .filter((data) => !dataIndisponivel(intervaloSuspensao, funcionario, indiceAusencias, data));
@@ -798,13 +818,13 @@ function escolherPadraoBalanceado({
     });
     if (!hasMaxFolgasPorSemanaDatas(folgasEfetivas, maxFolgasSemanaFuncionario)) return;
     if (!hasMaxFolgasAutomaticasComFixos(folgasEfetivas, descansosObrigatoriosFuncionario, maxFolgasSemanaFuncionario)) return;
-    const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas, { indiceAusencias, diasFixos, intervaloSuspensao });
+    const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas, { indiceAusencias, diasFixos, intervaloSuspensao, domingo6h });
     if (!hasNoConsecutiveAutomaticRests(rascunho.dias)) return;
     const errors = validateEscalaPayload({
       lojaId: Number(funcionario.LOJA || 0) || 1,
       mesRef,
       funcionarios: [rascunho]
-    });
+    }, { domingo6h });
     if (errors.some((error) => /domingos/i.test(String(error || '')))) return;
 
     const projetadaSecao = new Map(contagemFolgasSecao);
@@ -1053,6 +1073,17 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
       .forEach(({ funcionario, turno, turnoKey }, indiceSecao) => {
         const intervaloSuspensao = suspensoes.get(Number(funcionario.ESCFUNC_ID));
         const contagemFolgasTurno = contagensTurno.get(turnoKey);
+        if (effectiveRegime(funcionario) === TWELVE_THIRTY_SIX) {
+          const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, [],
+            { indiceAusencias, diasFixos, intervaloSuspensao, domingo6h: false });
+          for (const dia of rascunho.dias) {
+            if (dia.programacao !== 'F') continue;
+            contagemFolgasSecao.set(dia.data, (contagemFolgasSecao.get(dia.data) || 0) + 1);
+            contagemFolgasTurno.set(dia.data, (contagemFolgasTurno.get(dia.data) || 0) + 1);
+          }
+          payloadSecao.push(rascunho);
+          return;
+        }
         const paridadeDomingo = indiceSecao % 2;
         const domingosFolgaAlvo = domingosGerados.filter((data, index) => index % 2 === paridadeDomingo
           && !dataIndisponivel(intervaloSuspensao, funcionario, indiceAusencias, data));
@@ -1074,7 +1105,8 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
           domingosTrabalhoAlvo,
           indiceAusencias,
           diasFixos,
-          intervaloSuspensao
+          intervaloSuspensao,
+          domingo6h: opcoes.domingo6h
         });
         escolhido.folgas.forEach((data) => {
           contagemFolgasSecao.set(data, (contagemFolgasSecao.get(data) || 0) + 1);
@@ -1082,7 +1114,8 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
           const weekKey = getWeekKeyFromIso(data);
           contagemFolgasSemanaSecao.set(weekKey, (contagemFolgasSemanaSecao.get(weekKey) || 0) + 1);
         });
-        payloadSecao.push(buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, escolhido.folgas, { indiceAusencias, diasFixos, intervaloSuspensao }));
+        payloadSecao.push(buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, escolhido.folgas, { indiceAusencias, diasFixos, intervaloSuspensao,
+          domingo6h: opcoes.domingo6h }));
       });
     payload.push(...rebalancearFolgasDiasComunsSecao(payloadSecao, secao.length));
   });
@@ -1234,8 +1267,12 @@ async function liberarEscalaLojaMes({
 
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
+  if (!dryRun && mesRef >= '2026-12-01') {
+    await escalaService.materializarFixosProximoMes({ lojaId, mesRef, todayIso: hojeIso });
+  }
   const [funcionarios, turnos, ausencias, fixos, suspensoes] = await Promise.all([
-    catalogService.listFuncionariosByLoja(lojaId, secoesLiberacao ? { secoesPermitidas: secoesLiberacao } : {}),
+    catalogService.listFuncionariosByLoja(lojaId, secoesLiberacao
+      ? { mesRef, secoesPermitidas: secoesLiberacao } : { mesRef }),
     catalogService.listTurnosByLoja(lojaId, secoesLiberacao ? { secoesPermitidas: secoesLiberacao } : {}),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef }),
@@ -1297,12 +1334,13 @@ async function liberarEscalaLojaMes({
 async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()), actor }) {
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
-  const [funcionarios, turnos, ausencias, fixos, suspensoes] = await Promise.all([
-    catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)], includeInactive: true }),
+  const [funcionarios, turnos, ausencias, fixos, suspensoes, domingo6h] = await Promise.all([
+    catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas: [Number(escsecaoId)], includeInactive: true }),
     catalogService.listTurnosByLoja(lojaId),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId }),
-    pendenciaFuncionarioService.listarIntervalosSuspensos({ lojaId, inicio, fim })
+    pendenciaFuncionarioService.listarIntervalosSuspensos({ lojaId, inicio, fim }),
+    sundayShiftService.getStoreEnabled(lojaId)
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
   const expectedSnapshots = escalaService.buildEscalaSnapshots(diasAtuaisSecao);
@@ -1323,7 +1361,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
   const funcionariosPayloadCompleto = anexarDiasPassados(
     [
-      ...buildFuncionariosRascunhoBalanceado(funcionariosGeraveis, turnosSecao, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes }),
+      ...buildFuncionariosRascunhoBalanceado(funcionariosGeraveis, turnosSecao, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes, domingo6h }),
       ...buildFuncionariosLiberacao(funcionariosParaLimpar, turnosSecao, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes })
     ],
     diasAtuaisSecao,
@@ -1359,7 +1397,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
   }
 
   const ruleErrors = [
-    ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload }),
+    ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload }, { domingo6h }),
     ...getCriticasCoberturaMinima(funcionariosPayloadCompleto, 60, hojeIso)
   ];
   const saved = await escalaService.saveEscalasBatch({
@@ -1394,7 +1432,7 @@ async function resetarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = nul
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
   const [funcionarios, turnos, ausencias, fixos, suspensoes] = await Promise.all([
-    catalogService.listFuncionariosByLoja(lojaId, { secoesPermitidas: [Number(escsecaoId)], includeInactive: true }),
+    catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas: [Number(escsecaoId)], includeInactive: true }),
     catalogService.listTurnosByLoja(lojaId),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId }),

@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { getJson, postJson, type DiaEscala, type EscalaMensal, type FixoEscala, type Funcionario } from '../api';
 import { validateStandardHours, type StandardHours } from '../shiftValidation';
+import { validate12x36Hours } from '../shiftValidation';
+import { isDutyDay12x36 } from '../workRegime';
 import { autofillStandardHours } from '../shiftAutofill';
+import { ShiftProfileSelect } from '../ShiftProfileSelect';
 import { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
 
 export function EditarFixoEscala({
-  lojaId, mesRef, employee, date, existing, generatedDay, reference, holidayName, onClose, onSaved,
+  lojaId, mesRef, employee, date, existing, generatedDay, reference, holidayName, domingo6hHabilitado = false, onClose, onSaved,
 }: {
   lojaId: string;
   mesRef: string;
@@ -15,21 +18,28 @@ export function EditarFixoEscala({
   generatedDay?: DiaEscala;
   reference?: DiaEscala;
   holidayName?: string;
+  domingo6hHabilitado?: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
   const workDay = generatedDay?.PROGRAMACAO === 'TRB' ? generatedDay : reference;
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
-  const [mode, setMode] = useState<'FXF' | 'TRB'>(existing?.PROGRAMACAO === 'TRB' ? 'TRB' : 'FXF');
-  const [hours, setHours] = useState<StandardHours>(() => apprentice
-    ? apprenticeHoursFromStart((existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT1 : workDay?.HR_ENT1) || employee.HR_ENT1 || '08:00')
-      || apprenticeHoursFromStart('08:00')!
-    : {
+  const plantao12x36 = employee.REGIME_ESCALA === '12X36';
+  const diaPlantao = plantao12x36 && isDutyDay12x36(employee.DT_ANCORA_12X36 || '', date);
+  const domingo6h = !plantao12x36 && domingo6hHabilitado && new Date(`${date}T12:00:00`).getDay() === 0 && !apprentice;
+  const [profile, setProfile] = useState({ work: plantao12x36 ? 660 : domingo6h ? 360 : 528, interval: plantao12x36 ? 60 : 70 });
+  const [mode, setMode] = useState<'FXF' | 'TRB'>(existing?.PROGRAMACAO === 'TRB' || plantao12x36 && diaPlantao ? 'TRB' : 'FXF');
+  const [hours, setHours] = useState<StandardHours>(() => {
+    if (apprentice) return apprenticeHoursFromStart((existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT1 : workDay?.HR_ENT1) || employee.HR_ENT1 || '08:00')
+      || apprenticeHoursFromStart('08:00')!;
+    const base = {
       HR_ENT1: existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT1 || '' : workDay?.HR_ENT1 || '',
       HR_SAI1: existing?.PROGRAMACAO === 'TRB' ? existing.HR_SAI1 || '' : workDay?.HR_SAI1 || '',
       HR_ENT2: existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT2 || '' : workDay?.HR_ENT2 || '',
       HR_SAI2: existing?.PROGRAMACAO === 'TRB' ? existing.HR_SAI2 || '' : workDay?.HR_SAI2 || '',
-    });
+    };
+    return domingo6h ? autofillStandardHours(base, 'HR_ENT1', base.HR_ENT1 || '08:00', 360) || base : base;
+  });
   const [justification, setJustification] = useState(existing?.JUSTIFICATIVA || '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -42,7 +52,8 @@ export function EditarFixoEscala({
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy || uncertain) return;
-    const invalid = mode === 'TRB' ? apprentice ? validateApprenticeHours(hours) : validateStandardHours(hours) : '';
+    const invalid = mode === 'TRB' ? plantao12x36 ? validate12x36Hours(hours)
+      : apprentice ? validateApprenticeHours(hours) : validateStandardHours(hours, profile.work, profile.interval) : '';
     if (invalid) { setError(invalid); return; }
     setBusy(true);
     setError('');
@@ -119,18 +130,24 @@ export function EditarFixoEscala({
     <p><strong>{employee.NOME}</strong> · {employee.CHAPA}</p>
     {Number(generatedDay?.OFICIALIZADA) === 1 && <div className="notice warning" role="status">Esta alteração criará uma nova revisão. A escala precisará ser oficializada novamente.</div>}
     {holidayName && <div className="notice warning" role="status">Feriado nacional: {holidayName}.</div>}
+    {plantao12x36 && <div className="notice" role="status">{diaPlantao ? 'Dia de plantão 12x36.' : 'Dia de descanso 12x36.'}</div>}
     <div className="segmented day-editor-mode" role="group" aria-label="Tipo de fixo">
-      <button type="button" className={mode === 'FXF' ? 'selected' : ''} onClick={() => { setMode('FXF'); setError(''); }}>Folga fixa</button>
-      <button type="button" className={mode === 'TRB' ? 'selected' : ''} onClick={() => { setMode('TRB'); setError(''); }}>Horário fixo</button>
+      <button type="button" className={mode === 'FXF' ? 'selected' : ''} disabled={plantao12x36 && diaPlantao} onClick={() => { setMode('FXF'); setError(''); }}>Folga fixa</button>
+      <button type="button" className={mode === 'TRB' ? 'selected' : ''} disabled={plantao12x36 && !diaPlantao} onClick={() => { setMode('TRB'); setError(''); }}>Horário fixo</button>
     </div>
     {mode === 'TRB' && <div className="day-editor-times">
+      {!apprentice && !plantao12x36 && <ShiftProfileSelect sundayOnly={domingo6h} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+        setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
+        setHours({ HR_ENT1: item.HR_ENT1, HR_SAI1: item.HR_SAI1, HR_ENT2: item.HR_ENT2, HR_SAI2: item.HR_SAI2 });
+        setError('');
+      }} />}
       {(apprentice ? [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída']] as const
         : [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída intervalo'], ['HR_ENT2', 'Retorno'], ['HR_SAI2', 'Saída']] as const)
         .map(([key, label]) => <label key={key}>{label}<input type="time" required value={hours[key]} onChange={(event) => { const next = apprentice
           ? autofillApprenticeHours(key as 'HR_ENT1' | 'HR_SAI1', event.target.value)
-          : autofillStandardHours(hours, key, event.target.value);
+          : autofillStandardHours(hours, key, event.target.value, profile.work, profile.interval);
           if (next) { setHours(next); setError(''); }
-          else setError(apprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível ajustar o horário mantendo 08:48 de trabalho e 01:10 de intervalo.'); }} /></label>)}
+          else setError(apprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível manter a jornada e o intervalo selecionados.'); }} /></label>)}
     </div>}
     <label className="day-editor-justification">Justificativa<input maxLength={500} value={justification} onChange={(event) => setJustification(event.target.value)} placeholder="Opcional" /></label>
     {error && <div className="notice error" role="alert">{error}</div>}

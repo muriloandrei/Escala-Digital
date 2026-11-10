@@ -5,6 +5,8 @@ const escalaService = require('../src/services/escalaService');
 const catalogService = require('../src/services/catalogService');
 const accessService = require('../src/services/accessService');
 const auditService = require('../src/services/auditService');
+const sundayShiftService = require('../src/services/sundayShiftService');
+sundayShiftService.getStoreEnabled = async () => false;
 
 function handler(path) {
   return router.stack.find((layer) => layer.route?.path === path && layer.route.methods.post).route.stack.at(-1).handle;
@@ -244,11 +246,13 @@ test('fixed rest can be saved on a holiday', async () => {
 
 test('fixed apprentice work accepts a different start with 05:15 shift', async () => {
   const originals = {
+    getSecoesPermitidasUsuario: accessService.getSecoesPermitidasUsuario,
     assertSecoesPermitidas: accessService.assertSecoesPermitidas,
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
     saveFixoEscala: escalaService.saveFixoEscala,
     registerAudit: auditService.registerAudit
   };
+  accessService.getSecoesPermitidasUsuario = async () => [20];
   accessService.assertSecoesPermitidas = async () => {};
   catalogService.listFuncionariosByLoja = async () => [{ ESCFUNC_ID: 10, ESCSECAO_ID: 20,
     FUNCAO_DESCR: 'JOVEM APRENDIZ', HR_ENT1: '08:00' }];
@@ -267,6 +271,7 @@ test('fixed apprentice work accepts a different start with 05:15 shift', async (
     await handler('/fixos')({ body: { ...body, HR_SAI1: '14:00' }, user: { sub: 1 } }, denied, (error) => { throw error; });
     assert.equal(denied.code, 422);
   } finally {
+    accessService.getSecoesPermitidasUsuario = originals.getSecoesPermitidasUsuario;
     accessService.assertSecoesPermitidas = originals.assertSecoesPermitidas;
     catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
     escalaService.saveFixoEscala = originals.saveFixoEscala;

@@ -33,26 +33,12 @@ test('missing profile row receives operational defaults but officialization rema
   assert.equal(_private.normalizePermission({ PAGINA: 'escalas' }, 'ADMIN').PODE_OFICIALIZAR, 1);
 });
 
-test('Frente de Caixa operational scope includes Portaria', () => {
-  const predicate = _private.getEscopoOperacionalSecaoPredicate('s');
-  assert.match(predicate, /PORTARIA/);
-  assert.match(predicate, /s\.cod_secao/);
-  assert.match(predicate, /02\[\.\]012/);
-  assert.match(predicate, /s\.descr/);
-});
-
-test('Frente de Caixa leader sees Portaria even with older explicit section grants', async () => {
+test('Frente de Caixa leader sees only explicit section grants', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/services/accessService.js'), 'utf8');
   const module = { exports: {} };
   const connection = {
     execute: async (sql) => {
       if (sql.includes('from sgn_esc_usuario_secao us')) return { rows: [{ ESCSECAO_ID: 20 }] };
-      if (sql.includes('from sgn_esc_secao s')) {
-        assert.match(sql, /PORTARIA/);
-        assert.match(sql, /s\.cod_secao/);
-        assert.doesNotMatch(sql, /FRENTE\.\*CAIXA/);
-        return { rows: [{ ESCSECAO_ID: 25 }] };
-      }
       throw new Error(`SQL inesperado: ${sql}`);
     }
   };
@@ -67,7 +53,39 @@ test('Frente de Caixa leader sees Portaria even with older explicit section gran
   vm.runInContext(source, context);
   vm.runInContext(`getUsuarioSecaoColumns = async () => new Set(['STATUS']); getSecaoLojaColumn = async () => 'LOJA'; getTableColumns = async () => new Set(['STATUS']);`, context);
   const permitted = await module.exports.getSecoesPermitidasUsuario({ sub: 7, login: 'lider.frente35', perfil: 'LIDER', lojas: [35] }, 35);
-  assert.deepEqual(Array.from(permitted), [20, 25]);
+  assert.deepEqual(Array.from(permitted), [20]);
+});
+
+test('store user with FRENTE login is scoped to assigned sections', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/accessService.js'), 'utf8');
+  const module = { exports: {} };
+  const connection = {
+    execute: async (sql, binds) => {
+      assert.match(sql, /from sgn_esc_usuario_secao us/);
+      assert.match(sql, /nvl\(us\.status, 'A'\) = 'A'/);
+      assert.equal(binds.lojaId, 2);
+      return { rows: binds.usuarioId === 7 ? [{ ESCSECAO_ID: 4200 }] : [] };
+    }
+  };
+  const context = vm.createContext({
+    module,
+    require: (name) => name === '../db/oracle'
+      ? { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } }
+      : name === '../domain/sectionRollout'
+        ? require('../src/domain/sectionRollout')
+        : require(name)
+  });
+  vm.runInContext(source, context);
+  vm.runInContext(`getUsuarioSecaoColumns = async () => new Set(['STATUS']); getSecaoLojaColumn = async () => 'CODFILIAL';`, context);
+  const permitted = await module.exports.getSecoesPermitidasUsuario({ sub: 7, login: 'FRENTE02', perfil: 'OPERADOR', lojas: [2] }, 2);
+  assert.deepEqual(Array.from(permitted), [4200]);
+  const semVinculos = await module.exports.getSecoesPermitidasUsuario({ sub: 8, login: 'FRENTE02', perfil: 'OPERADOR', lojas: [2] }, 2);
+  assert.deepEqual(Array.from(semVinculos), []);
+  await assert.rejects(
+    module.exports.assertSecoesPermitidas({ sub: 7, login: 'FRENTE02', perfil: 'OPERADOR', lojas: [2] }, 2, [4201]),
+    { statusCode: 403 }
+  );
+  assert.equal(await module.exports.getSecoesPermitidasUsuario({ sub: 1, perfil: 'ADMIN' }, 2), null);
 });
 
 test('leader of another section sees only the explicitly assigned section', async () => {

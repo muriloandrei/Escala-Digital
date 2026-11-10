@@ -12,16 +12,16 @@ function loadService({ dismissal = '2026-10-15', inactive = false, status = 'A',
     async execute(sql, binds) {
       calls.push({ sql, binds });
       if (/select distinct p\.escfunc_id/i.test(sql)) {
-        assert.match(sql, /trunc\(d\.dt\) > trunc\(f\.dt_demiss\)/i);
+        assert.match(sql, /trunc\(f\.dt_demiss\) <= to_date\(:hojeIso/i);
         assert.match(sql, /p\.revisao = \(/i);
         if (binds.secaoPermitida0) {
           assert.match(sql, /p\.escsecao_id in \(:secaoPermitida0\)/i);
           assert.equal(binds.secaoPermitida0, 20);
         }
-        assert.match(sql, /upper\(trim\(nvl\(f\.status, 'A'\)\)\) not in \('A', 'F', 'P'\)/i);
+        assert.match(sql, /upper\(trim\(nvl\(f\.status, 'A'\)\)\) not in \('A', 'F', 'P', 'Z'\)/i);
         const funcionarioStatus = inactive ? 'I' : status;
-        const hasCut = state.days.some((day) => (dismissal && day > dismissal)
-          || (!['A', 'F', 'P'].includes(funcionarioStatus) && day >= binds.hojeIso));
+        const hasCut = (dismissal && dismissal <= binds.hojeIso && dismissal <= binds.periodoFim)
+          || state.days.some((day) => !['A', 'F', 'P', 'Z'].includes(funcionarioStatus) && day >= binds.hojeIso);
         return { rows: state.active && hasCut ? [{ ESCFUNC_ID: 90, FUNCIONARIO_STATUS: funcionarioStatus }] : [] };
       }
       if (/update sgn_esc_rm_envio/i.test(sql)) return { rowsAffected: 1 };
@@ -52,7 +52,10 @@ function loadService({ dismissal = '2026-10-15', inactive = false, status = 'A',
       if (name === '../domain/portariaSection') return require('../src/domain/portariaSection');
       if (name === '../domain/employeeStatus') return require('../src/domain/employeeStatus');
       if (name === '../domain/sectionRollout') return require('../src/domain/sectionRollout');
-      if (['./catalogService', '../domain/operationalPeriod', '../rules/escalaRules'].includes(name)) return {};
+      if (name === '../domain/officializationDates') return require('../src/domain/officializationDates');
+      if (name === '../domain/fixedCarry') return require('../src/domain/fixedCarry');
+      if (name === '../domain/operationalPeriod') return require('../src/domain/operationalPeriod');
+      if (['./catalogService', '../rules/escalaRules'].includes(name)) return {};
       throw new Error(`Dependencia inesperada: ${name}`);
     }
   });
@@ -86,28 +89,27 @@ function loadService({ dismissal = '2026-10-15', inactive = false, status = 'A',
   return { service: module.exports, connection, calls, events, state };
 }
 
-test('RM dismissal preserves history, creates only the employee revision and requires reapproval', async () => {
+test('confirmed dismissal inactivates the entire schedule while preserving the audit history', async () => {
   const { service, connection, calls, events, state } = loadService();
   const result = await service._private.reconciliarDesligamentosComConnection(connection, {
-    lojaId: 10, mesRef: '2026-10-01', secoesPermitidas: [20]
+    lojaId: 10, mesRef: '2026-10-01', secoesPermitidas: [20], hojeIso: '2026-10-20'
   });
   assert.equal(result.funcionarios, 1);
-  assert.equal(result.dias, 1);
+  assert.equal(result.dias, 2);
   assert.equal(result.oficializadas, 1);
-  assert.deepEqual(Array.from(state.days), ['2026-10-14']);
-  assert.equal(state.revision, 8);
-  assert.equal(connection.inserted.oficializada, 0);
-  assert.deepEqual(Array.from(connection.inserted.dias, (dia) => dia.data), ['2026-10-14']);
-  assert.equal(connection.inserted.funcionario.escfuncId, 90);
-  assert.equal(events[0].acao, 'AJUSTAR_DEMISSAO_RM');
+  assert.deepEqual(Array.from(state.days), ['2026-10-14', '2026-10-16']);
+  assert.equal(state.active, false);
+  assert.equal(state.revision, 7);
+  assert.equal(connection.inserted, undefined);
+  assert.equal(events[0].acao, 'INATIVAR_ESCALA_DEMISSAO_RM');
   assert.equal(events[0].situacao, 'POS_OFICIALIZACAO');
-  assert.equal(events[0].detalhe.alteracoes[0].data, '2026-10-16');
+  assert.equal(events[0].detalhe.alteracoes[0].data, '2026-10-14');
   assert.equal(events[0].detalhe.alteracoes[0].novo, null);
   assert.ok(calls.some(({ sql }) => /status = 'SUPERADO'/i.test(sql)));
   assert.equal(calls.filter(({ sql }) => sql === 'COMMIT').length, 1);
 
   const repeated = await service._private.reconciliarDesligamentosComConnection(connection, {
-    lojaId: 10, mesRef: '2026-10-01', secoesPermitidas: [20]
+    lojaId: 10, mesRef: '2026-10-01', secoesPermitidas: [20], hojeIso: '2026-10-20'
   });
   assert.equal(repeated.funcionarios, 0);
   assert.equal(events.length, 1);
@@ -117,7 +119,7 @@ test('RM dismissal preserves history, creates only the employee revision and req
 test('RM dismissal before the period inactivates only the dismissed employee', async () => {
   const { service, connection, calls, state } = loadService({ dismissal: '2026-10-01', days: ['2026-10-05', '2026-10-06'] });
   const result = await service._private.reconciliarDesligamentosComConnection(connection, {
-    lojaId: 10, mesRef: '2026-10-01'
+    lojaId: 10, mesRef: '2026-10-01', hojeIso: '2026-10-20'
   });
   assert.equal(result.dias, 2);
   assert.equal(state.active, false);
@@ -155,6 +157,7 @@ test('inactive employee cannot receive new days but historical days remain valid
   assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'A', '2026-10-15'));
   assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'F', '2026-10-15'));
   assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'P', '2026-10-15'));
+  assert.doesNotThrow(() => validate([{ data: '2026-10-15' }], 'Z', '2026-10-15'));
   assert.throws(() => validate([{ data: '2026-10-15' }], 'S', '2026-10-15'), /inativo/i);
 });
 
@@ -182,16 +185,29 @@ test('status P does not remove existing future schedule days', async () => {
   assert.equal(calls.some(({ sql }) => /^update/i.test(sql)), false);
 });
 
+test('status Z does not remove existing future schedule days', async () => {
+  const { service, connection, state, calls } = loadService({
+    dismissal: null, status: 'Z', days: ['2026-11-02', '2026-11-03']
+  });
+  const result = await service._private.reconciliarDesligamentosComConnection(connection, {
+    lojaId: 10, mesRef: '2026-11-01', hojeIso: '2026-10-15'
+  });
+  assert.equal(result.funcionarios, 0);
+  assert.deepEqual(state.days, ['2026-11-02', '2026-11-03']);
+  assert.equal(calls.some(({ sql }) => /^update/i.test(sql)), false);
+});
+
 test('future inactive header is hidden while historical days remain visible', () => {
   const { service } = loadService();
   const rows = [
     { ESCFUNC_ID: 90, FUNCIONARIO_STATUS: 'I', ESCPROGDIA_ID: null },
     { ESCFUNC_ID: 91, FUNCIONARIO_STATUS: 'S', ESCPROGDIA_ID: 12 },
     { ESCFUNC_ID: 92, FUNCIONARIO_STATUS: 'F', ESCPROGDIA_ID: null },
-    { ESCFUNC_ID: 93, FUNCIONARIO_STATUS: 'P', ESCPROGDIA_ID: null }
+    { ESCFUNC_ID: 93, FUNCIONARIO_STATUS: 'P', ESCPROGDIA_ID: null },
+    { ESCFUNC_ID: 94, FUNCIONARIO_STATUS: 'Z', ESCPROGDIA_ID: null }
   ];
   const visible = service._private.filtrarCabecalhosInativosSemDias(rows);
-  assert.deepEqual(visible.map((row) => row.ESCFUNC_ID), [91, 92, 93]);
+  assert.deepEqual(visible.map((row) => row.ESCFUNC_ID), [91, 92, 93, 94]);
 });
 
 test('empty header from a previous section is hidden after an employee changes section', () => {

@@ -1,7 +1,8 @@
 import type { DiaEscala, Funcionario } from './api';
 import { validateStandardHours, type StandardHours } from './shiftValidation';
+import { autofillStandardHours } from './shiftAutofill';
 
-export function quickShift(employee: Funcionario, reference?: DiaEscala) {
+export function quickShift(employee: Funcionario, reference?: DiaEscala, domingo6h = false) {
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
   if (apprentice) {
     const start = employee.HR_ENT1 || reference?.HR_ENT1 || '08:00';
@@ -17,5 +18,6 @@ export function quickShift(employee: Funcionario, reference?: DiaEscala) {
     HR_ENT2: source?.HR_ENT2 || '', HR_SAI2: source?.HR_SAI2 || '',
   });
   const fallback = { HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };
-  return [from(employee), from(reference), fallback].find((hours) => !validateStandardHours(hours)) || fallback;
+  const base = [from(employee), from(reference), fallback].find((hours) => !validateStandardHours(hours)) || fallback;
+  return domingo6h ? autofillStandardHours(base, 'HR_ENT1', base.HR_ENT1, 360) || base : base;
 }

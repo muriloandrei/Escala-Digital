@@ -89,13 +89,15 @@ export function HorariosPadrao({ user }: { user: User }) {
     event.preventDefault();
     if (!editing || busy || uncertain) return;
     const descr = form.DESCR.trim();
-    if (!descr || descr.length > 100 || preview?.work !== 528 || preview?.interval !== 70) {
-      setActionError('Informe uma descrição e horários válidos com jornada 08:48 e intervalo 01:10.'); return;
+    const validProfile = preview && ['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
+      .includes(`${preview.work}:${preview.interval}`);
+    if (!descr || descr.length > 100 || !validProfile) {
+      setActionError('Use um perfil 08:48, 08:24, 06:00 ou 05:00 com o intervalo correspondente.'); return;
     }
     setBusy(true);
     setActionError('');
     try {
-      const payload = { ...form, DESCR: descr, JORNADA_MINUTOS: 528, INTERVALO_MINUTOS: 70 };
+      const payload = { ...form, DESCR: descr, JORNADA_MINUTOS: preview!.work, INTERVALO_MINUTOS: preview!.interval };
       const result = editing === 'new'
         ? await postJson<{ horario: Horario }>('/api/catalog/horarios-padrao', payload)
         : await patchJson<{ horario: Horario }>(`/api/catalog/horarios-padrao/${editing.ESCHORPAD_ID}`, payload);
@@ -143,9 +145,9 @@ export function HorariosPadrao({ user }: { user: User }) {
       <h2 id="horario-editor-title">{editing === 'new' ? 'Novo horário padrão' : `Editar ${editing.DESCR}`}</h2>
       <div className="shift-fields"><label className="catalog-full-field">Descrição<input required maxLength={100} value={form.DESCR} disabled={busy || uncertain} onChange={(event) => setForm({ ...form, DESCR: event.target.value })} /></label>
         {(['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'] as const).map((field, index) => <label key={field}>{['Entrada', 'Saída para intervalo', 'Retorno do intervalo', 'Saída'][index]}<input required type="time" value={form[field]} disabled={busy || uncertain} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></label>)}</div>
-      <div className="shift-impact"><strong>{preview ? `Jornada ${formatMinutes(preview.work)} · intervalo ${formatMinutes(preview.interval)}` : 'Horários fora de ordem'}</strong><span>Exigidos: jornada 08:48 e intervalo 01:10.</span></div>
+      <div className="shift-impact"><strong>{preview ? `Jornada ${formatMinutes(preview.work)} · intervalo ${formatMinutes(preview.interval)}` : 'Horários fora de ordem'}</strong><span>08:48/01:10, 06:00/01:10, 05:00/00:15; nos postos, 08:48/01:40 ou 08:24/01:10 ou 01:40.</span></div>
       {actionError && <div className="notice error" role="alert">{actionError}{uncertain && ' Confira a lista antes de repetir.'}</div>}
-      <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditing(null)}>Cancelar</button><button className="button primary" type="submit" disabled={busy || uncertain || preview?.work !== 528 || preview?.interval !== 70}>{busy ? 'Salvando...' : 'Salvar horário'}</button></div>
+      <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditing(null)}>Cancelar</button><button className="button primary" type="submit" disabled={busy || uncertain || !preview || !(['528:70', '528:100', '504:70', '504:100', '360:70', '300:15'].includes(`${preview.work}:${preview.interval}`))}>{busy ? 'Salvando...' : 'Salvar horário'}</button></div>
     </form></div>}
     {confirmStatus && <div className="confirm-backdrop" role="presentation"><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="horario-status-title">
       <h2 id="horario-status-title">{confirmStatus.STATUS === 'A' ? 'Inativar' : 'Reativar'} {confirmStatus.DESCR}?</h2><p>A alteração afeta a disponibilidade deste modelo no cadastro.</p>

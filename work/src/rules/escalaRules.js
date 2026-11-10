@@ -1,4 +1,6 @@
-const { unfoldShiftMinutes } = require('../domain/shiftValidation');
+const { unfoldShiftMinutes, validate12x36Shift } = require('../domain/shiftValidation');
+const { getNationalHoliday } = require('../domain/nationalHolidays');
+const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('../domain/workRegime');
 
 const REGRAS_VIGENTES = [
   { codigo: 'DOMINGO_1X1', titulo: 'Domingo 1x1', descricao: 'O colaborador nao deve trabalhar dois domingos consecutivos.' },
@@ -45,6 +47,10 @@ function isDescanso(dia) {
 function isFolgaSemanal(dia) {
   const programacao = String(dia?.programacao || dia?.PROGRAMACAO || 'TRB').trim().toUpperCase();
   return programacao === 'F' || programacao === 'FOLGA' || programacao === 'FXF' || programacao === 'FOLGA_FIXA';
+}
+
+function isSunday(dataIso) {
+  return new Date(`${formatDate(dataIso)}T12:00:00`).getDay() === 0;
 }
 
 function isFerias(dia) {
@@ -107,7 +113,7 @@ function getHorarioDia(dia, apprentice = false) {
     retornoIntervalo: timeline?.[2] ?? null, saida: timeline?.[3] ?? null };
 }
 
-function validarTurnoDia(funcionarioLabel, dia) {
+function validarTurnoDia(funcionarioLabel, dia, { domingo6h = false, lojaId = null } = {}) {
   if (isDescanso(dia)) return [];
   const data = formatDate(dia.data || dia.DT);
   const horario = getHorarioDia(dia);
@@ -128,11 +134,16 @@ function validarTurnoDia(funcionarioLabel, dia) {
   if (intervalo <= 0 || primeiraJornada <= 0 || segundaJornada <= 0) {
     errors.push(`${funcionarioLabel}: jornada ou intervalo invalido em ${data}.`);
   }
-  if (jornada !== 528) {
-    errors.push(`${funcionarioLabel}: jornada total deve ser 08:48 em ${data}. Atual: ${minutesToTime(jornada)}.`);
+  const domingoObrigatorio = domingo6h && isSunday(data);
+  const posto = Number(lojaId) >= 700 && Number(lojaId) <= 799;
+  const jornadasPermitidas = domingoObrigatorio ? [360] : posto ? [528, 504, 360, 300] : [528, 360, 300];
+  if (!jornadasPermitidas.includes(jornada)) {
+    errors.push(`${funcionarioLabel}: jornada total deve ser ${jornadasPermitidas.map(minutesToTime).join(', ')} em ${data}. Atual: ${minutesToTime(jornada)}.`);
   }
-  if (intervalo < 70) {
-    errors.push(`${funcionarioLabel}: intervalo menor que 01:10 em ${data}. Atual: ${minutesToTime(intervalo)}.`);
+  const intervaloEsperado = jornada === 300 && !domingoObrigatorio ? 15 : 70;
+  const intervaloExato = jornada === 300 || jornada === 360 || domingoObrigatorio;
+  if (intervalo < intervaloEsperado || (intervaloExato && intervalo !== intervaloEsperado)) {
+    errors.push(`${funcionarioLabel}: intervalo deve ser ${intervaloExato ? 'exatamente' : 'no minimo'} ${minutesToTime(intervaloEsperado)} em ${data}. Atual: ${minutesToTime(intervalo)}.`);
   }
   if (primeiraJornada > 360 || segundaJornada > 360) {
     errors.push(`${funcionarioLabel}: jornada continua maior que 06:00 em ${data}.`);
@@ -168,7 +179,51 @@ function validarTurnoAprendiz(funcionarioLabel, dia) {
   return errors;
 }
 
-function validarRegrasFuncionario(funcionario, onCritica) {
+function validarRegras12x36(funcionario, onCritica) {
+  const label = funcionario.nome || funcionario.NOME || funcionario.chapa || funcionario.CHAPA || funcionario.escfuncId || 'Funcionario';
+  const anchor = formatDate(funcionario.dtAncora12x36 || funcionario.DT_ANCORA_12X36);
+  const days = [...(funcionario.dias || [])].sort((a, b) => formatDate(a.data || a.DT).localeCompare(formatDate(b.data || b.DT)));
+  const errors = [];
+  const addCritica = (message, dates) => {
+    errors.push(message);
+    if (onCritica) onCritica({ mensagem: message, datas: dates });
+  };
+  let lastWork = null;
+  for (const day of days) {
+    const date = formatDate(day.data || day.DT);
+    if (!date) continue;
+    let duty;
+    try { duty = isDutyDay(anchor, date); }
+    catch (_) { addCritica(`${label}: data ancora 12x36 invalida.`, [date]); break; }
+    const code = String(day.programacao || day.PROGRAMACAO || 'TRB').trim().toUpperCase();
+    const work = code === 'TRB';
+    const protectedAbsence = ['AFA', 'FER'].includes(code);
+    if (code === 'FDO' && !getNationalHoliday(date)) {
+      addCritica(`${label}: FDO permitida apenas em feriado nacional cadastrado (${date}).`, [date]);
+    }
+    if (duty && !work && !protectedAbsence && code !== 'FDO') {
+      addCritica(`${label}: plantao 12x36 esperado em ${date}; encontrado ${code}.`, [date]);
+    }
+    if (!duty && work) addCritica(`${label}: descanso 12x36 esperado em ${date}.`, [date]);
+    if (!work) continue;
+    const shift = {
+      HR_ENT1: day.hrEnt1 ?? day.HR_ENT1, HR_SAI1: day.hrSai1 ?? day.HR_SAI1,
+      HR_ENT2: day.hrEnt2 ?? day.HR_ENT2, HR_SAI2: day.hrSai2 ?? day.HR_SAI2
+    };
+    validate12x36Shift(shift).forEach((message) => addCritica(`${label}: ${message} (${date}).`, [date]));
+    const timeline = unfoldShiftMinutes([shift.HR_ENT1, shift.HR_SAI1, shift.HR_ENT2, shift.HR_SAI2]);
+    if (lastWork && timeline) {
+      const minutes = (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${lastWork.date}T00:00:00Z`)) / 60000
+        + timeline[0] - lastWork.exit;
+      if (minutes < 2160) addCritica(`${label}: descanso entre plantoes menor que 36:00 (${lastWork.date} e ${date}).`, [lastWork.date, date]);
+    }
+    if (timeline) lastWork = { date, exit: timeline[3] };
+  }
+  return errors;
+}
+
+function validarRegrasFuncionario(funcionario, onCritica, options = {}) {
+  if (effectiveRegime(funcionario) === TWELVE_THIRTY_SIX) return validarRegras12x36(funcionario, onCritica);
   const label = funcionario.nome || funcionario.NOME || funcionario.chapa || funcionario.CHAPA || funcionario.escfuncId || 'Funcionario';
   const dias = [...(funcionario.dias || [])].sort((a, b) => formatDate(a.data || a.DT).localeCompare(formatDate(b.data || b.DT)));
   const errors = [];
@@ -177,7 +232,9 @@ function validarRegrasFuncionario(funcionario, onCritica) {
     if (onCritica) onCritica({ mensagem, datas });
   };
   let ultimoTrabalho = null;
-  let ultimoDomingoTrabalhado = null;
+  const domingoAnterior = options.domingoAnteriorPorFuncionario?.get(Number(funcionario.escfuncId || funcionario.ESCFUNC_ID));
+  let ultimoDomingoTrabalhado = domingoAnterior?.PROGRAMACAO === 'TRB'
+    ? new Date(`${domingoAnterior.DT}T00:00:00Z`) : null;
   let diasTrabalhadosConsecutivos = 0;
   const maxDiasConsecutivos = Number(funcionario.maxDiasConsecutivos || 5);
   const folgasPorSemana = new Map();
@@ -188,12 +245,17 @@ function validarRegrasFuncionario(funcionario, onCritica) {
 
   for (const dia of dias) {
     const dataIso = formatDate(dia.data || dia.DT);
+    if (String(dia.programacao || dia.PROGRAMACAO || '').toUpperCase() === 'FDO' && !getNationalHoliday(dataIso)) {
+      addCritica(`${label}: FDO permitida apenas em feriado nacional cadastrado (${dataIso}).`, [dataIso]);
+    }
     const data = new Date(`${dataIso}T00:00:00`);
     const descanso = isDescanso(dia);
     const weekKey = getWeekKey(dataIso);
     diasPorSemana.set(weekKey, (diasPorSemana.get(weekKey) || 0) + 1);
-    if (descanso) descansosPorSemana.set(weekKey, (descansosPorSemana.get(weekKey) || 0) + 1);
-    (isFuncionarioAprendiz(funcionario) ? validarTurnoAprendiz(label, dia) : validarTurnoDia(label, dia))
+    if (descanso && String(dia.programacao || dia.PROGRAMACAO || '').toUpperCase() !== 'FDO') {
+      descansosPorSemana.set(weekKey, (descansosPorSemana.get(weekKey) || 0) + 1);
+    }
+    (isFuncionarioAprendiz(funcionario) ? validarTurnoAprendiz(label, dia) : validarTurnoDia(label, dia, options))
       .forEach((mensagem) => addCritica(mensagem, [dataIso]));
 
     if (isFolgaSemanal(dia)) {
@@ -257,7 +319,7 @@ function validarRegrasFuncionario(funcionario, onCritica) {
   return errors;
 }
 
-function validateEscalaPayload(payload) {
+function validateEscalaPayload(payload, options = {}) {
   if (!payload || typeof payload !== 'object') {
     return ['Payload da escala invalido.'];
   }
@@ -268,7 +330,7 @@ function validateEscalaPayload(payload) {
   if (!Array.isArray(payload.funcionarios)) errors.push('Lista de funcionarios obrigatoria.');
   if (Array.isArray(payload.funcionarios)) {
     payload.funcionarios.forEach((funcionario) => {
-      errors.push(...validarRegrasFuncionario(funcionario));
+      errors.push(...validarRegrasFuncionario(funcionario, null, { ...options, lojaId: payload.lojaId }));
     });
   }
 
@@ -293,16 +355,17 @@ function getCriticasCoberturaMinima(funcionarios = [], percentualMinimo = 60, ho
     .map(([data, item]) => `Cobertura minima da secao abaixo de ${percentualMinimo}% em ${data}. Trabalhando: ${item.trabalhando}/${item.total}.`);
 }
 
-function validarCriticasEscopo({ lojaId, mesRef, funcionarios }) {
+function validarCriticasEscopo({ lojaId, mesRef, funcionarios, domingo6h = false, domingoAnteriorPorFuncionario = null }) {
   const incompletos = funcionarios.filter((funcionario) => !funcionario.dias?.length)
     .map((funcionario) => `${funcionario.nome || funcionario.chapa || funcionario.escfuncId}: escala sem dias gerados.`);
   return [
     ...incompletos,
-    ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionarios.filter((funcionario) => funcionario.dias?.length) })
+    ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionarios.filter((funcionario) => funcionario.dias?.length) },
+      { domingo6h, domingoAnteriorPorFuncionario, lojaId })
   ];
 }
 
-function agruparCriticasPorSubsecao({ escala }) {
+function agruparCriticasPorSubsecao({ escala, lojaId = null, domingo6h = false, domingoAnteriorPorFuncionario = null }) {
   const secoes = new Map((escala.secoes || []).map((secao) => [Number(secao.ESCSECAO_ID), secao]));
   const diasPorFuncionario = new Map();
   for (const dia of escala.dias || []) {
@@ -328,6 +391,7 @@ function agruparCriticasPorSubsecao({ escala }) {
     grupos.get(key).funcionarios.push({
       escfuncId: Number(funcionario.ESCFUNC_ID), chapa: funcionario.CHAPA,
       nome: funcionario.NOME, funcao: funcionario.FUNCAO_DESCR,
+      regimeEscala: funcionario.REGIME_ESCALA, dtAncora12x36: funcionario.DT_ANCORA_12X36,
       dias: diasPorFuncionario.get(Number(funcionario.ESCFUNC_ID)) || []
     });
   }
@@ -343,7 +407,7 @@ function agruparCriticasPorSubsecao({ escala }) {
       }
       criticas.push(...validarRegrasFuncionario(funcionario, ({ mensagem, datas }) => {
         marcadores.push({ escfuncId: funcionario.escfuncId, datas, mensagem });
-      }));
+      }, { domingo6h, domingoAnteriorPorFuncionario, lojaId }));
     }
     return { ...grupo, criticas, marcadores };
   }).filter((grupo) => grupo.criticas.length > 0);

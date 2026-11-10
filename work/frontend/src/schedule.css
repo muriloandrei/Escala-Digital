@@ -615,6 +615,10 @@
   background: #fff0c2;
   color: #654400;
 }
+.monthly-grid td.fdo {
+  background: #fff0c2;
+  color: #654400;
+}
 .holiday-warning {
   display: block;
   width: 100%;

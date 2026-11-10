@@ -74,7 +74,8 @@ test('revisao aprovada ausente fica incerta e nao e marcada como enviada', async
   assert.match(updates[1].binds.erro, /Programacao oficializada nao encontrada/);
 });
 
-function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], dismissalDate = null, missingDay = null } = {}) {
+function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], dismissalDate = null,
+  missingDay = null, periodStart = '2026-10-05', periodEnd = '2026-11-01' } = {}) {
   const operations = [];
   const statements = [];
   const connection = {
@@ -84,6 +85,7 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
         return { rows: binds.tableName === 'SGN_ESC_SECAO'
           ? [{ COLUMN_NAME: 'STATUS' }] : [{ COLUMN_NAME: 'ATIVA' }] };
       }
+      if (/select domingo_6h_habilitado from sgn_esc_loja/i.test(sql)) return { rows: [{ DOMINGO_6H_HABILITADO: 0 }] };
       if (/select max\(p\.revisao\)/i.test(sql)) return { rows: [{ REVISAO: 7 }] };
       if (/from sgn_esc_pendencia_func/i.test(sql)) return { rows: [] };
       if (/select distinct p\.escfunc_id/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90 }] };
@@ -93,7 +95,7 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
       }
       if (/from sgn_esc_prog p\s+left join sgn_esc_funcionario f/i.test(sql)) {
         return { rows: Array.from({ length: 28 }, (_, index) => {
-          const date = new Date('2026-10-05T00:00:00Z');
+          const date = new Date(`${periodStart}T00:00:00Z`);
           date.setUTCDate(date.getUTCDate() + index);
           return { ESCFUNC_ID: 90, CHAPA: '000090', NOME: 'Teste', DT_DEMISS: dismissalDate,
             FUNCAO_DESCR: 'OPERADOR DE CAIXA', DT: date.toISOString().slice(0, 10),
@@ -122,7 +124,9 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
       createOperationId: () => 'op-queue',
       appendEvent: async () => { operations.push('event'); }
     },
-    '../domain/operationalPeriod': { getOperationalPeriodIso: () => ({ inicio: '2026-10-05', fim: '2026-11-01' }) },
+    '../domain/operationalPeriod': { getOperationalPeriodIso: () => ({ inicio: periodStart, fim: periodEnd }) },
+    '../domain/officializationDates': require('../src/domain/officializationDates'),
+    '../domain/fixedCarry': require('../src/domain/fixedCarry'),
     '../domain/portariaSection': require('../src/domain/portariaSection'),
     '../domain/employeeStatus': require('../src/domain/employeeStatus'),
     '../domain/sectionRollout': require('../src/domain/sectionRollout'),
@@ -131,7 +135,9 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
     '../rules/escalaRules': { validarCriticasEscopo: () => criticas }
   };
   const source = fs.readFileSync(path.join(__dirname, '../src/services/escalaService.js'), 'utf8');
-  vm.runInNewContext(source, { module, require: (name) => dependencies[name], console });
+  const context = vm.createContext({ module, require: (name) => dependencies[name], console });
+  vm.runInContext(source, context);
+  vm.runInContext("getHojeIso = () => '2026-10-01';", context);
   return { service: module.exports, operations, statements };
 }
 
@@ -177,6 +183,26 @@ test('oficializacao da secao recusa um dia ausente na transacao', async () => {
   assert.deepEqual(operations, ['rollback']);
 });
 
+test('oficializacao com IDs recusa dia futuro ausente', async () => {
+  const { service, operations } = loadEscalaService({ missingDay: '2026-10-12' });
+  await assert.rejects(
+    service.oficializarEscala({ lojaId: 35, mesRef: '2026-10-01', escsecaoId: 2003, escfuncIds: [90] }),
+    (error) => error.statusCode === 422 && /dias sem programacao/.test(error.message)
+  );
+  assert.deepEqual(operations, ['rollback']);
+});
+
+test('oficializacao de novembro ignora 01/11 ausente', async () => {
+  const { service, operations } = loadEscalaService({
+    missingDay: '2026-11-01', periodStart: '2026-11-01', periodEnd: '2026-11-08'
+  });
+  const result = await service.oficializarEscala({
+    lojaId: 35, mesRef: '2026-11-01', escsecaoId: 2003, escfuncIds: [90]
+  });
+  assert.equal(result.affectedRows, 1);
+  assert.deepEqual(operations, ['approve', 'queue', 'event', 'commit']);
+});
+
 test('envio RM pendente nao transmite dias posteriores a demissao', async () => {
   const { service, statements } = loadService({
     enabled: true,
@@ -217,6 +243,8 @@ test('edicao apos oficializacao supera envio pendente na mesma transacao', async
     './catalogService': {},
     './escalaEventService': { appendEvent: async () => statements.push('event') },
     '../domain/operationalPeriod': {},
+    '../domain/officializationDates': require('../src/domain/officializationDates'),
+    '../domain/fixedCarry': require('../src/domain/fixedCarry'),
     '../domain/portariaSection': require('../src/domain/portariaSection'),
     '../domain/employeeStatus': require('../src/domain/employeeStatus'),
     '../domain/sectionRollout': require('../src/domain/sectionRollout'),

@@ -10,10 +10,12 @@ async function loadFrontendHelper(filename) {
   return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 }
 
-test('frontend includes status P in employees eligible for schedules', async () => {
+test('frontend includes statuses P and Z in employees eligible for schedules', async () => {
   const { permiteEscala } = await loadFrontendHelper('employeeStatus.ts');
   assert.equal(permiteEscala('P'), true);
   assert.equal(permiteEscala(' p '), true);
+  assert.equal(permiteEscala('Z'), true);
+  assert.equal(permiteEscala(' z '), true);
   assert.equal(permiteEscala('I'), false);
 });
 
@@ -80,6 +82,19 @@ test('interactive editor accepts only a 01:10 interval', async () => {
   assert.match(validateStandardHours({ HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:20', HR_SAI2: '18:08' }), /exatamente 01:10/);
   assert.equal(validateStandardHours({ HR_ENT1: '20:00', HR_SAI1: '00:00', HR_ENT2: '01:10', HR_SAI2: '05:58' }), '');
   assert.match(validateStandardHours({ HR_ENT1: '20:00', HR_SAI1: '19:00', HR_ENT2: '20:10', HR_SAI2: '01:00' }), /24 horas/);
+});
+
+test('interactive editor supports registered 06:00/01:10 and 05:00/00:15 profiles', async () => {
+  const { validateStandardHours } = await loadFrontendHelper('shiftValidation.ts');
+  const { autofillStandardHours } = await loadFrontendHelper('shiftAutofill.ts');
+  const six = { HR_ENT1: '08:00', HR_SAI1: '11:00', HR_ENT2: '12:10', HR_SAI2: '15:10' };
+  const five = { HR_ENT1: '08:00', HR_SAI1: '10:30', HR_ENT2: '10:45', HR_SAI2: '13:15' };
+  assert.equal(validateStandardHours(six, 360, 70), '');
+  assert.equal(validateStandardHours(five, 300, 15), '');
+  assert.match(validateStandardHours(five, 300, 70), /01:10/);
+  assert.deepEqual(autofillStandardHours(five, 'HR_ENT1', '09:00', 300, 15), {
+    HR_ENT1: '09:00', HR_SAI1: '10:30', HR_ENT2: '10:45', HR_SAI2: '14:15'
+  });
 });
 
 test('apprentice editor adjusts both times while preserving 05:15', async () => {

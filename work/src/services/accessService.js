@@ -162,36 +162,6 @@ function isLeaderUser(requestUser) {
   return normalizePerfilName(requestUser) === 'LIDER';
 }
 
-function normalizeAccessText(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toUpperCase();
-}
-
-function isFrenteCaixaLeaderUser(requestUser) {
-  if (!isLeaderUser(requestUser)) return false;
-  const texto = normalizeAccessText(`${requestUser?.login || ''} ${requestUser?.nome || ''}`);
-  return texto.includes('FRENTE') || texto.includes('CAIXA');
-}
-
-function isFiscalRemotoLeaderUser(requestUser) {
-  if (!isLeaderUser(requestUser)) return false;
-  const texto = normalizeAccessText(`${requestUser?.login || ''} ${requestUser?.nome || ''}`);
-  return texto.includes('ESPECIALISTA') && texto.includes('REMOT');
-}
-
-function getEscopoOperacionalSecaoPredicate(alias = 's') {
-  return `(
-    regexp_like(upper(nvl(${alias}.descr, '')), 'FRENTE.*CAIXA')
-    or regexp_like(upper(nvl(${alias}.descr, '')), 'SERVI[CÇ]OS?.*CLIENT')
-    or regexp_like(upper(nvl(${alias}.descr, '')), 'TRANSPORT')
-    or regexp_like(upper(nvl(${alias}.descr, '')), 'PORTARIA')
-    or regexp_like(trim(nvl(${alias}.cod_secao, '')), '(^|[.])02[.]012$')
-  )`;
-}
-
 function canCreateEscala(requestUser) {
   return !isLeaderUser(requestUser);
 }
@@ -275,21 +245,13 @@ function normalizeUsuarioRows(rows = []) {
 }
 
 async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
-  if (!isLeaderUser(requestUser)) return null;
+  if (isGlobalStoreAccessUser(requestUser)) return null;
   const usuarioId = Number(requestUser?.sub || requestUser?.id || requestUser?.usuarioId || requestUser?.USUARIO_ID || 0);
   if (!usuarioId) return [];
 
   return withConnection(async (connection) => {
     const columns = await getUsuarioSecaoColumns(connection);
-    if (!columns) {
-      if (isFrenteCaixaLeaderUser(requestUser)) {
-        return listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId);
-      }
-      if (isFiscalRemotoLeaderUser(requestUser)) {
-        return listSecoesFiscalRemotoPermitidasInConnection(connection, requestUser, lojaId);
-      }
-      return [];
-    }
+    if (!columns) return [];
 
     const lojaColumn = await getSecaoLojaColumn(connection);
     const binds = { usuarioId };
@@ -309,80 +271,12 @@ async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    const explicitas = result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
-    if (explicitas.length && isFrenteCaixaLeaderUser(requestUser)) {
-      const portaria = await listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId, { onlyPortaria: true });
-      return [...new Set([...explicitas, ...portaria])];
-    }
-    if (explicitas.length) return explicitas;
-    if (isFrenteCaixaLeaderUser(requestUser)) {
-      return listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId);
-    }
-    if (isFiscalRemotoLeaderUser(requestUser)) {
-      return listSecoesFiscalRemotoPermitidasInConnection(connection, requestUser, lojaId);
-    }
-    return explicitas;
+    return result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
   });
 }
 
-async function listSecoesFrenteCaixaPermitidasInConnection(connection, requestUser, lojaId = null, { onlyPortaria = false } = {}) {
-  const lojas = lojaId
-    ? [Number(lojaId)]
-    : [...new Set((requestUser?.lojas || []).map(Number).filter(Boolean))];
-  if (!lojas.length) return [];
-
-  const lojaColumn = await getSecaoLojaColumn(connection);
-  const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
-  const binds = {};
-  const filters = [
-    buildInClause(`s.${lojaColumn.toLowerCase()}`, lojas, binds, 'lojaFrente'),
-    onlyPortaria
-      ? "(regexp_like(upper(nvl(s.descr, '')), 'PORTARIA') or regexp_like(trim(nvl(s.cod_secao, '')), '(^|[.])02[.]012$'))"
-      : getEscopoOperacionalSecaoPredicate('s')
-  ];
-  if (secaoColumns.has('STATUS')) filters.push("nvl(s.status, 'A') = 'A'");
-
-  const result = await connection.execute(
-    `select s.escsecao_id
-       from sgn_esc_secao s
-      where ${filters.join(' and ')}
-      order by s.escsecao_id`,
-    binds,
-    { outFormat: oracledb.OUT_FORMAT_OBJECT }
-  );
-
-  return result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
-}
-
-async function listSecoesFiscalRemotoPermitidasInConnection(connection, requestUser, lojaId = null) {
-  const lojas = lojaId
-    ? [Number(lojaId)]
-    : [...new Set((requestUser?.lojas || []).map(Number).filter(Boolean))];
-  if (!lojas.includes(999)) return [];
-
-  const lojaColumn = await getSecaoLojaColumn(connection);
-  const secaoColumns = await getTableColumns(connection, 'SGN_ESC_SECAO');
-  const filters = [
-    `s.${lojaColumn.toLowerCase()} = 999`,
-    "(regexp_like(upper(nvl(s.descr, '')), 'FISCAL.*REMOT') or s.cod_secao = '999.03.008')"
-  ];
-  if (secaoColumns.has('STATUS')) filters.push("nvl(s.status, 'A') = 'A'");
-
-  const result = await connection.execute(
-    `select s.escsecao_id
-       from sgn_esc_secao s
-      where ${filters.join(' and ')}
-      order by s.escsecao_id`,
-    {},
-    { outFormat: oracledb.OUT_FORMAT_OBJECT }
-  );
-
-  return result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
-}
-
 async function assertSecoesPermitidas(requestUser, lojaId, secaoIds = []) {
-  const perfil = normalizePerfilName(requestUser);
-  if (perfil === 'ADMIN' || perfil === 'GERENTE' || perfil === 'RH' || perfil === 'CONTROLADORIA' || !isLeaderUser(requestUser)) return;
+  if (isGlobalStoreAccessUser(requestUser)) return;
 
   const permitidas = await getSecoesPermitidasUsuario(requestUser, lojaId);
   const permitidasSet = new Set((permitidas || []).map(Number));
@@ -401,7 +295,7 @@ async function assertSecoesPermitidas(requestUser, lojaId, secaoIds = []) {
 }
 
 async function assertFuncionariosPermitidos(requestUser, lojaId, funcionarios = []) {
-  if (!isLeaderUser(requestUser)) return;
+  if (isGlobalStoreAccessUser(requestUser)) return;
   const secaoIds = (funcionarios || [])
     .map((funcionario) => funcionario?.escsecaoId || funcionario?.ESCSECAO_ID)
     .filter(Boolean);
@@ -869,5 +763,5 @@ module.exports = {
   saveLiberacaoSecoes,
   getPermissaoPerfil,
   getPermissoesPerfil,
-  _private: { normalizePermission, completarPermissoesPerfil, getEscopoOperacionalSecaoPredicate }
+  _private: { normalizePermission, completarPermissoesPerfil }
 };

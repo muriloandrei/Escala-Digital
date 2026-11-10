@@ -57,6 +57,70 @@ test('oficializacao identifica funcionario sem dias gerados', () => {
   assert.match(criticas[0], /escala sem dias gerados/);
 });
 
+test('dezembro respeita descanso dominical do ultimo domingo de novembro', () => {
+  const funcionarios = [{ escfuncId: 10, nome: 'Teste', dias: [
+    descanso('2026-12-01'), trabalho('2026-12-02'), trabalho('2026-12-03'),
+    descanso('2026-12-04'), trabalho('2026-12-05'), trabalho('2026-12-06')
+  ] }];
+  const domingoAnteriorPorFuncionario = new Map([[10,
+    { DT: '2026-11-29', PROGRAMACAO: 'TRB' }]]);
+  assert.ok(validarCriticasEscopo({ lojaId: 1, mesRef: '2026-12-01', funcionarios,
+    domingoAnteriorPorFuncionario }).some((item) => item.includes('dois domingos consecutivos')));
+  domingoAnteriorPorFuncionario.set(10, { DT: '2026-11-29', PROGRAMACAO: 'F' });
+  assert.equal(validarCriticasEscopo({ lojaId: 1, mesRef: '2026-12-01', funcionarios,
+    domingoAnteriorPorFuncionario }).some((item) => item.includes('dois domingos consecutivos')), false);
+});
+
+test('12x36 follows its anchor without applying 5x2 weekly rest rules', () => {
+  const shift = (data) => trabalho(data, { hrEnt1: '07:00', hrSai1: '12:30', hrEnt2: '13:30', hrSai2: '19:00' });
+  const dias = [shift('2026-12-01'), descanso('2026-12-02'), shift('2026-12-03'),
+    descanso('2026-12-04'), shift('2026-12-05'), descanso('2026-12-06')];
+  const funcionario = { escfuncId: 10, nome: 'Plantao', regimeEscala: '12X36',
+    dtAncora12x36: '2026-12-01', dias };
+  assert.deepEqual(validarCriticasEscopo({ lojaId: 700, mesRef: '2026-12-01',
+    funcionarios: [funcionario] }), []);
+  dias[1] = shift('2026-12-02');
+  assert.ok(validarCriticasEscopo({ lojaId: 700, mesRef: '2026-12-01',
+    funcionarios: [funcionario] }).some((item) => item.includes('descanso 12x36 esperado')));
+});
+
+test('08h24 post shift is rejected outside post stores', () => {
+  const day = trabalho('2026-09-01', { hrEnt1: '07:00', hrSai1: '11:30',
+    hrEnt2: '13:10', hrSai2: '17:04' });
+  const employee = { escfuncId: 10, nome: 'Posto', dias: [day] };
+  assert.deepEqual(validarCriticasEscopo({ lojaId: 700, mesRef: '2026-09-01', funcionarios: [employee] }), []);
+  assert.match(validarCriticasEscopo({ lojaId: 35, mesRef: '2026-09-01', funcionarios: [employee] }).join(' '), /jornada total/);
+});
+
+test('FDO pode coexistir com duas folgas semanais sem contar como terceira folga', () => {
+  const dias = [
+    descanso('2026-09-07', 'FDO'), trabalho('2026-09-08'), descanso('2026-09-09'),
+    trabalho('2026-09-10'), descanso('2026-09-11'), trabalho('2026-09-12'), trabalho('2026-09-13')
+  ];
+  const criticas = validateEscalaPayload(buildPayload(dias));
+  assert.equal(criticas.some((item) => item.includes('possui 3 folgas')), false);
+  dias[0] = descanso('2026-09-07');
+  assert.equal(validateEscalaPayload(buildPayload(dias)).some((item) => item.includes('possui 3 folgas')), true);
+});
+
+test('FDO nao substitui uma das duas folgas semanais', () => {
+  const dias = [
+    descanso('2026-09-07', 'FDO'), trabalho('2026-09-08'), descanso('2026-09-09'),
+    trabalho('2026-09-10'), trabalho('2026-09-11'), trabalho('2026-09-12'), trabalho('2026-09-13')
+  ];
+  assert.equal(validateEscalaPayload(buildPayload(dias)).some((item) => item.includes('minimo esperado no 5x2')), true);
+  dias[4] = descanso('2026-09-11');
+  assert.equal(validateEscalaPayload(buildPayload(dias)).some((item) => item.includes('minimo esperado no 5x2')), false);
+});
+
+test('regra parametrizada exige seis horas e intervalo de 1h10 no domingo', () => {
+  const domingo = trabalho('2026-09-13', { hrEnt1: '08:00', hrSai1: '11:00', hrEnt2: '12:10', hrSai2: '15:10' });
+  assert.equal(validateEscalaPayload(buildPayload([domingo]), { domingo6h: true }).some((item) => item.includes('jornada total')), false);
+  assert.equal(validateEscalaPayload(buildPayload([domingo]), { domingo6h: false }).some((item) => item.includes('jornada total')), false);
+  const intervaloLongo = { ...domingo, hrEnt2: '12:20', hrSai2: '15:20' };
+  assert.equal(validateEscalaPayload(buildPayload([intervaloLongo]), { domingo6h: true }).some((item) => item.includes('intervalo')), true);
+});
+
 test('painel mostra criticas de outras subsecoes sem repetir funcionarios ou secoes inacessiveis', () => {
   const grupos = agruparCriticasPorSubsecao({
     lojaId: 10, mesRef: '2026-11-01',
@@ -303,6 +367,13 @@ test('backend rejects total journey different from 08:48', () => {
   ]));
 
   assert.ok(errors.some((error) => error.includes('jornada total deve ser 08:48')));
+});
+
+test('backend accepts 5h with 15m interval and rejects a wrong interval', () => {
+  const five = trabalho('2026-09-01', { hrEnt1: '08:00', hrSai1: '10:30', hrEnt2: '10:45', hrSai2: '13:15' });
+  assert.equal(validateEscalaPayload(buildPayload([five])).some((error) => error.includes('jornada total') || error.includes('intervalo')), false);
+  const invalid = { ...five, hrEnt2: '11:40', hrSai2: '14:10' };
+  assert.equal(validateEscalaPayload(buildPayload([invalid])).some((error) => error.includes('intervalo')), true);
 });
 
 test('backend validates apprentice with fixed 05:15 first period only', () => {

@@ -34,7 +34,7 @@ export function preferredStore(user: User, lojas: Loja[]) {
   );
 }
 
-export type Loja = { LOJA: number; ESCLOJA_ID?: number; NOME?: string; DESCR?: string; TODAS_SECOES_HABILITADAS?: number };
+export type Loja = { LOJA: number; ESCLOJA_ID?: number; NOME?: string; DESCR?: string; TODAS_SECOES_HABILITADAS?: number; DOMINGO_6H_HABILITADO?: number };
 
 export type ResumoEscala = {
   LOJA: number;
@@ -64,6 +64,9 @@ export type Funcionario = {
   HR_SAI1?: string | null;
   HR_ENT2?: string | null;
   HR_SAI2?: string | null;
+  REGIME_ESCALA?: '5X2' | '12X36';
+  DT_ANCORA_12X36?: string | null;
+  REGIME_MES_INICIO?: string | null;
   DT_DEMISS?: string | null;
     STATUS?: string | null;
   GERADA?: number;

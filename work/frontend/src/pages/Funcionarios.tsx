@@ -11,6 +11,7 @@ import {
   type User,
 } from '../api';
 import { EditarHorarioBase } from './EditarHorarioBase';
+import { ConfigurarRegimeFuncionario } from './ConfigurarRegimeFuncionario';
 import { permiteEscala } from '../employeeStatus';
 
 type Suspension = { ESCPEND_ID: number; ESCFUNC_ID: number; DT_INICIO: string; DT_FIM?: string | null; TIPO?: string; STATUS: string; JUSTIFICATIVA?: string };
@@ -33,6 +34,7 @@ export function Funcionarios({ user }: { user: User }) {
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
   const [shiftTarget, setShiftTarget] = useState<{ employee: Funcionario; month: string } | null>(null);
+  const [regimeTarget, setRegimeTarget] = useState<Funcionario | null>(null);
   const [message, setMessage] = useState('');
   const [suspendTarget, setSuspendTarget] = useState<Funcionario | null>(null);
   const [closeTarget, setCloseTarget] = useState<Suspension | null>(null);
@@ -158,7 +160,7 @@ export function Funcionarios({ user }: { user: User }) {
     deepLinkOpened.current = `${loja}:${id}`;
     setSearch(employee.CHAPA);
     setSelected(employee.ESCFUNC_ID);
-    if (canEdit(user, 'escalas') && !employee.DT_DEMISS) {
+    if (canEdit(user, 'escalas') && !employee.DT_DEMISS && employee.REGIME_ESCALA !== '12X36') {
       setShiftTarget({ employee, month: /^\d{4}-\d{2}$/.test(params.get('mes') || '') ? params.get('mes')! : currentMonth() });
     }
   }, [funcionarios, loja, params, user]);
@@ -188,11 +190,16 @@ export function Funcionarios({ user }: { user: User }) {
               <h2>{detail.NOME}</h2>
               <p>{detail.CHAPA} · {detail.FUNCAO_DESCR || 'Cargo não informado'}</p>
             </div>
-            {canEdit(user, 'escalas') && !detail.DT_DEMISS && permiteEscala(detail.STATUS) && (
+            {canEdit(user, 'escalas') && detail.REGIME_ESCALA !== '12X36' && !detail.DT_DEMISS && permiteEscala(detail.STATUS) && (
                 <button type="button" className="button primary" onClick={() => openShift(detail)}>
                   <Pencil size={15} /> Editar horário
                 </button>
               )}
+            {Number(loja) >= 700 && Number(loja) <= 799 && canEdit(user, 'funcionarios')
+              && !detail.DT_DEMISS && permiteEscala(detail.STATUS) &&
+              <button type="button" className="button secondary" onClick={() => setRegimeTarget(detail)}>
+                <Pencil size={15} /> Configurar regime
+              </button>}
             {canSuspend && !detail.DT_DEMISS && permiteEscala(detail.STATUS) && !detailSuspension &&
               <button type="button" className="button secondary" onClick={() => {
                 setSuspendTarget(detail); setSuspendError('');
@@ -208,6 +215,7 @@ export function Funcionarios({ user }: { user: User }) {
             <div><dt>Loja</dt><dd>{detail.LOJA || loja}</dd></div>
             <div><dt>Seção</dt><dd>{detail.SECAO_DESCR || '–'}</dd></div>
             <div><dt>Subseção</dt><dd>{detail.SUBSECAO_DESCR || 'Sem subseção'}</dd></div>
+            {Number(loja) >= 700 && Number(loja) <= 799 && <div><dt>Regime</dt><dd>{detail.REGIME_ESCALA || '5X2'}{detail.REGIME_ESCALA === '12X36' && detail.DT_ANCORA_12X36 ? ` · Âncora ${detail.DT_ANCORA_12X36}` : ''}</dd></div>}
             <div><dt>Entrada</dt><dd>{detail.HR_ENT1 || '–'}</dd></div>
             <div><dt>Saída intervalo</dt><dd>{detail.HR_SAI1 || '–'}</dd></div>
             <div><dt>Retorno</dt><dd>{detail.HR_ENT2 || '–'}</dd></div>
@@ -360,6 +368,8 @@ export function Funcionarios({ user }: { user: User }) {
         <div className="confirm-actions"><button className="button secondary" type="button" disabled={suspendBusy} onClick={() => setCloseTarget(null)}>Cancelar</button><button className="button primary" type="button" disabled={suspendBusy} onClick={closeSuspension}>{suspendBusy ? 'Encerrando...' : 'Confirmar encerramento'}</button></div>
       </div></div>}
       {shiftTarget && <EditarHorarioBase key={`${shiftTarget.employee.ESCFUNC_ID}-${shiftTarget.month}`} employee={shiftTarget.employee} lojaId={loja} initialMonth={shiftTarget.month} onClose={() => setShiftTarget(null)} onSaved={(text) => { setMessage(text); setShiftTarget(null); setReload((value) => value + 1); }} />}
+      {regimeTarget && <ConfigurarRegimeFuncionario key={regimeTarget.ESCFUNC_ID} employee={regimeTarget} lojaId={loja}
+        onClose={() => setRegimeTarget(null)} onSaved={(text) => { setMessage(text); setRegimeTarget(null); setReload((value) => value + 1); }} />}
     </main>
   );
 }

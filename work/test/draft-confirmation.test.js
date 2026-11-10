@@ -15,6 +15,8 @@ function loadService(connection, appendEvent) {
       if (name === './escalaEventService') return { createOperationId: () => 'op-gerada', appendEvent };
       if (name === './catalogService') return {};
       if (name === '../domain/operationalPeriod') return {};
+      if (name === '../domain/officializationDates') return require('../src/domain/officializationDates');
+      if (name === '../domain/fixedCarry') return require('../src/domain/fixedCarry');
       if (name === '../domain/portariaSection') return require('../src/domain/portariaSection');
       if (name === '../domain/employeeStatus') return require('../src/domain/employeeStatus');
       if (name === '../domain/sectionRollout') return require('../src/domain/sectionRollout');

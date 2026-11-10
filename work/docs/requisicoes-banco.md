@@ -58,6 +58,15 @@ Fluxo externo RM usado pela oficializacao/reprocessamento:
 - `DELETE /rmsrestdataserver/rest/PtoAdtTabFolgaData/{CODCOLIGADA}$_${CODTABFOLGA}$_${DATA}$_${HORAINICIO}`: remove folgas que nao existem mais na escala.
 - `POST /rmsrestdataserver/rest/PtoAdtTabFolgaData?codcoligada=0`: envia novas folgas em array no formato esperado pelo RM.
 
+As folgas DSR enviadas no POST usam `HORAINICIO=0`, `HORAFIM=1440`,
+`HORAINICIOSTR=00:00`, `HORAFIMSTR=24:00` e `CONSEXTRAINTER=1`.
+Registros com a mesma data e hora inicial, mas com formato diferente, sao
+substituidos no reprocessamento. O GET precisa retornar os campos de horario e
+`CONSEXTRAINTER` para que a reconciliacao possa verificar a linha antes do DELETE.
+Para corrigir registros antigos diretamente no RM, execute primeiro
+`db/scripts/selecionar_folgas_rm_dia_inteiro.sql` no Oracle da escala e depois
+`db/scripts/corrigir_folgas_rm_dia_inteiro.sql` no SQL Server do RM em modo previa.
+
 ## Controle de acesso
 
 | Tela/fluxo | Endpoint | Metodo | Servico | Operacao no banco | Tabelas |

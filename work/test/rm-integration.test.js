@@ -8,6 +8,47 @@ process.env.ORACLE_CONNECT_STRING ||= 'localhost/XEPDB1';
 
 const { consultarFolgasFuncionarioMes, _private } = require('../src/services/rmIntegrationService');
 
+test('envia DSR como dia inteiro com intervalo extra', () => {
+  const payload = _private.buildFolgaPayload({
+    evento: { data: '2026-11-08', programacao: 'F' }, codColigada: 1, codTabFolga: '064.0075'
+  });
+  assert.equal(payload.HORAINICIO, 0);
+  assert.equal(payload.HORAFIM, 1440);
+  assert.equal(payload.HORAINICIOSTR, '00:00');
+  assert.equal(payload.HORAFIMSTR, '24:00');
+  assert.equal(payload.CONSEXTRAINTER, 1);
+});
+
+test('reprocessamento substitui formato antigo e preserva folga ja corrigida', () => {
+  const funcionario = { diasCobertos: ['2026-11-08'], eventos: [{ data: '2026-11-08', programacao: 'F' }] };
+  const options = { funcionario, codColigada: 1, codTabFolga: '064.0075' };
+  const antigo = {
+    CODCOLIGADA: 1, CODTABFOLGA: '064.0075', DATA: '2026-11-08T00:00:00',
+    HORAINICIO: 480, HORAFIM: 720, HORAINICIOSTR: '08:00', HORAFIMSTR: '12:00', CONSEXTRAINTER: 0
+  };
+  const plano = _private.planejarFolgasRm({ ...options, existentesRows: [antigo] });
+  assert.equal(plano.deletePaths.length, 1);
+  assert.match(plano.deletePaths[0], /\$_\$480$/);
+  assert.equal(plano.payloadInclusao.length, 1);
+  const correto = { ...antigo, ...plano.payloadInclusao[0] };
+  assert.deepEqual(_private.planejarFolgasRm({ ...options, existentesRows: [correto] }), {
+    deletePaths: [], payloadInclusao: []
+  });
+  const metadadosAntigos = { ...correto, CONSEXTRAINTER: 0 };
+  const correcao = _private.planejarFolgasRm({ ...options, existentesRows: [metadadosAntigos] });
+  assert.equal(correcao.deletePaths.length, 1);
+  assert.equal(correcao.payloadInclusao.length, 1);
+});
+
+test('reprocessamento bloqueia resposta RM incompleta ou ambigua antes do DELETE', () => {
+  const funcionario = { diasCobertos: ['2026-11-08'], eventos: [{ data: '2026-11-08', programacao: 'F' }] };
+  const folga = { CODCOLIGADA: 1, CODTABFOLGA: '064.0075', DATA: '2026-11-08', HORAINICIO: 0 };
+  const options = { funcionario, codColigada: 1, codTabFolga: '064.0075' };
+  assert.throws(() => _private.planejarFolgasRm({ ...options, existentesRows: [folga] }), /campos necessarios/);
+  const completa = { ...folga, HORAFIM: 1440, HORAINICIOSTR: '00:00', HORAFIMSTR: '24:00', CONSEXTRAINTER: 1 };
+  assert.throws(() => _private.planejarFolgasRm({ ...options, existentesRows: [completa, completa] }), /duplicadas/);
+});
+
 test('monta DELETE do RM com data direta retornada pela API', () => {
   const path = _private.buildDeleteFolgaPath(
     {
@@ -184,6 +225,27 @@ test('RM separa dias cobertos de folgas e ignora ferias e afastamentos', () => {
   assert.deepEqual(funcionarios[0].eventos, []);
   assert.deepEqual(funcionarios[0].diasCobertos, ['2026-10-05']);
   assert.deepEqual(funcionarios[1].eventos, [{ data: '2026-10-05', programacao: 'F' }]);
+});
+
+test('RM conserva FDO separado dos eventos DSR', () => {
+  const [funcionario] = _private.agruparPorFuncionario([
+    { ESCFUNC_ID: 1, CHAPA: '001', DT: new Date('2026-10-05T12:00:00Z'), PROGRAMACAO: 'FDO' }
+  ]);
+  assert.deepEqual(funcionario.eventos, []);
+  assert.deepEqual(funcionario.fdoDatas, ['2026-10-05']);
+  assert.deepEqual(funcionario.diasCobertos, []);
+});
+
+test('RM nao envia nem remove folga nas datas FDO', () => {
+  const [funcionario] = _private.agruparPorFuncionario([
+    { ESCFUNC_ID: 1, CHAPA: '001', DT: new Date('2026-09-07T12:00:00Z'), PROGRAMACAO: 'FDO' },
+    { ESCFUNC_ID: 1, CHAPA: '001', DT: new Date('2026-09-09T12:00:00Z'), PROGRAMACAO: 'F' }
+  ]);
+  const existentesRows = [{ CODCOLIGADA: 1, CODTABFOLGA: '001', DATA: '2026-09-07T00:00:00', HORAINICIO: 0 }];
+  const plano = _private.planejarFolgasRm({ existentesRows, funcionario, codColigada: 1, codTabFolga: '001' });
+  assert.deepEqual(plano.deletePaths, []);
+  assert.equal(plano.payloadInclusao.length, 1);
+  assert.match(plano.payloadInclusao[0].DATA, /2026-09-09/);
 });
 
 test('RM seleciona somente o escopo oficializado solicitado', async () => {

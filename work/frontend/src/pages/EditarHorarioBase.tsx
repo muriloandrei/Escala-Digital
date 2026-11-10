@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { patchJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { autofillStandardHours } from '../shiftAutofill';
 import { validateStandardHours } from '../shiftValidation';
+import { ShiftProfileSelect } from '../ShiftProfileSelect';
 import { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
 
 type Impact = { diasAlterados: number; diasManuais: number; possuiEscala: boolean; mesesImpactados: string[]; mesesParaReoficializar: string[] };
@@ -11,17 +12,19 @@ function currentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, onClose, onSaved }: {
+export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, allowRetroactive = false, onClose, onSaved }: {
   employee: Funcionario;
   lojaId: string;
   initialMonth: string;
   currentDay?: DiaEscala;
+  allowRetroactive?: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
   const minimumMonth = currentMonth();
-  const [month, setMonth] = useState(initialMonth < minimumMonth ? minimumMonth : initialMonth);
+  const [month, setMonth] = useState(initialMonth < minimumMonth && !allowRetroactive ? minimumMonth : initialMonth);
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
+  const [profile, setProfile] = useState({ work: 528, interval: 70 });
   const [hours, setHours] = useState(() => apprentice
     ? apprenticeHoursFromStart(employee.HR_ENT1 || currentDay?.HR_ENT1 || '08:00') || apprenticeHoursFromStart('08:00')!
     : {
@@ -36,8 +39,8 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
     HR_ENT2: apprentice ? null : hours.HR_ENT2, HR_SAI2: apprentice ? null : hours.HR_SAI2 });
 
   async function preview() {
-    if (month < currentMonth()) { setError('Horários de meses anteriores não podem ser alterados.'); return; }
-    const invalid = apprentice ? validateApprenticeHours(hours) : validateStandardHours(hours);
+    if (month < currentMonth() && !allowRetroactive) { setError('Horários de meses anteriores não podem ser alterados.'); return; }
+    const invalid = apprentice ? validateApprenticeHours(hours) : validateStandardHours(hours, profile.work, profile.interval);
     if (invalid) { setError(invalid); return; }
     setBusy(true); setError('');
     try {
@@ -49,7 +52,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
 
   async function save() {
     if (!impact) return;
-    if (month < currentMonth()) { setError('Horários de meses anteriores não podem ser alterados.'); return; }
+    if (month < currentMonth() && !allowRetroactive) { setError('Horários de meses anteriores não podem ser alterados.'); return; }
     setBusy(true); setError('');
     try {
       const result = await patchJson<{ diasAlterados: number; mesesAtualizados: string[]; mesesParaReoficializar: string[] }>(
@@ -64,19 +67,23 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
       <h2 id="shift-title">Editar horário · {employee.NOME}</h2>
       <p>{employee.CHAPA} · {employee.FUNCAO_DESCR || 'Cargo não informado'}</p>
       {currentDay && <p>Na escala: {[currentDay.HR_ENT1, currentDay.HR_SAI1, currentDay.HR_ENT2, currentDay.HR_SAI2].filter(Boolean).join(' · ')}</p>}
+      {!apprentice && <ShiftProfileSelect postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+        setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
+        setHours({ HR_ENT1: item.HR_ENT1, HR_SAI1: item.HR_SAI1, HR_ENT2: item.HR_ENT2, HR_SAI2: item.HR_SAI2 });
+        setImpact(null); setError('');
+      }} />}
       <div className="shift-fields">{(apprentice ? ['HR_ENT1', 'HR_SAI1'] as const : ['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'] as const).map((field, index) =>
         <label key={field}>{apprentice ? ['Entrada', 'Saída'][index] : ['Entrada', 'Saída intervalo', 'Retorno', 'Última saída'][index]}
           <input type="time" value={hours[field]} onChange={(event) => {
             const next = apprentice ? autofillApprenticeHours(field as 'HR_ENT1' | 'HR_SAI1', event.target.value)
-              : autofillStandardHours(hours, field, event.target.value);
+              : autofillStandardHours(hours, field, event.target.value, profile.work, profile.interval);
             if (next) { setHours(next); setError(''); }
-            else setError(apprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível ajustar o horário mantendo 08:48 de trabalho e 01:10 de intervalo.');
+            else setError(apprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível manter a jornada e o intervalo selecionados.');
             setImpact(null);
           }} required />
         </label>)}</div>
-      <div className="shift-options"><label>Mês de referência<input type="month" min={minimumMonth} value={month} onChange={(event) => { setMonth(event.target.value); setImpact(null); }} required /></label></div>
-      {initialMonth < minimumMonth && <p>A escala aberta é de um mês anterior. A alteração começará no mês vigente.</p>}
-      <p>O horário-base e os dias futuros editáveis serão atualizados juntos. Folgas, fixos e ajustes manuais permanecem.</p>
+      <div className="shift-options"><label>Mês de referência<input type="month" min={allowRetroactive ? undefined : minimumMonth} value={month} onChange={(event) => { setMonth(event.target.value); setImpact(null); }} required /></label></div>
+      {initialMonth < minimumMonth && !allowRetroactive && <p>A escala aberta é de um mês anterior. A alteração começará no mês vigente.</p>}
       {impact && <div className="shift-impact"><strong>Prévia</strong><span>{impact.possuiEscala ? `${impact.diasAlterados} dia(s) em ${impact.mesesImpactados.length} mês(es).` : 'Nenhuma escala futura existente.'}</span><span>{impact.diasManuais} dia(s) com ajuste manual preservado(s).</span>{impact.mesesParaReoficializar?.length > 0 && <span>Reoficialização necessária em {impact.mesesParaReoficializar.join(', ')}.</span>}</div>}
       {error && <div className="notice error" role="alert">{error}</div>}
       <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={onClose}>Cancelar</button><button className="button primary" type="button" disabled={busy || !month} onClick={impact ? save : preview}>{busy ? 'Aguarde...' : impact ? 'Salvar horário' : 'Ver prévia'}</button></div>
