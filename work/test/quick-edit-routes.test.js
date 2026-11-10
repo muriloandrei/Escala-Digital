@@ -325,3 +325,42 @@ test('apprentice base-hour preview and update accept a different 05:15 shift', a
     auditService.registerAudit = originals.registerAudit;
   }
 });
+
+test('regular employee can preview base hours and save a fixed work shift', async () => {
+  const originals = {
+    getSecoesPermitidasUsuario: accessService.getSecoesPermitidasUsuario,
+    assertSecoesPermitidas: accessService.assertSecoesPermitidas,
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    previewHorarioFuncionarioEscala: escalaService.previewHorarioFuncionarioEscala,
+    saveFixoEscala: escalaService.saveFixoEscala,
+    registerAudit: auditService.registerAudit
+  };
+  accessService.getSecoesPermitidasUsuario = async () => [20];
+  accessService.assertSecoesPermitidas = async () => {};
+  catalogService.listFuncionariosByLoja = async () => [{ ESCFUNC_ID: 10, ESCSECAO_ID: 20,
+    FUNCAO_DESCR: 'OPERADOR DE CAIXA', HR_ENT1: '08:00' }];
+  escalaService.previewHorarioFuncionarioEscala = async () => ({ diasAlterados: 2 });
+  escalaService.saveFixoEscala = async () => ({ ESCFIXO_ID: 1, PROGRAMACAO: 'TRB' });
+  auditService.registerAudit = async () => {};
+  const hours = { HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };
+  try {
+    const preview = response();
+    await handler('/funcionario/horario/preview')({ body: { lojaId: 65, mesRef: '2099-11-01',
+      escfuncId: 10, aplicarNaEscala: true, ...hours }, user: { sub: 1 } }, preview,
+    (error) => { throw error; });
+    assert.equal(preview.code, 200);
+
+    const fixed = response();
+    await handler('/fixos')({ body: { lojaId: 65, mesRef: '2099-11-01', escfuncId: 10,
+      escsecaoId: 20, DT: '2099-11-11', PROGRAMACAO: 'TRB', ...hours }, user: { sub: 1 } }, fixed,
+    (error) => { throw error; });
+    assert.equal(fixed.code, 201);
+  } finally {
+    accessService.getSecoesPermitidasUsuario = originals.getSecoesPermitidasUsuario;
+    accessService.assertSecoesPermitidas = originals.assertSecoesPermitidas;
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    escalaService.previewHorarioFuncionarioEscala = originals.previewHorarioFuncionarioEscala;
+    escalaService.saveFixoEscala = originals.saveFixoEscala;
+    auditService.registerAudit = originals.registerAudit;
+  }
+});

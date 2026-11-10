@@ -12,6 +12,7 @@ const officializationService = require('../services/officializationService');
 const previousSundayService = require('../services/previousSundayService');
 const sectionRolloutService = require('../services/sectionRolloutService');
 const sundayShiftService = require('../services/sundayShiftService');
+const workRegimeService = require('../services/workRegimeService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { validateStandardShift, validateApprenticeShift, validate12x36Shift } = require('../domain/shiftValidation');
 const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('../domain/workRegime');
