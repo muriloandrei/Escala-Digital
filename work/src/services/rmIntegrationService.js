@@ -580,7 +580,7 @@ async function validarPreRequisitosRm({ lojaId, mesRef, revisao, escsecaoId, esc
   });
 }
 
-async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds, exigirEscala = false }) {
+async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds, exigirEscala = false, somenteVerificar = false }) {
   const rmConfig = getEnv().rm;
   return withConnection(async (connection) => {
     const rows = await getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId, escfuncIds, apenasOficializada: true });
@@ -636,6 +636,9 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
         const { deletePaths, payloadInclusao } = planejarFolgasRm({
           existentesRows, funcionario, codColigada: codColigadaRm, codTabFolga
         });
+        if (somenteVerificar && (deletePaths.length || payloadInclusao.length)) {
+          throw new Error('Timeout de escrita no RM: consulta ainda nao confirma as folgas. Envio INCERTO; conferir no RM antes de reenviar.');
+        }
         let removidas = 0;
 
         for (const deletePath of deletePaths) {
@@ -712,18 +715,30 @@ async function getEnviosOperacao(operacaoId) {
   });
 }
 
-async function listPendenciasRm({ lojaId = null, limit = 100 } = {}) {
+async function listPendenciasRm({ lojaId = null, limit = 100, incertos = false, falhas = false, erroTipo = null } = {}) {
   const limite = Math.min(500, Math.max(1, Number(limit) || 100));
   return withConnection(async (connection) => {
     const binds = { limite };
-    const filtroLoja = lojaId ? 'and loja = :lojaId' : '';
+    const filtroLoja = lojaId ? 'and e.loja = :lojaId' : '';
     if (lojaId) binds.lojaId = Number(lojaId);
+    if (erroTipo && !['CODTABFOLGA', 'TIMEOUT'].includes(erroTipo)) throw new Error('Tipo de erro RM invalido.');
+    const filtroErro = erroTipo ? 'and upper(e.erro) like :erroTipo' : '';
+    if (erroTipo) binds.erroTipo = `%${erroTipo}%`;
     const result = await connection.execute(
       `select * from (
-         select envio_id, loja, mes_ref, escsecao_id, escfunc_id, revisao, status
-           from sgn_esc_rm_envio
-          where status = 'PENDENTE' ${filtroLoja}
-          order by dt_hr_incl, envio_id
+         select e.envio_id, e.loja, e.mes_ref, e.escsecao_id, e.escfunc_id,
+                e.revisao, e.status, e.tentativas, e.erro, f.chapa,
+                (select max(p.revisao) from sgn_esc_prog p
+                  where p.loja = e.loja and p.mes_ref = e.mes_ref
+                    and p.escfunc_id = e.escfunc_id and nvl(p.ativa, 1) = 1) revisao_atual,
+                (select max(p.oficializada) from sgn_esc_prog p
+                  where p.loja = e.loja and p.mes_ref = e.mes_ref
+                    and p.escfunc_id = e.escfunc_id and p.revisao = e.revisao
+                    and p.escsecao_id = e.escsecao_id and nvl(p.ativa, 1) = 1) oficializada
+           from sgn_esc_rm_envio e
+           left join sgn_esc_funcionario f on f.escfunc_id = e.escfunc_id
+          where e.status = '${falhas ? 'FALHA' : incertos ? 'INCERTO' : 'PENDENTE'}' ${filtroLoja} ${filtroErro}
+          order by e.dt_hr_incl, e.envio_id
        ) where rownum <= :limite`,
       binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -731,11 +746,46 @@ async function listPendenciasRm({ lojaId = null, limit = 100 } = {}) {
   });
 }
 
-async function processarEnvioRm(envio, { manual = false } = {}) {
+async function processarEnvioRm(envio, { manual = false, retry = false } = {}) {
   const envioId = Number(pick(envio, 'ENVIO_ID', 'envio_id'));
+  const lojaId = Number(pick(envio, 'LOJA', 'loja'));
+  const mesRef = formatDate(pick(envio, 'MES_REF', 'mes_ref'));
+  const escfuncId = Number(pick(envio, 'ESCFUNC_ID', 'escfunc_id'));
+  const revisao = Number(pick(envio, 'REVISAO', 'revisao'));
+  const escsecaoId = Number(pick(envio, 'ESCSECAO_ID', 'escsecao_id'));
+  const atual = await withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select max(p.revisao) revisao_atual,
+              max(case when p.revisao = :revisao and p.escsecao_id = :escsecaoId
+                        then p.oficializada end) oficializada
+         from sgn_esc_prog p
+        where p.loja = :lojaId and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          and p.escfunc_id = :escfuncId and nvl(p.ativa, 1) = 1`,
+      { lojaId, mesRef, escfuncId, revisao, escsecaoId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows?.[0];
+  });
+  if (Number(pick(atual, 'REVISAO_ATUAL', 'revisao_atual')) !== revisao
+    || Number(pick(atual, 'OFICIALIZADA', 'oficializada')) !== 1) {
+    const erro = 'Envio nao corresponde a revisao ativa mais recente e oficializada. Oficialize a revisao atual antes de reenviar.';
+    if (manual) {
+      const error = new Error(erro);
+      error.statusCode = 409;
+      throw error;
+    }
+    await withConnection(async (connection) => {
+      await connection.execute(
+        `update sgn_esc_rm_envio set status = 'SUPERADO', erro = :erro, dt_hr_alter = sysdate
+          where envio_id = :envioId and status in ('PENDENTE', 'INCERTO')`,
+        { envioId, erro }, { autoCommit: false }
+      );
+      await connection.commit();
+    });
+    return { enabled: true, enviados: 0, falhas: 1, status: 'SUPERADO', erros: [erro] };
+  }
   const claimed = await withConnection(async (connection) => {
-    const statusSql = manual
-      ? "(status in ('PENDENTE', 'INCERTO') or (status = 'PROCESSANDO' and dt_hr_alter < sysdate - 30/1440))"
+    const statusSql = manual || retry
+      ? "(status in ('PENDENTE', 'INCERTO', 'FALHA') or (status = 'PROCESSANDO' and dt_hr_alter < sysdate - 30/1440))"
       : "status = 'PENDENTE'";
     const result = await connection.execute(
       `update sgn_esc_rm_envio
@@ -749,17 +799,21 @@ async function processarEnvioRm(envio, { manual = false } = {}) {
   if (!claimed) return { enabled: true, enviados: 0, falhas: 0, ignorado: true };
 
   let rm;
-  try {
-    rm = await oficializarNoRm({
-      lojaId: Number(pick(envio, 'LOJA', 'loja')),
-      mesRef: formatDate(pick(envio, 'MES_REF', 'mes_ref')),
-      escsecaoId: Number(pick(envio, 'ESCSECAO_ID', 'escsecao_id')),
-      escfuncIds: [Number(pick(envio, 'ESCFUNC_ID', 'escfunc_id'))],
-      revisao: Number(pick(envio, 'REVISAO', 'revisao')),
-      exigirEscala: true
-    });
-  } catch (error) {
-    rm = { enabled: true, enviados: 0, falhas: 1, erros: [error.message] };
+  // Apos timeout de escrita, apenas consultar: o RM pode ter aplicado o POST/DELETE.
+  let somenteVerificar = false;
+  for (let tentativa = 0; tentativa < 3; tentativa += 1) {
+    try {
+      rm = await oficializarNoRm({
+        lojaId, mesRef, escsecaoId, escfuncIds: [escfuncId], revisao, exigirEscala: true, somenteVerificar
+      });
+    } catch (error) {
+      rm = { enabled: true, enviados: 0, falhas: 1, erros: [error.message] };
+    }
+    if (!rm.falhas) break;
+    if (/timeout/i.test(rm.erros?.[0] || '') && /em (POST|DELETE)/i.test(rm.erros?.[0] || '')) {
+      somenteVerificar = true;
+    }
+    if (!/RM nao retornou CODTABFOLGA|timeout/i.test(rm.erros?.[0] || '')) break;
   }
   await withConnection(async (connection) => {
     await connection.execute(
@@ -768,14 +822,16 @@ async function processarEnvioRm(envio, { manual = false } = {}) {
         where envio_id = :envioId and status = 'PROCESSANDO'`,
       {
         envioId,
-        status: rm.falhas ? 'INCERTO' : 'ENVIADO',
+        status: rm.falhas && !somenteVerificar && /RM nao retornou CODTABFOLGA/i.test(rm.erros?.[0] || '')
+          ? 'FALHA' : rm.falhas ? 'INCERTO' : 'ENVIADO',
         erro: rm.erros?.[0] ? String(rm.erros[0]).slice(0, 1000) : null
       },
       { autoCommit: false }
     );
     await connection.commit();
   });
-  return rm;
+  return { ...rm, status: rm.falhas && !somenteVerificar && /RM nao retornou CODTABFOLGA/i.test(rm.erros?.[0] || '')
+    ? 'FALHA' : rm.falhas ? 'INCERTO' : 'ENVIADO' };
 }
 
 async function processarOperacaoRm({ operacaoId }) {
@@ -796,15 +852,15 @@ async function processarOperacaoRm({ operacaoId }) {
   return resultado;
 }
 
-async function processarPendenciasRm({ lojaId = null, limit = 100 } = {}) {
+async function processarPendenciasRm({ lojaId = null, limit = 100, incertos = false, falhas = false, erroTipo = null } = {}) {
   if (!getEnv().rm.enabled) throw new Error('Integracao RM desabilitada. Nenhum envio foi iniciado.');
-  const envios = await listPendenciasRm({ lojaId, limit });
+  const envios = await listPendenciasRm({ lojaId, limit, incertos, falhas, erroTipo });
   const resultados = [];
   for (const envio of envios) {
     const envioId = Number(pick(envio, 'ENVIO_ID', 'envio_id'));
     try {
-      const resultado = await processarEnvioRm(envio);
-      resultados.push({ envioId, status: resultado.ignorado ? 'IGNORADO' : resultado.falhas ? 'INCERTO' : 'ENVIADO' });
+      const resultado = await processarEnvioRm(envio, { retry: incertos || falhas });
+      resultados.push({ envioId, status: resultado.ignorado ? 'IGNORADO' : resultado.status });
     } catch (error) {
       resultados.push({ envioId, status: 'VERIFICAR', erro: error.message });
     }
@@ -837,7 +893,11 @@ async function reprocessarEnvioRm({ lojaId, mesRef, revisao, escfuncId, envioId 
     throw error;
   }
   const envio = envios[0];
-  if (!envio) return oficializarNoRm({ lojaId, mesRef, revisao, escfuncIds: [escfuncId], exigirEscala: true });
+  if (!envio) {
+    const error = new Error('Nao existe pendencia RM para esta revisao. Oficialize a escala antes de reenviar.');
+    error.statusCode = 404;
+    throw error;
+  }
   if (!getEnv().rm.enabled) return { enabled: false, status: 'PENDENTE', enviados: 0, falhas: 0 };
   return processarEnvioRm(envio, { manual: true });
 }

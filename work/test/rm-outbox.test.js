@@ -4,15 +4,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function loadService({ enabled, rows, scheduleRows = [] }) {
+function loadService({ enabled, rows, scheduleRows = [], fetchImpl = null }) {
   const statements = [];
   const connection = {
     async execute(sql, binds) {
       statements.push({ sql, binds });
       if (/from sgn_esc_rm_envio where operacao_id/i.test(sql)) return { rows };
       if (/from sgn_esc_rm_envio e/i.test(sql)) return { rows };
-      if (/from sgn_esc_rm_envio\s+where status = 'PENDENTE'/i.test(sql)) return { rows };
+      if (/from sgn_esc_rm_envio e\s+left join sgn_esc_funcionario/i.test(sql)) return { rows };
+      if (/select max\(p\.revisao\) revisao_atual/i.test(sql)) return { rows: [{ REVISAO_ATUAL: 7, OFICIALIZADA: scheduleRows.length ? 1 : 0 }] };
       if (/update sgn_esc_rm_envio/i.test(sql)) return { rowsAffected: 1 };
+      if (/insert into sgn_esc_rm_log/i.test(sql)) return { rowsAffected: 1 };
       if (/user_tab_columns/i.test(sql)) return { rows: [{ COLUMN_NAME: 'CPF' }, { COLUMN_NAME: 'ATIVA' }] };
       if (/from sgn_esc_prog p/i.test(sql)) return { rows: scheduleRows };
       throw new Error(`Unexpected SQL: ${sql}`);
@@ -21,12 +23,20 @@ function loadService({ enabled, rows, scheduleRows = [] }) {
   };
   const module = { exports: {} };
   const dependencies = {
-    '../config/env': { getEnv: () => ({ rm: { enabled } }) },
+    '../config/env': { getEnv: () => ({ rm: {
+      enabled, baseUrl: 'http://localhost:1', retries: 0, timeoutMs: 1000,
+      funcionarioPath: '/funcionario', folgasPath: '/folgas',
+      folgasPostCodcoligada: '0', timezoneOffset: '-03:00'
+    } }) },
     '../db/oracle': { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } },
     '../domain/operationalPeriod': { getOperationalPeriodIso: () => ({ inicio: '2026-10-05', fim: '2026-11-01' }) }
   };
   const source = fs.readFileSync(path.join(__dirname, '../src/services/rmIntegrationService.js'), 'utf8');
-  vm.runInNewContext(source, { module, require: (name) => dependencies[name], console });
+  vm.runInNewContext(source, {
+    module, require: (name) => dependencies[name], console,
+    fetch: fetchImpl || (() => { throw new Error('Fetch inesperado'); }),
+    AbortController, setTimeout, clearTimeout
+  });
   return { service: module.exports, statements };
 }
 
@@ -55,12 +65,21 @@ test('retomada lista apenas pendencias com limite e nao envia sem apply', async 
   const { service, statements } = loadService({ enabled: false, rows: [envio] });
   const result = await service.listPendenciasRm({ lojaId: 35, limit: 20 });
   assert.equal(result.length, 1);
-  const query = statements.find(({ sql }) => /where status = 'PENDENTE'/i.test(sql));
+  const query = statements.find(({ sql }) => /where e\.status = 'PENDENTE'/i.test(sql));
   assert.equal(query.binds.limite, 20);
   assert.equal(query.binds.lojaId, 35);
-  assert.match(query.sql, /order by dt_hr_incl, envio_id/i);
+  assert.match(query.sql, /order by e\.dt_hr_incl, e\.envio_id/i);
   await assert.rejects(service.processarPendenciasRm({ lojaId: 35 }), /Integracao RM desabilitada/);
   assert.equal(statements.some(({ sql }) => /update sgn_esc_rm_envio/i.test(sql)), false);
+});
+
+test('diagnostico de incertos filtra somente erro CODTABFOLGA e mostra revisao atual', async () => {
+  const { service, statements } = loadService({ enabled: false, rows: [envio] });
+  await service.listPendenciasRm({ lojaId: 35, incertos: true, erroTipo: 'CODTABFOLGA' });
+  const query = statements.find(({ sql }) => /where e\.status = 'INCERTO'/i.test(sql));
+  assert.match(query.sql, /revisao_atual/);
+  assert.equal(query.binds.erroTipo, '%CODTABFOLGA%');
+  assert.equal(query.binds.lojaId, 35);
 });
 
 test('revisao aprovada ausente fica incerta e nao e marcada como enviada', async () => {
@@ -69,9 +88,93 @@ test('revisao aprovada ausente fica incerta e nao e marcada como enviada', async
   assert.equal(result.status, 'INCERTO');
   assert.equal(result.falhas, 1);
   const updates = statements.filter(({ sql }) => /update sgn_esc_rm_envio/i.test(sql));
-  assert.equal(updates.length, 2);
+  assert.equal(updates.length, 1);
+  assert.match(updates[0].sql, /status = 'SUPERADO'/);
+  assert.match(updates[0].binds.erro, /revisao ativa mais recente/);
+});
+
+test('CODTABFOLGA ausente tenta tres consultas e sinaliza falha confirmada', async () => {
+  let consultas = 0;
+  const row = {
+    ESCFUNC_ID: 90, CHAPA: '035.0090', CPF: '12345678901', CODCOLIGADA: 1,
+    REVISAO: 7, DT: '2026-10-05', PROGRAMACAO: 'F', APOS_DEMISSAO: 0
+  };
+  const fetchImpl = async () => {
+    consultas += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify([{ CODSITUACAO: 'A' }]) };
+  };
+  const { service, statements } = loadService({ enabled: true, rows: [{ ...envio, MES_REF: '2026-10-01' }], scheduleRows: [row], fetchImpl });
+  const result = await service.processarOperacaoRm({ operacaoId: 'op-codtab' });
+  assert.equal(consultas, 3);
+  assert.equal(result.status, 'INCERTO');
+  const updates = statements.filter(({ sql }) => /update sgn_esc_rm_envio/i.test(sql));
+  assert.equal(updates[1].binds.status, 'FALHA');
+  assert.match(updates[1].binds.erro, /CODTABFOLGA/);
+});
+
+test('timeout no POST reconcilia no GET sem repetir uma escrita ja aplicada', async () => {
+  const row = {
+    ESCFUNC_ID: 90, CHAPA: '035.0090', CPF: '12345678901', CODCOLIGADA: 1,
+    REVISAO: 7, DT: '2026-10-05', PROGRAMACAO: 'F', APOS_DEMISSAO: 0
+  };
+  let posts = 0;
+  let consultasFolgas = 0;
+  const fetchImpl = async (url, options) => {
+    if (url.includes('/funcionario')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([{ CODSITUACAO: 'A', CODTABFOLGA: '035.0090', CODCOLIGADA: 1 }]) };
+    }
+    if ((options.method || 'GET') === 'POST') {
+      posts += 1;
+      const error = new Error('The operation was aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
+    consultasFolgas += 1;
+    const body = consultasFolgas === 1
+      ? { messages: [{ code: '0003', type: 'info' }], data: null, length: 0 }
+      : [{ DATA: '2026-10-05', CODCOLIGADA: 1, CODTABFOLGA: '035.0090',
+        HORAINICIO: 0, HORAFIM: 1440, HORAINICIOSTR: '00:00', HORAFIMSTR: '24:00', CONSEXTRAINTER: 1 }];
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
+  const { service, statements } = loadService({ enabled: true, rows: [{ ...envio, MES_REF: '2026-10-01' }], scheduleRows: [row], fetchImpl });
+  const result = await service.processarOperacaoRm({ operacaoId: 'op-timeout' });
+  assert.equal(result.status, 'ENVIADO', JSON.stringify({ posts, consultasFolgas, logs: statements.filter(({ sql }) => /insert into sgn_esc_rm_log/i.test(sql)).map(({ binds }) => binds) }));
+  assert.equal(posts, 1);
+  assert.equal(consultasFolgas, 2);
+  const updates = statements.filter(({ sql }) => /update sgn_esc_rm_envio/i.test(sql));
+  assert.equal(updates[1].binds.status, 'ENVIADO');
+});
+
+test('timeout no POST nao repete escrita quando GET ainda nao confirma', async () => {
+  const row = {
+    ESCFUNC_ID: 90, CHAPA: '035.0090', CPF: '12345678901', CODCOLIGADA: 1,
+    REVISAO: 7, DT: '2026-10-05', PROGRAMACAO: 'F', APOS_DEMISSAO: 0
+  };
+  let posts = 0;
+  let consultasFolgas = 0;
+  const fetchImpl = async (url, options) => {
+    if (url.includes('/funcionario')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([{ CODSITUACAO: 'A', CODTABFOLGA: '035.0090', CODCOLIGADA: 1 }]) };
+    }
+    if ((options.method || 'GET') === 'POST') {
+      posts += 1;
+      const error = new Error('The operation was aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
+    consultasFolgas += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify({
+      messages: [{ code: '0003', type: 'info' }], data: null, length: 0
+    }) };
+  };
+  const { service, statements } = loadService({ enabled: true, rows: [{ ...envio, MES_REF: '2026-10-01' }], scheduleRows: [row], fetchImpl });
+  const result = await service.processarOperacaoRm({ operacaoId: 'op-timeout-stale' });
+  assert.equal(result.status, 'INCERTO');
+  assert.equal(posts, 1);
+  assert.equal(consultasFolgas, 3);
+  const updates = statements.filter(({ sql }) => /update sgn_esc_rm_envio/i.test(sql));
   assert.equal(updates[1].binds.status, 'INCERTO');
-  assert.match(updates[1].binds.erro, /Programacao oficializada nao encontrada/);
+  assert.match(updates[1].binds.erro, /Timeout de escrita/);
 });
 
 function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], dismissalDate = null,
