@@ -343,15 +343,17 @@ function getCriticasCoberturaMinima(funcionarios = [], percentualMinimo = 60, ho
     (funcionario.dias || []).forEach((dia) => {
       const data = formatDate(dia.data || dia.DT);
       if (!data || data < hojeIso) return;
-      if (!dias.has(data)) dias.set(data, { total: 0, trabalhando: 0 });
+      if (!dias.has(data)) dias.set(data, { total: 0, trabalhando: 0, fdo: 0 });
       const item = dias.get(data);
       item.total += 1;
-      if (String(dia.programacao || dia.PROGRAMACAO || 'TRB').toUpperCase() === 'TRB') item.trabalhando += 1;
+      const programacao = String(dia.programacao || dia.PROGRAMACAO || 'TRB').toUpperCase();
+      if (programacao === 'TRB') item.trabalhando += 1;
+      if (programacao === 'FDO') item.fdo += 1;
     });
   });
   return [...dias.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .filter(([, item]) => item.total > 0 && (item.trabalhando / item.total) * 100 < percentualMinimo)
+    .filter(([, item]) => item.fdo !== item.total && item.total > 0 && (item.trabalhando / item.total) * 100 < percentualMinimo)
     .map(([data, item]) => `Cobertura minima da secao abaixo de ${percentualMinimo}% em ${data}. Trabalhando: ${item.trabalhando}/${item.total}.`);
 }
 

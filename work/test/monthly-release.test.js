@@ -817,7 +817,7 @@ test('monthly release balances Sundays within each subsection', () => {
   }));
   const rascunhos = buildFuncionariosRascunhoBalanceado(funcionarios, [], '2026-11-01', '2026-11-02');
 
-  for (const data of ['2026-11-08', '2026-11-15', '2026-11-22', '2026-11-29']) {
+  for (const data of ['2026-11-08', '2026-11-22', '2026-11-29']) {
     for (const subsecaoId of [1, 2]) {
       const pessoas = funcionarios.filter((item) => item.ESCSUBSECAO_ID === subsecaoId);
       const trabalhando = pessoas.filter((item) => rascunhos.find((rascunho) => rascunho.escfuncId === item.ESCFUNC_ID)
@@ -825,6 +825,7 @@ test('monthly release balances Sundays within each subsection', () => {
       assert.ok(trabalhando >= 2 && trabalhando <= 3, `${data}: subseção ${subsecaoId} com ${trabalhando}/5 trabalhando`);
     }
   }
+  assert.ok(rascunhos.every((rascunho) => rascunho.dias.find((dia) => dia.data === '2026-11-15')?.programacao === 'FDO'));
 });
 
 test('section generation saves draft even when automatic validation returns critiques', async () => {
@@ -880,6 +881,49 @@ test('section generation saves draft even when automatic validation returns crit
     escalaService.listFixosEscala = originals.listFixosEscala;
     escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
     escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+  }
+});
+
+test('Gerar Escala persists December FDO without consuming the two weekly rests', async () => {
+  const originals = {
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listFixosEscala: escalaService.listFixosEscala,
+    listDiasSecaoAtual: escalaService.listDiasSecaoAtual,
+    saveEscalasBatch: escalaService.saveEscalasBatch,
+    listarIntervalosSuspensos: pendenciaFuncionarioService.listarIntervalosSuspensos
+  };
+  let savedPayload;
+  catalogService.listFuncionariosByLoja = async () => [{
+    ESCFUNC_ID: 300, CHAPA: '064.0300', NOME: 'Funcionario Feriado',
+    LOJA: 64, ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  }];
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listFixosEscala = async () => [];
+  escalaService.listDiasSecaoAtual = async () => [];
+  pendenciaFuncionarioService.listarIntervalosSuspensos = async () => new Map();
+  escalaService.saveEscalasBatch = async (payload) => { savedPayload = payload; return payload.funcionarios; };
+  try {
+    await monthlyReleaseService.gerarEscalaSecao({ lojaId: 64, mesRef: '2026-12-01',
+      escsecaoId: 20, hojeIso: '2026-11-30' });
+    const days = savedPayload.funcionarios[0].dias;
+    for (const holiday of ['2026-12-25', '2027-01-01']) {
+      assert.equal(days.find((day) => day.data === holiday)?.programacao, 'FDO');
+      const weekStart = holiday === '2026-12-25' ? '2026-12-21' : '2026-12-28';
+      const weekEnd = holiday === '2026-12-25' ? '2026-12-27' : '2027-01-03';
+      assert.equal(days.filter((day) => day.data >= weekStart && day.data <= weekEnd && day.programacao === 'F').length, 2);
+    }
+  } finally {
+    catalogService.listFuncionariosByLoja = originals.listFuncionariosByLoja;
+    catalogService.listTurnosByLoja = originals.listTurnosByLoja;
+    catalogService.listAusenciasByLojaMes = originals.listAusenciasByLojaMes;
+    escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.listDiasSecaoAtual = originals.listDiasSecaoAtual;
+    escalaService.saveEscalasBatch = originals.saveEscalasBatch;
+    pendenciaFuncionarioService.listarIntervalosSuspensos = originals.listarIntervalosSuspensos;
   }
 });
 

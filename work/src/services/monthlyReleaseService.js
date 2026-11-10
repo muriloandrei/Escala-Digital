@@ -7,6 +7,7 @@ const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { isPortariaSection } = require('../domain/portariaSection');
 const { permiteEscala } = require('../domain/employeeStatus');
 const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('../domain/workRegime');
+const { planHolidayRests } = require('../domain/holidayRest');
 
 function formatDateValue(value) {
   if (value instanceof Date) {
@@ -406,7 +407,21 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
       };
     });
 
-  return montarFuncionarioRascunho(funcionario, turno, dias, horario);
+  const rascunho = montarFuncionarioRascunho(funcionario, turno, dias, horario);
+  const escfuncId = funcionario.ESCFUNC_ID || funcionario.escfuncId;
+  const lockedDates = [...diasFixos.keys()]
+    .filter((key) => key.startsWith(`${escfuncId}|`))
+    .map((key) => key.split('|')[1]);
+  const holidayPlan = planHolidayRests(dias, {
+    regime: effectiveRegime(funcionario),
+    lockedDates,
+    restCounts: new Map(opcoes.restCounts || []),
+    validate: (candidateDays) => validateEscalaPayload({
+      lojaId: Number(funcionario.LOJA || 0) || 1, mesRef,
+      funcionarios: [{ ...rascunho, dias: candidateDays }]
+    }, { domingo6h: opcoes.domingo6h })
+  });
+  return { ...rascunho, dias: holidayPlan.days };
 }
 
 function buildFuncionarioRascunho(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), funcionarioIndex = 0, padraoFolga = null, opcoes = {}) {
@@ -818,7 +833,16 @@ function escolherPadraoBalanceado({
     });
     if (!hasMaxFolgasPorSemanaDatas(folgasEfetivas, maxFolgasSemanaFuncionario)) return;
     if (!hasMaxFolgasAutomaticasComFixos(folgasEfetivas, descansosObrigatoriosFuncionario, maxFolgasSemanaFuncionario)) return;
-    const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas, { indiceAusencias, diasFixos, intervaloSuspensao, domingo6h });
+    const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas,
+      { indiceAusencias, diasFixos, intervaloSuspensao, domingo6h, restCounts: contagemFolgasSecao });
+    const folgasProjetadas = rascunho.dias
+      .filter((dia) => ['F', 'FDO'].includes(dia.programacao)
+        && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${dia.data}`))
+      .map((dia) => dia.data);
+    const folgasSemanaisProjetadas = rascunho.dias
+      .filter((dia) => dia.programacao === 'F'
+        && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${dia.data}`))
+      .map((dia) => dia.data);
     if (!hasNoConsecutiveAutomaticRests(rascunho.dias)) return;
     const errors = validateEscalaPayload({
       lojaId: Number(funcionario.LOJA || 0) || 1,
@@ -830,7 +854,7 @@ function escolherPadraoBalanceado({
     const projetadaSecao = new Map(contagemFolgasSecao);
     const projetadaTurno = new Map(contagemFolgasTurno);
     const projetadaSemanaSecao = new Map(contagemFolgasSemanaSecao);
-    folgasEfetivas.forEach((data) => {
+    folgasProjetadas.forEach((data) => {
       projetadaSecao.set(data, (projetadaSecao.get(data) || 0) + 1);
       projetadaTurno.set(data, (projetadaTurno.get(data) || 0) + 1);
       const weekKey = getWeekKeyFromIso(data);
@@ -858,15 +882,18 @@ function escolherPadraoBalanceado({
     const maxFolgasInicio = Math.max(...primeiraJanelaCounts, 0);
     const somaQuadradosInicio = primeiraJanelaCounts.reduce((acc, value, index) => acc + (value * value * (primeiraJanela.length - index)), 0);
     const folgasPrimeiroDia = hojeIso ? (projetadaSecao.get(hojeIso) || 0) : 0;
-    const turnoSemCobertura = Number(turnoSize || 0) > 1 && folgasEfetivas.some((data) => (projetadaTurno.get(data) || 0) >= Number(turnoSize || 0));
+    const turnoSemCobertura = Number(turnoSize || 0) > 1 && folgasProjetadas.some((data) => (projetadaTurno.get(data) || 0) >= Number(turnoSize || 0));
     const limiteDesejadoTurno = Math.max(1, Math.ceil(Number(turnoSize || 1) / 2));
     const excessoFolgaTurno = Math.max(0, maxFolgasTurnoDia - limiteDesejadoTurno);
-    const folgasPlanejadasFuncionario = new Set([...folgasEfetivas, ...descansosObrigatoriosFuncionario]);
+    const folgasPlanejadasFuncionario = new Set([
+      ...folgasSemanaisProjetadas,
+      ...descansosObrigatoriosFuncionario
+    ]);
     const folgasAbaixoMinimo = Math.max(0, folgasEsperadas - folgasPlanejadasFuncionario.size);
     const folgasAcimaEsperado = Math.max(0, folgasPlanejadasFuncionario.size - folgasEsperadas);
-    const domingosFolgaPerdidos = [...domingosFolgaSet].filter((data) => !encontrarAusencia(indiceAusencias, funcionario, data) && !folgasFixasSet.has(data) && !folgasEfetivas.includes(data)).length;
-    const domingosTrabalhoViraramFolga = [...domingosTrabalhoSet].filter((data) => folgasEfetivas.includes(data)).length;
-    const folgasAutomaticasPertoFixo = hasNoAutomaticRestNearFixedRest(folgasEfetivas, folgasFixasFuncionario) ? 0 : 1;
+    const domingosFolgaPerdidos = [...domingosFolgaSet].filter((data) => !encontrarAusencia(indiceAusencias, funcionario, data) && !folgasFixasSet.has(data) && !folgasProjetadas.includes(data)).length;
+    const domingosTrabalhoViraramFolga = [...domingosTrabalhoSet].filter((data) => folgasProjetadas.includes(data)).length;
+    const folgasAutomaticasPertoFixo = hasNoAutomaticRestNearFixedRest(folgasSemanaisProjetadas, folgasFixasFuncionario) ? 0 : 1;
     const desempate = Math.abs(planoIndex - (indiceSecao % Math.max(planos.length, 1)));
     const score = (errors.length * 100000)
       + (turnoSemCobertura ? 50000 : 0)
@@ -1108,16 +1135,38 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
           intervaloSuspensao,
           domingo6h: opcoes.domingo6h
         });
-        escolhido.folgas.forEach((data) => {
+        const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, escolhido.folgas,
+          { indiceAusencias, diasFixos, intervaloSuspensao, domingo6h: opcoes.domingo6h, restCounts: contagemFolgasSecao });
+        rascunho.dias.filter((dia) => ['F', 'FDO'].includes(dia.programacao)
+          && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${dia.data}`)).forEach(({ data }) => {
           contagemFolgasSecao.set(data, (contagemFolgasSecao.get(data) || 0) + 1);
           contagemFolgasTurno.set(data, (contagemFolgasTurno.get(data) || 0) + 1);
           const weekKey = getWeekKeyFromIso(data);
           contagemFolgasSemanaSecao.set(weekKey, (contagemFolgasSemanaSecao.get(weekKey) || 0) + 1);
         });
-        payloadSecao.push(buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, escolhido.folgas, { indiceAusencias, diasFixos, intervaloSuspensao,
-          domingo6h: opcoes.domingo6h }));
+        payloadSecao.push(rascunho);
       });
-    payload.push(...rebalancearFolgasDiasComunsSecao(payloadSecao, secao.length));
+    const balanceados = rebalancearFolgasDiasComunsSecao(payloadSecao, secao.length);
+    const contagemFinalDescansos = new Map();
+    balanceados.forEach((rascunho) => rascunho.dias.forEach((dia) => {
+      if (dia.programacao === 'TRB') return;
+      contagemFinalDescansos.set(dia.data, (contagemFinalDescansos.get(dia.data) || 0) + 1);
+    }));
+    for (const rascunho of balanceados) {
+      const lockedDates = [...diasFixos.keys()]
+        .filter((key) => key.startsWith(`${rascunho.escfuncId}|`))
+        .map((key) => key.split('|')[1]);
+      const plan = planHolidayRests(rascunho.dias, {
+        regime: rascunho.regimeEscala,
+        lockedDates,
+        restCounts: contagemFinalDescansos,
+        validate: (candidateDays) => validateEscalaPayload({
+          lojaId: Number(opcoes.lojaId || secao[0]?.funcionario.LOJA || 1), mesRef,
+          funcionarios: [{ ...rascunho, dias: candidateDays }]
+        }, { domingo6h: opcoes.domingo6h })
+      });
+      payload.push({ ...rascunho, dias: plan.days });
+    }
   });
   return payload;
 }

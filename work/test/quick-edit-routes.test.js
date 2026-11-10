@@ -364,3 +364,52 @@ test('regular employee can preview base hours and save a fixed work shift', asyn
     auditService.registerAudit = originals.registerAudit;
   }
 });
+
+test('single-day holiday FDO preserves two weekly rests in the saved revision', async () => {
+  const originals = {
+    assertFuncionariosPermitidos: accessService.assertFuncionariosPermitidos,
+    validateAusencias: escalaService.validateAusencias,
+    getEscalaFuncionarioAtual: escalaService.getEscalaFuncionarioAtual,
+    listFixosEscala: escalaService.listFixosEscala,
+    saveEscalasFuncionariosRevision: escalaService.saveEscalasFuncionariosRevision,
+    registerAudit: auditService.registerAudit
+  };
+  const dates = ['2026-12-21', '2026-12-22', '2026-12-23', '2026-12-24',
+    '2026-12-25', '2026-12-26', '2026-12-27'];
+  const oldDays = dates.map((DT, index) => ({ DT, PROGRAMACAO: [0, 2].includes(index) ? 'F' : 'TRB',
+    HR_ENT1: [0, 2].includes(index) ? 'F' : '08:00',
+    HR_SAI1: [0, 2].includes(index) ? 'F' : '12:00',
+    HR_ENT2: [0, 2].includes(index) ? 'F' : '13:10',
+    HR_SAI2: [0, 2].includes(index) ? 'F' : '17:58' }));
+  let savedDays = null;
+  accessService.assertFuncionariosPermitidos = async () => {};
+  escalaService.validateAusencias = async () => [];
+  escalaService.getEscalaFuncionarioAtual = async () => ({ revisao: 1, dias: oldDays });
+  escalaService.listFixosEscala = async () => [];
+  escalaService.saveEscalasFuncionariosRevision = async ({ funcionarios }) => {
+    savedDays = funcionarios[0].dias;
+    return [{ revisao: 2, escprogId: 3 }];
+  };
+  auditService.registerAudit = async () => {};
+  try {
+    const result = response();
+    await handler('/funcionarios/revisao')({ body: {
+      lojaId: 65, mesRef: '2026-12-01', edicaoPontual: true, oficializada: 0,
+      funcionarios: [{ escfuncId: 10, revisaoBase: 1, chapa: '065.0010', nome: 'Teste',
+        funcao: 'OPERADOR DE CAIXA', escsecaoId: 20, escfuncaoId: 30,
+        dias: [{ data: '2026-12-25', programacao: 'FDO', hrEnt1: null, hrSai1: null,
+          hrEnt2: null, hrSai2: null }] }]
+    }, user: { sub: 1 } }, result, (error) => { throw error; });
+    assert.equal(result.code, 201);
+    assert.equal(savedDays.find((day) => day.data === '2026-12-25').programacao, 'FDO');
+    assert.equal(savedDays.filter((day) => day.programacao === 'F').length, 2);
+    assert.deepEqual(result.body.criticas, []);
+  } finally {
+    accessService.assertFuncionariosPermitidos = originals.assertFuncionariosPermitidos;
+    escalaService.validateAusencias = originals.validateAusencias;
+    escalaService.getEscalaFuncionarioAtual = originals.getEscalaFuncionarioAtual;
+    escalaService.listFixosEscala = originals.listFixosEscala;
+    escalaService.saveEscalasFuncionariosRevision = originals.saveEscalasFuncionariosRevision;
+    auditService.registerAudit = originals.registerAudit;
+  }
+});

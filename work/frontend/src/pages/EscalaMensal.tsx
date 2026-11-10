@@ -560,6 +560,15 @@ export function EscalaMensal({ user }: { user: User }) {
       clickTimer.current = null;
       if ((!permiteEscala(employee.STATUS) && !(canEditHistorical && date < localToday()))
         || (employee.DT_DEMISS && date > iso(employee.DT_DEMISS))) return;
+      if (holidays[date]) {
+        if (day && !day.FIXO_ESCALA && !day.AUSENCIA_OBRIGATORIA
+          && !['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase())
+          && canEdit(user, 'escalas') && canEdit(user, 'escalas-funcionarios')
+          && (canEditHistorical || (escala?.status !== 'FINALIZADA' && date >= localToday()))) {
+          setEditingCell({ employee, day });
+        } else setSelectedCell({ employee, date, day });
+        return;
+      }
       if (date >= localToday() && escala?.status !== 'FINALIZADA'
         && canEdit(user, 'escalas') && canEdit(user, 'escalas-funcionarios')) void quickToggle(employee, date, day);
       else setSelectedCell({ employee, date, day });

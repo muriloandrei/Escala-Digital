@@ -686,6 +686,21 @@ async function assertSubsecaoFrenteCaixa(connection, lojaCodigo, escsecaoId) {
   return secao;
 }
 
+async function translateSubsecaoNameConflict(connection, escsecaoId, descr, error) {
+  if (error.errorNum !== 1 || !/SGN_ESC_SUBSECAO_1_UK\b/i.test(error.message || '')) throw error;
+  const subsecoesMap = await listSubsecoesBySecaoIdsInConnection(connection, [escsecaoId], { includeInactive: true });
+  const existing = subsecoesMap.get(String(escsecaoId)) || [];
+  const duplicate = existing.find((item) => item.DESCR === descr);
+  const reason = duplicate?.STATUS === 'I'
+    ? `A subsecao "${duplicate.DESCR}" ja existe nesta secao (ID ${duplicate.ESCSUBSECAO_ID}) e esta inativa. Reative-a na lista de subsecoes.`
+    : duplicate
+      ? `A subsecao "${duplicate.DESCR}" ja existe nesta secao (ID ${duplicate.ESCSUBSECAO_ID}). Use o cadastro existente.`
+      : 'Ja existe uma subsecao com esse nome nesta secao. Consulte a lista, inclusive os registros inativos.';
+  const conflict = new Error(reason);
+  conflict.statusCode = 422;
+  throw conflict;
+}
+
 async function createSubsecao({ lojaId, escsecaoId, data }) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
@@ -698,20 +713,25 @@ async function createSubsecao({ lojaId, escsecaoId, data }) {
     const secao = await assertSubsecaoFrenteCaixa(connection, lojaCodigo, escsecaoId);
     if (!secao) return null;
 
-    const result = await connection.execute(
-      `insert into sgn_esc_subsecao (
-         escsubsecao_id, escsecao_id, descr, status, dt_hr_incl
-       ) values (
-         sgn_esc_subsecao_seq.nextval, :escsecaoId, :descr, 'A', sysdate
-       )
-       returning escsubsecao_id into :id`,
-      {
-        escsecaoId,
-        descr: data.DESCR,
-        id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
-      },
-      { autoCommit: false }
-    );
+    let result;
+    try {
+      result = await connection.execute(
+        `insert into sgn_esc_subsecao (
+           escsubsecao_id, escsecao_id, descr, status, dt_hr_incl
+         ) values (
+           sgn_esc_subsecao_seq.nextval, :escsecaoId, :descr, 'A', sysdate
+         )
+         returning escsubsecao_id into :id`,
+        {
+          escsecaoId,
+          descr: data.DESCR,
+          id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
+        },
+        { autoCommit: false }
+      );
+    } catch (error) {
+      await translateSubsecaoNameConflict(connection, escsecaoId, data.DESCR, error);
+    }
     await connection.commit();
     const subsecoesMap = await listSubsecoesBySecaoIdsInConnection(connection, [escsecaoId], { includeInactive: true });
     return (subsecoesMap.get(String(escsecaoId)) || []).find((item) => Number(item.ESCSUBSECAO_ID) === Number(result.outBinds.id[0])) || null;
@@ -734,14 +754,19 @@ async function updateSubsecao({ lojaId, escsecaoId, escsubsecaoId, data }) {
     }
     if (!fields.length) return null;
 
-    const result = await connection.execute(
-      `update sgn_esc_subsecao
-       set ${fields.join(', ')}
-       where escsubsecao_id = :escsubsecaoId
-         and escsecao_id = :escsecaoId`,
-      binds,
-      { autoCommit: true }
-    );
+    let result;
+    try {
+      result = await connection.execute(
+        `update sgn_esc_subsecao
+         set ${fields.join(', ')}
+         where escsubsecao_id = :escsubsecaoId
+           and escsecao_id = :escsecaoId`,
+        binds,
+        { autoCommit: true }
+      );
+    } catch (error) {
+      await translateSubsecaoNameConflict(connection, escsecaoId, data.DESCR, error);
+    }
     if (!result.rowsAffected) return null;
     const subsecoesMap = await listSubsecoesBySecaoIdsInConnection(connection, [escsecaoId], { includeInactive: true });
     return (subsecoesMap.get(String(escsecaoId)) || []).find((item) => Number(item.ESCSUBSECAO_ID) === Number(escsubsecaoId)) || null;
