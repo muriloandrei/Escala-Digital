@@ -112,6 +112,52 @@ test('CODTABFOLGA ausente tenta tres consultas e sinaliza falha confirmada', asy
   assert.match(updates[1].binds.erro, /CODTABFOLGA/);
 });
 
+test('usa CHAPA do retorno RM como CODTABFOLGA quando o campo nao vem na consulta', async () => {
+  const row = {
+    ESCFUNC_ID: 90, CHAPA: '035.0090', CPF: '12345678901', CODCOLIGADA: 1,
+    REVISAO: 7, DT: '2026-10-05', PROGRAMACAO: 'F', APOS_DEMISSAO: 0
+  };
+  let enviado = null;
+  const fetchImpl = async (url, options) => {
+    if (url.includes('/funcionario')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([{
+        CPF: '12345678901', CODCOLIGADA: 1, CHAPA: '035.0090', CODSITUACAO: 'A'
+      }]) };
+    }
+    if ((options.method || 'GET') === 'POST') {
+      enviado = JSON.parse(options.body);
+      return { ok: true, status: 200, text: async () => '{}' };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({
+      messages: [{ code: '0003', type: 'info' }], data: null, length: 0
+    }) };
+  };
+  const { service } = loadService({ enabled: true, rows: [{ ...envio, MES_REF: '2026-10-01' }], scheduleRows: [row], fetchImpl });
+  const result = await service.processarOperacaoRm({ operacaoId: 'op-chapa-fallback' });
+  assert.equal(result.status, 'ENVIADO');
+  assert.equal(enviado[0].CODTABFOLGA, '035.0090');
+});
+
+test('nao usa CHAPA divergente do retorno RM para enviar folgas', async () => {
+  const row = {
+    ESCFUNC_ID: 90, CHAPA: '035.0090', CPF: '12345678901', CODCOLIGADA: 1,
+    REVISAO: 7, DT: '2026-10-05', PROGRAMACAO: 'F', APOS_DEMISSAO: 0
+  };
+  let posts = 0;
+  const fetchImpl = async (_url, options) => {
+    if ((options.method || 'GET') === 'POST') posts += 1;
+    return { ok: true, status: 200, text: async () => JSON.stringify([{
+      CPF: '12345678901', CODCOLIGADA: 1, CHAPA: '035.9999', CODSITUACAO: 'A'
+    }]) };
+  };
+  const { service, statements } = loadService({ enabled: true, rows: [{ ...envio, MES_REF: '2026-10-01' }], scheduleRows: [row], fetchImpl });
+  await service.processarOperacaoRm({ operacaoId: 'op-chapa-divergente' });
+  assert.equal(posts, 0);
+  const updates = statements.filter(({ sql }) => /update sgn_esc_rm_envio/i.test(sql));
+  assert.equal(updates[1].binds.status, 'FALHA');
+  assert.match(updates[1].binds.erro, /CHAPA correspondente/);
+});
+
 test('timeout no POST reconcilia no GET sem repetir uma escrita ja aplicada', async () => {
   const row = {
     ESCFUNC_ID: 90, CHAPA: '035.0090', CPF: '12345678901', CODCOLIGADA: 1,

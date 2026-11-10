@@ -117,8 +117,12 @@ function getFuncionarioRmData(body) {
     || {};
 }
 
-function getCodTabFolga(funcionarioRm) {
-  return pick(funcionarioRm, 'CODTABFOLGA', 'codTabFolga', 'codtabfolga', 'CodTabFolga');
+function getCodTabFolga(funcionarioRm, chapaEsperada = null) {
+  const codigo = pick(funcionarioRm, 'CODTABFOLGA', 'codTabFolga', 'codtabfolga', 'CodTabFolga');
+  if (codigo != null && String(codigo).trim()) return String(codigo).trim();
+  const chapaRm = String(pick(funcionarioRm, 'CHAPA', 'chapa', 'Chapa') || '').trim();
+  if (!chapaRm || (chapaEsperada && chapaRm !== String(chapaEsperada).trim())) return null;
+  return chapaRm;
 }
 
 function isFuncionarioRmAtivo(funcionarioRm) {
@@ -626,9 +630,9 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
 
         const funcionarioRm = await getFuncionarioRmPorCpf(cpf);
         const codColigadaRm = getCodColigada(funcionarioRm, funcionario.codcoligada);
-        const codTabFolga = getCodTabFolga(funcionarioRm);
+        const codTabFolga = getCodTabFolga(funcionarioRm, funcionario.chapa);
         if (!codTabFolga) {
-          throw new Error(`RM nao retornou CODTABFOLGA para o CPF ${mask(cpf)}.`);
+          throw new Error(`RM nao retornou CODTABFOLGA nem CHAPA correspondente a ${funcionario.chapa} para o CPF ${mask(cpf)}.`);
         }
 
         const { inicio, fim } = getOperationalPeriodIso(mesRef);
