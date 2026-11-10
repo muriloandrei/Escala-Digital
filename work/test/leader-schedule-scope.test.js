@@ -32,8 +32,7 @@ test('leader sees released store in summary while monthly data remains section-s
     summary: escalaService.listEscalasResumo,
     monthly: escalaService.getEscalaMensal,
     progress: officializationService.getProgress,
-    sunday: previousSundayService.getPriorSunday,
-    previousDay: previousSundayService.getPreviousDay
+    sunday: previousSundayService.getPriorSunday
   };
   const calls = [];
   accessService.getSecoesPermitidasUsuario = async () => [20, 21];
@@ -50,7 +49,6 @@ test('leader sees released store in summary while monthly data remains section-s
     return { secoes: [] };
   };
   previousSundayService.getPriorSunday = async () => null;
-  previousSundayService.getPreviousDay = async () => null;
   const user = { perfil: 'LIDER', lojas: [10], sub: 1 };
   try {
     const list = response();
@@ -67,13 +65,19 @@ test('leader sees released store in summary while monthly data remains section-s
     assert.equal(month.code, 200);
     assert.deepEqual(calls.find(([kind]) => kind === 'monthly')[1].secoesPermitidas, [20, 21]);
     assert.deepEqual(calls.find(([kind]) => kind === 'progress')[1].secoesPermitidas, [20, 21]);
+
+    previousSundayService.getPriorSunday = async () => ({ data: '2026-11-29', dias: [] });
+    const december = response();
+    await route('/mensal')({ user, query: { lojaId: '10', mesRef: '2026-12-01' } }, december,
+      (error) => { throw error; });
+    assert.deepEqual(december.body.periodo, { inicio: '2026-11-30', fim: '2027-01-03' });
+    assert.equal(december.body.diaAnterior.data, '2026-11-29');
   } finally {
     accessService.getSecoesPermitidasUsuario = originals.sections;
     escalaService.listEscalasResumo = originals.summary;
     escalaService.getEscalaMensal = originals.monthly;
     officializationService.getProgress = originals.progress;
     previousSundayService.getPriorSunday = originals.sunday;
-    previousSundayService.getPreviousDay = originals.previousDay;
   }
 });
 

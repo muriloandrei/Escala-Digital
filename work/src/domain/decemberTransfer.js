@@ -1,4 +1,4 @@
-const START = '2026-12-01';
+const START = '2026-11-30';
 const END = '2026-12-06';
 
 function isTransferDate(date) {

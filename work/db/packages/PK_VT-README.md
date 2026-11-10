@@ -21,8 +21,8 @@ desligamento. Nao foi compilado contra o Oracle de producao. Compare-o com o
 - Para as secoes migradas, a compra de cada `DT_REF` cobre uma unica vez o
   periodo operacional completo: da primeira segunda-feira do mes ate o domingo
   anterior a primeira segunda-feira do mes seguinte, com excecao da transicao
-  de novembro e dezembro/2026. Novembro/2026 cobre 01/11 a 30/11; outubro/2026 termina
-  em 31/10; dezembro/2026 cobre 01/12 a 03/01/2027. Nao ha sobreposicao
+  de novembro e dezembro/2026. Novembro/2026 cobre 01/11 a 29/11; outubro/2026 termina
+  em 31/10; dezembro/2026 cobre 30/11 a 03/01/2027. Nao ha sobreposicao
   entre as duas compras. Lojas e secoes APEX continuam no mes calendario.
 - `FKG_DIAS_TRAB` conta datas `TRB` dentro do intervalo informado pela compra.
   Dias repetidos sao contados uma vez. Regras de gratuidade e exclusao permanecem.
@@ -104,7 +104,7 @@ Compile como dono de `PK_VT` com `@compilar_pk_vt_novembro_2026.sql` e confirme
 `USER_ERRORS` vazio e package body `VALID`. Compare `FKG_ESCALA_OK` e
 `FKG_DIAS_TRAB` para um empregado de uma loja migrada e outro de uma loja
 APEX. Teste 01/11/2026 na revisao de novembro antes e depois de oficializa-la,
-01/11 a 30/11 na compra de novembro, 01/12 a 03/01 na compra de dezembro,
+01/11 a 29/11 na compra de novembro, 30/11 a 03/01 na compra de dezembro,
 uma revisao nova nao
 oficializada, folga/FER/AFA, compra parcial e gratuidade. Faca uma compra de
 teste transacional e confira
@@ -112,8 +112,8 @@ teste transacional e confira
 
 ```sql
 select date '2026-11-01' inicio_nov,
-       date '2026-11-30' fim_nov,
-       date '2026-12-01' inicio_dez,
+       date '2026-11-29' fim_nov,
+       date '2026-11-30' inicio_dez,
        trunc(add_months(date '2026-12-01', 1) + 6, 'IW') - 1 fim_dez
   from dual;
 ```

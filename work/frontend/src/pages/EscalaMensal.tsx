@@ -849,14 +849,14 @@ export function EscalaMensal({ user }: { user: User }) {
                 >
                   <table className="monthly-grid">
                     <thead>
-                      <tr className="monthly-coverage-row"><th className="employee-col">Qualidade (%)</th>{diaAnterior && <th className="context-sunday" title="30/11 da escala de novembro, somente leitura">Ref.</th>}{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''} title={`${item.working} trabalhando, ${item.rests} em folga`}>{item.quality === null ? '–' : `${item.quality}%`}</th>)}</tr>
+                      <tr className="monthly-coverage-row"><th className="employee-col">Qualidade (%)</th>{diaAnterior && <th className="context-sunday" title="29/11 pertence a novembro. Clique no dia do funcionário para editar novembro.">Ref.</th>}{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''} title={`${item.working} trabalhando, ${item.rests} em folga`}>{item.quality === null ? '–' : `${item.quality}%`}</th>)}</tr>
                       <tr className="monthly-count-row"><th className="employee-col">Folgas</th>{diaAnterior && <th className="context-sunday">–</th>}{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}><span className="rest-count">{item.rests} F</span></th>)}</tr>
                       <tr className="monthly-count-row"><th className="employee-col">Trabalhando</th>{diaAnterior && <th className="context-sunday">–</th>}{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}><span className="work-count">{item.working} T</span></th>)}</tr>
                       <tr>
                         <th rowSpan={2} className="employee-col">
                           Funcionário
                         </th>
-                        {diaAnterior && <th className="context-sunday" title="30/11 da escala de novembro, somente leitura">{weekday(diaAnterior.data)}</th>}
+                        {diaAnterior && <th className="context-sunday" title="29/11 da escala de novembro">{weekday(diaAnterior.data)}</th>}
                         {dates.map((date, index) => (
                           <th key={date} className={`${isWeekStart(date, index) ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>
                             {weekday(date)}
@@ -864,7 +864,7 @@ export function EscalaMensal({ user }: { user: User }) {
                         ))}
                       </tr>
                       <tr>
-                        {diaAnterior && <th className="context-sunday" title="30/11 da escala de novembro, somente leitura">{diaAnterior.data.slice(8)}/{diaAnterior.data.slice(5, 7)}</th>}
+                        {diaAnterior && <th className="context-sunday" title="29/11 da escala de novembro">{diaAnterior.data.slice(8)}/{diaAnterior.data.slice(5, 7)}</th>}
                         {dates.map((date, index) => (
                           <th key={date} className={`${isWeekStart(date, index) ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>
                             {date.slice(8, 10)}
@@ -885,7 +885,8 @@ export function EscalaMensal({ user }: { user: User }) {
                           </th>
                           {diaAnterior && (() => {
                             const day = diaAnteriorPorFuncionario.get(Number(person.ESCFUNC_ID));
-                            return <td className="context-sunday" title={`${person.NOME} · ${formatDate(diaAnterior.data)} · ${shiftLabel(day)} · Somente leitura`}><span>{day ? cellText(day) : '–'}</span></td>;
+                            const novemberParams = new URLSearchParams({ secao: String(person.ESCSECAO_ID), funcionario: String(person.ESCFUNC_ID), dia: diaAnterior.data });
+                            return <td className="context-sunday"><Link to={`/escalas/${encodeURIComponent(lojaId || '')}/2026-11-01?${novemberParams}`} title={`${person.NOME} · ${formatDate(diaAnterior.data)} · ${shiftLabel(day)} · Abrir em novembro`} aria-label={`Abrir 29/11 de ${person.NOME} na escala de novembro`}>{day ? cellText(day) : '–'}</Link></td>;
                           })()}
                           {dates.map((date, index) => {
                             const aposDemissao = Boolean(person.DT_DEMISS && date > iso(person.DT_DEMISS));

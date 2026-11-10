@@ -38,6 +38,19 @@ test('monthly release builds draft only from today onward', () => {
   assert.equal(rascunho.dias.some((dia) => dia.programacao === 'TRB'), true);
 });
 
+test('December 2026 release starts on November 30 and excludes November 29', () => {
+  const employee = {
+    ESCFUNC_ID: 11, CHAPA: '0011', NOME: 'Funcionario Dezembro',
+    ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+  };
+  const draft = buildFuncionarioRascunho(employee, null, '2026-12-01', '2026-11-09');
+  assert.equal(draft.dias[0].data, '2026-11-30');
+  assert.equal(draft.dias.at(-1).data, '2027-01-03');
+  assert.equal(draft.dias.length, 35);
+  assert.ok(!draft.dias.some((day) => day.data === '2026-11-29'));
+});
+
 test('12x36 draft alternates duty and rest without 5x2 balancing', () => {
   const employee = {
     ESCFUNC_ID: 7001, CHAPA: '700.0001', NOME: 'Plantao', ESCSECAO_ID: 20, ESCFUNCAO_ID: 30,
@@ -777,7 +790,7 @@ test('November 2026 draft includes November 1 and alternates its rest with Novem
     HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
   };
   const [draft] = buildFuncionariosRascunhoBalanceado([employee], [], '2026-11-01', '2026-10-29');
-  assert.equal(draft.dias.length, 30);
+  assert.equal(draft.dias.length, 29);
   assert.equal(draft.dias[0].data, '2026-11-01');
   const firstSunday = draft.dias.find((day) => day.data === '2026-11-01');
   const nextSunday = draft.dias.find((day) => day.data === '2026-11-08');

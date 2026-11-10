@@ -58,7 +58,7 @@ async function loadFixes(connection, loja, escfuncId, mesRef) {
        from sgn_esc_fixo_escala
       where loja = :loja and escfunc_id = :escfuncId
         and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-        and dt between date '2026-12-01' and date '2026-12-06'
+        and dt between date '2026-11-30' and date '2026-12-06'
         and nvl(status, 'A') = 'A'
       order by dt`, { loja, escfuncId, mesRef }, options
   );
@@ -121,7 +121,7 @@ async function applyEmployee(connection, { loja, escfuncId, by, current }) {
   await connection.execute(
     `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao)
      select sgn_esc_prog_dia_seq.nextval, :newId, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
-       from sgn_esc_prog_dia where escprog_id = :oldId and dt < date '2026-12-01'`,
+       from sgn_esc_prog_dia where escprog_id = :oldId and dt < date '2026-11-30'`,
     { newId: novNew, oldId: oldNov.id }, { autoCommit: false }
   );
   await connection.execute(
@@ -134,7 +134,7 @@ async function applyEmployee(connection, { loja, escfuncId, by, current }) {
     `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao)
      select sgn_esc_prog_dia_seq.nextval, :newId, d.dt, d.hr_ent1, d.hr_sai1, d.hr_ent2, d.hr_sai2, d.programacao
        from sgn_esc_prog_dia d
-      where d.escprog_id = :oldNov and d.dt between date '2026-12-01' and date '2026-12-06'
+      where d.escprog_id = :oldNov and d.dt between date '2026-11-30' and date '2026-12-06'
         and not exists (select 1 from sgn_esc_prog_dia x where x.escprog_id = :newId and x.dt = d.dt)`,
     { newId: decNew, oldNov: oldNov.id }, { autoCommit: false }
   );
@@ -144,7 +144,7 @@ async function applyEmployee(connection, { loja, escfuncId, by, current }) {
         and p.mes_ref = date '2026-11-01' and nvl(p.ativa, 1) = 1
         and p.escprog_id <> :novNew
         and exists (select 1 from sgn_esc_prog_dia d where d.escprog_id = p.escprog_id
-          and d.dt between date '2026-12-01' and date '2026-12-06')`,
+          and d.dt between date '2026-11-30' and date '2026-12-06')`,
     { loja, escfuncId, novNew }, { autoCommit: false }
   );
   await connection.execute('update sgn_esc_prog set ativa = 0 where escprog_id = :oldDec',
@@ -165,7 +165,7 @@ async function applyEmployee(connection, { loja, escfuncId, by, current }) {
   }
   await connection.execute(
     `update sgn_esc_rm_envio set status = 'SUPERADO',
-       erro = 'Transferencia de 01-06/12 para dezembro; nova oficializacao necessaria.', dt_hr_alter = sysdate
+       erro = 'Transferencia de 30/11-06/12 para dezembro; nova oficializacao necessaria.', dt_hr_alter = sysdate
       where loja = :loja and escfunc_id = :escfuncId
         and mes_ref in (date '2026-11-01', date '2026-12-01') and status = 'PENDENTE'`,
     { loja, escfuncId }, { autoCommit: false }
@@ -195,7 +195,7 @@ async function candidateStores(connection) {
        union all
        select loja from sgn_esc_fixo_escala
         where mes_ref = date '2026-11-01' and nvl(status, 'A') = 'A'
-          and dt between date '2026-12-01' and date '2026-12-06'
+          and dt between date '2026-11-30' and date '2026-12-06'
      ) order by loja`, {}, options
   );
   return result.rows.map((row) => Number(row.LOJA));
@@ -207,14 +207,14 @@ async function candidateEmployees(connection, loja) {
        select p.escfunc_id from sgn_esc_prog p
        join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
        where p.loja = :loja and p.mes_ref = date '2026-11-01'
-         and nvl(p.ativa, 1) = 1 and d.dt between date '2026-12-01' and date '2026-12-06'
+         and nvl(p.ativa, 1) = 1 and d.dt between date '2026-11-30' and date '2026-12-06'
          and p.revisao = (select max(px.revisao) from sgn_esc_prog px
            where px.loja = p.loja and px.escfunc_id = p.escfunc_id
              and px.mes_ref = p.mes_ref and nvl(px.ativa, 1) = 1)
        union all
        select f.escfunc_id from sgn_esc_fixo_escala f
        where f.loja = :loja and f.mes_ref = date '2026-11-01'
-         and nvl(f.status, 'A') = 'A' and f.dt between date '2026-12-01' and date '2026-12-06'
+         and nvl(f.status, 'A') = 'A' and f.dt between date '2026-11-30' and date '2026-12-06'
      ) order by escfunc_id`, { loja }, options
   );
   return result.rows.map((row) => Number(row.ESCFUNC_ID));

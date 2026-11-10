@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadPriorSunday, loadPreviousDay, buildPriorSunday } = require('../src/services/previousSundayService');
+const { loadPriorSunday, buildPriorSunday } = require('../src/services/previousSundayService');
 
 test('previous Sunday uses November active schedule and only current visible employees', async () => {
   const queries = [];
@@ -36,19 +36,4 @@ test('ambiguous prior Sunday is not presented as a definite shift', () => {
     schedules: [{ ESCFUNC_ID: 1, PROGRAMACAO: 'TRB' }, { ESCFUNC_ID: 1, PROGRAMACAO: 'F' }],
     fixedDays: [{ ESCFUNC_ID: 1, PROGRAMACAO: 'FXF' }], absences: [] });
   assert.deepEqual(result.dias, []);
-});
-
-test('November 30 context uses only the latest active revision and leaves missing days blank', async () => {
-  const connection = { async execute(sql, binds) {
-    assert.match(sql, /date '2026-11-30'/);
-    assert.match(sql, /p\.revisao = \(select max\(px\.revisao\)/);
-    assert.equal(binds.lojaId, 35);
-    return { rows: [
-      { ESCFUNC_ID: 1, PROGRAMACAO: 'TRB', HR_ENT1: '08:00' },
-      { ESCFUNC_ID: 99, PROGRAMACAO: 'F' }
-    ] };
-  } };
-  const result = await loadPreviousDay(connection, { lojaId: 35, employeeIds: [1, 2] });
-  assert.equal(result.data, '2026-11-30');
-  assert.deepEqual(result.dias.map((day) => [day.ESCFUNC_ID, day.DT]), [[1, '2026-11-30']]);
 });

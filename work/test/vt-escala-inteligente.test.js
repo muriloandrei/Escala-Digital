@@ -37,10 +37,10 @@ test('compra inteligente atribui 01/11 a novembro sem consultar outubro', () => 
   const disponibilidade = body.slice(body.indexOf('FUNCTION FKG_ESCALA_OK'), body.indexOf('FUNCTION FKG_QTDE_COMPRA'));
   const dias = body.slice(body.indexOf('PROCEDURE PKB_APURA_DIAS_TRAB'), body.indexOf('FUNCTION FKG_DIAS_TRAB'));
   const compra = body.slice(body.indexOf('PROCEDURE PKB_INCLUI_FUNC_SOLIC'));
-  assert.deepEqual(getOperationalPeriodIso('2026-11-01'), { inicio: '2026-11-01', fim: '2026-11-30' });
-  assert.deepEqual(getOperationalPeriodIso('2026-12-01'), { inicio: '2026-12-01', fim: '2027-01-03' });
+  assert.deepEqual(getOperationalPeriodIso('2026-11-01'), { inicio: '2026-11-01', fim: '2026-11-29' });
+  assert.deepEqual(getOperationalPeriodIso('2026-12-01'), { inicio: '2026-11-30', fim: '2027-01-03' });
   assert.match(body, /return trunc\(trunc\(ed_dt_ref, 'MM'\) \+ 6, 'IW'\)/i);
-  assert.match(body, /if trunc\(ed_dt_ref, 'MM'\) in \(date '2026-11-01', date '2026-12-01'\) then\s+return trunc\(ed_dt_ref, 'MM'\)/i);
+  assert.match(body, /if trunc\(ed_dt_ref, 'MM'\) = date '2026-11-01' then\s+return date '2026-11-01';\s+elsif trunc\(ed_dt_ref, 'MM'\) = date '2026-12-01' then\s+return date '2026-11-30'/i);
   assert.match(body, /return FKG_INICIO_PERIODO_OPERACIONAL\(add_months\(trunc\(ed_dt_ref, 'MM'\), 1\)\) - 1/i);
   assert.match(disponibilidade, /p\.mes_ref = trunc\(ed_dt_ref, 'MM'\)/i);
   assert.match(disponibilidade, /p\.oficializada = 1/i);

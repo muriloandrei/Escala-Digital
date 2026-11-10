@@ -337,10 +337,13 @@
   color: #536170;
   border-right: 1px solid #aab3bd;
 }
-.monthly-grid td.context-sunday span {
+.monthly-grid td.context-sunday a {
   display: block;
   line-height: 30px;
   font-weight: 650;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .monthly-grid td button {
   display: block;

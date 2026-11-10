@@ -6,13 +6,13 @@ function day(DT, PROGRAMACAO = 'TRB', HR_ENT1 = '08:00') {
   return { DT, PROGRAMACAO, HR_ENT1, HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };
 }
 
-test('transfers only 01-06 December from the latest November schedule', () => {
+test('transfers 30 November through 06 December from the latest November schedule', () => {
   const result = planDecemberTransfer({
     november: [{ days: [day('2026-11-30'), day('2026-12-01'), day('2026-12-06')] }],
     december: [{ days: [day('2026-12-07'), day('2027-01-03')] }],
     novemberFixes: [{ ...day('2026-12-03', 'FXF'), ESCFIXO_ID: 1 }]
   });
-  assert.deepEqual(result, { action: 'TRANSFER', sourceDays: 2, fixes: 1, addDays: 2, addFixes: 1 });
+  assert.deepEqual(result, { action: 'TRANSFER', sourceDays: 3, fixes: 1, addDays: 3, addFixes: 1 });
 });
 
 test('blocks conflicting December days and fixed days without overwriting them', () => {
@@ -27,9 +27,17 @@ test('blocks conflicting December days and fixed days without overwriting them',
 test('requires a single December revision and is idempotent after the source is moved', () => {
   assert.match(planDecemberTransfer({ november: [{ days: [day('2026-12-01')] }] }).reason,
     /escala de dezembro ausente/);
-  assert.deepEqual(planDecemberTransfer({ november: [{ days: [day('2026-11-30')] }],
-    december: [{ days: [day('2026-12-01')] }] }),
+  assert.deepEqual(planDecemberTransfer({ november: [{ days: [day('2026-11-29')] }],
+    december: [{ days: [day('2026-11-30')] }] }),
   { action: 'UNCHANGED', sourceDays: 0, fixes: 0 });
+});
+
+test('30 November alone moves without duplicating existing December days', () => {
+  const result = planDecemberTransfer({
+    november: [{ days: [day('2026-11-29', 'F'), day('2026-11-30')] }],
+    december: [{ days: [day('2026-12-01')] }]
+  });
+  assert.deepEqual(result, { action: 'TRANSFER', sourceDays: 1, fixes: 0, addDays: 1, addFixes: 0 });
 });
 
 test('blocks transfer across different employee sections', () => {

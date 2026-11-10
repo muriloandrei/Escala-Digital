@@ -32,7 +32,7 @@ test('dezembro usa periodo operacional e previsualiza todas as lojas sem gravar'
     };
     await run(['--mes=2026-12'], dependencies);
     assert.deepEqual(calls, [{ mesRef: '2026-12-01', dryRun: true }]);
-    assert.match(lines[0], /2026-12-01 a 2027-01-03/);
+    assert.match(lines[0], /2026-11-30 a 2027-01-03/);
     await run(['--mes=2026-12', '--loja=35', '--apply', '--by=opc'], dependencies);
     assert.deepEqual(calls[1], { mesRef: '2026-12-01', dryRun: false, lojas: [35] });
     assert.equal(calls[2].action, 'LIBERAR_ESCALA_MENSAL');
