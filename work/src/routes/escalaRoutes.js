@@ -473,10 +473,13 @@ router.get('/mensal', requirePermission('escalas', 'visualizar'), resolveLojaReq
     const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
     const escala = await escalaService.getEscalaMensal({ lojaId, mesRef, secoesPermitidas });
     const progresso = await officializationService.getProgress({ lojaId, mesRef, secoesPermitidas, escala });
-    const domingoAnterior = await previousSundayService.getPriorSunday({ lojaId, mesRef,
-      employeeIds: (escala.funcionarios || []).map((person) => Number(person.ESCFUNC_ID)) });
+    const employeeIds = (escala.funcionarios || []).map((person) => Number(person.ESCFUNC_ID));
+    const [domingoAnterior, diaAnterior] = await Promise.all([
+      previousSundayService.getPriorSunday({ lojaId, mesRef, employeeIds }),
+      previousSundayService.getPreviousDay({ lojaId, mesRef, employeeIds })
+    ]);
     const domingo6hHabilitado = await sundayShiftService.getStoreEnabled(lojaId);
-    return res.json({ escala, periodo: getOperationalPeriodIso(mesRef), progresso, domingoAnterior, domingo6hHabilitado });
+    return res.json({ escala, periodo: getOperationalPeriodIso(mesRef), progresso, domingoAnterior, diaAnterior, domingo6hHabilitado });
   } catch (error) {
     return next(error);
   }

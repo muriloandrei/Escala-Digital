@@ -32,7 +32,8 @@ test('leader sees released store in summary while monthly data remains section-s
     summary: escalaService.listEscalasResumo,
     monthly: escalaService.getEscalaMensal,
     progress: officializationService.getProgress,
-    sunday: previousSundayService.getPriorSunday
+    sunday: previousSundayService.getPriorSunday,
+    previousDay: previousSundayService.getPreviousDay
   };
   const calls = [];
   accessService.getSecoesPermitidasUsuario = async () => [20, 21];
@@ -49,6 +50,7 @@ test('leader sees released store in summary while monthly data remains section-s
     return { secoes: [] };
   };
   previousSundayService.getPriorSunday = async () => null;
+  previousSundayService.getPreviousDay = async () => null;
   const user = { perfil: 'LIDER', lojas: [10], sub: 1 };
   try {
     const list = response();
@@ -71,6 +73,7 @@ test('leader sees released store in summary while monthly data remains section-s
     escalaService.getEscalaMensal = originals.monthly;
     officializationService.getProgress = originals.progress;
     previousSundayService.getPriorSunday = originals.sunday;
+    previousSundayService.getPreviousDay = originals.previousDay;
   }
 });
 

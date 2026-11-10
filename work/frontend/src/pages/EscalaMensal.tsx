@@ -118,7 +118,7 @@ export function EscalaMensal({ user }: { user: User }) {
   const [params, setParams] = useSearchParams();
   const [escala, setEscala] = useState<EscalaMensal | null>(null);
   const [periodo, setPeriodo] = useState<PeriodoOperacional | null>(null);
-  const [domingoAnterior, setDomingoAnterior] = useState<DomingoAnterior | null>(null);
+  const [diaAnterior, setDiaAnterior] = useState<DomingoAnterior | null>(null);
   const [domingo6hHabilitado, setDomingo6hHabilitado] = useState(false);
   const [holidays, setHolidays] = useState<Record<string, string>>({});
   const [catalogSections, setCatalogSections] = useState<Secao[]>([]);
@@ -159,11 +159,11 @@ export function EscalaMensal({ user }: { user: User }) {
     setLoading(true);
     setError('');
     setProgress(null);
-    setDomingoAnterior(null);
+    setDiaAnterior(null);
     setSelectedCell(null);
     const monthQuery = new URLSearchParams({ lojaId, mesRef });
     Promise.all([
-      getJson<{ escala: EscalaMensal; periodo: PeriodoOperacional; progresso: ScheduleProgress; domingoAnterior: DomingoAnterior | null; domingo6hHabilitado: boolean }>(
+      getJson<{ escala: EscalaMensal; periodo: PeriodoOperacional; progresso: ScheduleProgress; diaAnterior: DomingoAnterior | null; domingo6hHabilitado: boolean }>(
         `/api/escalas/mensal?${monthQuery}`,
         controller.signal,
       ),
@@ -175,7 +175,7 @@ export function EscalaMensal({ user }: { user: User }) {
       .then(([month, catalog]) => {
         setEscala(month.escala);
         setPeriodo(month.periodo);
-        setDomingoAnterior(month.domingoAnterior);
+        setDiaAnterior(month.diaAnterior);
         setDomingo6hHabilitado(month.domingo6hHabilitado === true);
         setProgress(month.progresso);
         setCatalogSections(catalog.secoes || []);
@@ -260,9 +260,9 @@ export function EscalaMensal({ user }: { user: User }) {
         ? 'Sem subseção'
         : subsections.find(([id]) => id === subsection)?.[1] || 'Subseção';
   const dates = useMemo(() => (periodo ? datesBetween(periodo) : []), [periodo]);
-  const domingoAnteriorPorFuncionario = useMemo(() => new Map(
-    (domingoAnterior?.dias || []).map((day) => [Number(day.ESCFUNC_ID), day]),
-  ), [domingoAnterior]);
+  const diaAnteriorPorFuncionario = useMemo(() => new Map(
+    (diaAnterior?.dias || []).map((day) => [Number(day.ESCFUNC_ID), day]),
+  ), [diaAnterior]);
   const periodHolidays = useMemo(() => dates.filter((date) => holidays[date]).map((date) => ({ date, name: holidays[date] })), [dates, holidays]);
   const critiqueMarkers = useMemo(() => {
     const byEmployee = new Map<number, { row: string[]; dates: Map<string, string[]> }>();
@@ -849,14 +849,14 @@ export function EscalaMensal({ user }: { user: User }) {
                 >
                   <table className="monthly-grid">
                     <thead>
-                      <tr className="monthly-coverage-row"><th className="employee-col">Qualidade (%)</th>{domingoAnterior && <th className="context-sunday" title="Domingo da escala de novembro, somente leitura">Ref.</th>}{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''} title={`${item.working} trabalhando, ${item.rests} em folga`}>{item.quality === null ? '–' : `${item.quality}%`}</th>)}</tr>
-                      <tr className="monthly-count-row"><th className="employee-col">Folgas</th>{domingoAnterior && <th className="context-sunday">–</th>}{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}><span className="rest-count">{item.rests} F</span></th>)}</tr>
-                      <tr className="monthly-count-row"><th className="employee-col">Trabalhando</th>{domingoAnterior && <th className="context-sunday">–</th>}{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}><span className="work-count">{item.working} T</span></th>)}</tr>
+                      <tr className="monthly-coverage-row"><th className="employee-col">Qualidade (%)</th>{diaAnterior && <th className="context-sunday" title="30/11 da escala de novembro, somente leitura">Ref.</th>}{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''} title={`${item.working} trabalhando, ${item.rests} em folga`}>{item.quality === null ? '–' : `${item.quality}%`}</th>)}</tr>
+                      <tr className="monthly-count-row"><th className="employee-col">Folgas</th>{diaAnterior && <th className="context-sunday">–</th>}{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}><span className="rest-count">{item.rests} F</span></th>)}</tr>
+                      <tr className="monthly-count-row"><th className="employee-col">Trabalhando</th>{diaAnterior && <th className="context-sunday">–</th>}{coverage.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}><span className="work-count">{item.working} T</span></th>)}</tr>
                       <tr>
                         <th rowSpan={2} className="employee-col">
                           Funcionário
                         </th>
-                        {domingoAnterior && <th className="context-sunday" title="Domingo da escala de novembro, somente leitura">{weekday(domingoAnterior.data)}</th>}
+                        {diaAnterior && <th className="context-sunday" title="30/11 da escala de novembro, somente leitura">{weekday(diaAnterior.data)}</th>}
                         {dates.map((date, index) => (
                           <th key={date} className={`${isWeekStart(date, index) ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>
                             {weekday(date)}
@@ -864,7 +864,7 @@ export function EscalaMensal({ user }: { user: User }) {
                         ))}
                       </tr>
                       <tr>
-                        {domingoAnterior && <th className="context-sunday" title="Domingo da escala de novembro, somente leitura">{domingoAnterior.data.slice(8)}/{domingoAnterior.data.slice(5, 7)}</th>}
+                        {diaAnterior && <th className="context-sunday" title="30/11 da escala de novembro, somente leitura">{diaAnterior.data.slice(8)}/{diaAnterior.data.slice(5, 7)}</th>}
                         {dates.map((date, index) => (
                           <th key={date} className={`${isWeekStart(date, index) ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>
                             {date.slice(8, 10)}
@@ -883,9 +883,9 @@ export function EscalaMensal({ user }: { user: User }) {
                             <small>{person.FUNCAO_DESCR || 'Cargo não informado'}{person.DT_DEMISS ? ` · Desligado em ${formatDate(iso(person.DT_DEMISS))}` : !permiteEscala(person.STATUS) ? ' · Inativo no RM' : ''}</small>
                             <button type="button" className="person-menu-trigger" title={`Ações de ${person.NOME}`} aria-label={`Ações de ${person.NOME}`} onClick={(event) => openPersonMenu(event, person)}><MoreVertical size={16} /></button>
                           </th>
-                          {domingoAnterior && (() => {
-                            const day = domingoAnteriorPorFuncionario.get(Number(person.ESCFUNC_ID));
-                            return <td className="context-sunday" title={`${person.NOME} · ${formatDate(domingoAnterior.data)} · ${shiftLabel(day)} · Somente leitura`}><span>{cellText(day)}</span></td>;
+                          {diaAnterior && (() => {
+                            const day = diaAnteriorPorFuncionario.get(Number(person.ESCFUNC_ID));
+                            return <td className="context-sunday" title={`${person.NOME} · ${formatDate(diaAnterior.data)} · ${shiftLabel(day)} · Somente leitura`}><span>{day ? cellText(day) : '–'}</span></td>;
                           })()}
                           {dates.map((date, index) => {
                             const aposDemissao = Boolean(person.DT_DEMISS && date > iso(person.DT_DEMISS));

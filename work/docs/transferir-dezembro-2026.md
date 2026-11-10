@@ -1,8 +1,11 @@
 # Transicao novembro/dezembro de 2026
 
 Com a regra atual, novembro cobre 01/11 a 30/11 e dezembro cobre 01/12 a
-03/01. O domingo de 29/11 aparece na tela de dezembro apenas como referencia;
-01/12 a 06/12 sao dias normais da escala de dezembro.
+03/01. O dia 30/11 aparece em cinza na tela de dezembro apenas como referencia
+da ultima revisao ativa de novembro; sem lancamento, a celula fica vazia. Ele
+nao compoe os dias gerados nem a oficializacao de dezembro. O domingo 29/11
+continua sendo consultado internamente para a regra de descanso dominical.
+01/12 a 06/12 sao dias normais e editaveis da escala de dezembro.
 
 Antes da aplicacao, publique o codigo e confirme que a escala de dezembro foi
 liberada para as lojas envolvidas. A rotina exige uma programacao ativa unica
