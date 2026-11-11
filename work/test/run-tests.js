@@ -4,6 +4,7 @@ require('./operational-period.test');
 require('./fixed-carry.test');
 require('./december-transfer.test');
 require('./work-regime.test');
+require('./post-simulation.test');
 require('./previous-sunday.test');
 require('./escala-rules-backend.test');
 

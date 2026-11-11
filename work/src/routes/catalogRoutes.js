@@ -23,16 +23,6 @@ const funcionarioEscalaSchema = z.object({
   DT_DEMISS: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
 }).strict();
 
-const regimeFuncionarioSchema = z.object({
-  mesInicio: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/),
-  regime: z.enum(['5X2', '12X36']),
-  dtAncora: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  hours: z.object({
-    HR_ENT1: z.string(), HR_SAI1: z.string(),
-    HR_ENT2: z.string(), HR_SAI2: z.string()
-  }).strict().nullable().optional()
-}).strict();
-
 const dataIsoSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const parsed = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
@@ -723,20 +713,8 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, require
 });
 
 router.post('/lojas/:lojaId/funcionarios/:escfuncId/regime', resolveLojaParam, requireLojaAccess,
-  requirePermission('funcionarios', 'editar'), async (req, res, next) => {
-    try {
-      const data = regimeFuncionarioSchema.parse(req.body);
-      const resultado = await workRegimeService.configure({
-        lojaId: Number(req.params.lojaId), escfuncId: Number(req.params.escfuncId),
-        ...data, actor: req.user
-      });
-      if (!resultado) return res.status(404).json({ error: 'Funcionario nao encontrado para a loja.' });
-      return res.json({ resultado });
-    } catch (error) {
-      if (error.name === 'ZodError') return res.status(400).json({ error: 'Configuracao de regime invalida.', details: error.errors });
-      if (error.statusCode === 422) return res.status(422).json({ error: error.message, details: error.details });
-      return next(error);
-    }
+  requirePermission('funcionarios', 'editar'), (req, res) => {
+    return res.status(410).json({ error: 'Configuracao individual de regime desativada. Use a simulacao 12x36 na escala do posto.' });
   });
 
 router.get('/lojas/:lojaId/ausencias', resolveLojaParam, requireLojaAccess, async (req, res, next) => {

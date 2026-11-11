@@ -27,6 +27,7 @@ import { nextFixedState } from '../quickFixedCycle';
 import { compareEmployeesByShift } from '../scheduleOrder';
 import { groupScheduleSections } from '../scheduleSections';
 import { isWeekStart } from '../scheduleWeeks';
+import { Simulacao12x36 } from './Simulacao12x36';
 import { permiteEscala } from '../employeeStatus';
 import { ProgressoEscalaModal } from './ProgressoEscala';
 
@@ -312,6 +313,7 @@ export function EscalaMensal({ user }: { user: User }) {
     memberOfSubsection(item, subsection) &&
     (!personFilter || String(item.ESCFUNC_ID) === personFilter));
   const scopeFullyAbsent = scopePeople.length > 0 && scopePeople.every((person) => fullAbsenceIds.has(Number(person.ESCFUNC_ID)));
+  const isPosto = Number(lojaId) >= 700 && Number(lojaId) <= 799;
   useEffect(() => setCritiqueGroups([]), [lojaId, mesRef]);
   useEffect(() => {
     if (!lojaId || !mesRef || !sectionId || !escala) {
@@ -806,6 +808,8 @@ export function EscalaMensal({ user }: { user: User }) {
                   </label>
                 )}
               </div>
+              <section className="schedule-regime" aria-label={isPosto ? 'Escala 5x2' : undefined}>
+              {isPosto && <div className="schedule-regime-heading"><strong>Escala 5x2</strong><span>Operacional · {visibleEmployees.length} funcionário(s)</span></div>}
               {canEdit(user, 'escalas') && (
                 <div className="schedule-actions">
                   <span>
@@ -961,6 +965,11 @@ export function EscalaMensal({ user }: { user: User }) {
                   </table>
                 </div>
               )}
+              </section>
+              {isPosto && lojaId && mesRef && sectionId && view === 'mensal' && <Simulacao12x36
+                lojaId={Number(lojaId)} mesRef={mesRef} escsecaoId={Number(sectionId)}
+                dates={dates} people={visibleEmployees} scopePeople={scopePeople}
+                canEdit={canEdit(user, 'escalas')} />}
               {selectedCell && (
                 <div className="cell-detail">
                   {holidays[selectedCell.date] && <span className="holiday-warning" role="status">Feriado nacional: {holidays[selectedCell.date]}.</span>}

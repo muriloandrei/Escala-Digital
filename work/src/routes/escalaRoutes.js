@@ -13,6 +13,7 @@ const previousSundayService = require('../services/previousSundayService');
 const sectionRolloutService = require('../services/sectionRolloutService');
 const sundayShiftService = require('../services/sundayShiftService');
 const workRegimeService = require('../services/workRegimeService');
+const postSimulationService = require('../services/postSimulationService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { validateStandardShift, validateApprenticeShift, validate12x36Shift } = require('../domain/shiftValidation');
 const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('../domain/workRegime');
@@ -104,6 +105,77 @@ const fixoEscalaSchema = z.object({
 });
 
 router.use(requireAuth);
+
+const simulationScopeSchema = z.object({
+  lojaId: z.coerce.number().int().positive(),
+  mesRef: z.string().regex(/^\d{4}-\d{2}-01$/),
+  escsecaoId: z.coerce.number().int().positive()
+});
+const simulationHoursSchema = z.object({
+  HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_SAI1: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/),
+  HR_SAI2: z.string().regex(/^\d{2}:\d{2}$/)
+});
+
+router.get('/simulacao-12x36', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess,
+  async (req, res, next) => {
+    try {
+      const scope = simulationScopeSchema.parse(req.query);
+      await accessService.assertSecoesPermitidas(req.user, scope.lojaId, [scope.escsecaoId]);
+      return res.json({ dias: await postSimulationService.list(scope) });
+    } catch (error) {
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da simulacao invalidos.' });
+      return next(error);
+    }
+  });
+
+router.post('/simulacao-12x36/gerar', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess,
+  async (req, res, next) => {
+    try {
+      const payload = simulationScopeSchema.extend({ escfuncIds: z.array(z.number().int().positive()).min(1) }).parse(req.body);
+      await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+      const resultado = await postSimulationService.generate({ ...payload, actor: req.user });
+      await auditService.registerAudit({ action: 'GERAR_SIMULACAO_12X36', user: req.user,
+        lojaId: payload.lojaId, mesRef: payload.mesRef, details: { escsecaoId: payload.escsecaoId, ...resultado } });
+      return res.json({ resultado });
+    } catch (error) {
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da simulacao invalidos.' });
+      return next(error);
+    }
+  });
+
+router.put('/simulacao-12x36/funcionario', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess,
+  async (req, res, next) => {
+    try {
+      const payload = simulationScopeSchema.extend({ escfuncId: z.number().int().positive(),
+        anchor: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), hours: simulationHoursSchema }).parse(req.body);
+      await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+      const resultado = await postSimulationService.configureEmployee({ ...payload, actor: req.user });
+      await auditService.registerAudit({ action: 'AJUSTAR_SIMULACAO_12X36', user: req.user,
+        lojaId: payload.lojaId, mesRef: payload.mesRef, details: { escsecaoId: payload.escsecaoId, escfuncId: payload.escfuncId, anchor: payload.anchor } });
+      return res.json({ resultado });
+    } catch (error) {
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da simulacao invalidos.' });
+      return next(error);
+    }
+  });
+
+router.patch('/simulacao-12x36/dia', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess,
+  async (req, res, next) => {
+    try {
+      const payload = simulationScopeSchema.extend({ escfuncId: z.number().int().positive(),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), hours: simulationHoursSchema }).parse(req.body);
+      await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+      const resultado = await postSimulationService.editDay({ ...payload, actor: req.user });
+      await auditService.registerAudit({ action: 'EDITAR_DIA_SIMULACAO_12X36', user: req.user,
+        lojaId: payload.lojaId, mesRef: payload.mesRef, details: { escsecaoId: payload.escsecaoId, escfuncId: payload.escfuncId, date: payload.date } });
+      return res.json({ resultado });
+    } catch (error) {
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da simulacao invalidos.' });
+      return next(error);
+    }
+  });
 
 router.get('/feriados', requirePermission('escalas', 'visualizar'), (req, res) => {
   const { inicio, fim } = req.query;

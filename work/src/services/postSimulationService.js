@@ -1,0 +1,176 @@
+const { withConnection, oracledb } = require('../db/oracle');
+const catalogService = require('./catalogService');
+const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
+const { isIsoDate, isDutyDay } = require('../domain/workRegime');
+const { validate12x36Shift } = require('../domain/shiftValidation');
+
+const DEFAULT_HOURS = Object.freeze({ HR_ENT1: '07:00', HR_SAI1: '12:30', HR_ENT2: '13:30', HR_SAI2: '19:00' });
+
+function assertPostStore(lojaId) {
+  if (!Number.isInteger(Number(lojaId)) || Number(lojaId) < 700 || Number(lojaId) > 799) {
+    const error = new Error('Simulacao 12x36 disponivel somente nos postos 700 a 799.');
+    error.statusCode = 422;
+    throw error;
+  }
+}
+
+function periodDates(mesRef) {
+  const period = getOperationalPeriodIso(mesRef);
+  const dates = [];
+  for (let timestamp = Date.parse(`${period.inicio}T00:00:00Z`);
+    timestamp <= Date.parse(`${period.fim}T00:00:00Z`); timestamp += 86400000) {
+    dates.push(new Date(timestamp).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+async function employeesInSection(lojaId, mesRef, escsecaoId) {
+  const employees = await catalogService.listFuncionariosByLoja(lojaId, {
+    mesRef, secoesPermitidas: [Number(escsecaoId)]
+  });
+  return new Map(employees.filter((person) => Number(person.ESCSECAO_ID) === Number(escsecaoId))
+    .map((person) => [Number(person.ESCFUNC_ID), person]));
+}
+
+function assertEmployee(employees, escfuncId) {
+  if (!employees.has(Number(escfuncId))) {
+    const error = new Error('Funcionario nao pertence a esta secao do posto.');
+    error.statusCode = 422;
+    throw error;
+  }
+}
+
+function assertHours(hours) {
+  const errors = validate12x36Shift(hours);
+  if (errors.length) {
+    const error = new Error(errors[0]);
+    error.statusCode = 422;
+    throw error;
+  }
+}
+
+function simulationRows({ lojaId, mesRef, escsecaoId, escfuncId, anchor, hours, actor }) {
+  return periodDates(mesRef).map((date) => ({
+    lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId), escfuncId: Number(escfuncId),
+    date, anchor, programacao: isDutyDay(anchor, date) ? 'TRB' : 'F',
+    ...hours, login: String(actor?.login || 'SISTEMA').slice(0, 100)
+  }));
+}
+
+async function replaceEmployee(connection, input) {
+  const rows = simulationRows(input);
+  await connection.execute(
+    `delete from sgn_esc_sim_12x36 where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+      and escfunc_id = :escfuncId`,
+    { lojaId: input.lojaId, mesRef: input.mesRef, escfuncId: input.escfuncId }, { autoCommit: false }
+  );
+  await connection.executeMany(
+    `insert into sgn_esc_sim_12x36
+       (loja, mes_ref, escsecao_id, escfunc_id, dia, dt_ancora, programacao,
+        hr_ent1, hr_sai1, hr_ent2, hr_sai2, login, dt_hr_alter)
+     values (:lojaId, to_date(:mesRef, 'YYYY-MM-DD'), :escsecaoId, :escfuncId,
+       to_date(:date, 'YYYY-MM-DD'), to_date(:anchor, 'YYYY-MM-DD'), :programacao,
+       :HR_ENT1, :HR_SAI1, :HR_ENT2, :HR_SAI2, :login, sysdate)`,
+    rows, { autoCommit: false }
+  );
+  return rows.length;
+}
+
+async function list({ lojaId, mesRef, escsecaoId }) {
+  assertPostStore(lojaId);
+  const employees = await employeesInSection(lojaId, mesRef, escsecaoId);
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select escfunc_id, to_char(dia, 'YYYY-MM-DD') dia,
+              to_char(dt_ancora, 'YYYY-MM-DD') dt_ancora, programacao,
+              hr_ent1, hr_sai1, hr_ent2, hr_sai2
+         from sgn_esc_sim_12x36
+        where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          and escsecao_id = :escsecaoId order by escfunc_id, dia`,
+      { lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId) },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return (result.rows || []).filter((row) => employees.has(Number(row.ESCFUNC_ID)));
+  });
+}
+
+async function generate({ lojaId, mesRef, escsecaoId, escfuncIds, actor }) {
+  assertPostStore(lojaId);
+  const employees = await employeesInSection(lojaId, mesRef, escsecaoId);
+  const ids = [...new Set((escfuncIds || []).map(Number))];
+  if (!ids.length) {
+    const error = new Error('Selecione ao menos um funcionario para simular.');
+    error.statusCode = 422;
+    throw error;
+  }
+  ids.forEach((id) => assertEmployee(employees, id));
+  return withConnection(async (connection) => {
+    try {
+      let days = 0;
+      for (const escfuncId of ids) {
+        days += await replaceEmployee(connection, { lojaId, mesRef, escsecaoId, escfuncId,
+          anchor: periodDates(mesRef)[0], hours: DEFAULT_HOURS, actor });
+      }
+      await connection.commit();
+      return { funcionarios: ids.length, dias: days };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    }
+  });
+}
+
+async function configureEmployee({ lojaId, mesRef, escsecaoId, escfuncId, anchor, hours, actor }) {
+  assertPostStore(lojaId);
+  const dates = periodDates(mesRef);
+  if (!isIsoDate(anchor) || !dates.includes(anchor)) {
+    const error = new Error('A ancora deve estar no periodo desta escala.');
+    error.statusCode = 422;
+    throw error;
+  }
+  assertHours(hours);
+  assertEmployee(await employeesInSection(lojaId, mesRef, escsecaoId), escfuncId);
+  return withConnection(async (connection) => {
+    try {
+      const days = await replaceEmployee(connection, { lojaId, mesRef, escsecaoId, escfuncId, anchor, hours, actor });
+      await connection.commit();
+      return { dias: days };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    }
+  });
+}
+
+async function editDay({ lojaId, mesRef, escsecaoId, escfuncId, date, hours, actor }) {
+  assertPostStore(lojaId);
+  if (!periodDates(mesRef).includes(date)) {
+    const error = new Error('Dia fora do periodo da simulacao.');
+    error.statusCode = 422;
+    throw error;
+  }
+  assertHours(hours);
+  assertEmployee(await employeesInSection(lojaId, mesRef, escsecaoId), escfuncId);
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `update sgn_esc_sim_12x36 set hr_ent1 = :HR_ENT1, hr_sai1 = :HR_SAI1,
+              hr_ent2 = :HR_ENT2, hr_sai2 = :HR_SAI2, login = :login, dt_hr_alter = sysdate
+        where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          and escsecao_id = :escsecaoId and escfunc_id = :escfuncId
+          and dia = to_date(:date, 'YYYY-MM-DD') and programacao = 'TRB'`,
+      { ...hours, login: String(actor?.login || 'SISTEMA').slice(0, 100),
+        lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId), escfuncId: Number(escfuncId), date },
+      { autoCommit: false }
+    );
+    if (result.rowsAffected !== 1) {
+      await connection.rollback();
+      const error = new Error('Plantao nao encontrado. Gere a simulacao antes de editar.');
+      error.statusCode = 422;
+      throw error;
+    }
+    await connection.commit();
+    return { atualizado: true };
+  });
+}
+
+module.exports = { DEFAULT_HOURS, periodDates, simulationRows, list, generate, configureEmployee, editDay };

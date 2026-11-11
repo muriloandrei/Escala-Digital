@@ -561,6 +561,59 @@
 .schedule-actions strong {
   color: #17283e;
 }
+.schedule-regime + .schedule-regime {
+  margin-top: 22px;
+}
+.schedule-regime-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid #d9e2ec;
+  border-top: 3px solid #1f4c93;
+  background: #edf3fa;
+  color: #17283e;
+}
+.schedule-regime-heading strong {
+  font-size: 14px;
+}
+.schedule-regime-heading span {
+  color: #60748c;
+  font-size: 12px;
+}
+.schedule-regime-heading + .schedule-actions {
+  border-top: 0;
+}
+.schedule-simulation .notice {
+  margin: 0;
+}
+.sim-hours {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+.sim-field {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334861;
+}
+.sim-field input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid #ccd8e6;
+  border-radius: 4px;
+  padding: 0 8px;
+  color: #17283e;
+  background: #fff;
+}
+.schedule-simulation .monthly-grid td button:disabled:hover {
+  outline: 0;
+}
 .schedule-page .notice {
   margin: 12px 0;
 }

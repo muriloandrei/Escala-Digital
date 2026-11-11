@@ -452,23 +452,13 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    const today = new Date();
-    const regimeMes = options.mesRef || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
-    const regimes = lojaCodigo >= 700 && lojaCodigo <= 799
-      ? await require('./workRegimeService').listEffective(connection, { lojaId: lojaCodigo, mesRef: regimeMes })
-      : new Map();
     return result.rows.map((row) => {
       const funcionario = normalizeFuncionario(row);
-      const regime = regimes.get(Number(funcionario.ESCFUNC_ID));
       return {
         ...funcionario,
-        REGIME_ESCALA: regime?.REGIME || '5X2',
-        DT_ANCORA_12X36: regime?.DT_ANCORA || null,
-        REGIME_MES_INICIO: regime?.MES_INICIO || null,
-        ...(regime?.REGIME === '12X36' ? {
-          HR_ENT1: regime.HR_ENT1, HR_SAI1: regime.HR_SAI1,
-          HR_ENT2: regime.HR_ENT2, HR_SAI2: regime.HR_SAI2
-        } : {}),
+        REGIME_ESCALA: '5X2',
+        DT_ANCORA_12X36: null,
+        REGIME_MES_INICIO: null,
         ESCALA_PROGRAMACAO: pick(row, 'ESCALA_PROGRAMACAO', 'escala_programacao'),
         ESCALA_REVISAO: pick(row, 'ESCALA_REVISAO', 'escala_revisao'),
         ESCALA_OFICIALIZADA: pick(row, 'ESCALA_OFICIALIZADA', 'escala_oficializada')

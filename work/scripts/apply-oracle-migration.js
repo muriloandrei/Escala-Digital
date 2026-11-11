@@ -28,7 +28,8 @@ const migrationNames = [
   '20261105_retificacoes_rh.sql',
   '20261105_domingo_6h_lojas.sql',
   '20261109_regime_12x36_funcionario.sql',
-  '20261109_postos_horarios_padrao.sql'
+  '20261109_postos_horarios_padrao.sql',
+  '20261111_simulacao_12x36_postos.sql'
 ];
 
 function parseSinglePlsqlBlock(source) {
