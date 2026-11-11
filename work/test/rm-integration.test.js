@@ -231,21 +231,23 @@ const folgaParaPost = [{
 const erroMestreAusente = { messages: [{ code: '0007', type: 'error', detail: 'Violação de chave estrangeira' }], length: 0, data: null };
 
 test('cria cabecalho RM apos FK 0007 e repete POST de detalhes somente uma vez', async () => {
-  await simularPostFolgas([
-    { status: 500, body: erroMestreAusente }, { status: 201 }, { status: 201 }
-  ], async (chamadas) => {
-    const result = await _private.postFolgas(folgaParaPost);
-    assert.equal(result.cabecalhoCriado, true);
-    assert.equal(chamadas.length, 3);
-    assert.match(chamadas[0].url, /PtoAdtTabFolgaData\?codcoligada=1$/);
-    assert.match(chamadas[1].url, /PtoTabFolgaData\?codcoligada=1$/);
-    assert.equal(chamadas[2].url, chamadas[0].url);
-    assert.deepEqual(JSON.parse(chamadas[1].options.body), [{
-      CODCOLIGADA: 1, CODTABFOLGA: '063.0651', DESCRICAO: 'Folga API Escala'
-    }]);
-    assert.equal(chamadas[2].options.body, chamadas[0].options.body);
-    assert.equal('returnStatus' in chamadas[1].options, false);
-  });
+  for (const statusMestre of [200, 201]) {
+    await simularPostFolgas([
+      { status: 500, body: erroMestreAusente }, { status: statusMestre }, { status: 201 }
+    ], async (chamadas) => {
+      const result = await _private.postFolgas(folgaParaPost);
+      assert.equal(result.cabecalhoCriado, true);
+      assert.equal(chamadas.length, 3);
+      assert.match(chamadas[0].url, /PtoAdtTabFolgaData\?codcoligada=1$/);
+      assert.match(chamadas[1].url, /PtoTabFolgaData\?codcoligada=1$/);
+      assert.equal(chamadas[2].url, chamadas[0].url);
+      assert.deepEqual(JSON.parse(chamadas[1].options.body), [{
+        CODCOLIGADA: 1, CODTABFOLGA: '063.0651', DESCRICAO: 'Folga API Escala'
+      }]);
+      assert.equal(chamadas[2].options.body, chamadas[0].options.body);
+      assert.equal('returnStatus' in chamadas[1].options, false);
+    });
+  }
 });
 
 test('nao cria cabecalho por HTTP 500 sem violacao FK 0007', async () => {
@@ -255,13 +257,27 @@ test('nao cria cabecalho por HTTP 500 sem violacao FK 0007', async () => {
   });
 });
 
-test('nao repete detalhes quando mestre falha ou nao retorna 201', async () => {
-  for (const resposta of [{ status: 500 }, { status: 200 }]) {
+test('nao repete detalhes quando mestre falha', async () => {
+  for (const resposta of [{ status: 500 }, { status: 204 }]) {
     await simularPostFolgas([{ status: 500, body: erroMestreAusente }, resposta], async (chamadas) => {
-      await assert.rejects(_private.postFolgas(folgaParaPost), /HTTP (500|200)/);
+      await assert.rejects(_private.postFolgas(folgaParaPost), /HTTP (500|204)/);
       assert.equal(chamadas.length, 2);
     });
   }
+});
+
+test('diagnostico compara payload com GET antes e depois, inclusive duplicidade no payload', () => {
+  const diagnostico = _private.diagnosticarFolgasRm({
+    payload: [folgaParaPost[0], folgaParaPost[0]],
+    getAntes: [],
+    getDepois: [{ ...folgaParaPost[0], HORAFIM: 0 }],
+    erroGetDepois: null
+  });
+  assert.deepEqual(diagnostico.payload, [folgaParaPost[0], folgaParaPost[0]]);
+  assert.deepEqual(diagnostico.getAntes, []);
+  assert.equal(diagnostico.getDepois[0].completa, false);
+  assert.deepEqual(diagnostico.comparacao.map((item) => item.repeticoesNoPayload), [2, 2]);
+  assert.equal(diagnostico.comparacao[0].getDepois[0].horaFim, 0);
 });
 
 test('nao cria outro mestre quando repeticao dos detalhes falha', async () => {

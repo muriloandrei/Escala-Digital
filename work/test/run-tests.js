@@ -35,6 +35,7 @@ require('./suspension-permissions.test');
 require('./rm-integration.test');
 require('./rm-outbox.test');
 require('./rm-reprocess-cli.test');
+require('./rm-reprocess-ids-cli.test');
 require('./horario-funcionario.test');
 require('./draft-confirmation.test');
 require('./retroactive-admin.test');

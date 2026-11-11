@@ -447,6 +447,48 @@ function planejarFolgasRm({ existentesRows, funcionario, codColigada, codTabFolg
   return { deletePaths, payloadInclusao };
 }
 
+function diagnosticarFolgasRm({ payload, getAntes, getDepois, erroGetDepois }) {
+  const resumir = (folgas) => folgas.map((folga) => ({
+    codcoligada: getFolgaCodColigadaValue(folga) ?? null,
+    codtabfolga: getFolgaCodTabFolgaValue(folga) ?? null,
+    data: formatDate(getFolgaDateValue(folga)),
+    horaInicio: getFolgaHoraInicioValue(folga) ?? null,
+    horaFim: pick(folga, 'HORAFIM', 'ADTTABFOLGA.HORAFIM') ?? null,
+    horaInicioStr: pick(folga, 'HORAINICIOSTR', 'ADTTABFOLGA.HORAINICIOSTR') ?? null,
+    horaFimStr: pick(folga, 'HORAFIMSTR', 'ADTTABFOLGA.HORAFIMSTR') ?? null,
+    consextrainter: pick(folga, 'CONSEXTRAINTER', 'ADTTABFOLGA.CONSEXTRAINTER') ?? null,
+    completa: isFolgaRmCompleta(folga)
+  }));
+  const antes = resumir(getAntes);
+  const depois = getDepois === null ? null : resumir(getDepois);
+  const contagem = new Map();
+  for (const folga of payload) {
+    const chave = `${formatDate(folga.DATA)}|${folga.HORAINICIO}`;
+    contagem.set(chave, (contagem.get(chave) || 0) + 1);
+  }
+  const comparar = (folgas, data, horaInicio) => folgas
+    .filter((folga) => folga.data === data && Number(folga.horaInicio) === Number(horaInicio))
+    .map((folga) => ({ completa: folga.completa, horaFim: folga.horaFim, consextrainter: folga.consextrainter }));
+
+  return {
+    payload,
+    getAntes: antes,
+    getDepois: depois,
+    erroGetDepois: erroGetDepois || null,
+    comparacao: payload.map((folga) => {
+      const data = formatDate(folga.DATA);
+      const chave = `${data}|${folga.HORAINICIO}`;
+      return {
+        data,
+        horaInicio: folga.HORAINICIO,
+        repeticoesNoPayload: contagem.get(chave),
+        getAntes: comparar(antes, data, folga.HORAINICIO),
+        getDepois: depois === null ? null : comparar(depois, data, folga.HORAINICIO)
+      };
+    })
+  };
+}
+
 async function postFolgas(payload) {
   if (!payload.length) return null;
   const rmConfig = getEnv().rm;
@@ -471,7 +513,7 @@ async function postFolgas(payload) {
     method: 'POST', returnStatus: true,
     body: JSON.stringify([{ CODCOLIGADA, CODTABFOLGA, DESCRICAO: 'Folga API Escala' }])
   });
-  if (cabecalho.status !== 201) {
+  if (cabecalho.status !== 200 && cabecalho.status !== 201) {
     throw new Error(`RM retornou HTTP ${cabecalho.status} ao criar cabecalho da tabela de folga; detalhes nao reenviados.`);
   }
   return { body: await enviarDetalhes(), cabecalhoCriado: true };
@@ -641,6 +683,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
     let falhas = 0;
     const erros = [];
     for (const funcionario of agruparPorFuncionario(rows)) {
+      let diagnosticoId = null;
       try {
         if (!funcionario.eventos.length && !funcionario.diasCobertos.length) {
           await registrarRmLog(connection, {
@@ -678,7 +721,31 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
           await requestRm(deletePath, { method: 'DELETE' });
           removidas += 1;
         }
-        const postResultado = await postFolgas(payloadInclusao);
+        let postResultado;
+        try {
+          postResultado = await postFolgas(payloadInclusao);
+        } catch (error) {
+          if (payloadInclusao.length) {
+            diagnosticoId = randomUUID();
+            let getDepois = null;
+            let erroGetDepois = null;
+            if (error.statusCode === 500 && /chave duplicada|conflito de descanso/i.test(error.message)) {
+              try {
+                getDepois = await getFolgasExistentes({ codTabFolga, inicio, fim });
+              } catch (consultaError) {
+                erroGetDepois = consultaError.message;
+              }
+            }
+            console.error(JSON.stringify({
+              event: 'rm_folgas_post_diagnostico', diagnosticoId,
+              loja: lojaId, mesRef: formatDate(mesRef), revisao: funcionario.revisao ?? revisao,
+              escfuncId: funcionario.escfuncId, chapa: funcionario.chapa,
+              removidasAntesDoPost: removidas, erroPost: error.message,
+              ...diagnosticarFolgasRm({ payload: payloadInclusao, getAntes: existentesRows, getDepois, erroGetDepois })
+            }));
+          }
+          throw error;
+        }
 
         enviados += funcionario.eventos.length;
         await registrarRmLog(connection, {
@@ -694,7 +761,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
           loja: lojaId, mesRef, revisao: funcionario.revisao ?? revisao, escfuncId: funcionario.escfuncId, chapa: funcionario.chapa, cpf: mask(funcionario.cpf),
           acao: 'RM_ENVIAR_DESCANSOS', status: 'FALHA',
           mensagem: error.message,
-          payloadResumo: `chapa=${funcionario.chapa}`
+          payloadResumo: `chapa=${funcionario.chapa}${diagnosticoId ? `; diagnostico_id=${diagnosticoId}` : ''}`
         });
       }
     }
@@ -980,9 +1047,14 @@ async function prepararGrupoRmComErro(grupo) {
   });
 }
 
-async function reprocessarGrupoRmComErro(grupo) {
+async function reprocessarGrupoRmComErro(grupo, { expectedEnvioId = null, expectedErro = null } = {}) {
   if (!getEnv().rm.enabled) throw new Error('Integracao RM desabilitada.');
   const plano = await prepararGrupoRmComErro(grupo);
+  if (expectedEnvioId !== null && (plano.acao !== 'REPROCESSAR'
+    || Number(pick(plano.envio, 'ENVIO_ID', 'envio_id')) !== expectedEnvioId
+    || String(pick(plano.envio, 'ERRO', 'erro') || '') !== expectedErro)) {
+    return { ...plano, acao: 'BLOQUEADO', motivo: 'Envio ou erro atual mudou desde a previa. Nenhum POST executado.' };
+  }
   if (plano.acao === 'BLOQUEADO') return plano;
   const { lojaId, mesRef, escfuncId, escsecaoId, revisao } = plano;
   if (plano.acao !== 'JA_ENVIADO') {
@@ -1115,6 +1187,7 @@ module.exports = {
     getFolgaKey,
     buildFolgaPayload,
     planejarFolgasRm,
+    diagnosticarFolgasRm,
     isFolgaRmCompleta,
     assertFolgasRmVerificaveis,
     extrairFolgasConsultadasRm,

@@ -24,6 +24,7 @@
     "smoke:rm-outbox": "node scripts/smoke-rm-outbox.js",
     "rm:processar-pendentes": "node scripts/processar-pendencias-rm.js",
     "rm:reprocessar-erros": "node scripts/reprocessar-envios-rm-com-erro.js",
+    "rm:reprocessar-ids": "node scripts/reprocessar-envios-rm-por-id.js",
     "turnos:padrao": "node scripts/recriar-turnos-padrao-secao.js",
     "seed:dashboard": "node scripts/seed-dashboard-test-data.js",
     "usuarios:corrigir-lojas": "node scripts/corrigir-usuarios-loja.js",

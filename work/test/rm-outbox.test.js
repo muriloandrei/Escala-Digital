@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 function loadService({ enabled, rows, scheduleRows = [], fetchImpl = null,
-  programacoesRows = [], currentEnviosRows = [] }) {
+  programacoesRows = [], currentEnviosRows = [], consoleImpl = console }) {
   const statements = [];
   const connection = {
     async execute(sql, binds) {
@@ -42,7 +42,7 @@ function loadService({ enabled, rows, scheduleRows = [], fetchImpl = null,
   };
   const source = fs.readFileSync(path.join(__dirname, '../src/services/rmIntegrationService.js'), 'utf8');
   vm.runInNewContext(source, {
-    module, require: (name) => dependencies[name], console,
+    module, require: (name) => dependencies[name], console: consoleImpl,
     fetch: fetchImpl || (() => { throw new Error('Fetch inesperado'); }),
     AbortController, setTimeout, clearTimeout
   });
@@ -123,6 +123,18 @@ test('lote reconhece revisao atual ja enviada e supera somente erros antigos', a
   assert.equal(updates.length, 1);
   assert.match(updates[0].sql, /status = 'SUPERADO'/);
   assert.equal(statements.some(({ sql }) => /insert into sgn_esc_rm_envio/i.test(sql)), false);
+});
+
+test('reprocessamento selecionado nao troca de envio ou erro durante a aplicacao', async () => {
+  const atual = { ...envio, MES_REF: '2026-10-01', STATUS: 'INCERTO', ERRO: 'erro alterado' };
+  const { service, statements } = loadService({ enabled: true, rows: [],
+    programacoesRows: [programacaoAtual], currentEnviosRows: [atual] });
+  const resultado = await service.reprocessarGrupoRmComErro(grupoErro, {
+    expectedEnvioId: 41, expectedErro: 'erro da previa'
+  });
+  assert.equal(resultado.acao, 'BLOQUEADO');
+  assert.match(resultado.motivo, /mudou desde a previa/);
+  assert.equal(statements.some(({ sql }) => /update sgn_esc_rm_envio|insert into sgn_esc_rm_envio/i.test(sql)), false);
 });
 
 test('lote cria pendencia para revisao atual oficializada sem envio e reconcilia no RM', async () => {
@@ -222,6 +234,49 @@ test('nao usa CHAPA divergente do retorno RM para enviar folgas', async () => {
   const updates = statements.filter(({ sql }) => /update sgn_esc_rm_envio/i.test(sql));
   assert.equal(updates[1].binds.status, 'FALHA');
   assert.match(updates[1].binds.erro, /CHAPA correspondente/);
+});
+
+test('POST duplicado registra payload e GETs correlacionados ao log Oracle', async () => {
+  const row = {
+    ESCFUNC_ID: 90, CHAPA: '035.0090', CPF: '12345678901', CODCOLIGADA: 1,
+    REVISAO: 7, DT: '2026-10-05', PROGRAMACAO: 'F', APOS_DEMISSAO: 0
+  };
+  const diagnosticos = [];
+  let consultasFolgas = 0;
+  const folgaExistente = {
+    DATA: '2026-10-05', CODCOLIGADA: 1, CODTABFOLGA: '035.0090',
+    HORAINICIO: 0, HORAFIM: 1440, HORAINICIOSTR: '00:00', HORAFIMSTR: '24:00', CONSEXTRAINTER: 1
+  };
+  const fetchImpl = async (url, options) => {
+    if (url.includes('/funcionario')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([{
+        CODSITUACAO: 'A', CODTABFOLGA: '035.0090', CODCOLIGADA: 1
+      }]) };
+    }
+    if ((options.method || 'GET') === 'POST') {
+      return { ok: false, status: 500, text: async () => JSON.stringify({
+        messages: [{ code: '0007', type: 'error', detail: 'Chave duplicada' }]
+      }) };
+    }
+    consultasFolgas += 1;
+    const body = consultasFolgas === 1
+      ? { messages: [{ code: '0003', type: 'info' }], data: null, length: 0 }
+      : [folgaExistente];
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
+  const { service, statements } = loadService({
+    enabled: true, rows: [{ ...envio, MES_REF: '2026-10-01' }], scheduleRows: [row], fetchImpl,
+    consoleImpl: { error: (message) => diagnosticos.push(JSON.parse(message)) }
+  });
+  const result = await service.processarOperacaoRm({ operacaoId: 'op-duplicado' });
+  assert.equal(result.status, 'INCERTO');
+  assert.equal(consultasFolgas, 2);
+  assert.equal(diagnosticos.length, 1);
+  assert.equal(diagnosticos[0].event, 'rm_folgas_post_diagnostico');
+  assert.equal(diagnosticos[0].payload[0].DATA, '2026-10-05T00:00:00-03:00');
+  assert.equal(diagnosticos[0].comparacao[0].getDepois[0].completa, true);
+  const falha = statements.find(({ sql, binds }) => /insert into sgn_esc_rm_log/i.test(sql) && binds.status === 'FALHA');
+  assert.match(falha.binds.payloadResumo, /diagnostico_id=op-test/);
 });
 
 test('timeout no POST reconcilia no GET sem repetir uma escrita ja aplicada', async () => {
