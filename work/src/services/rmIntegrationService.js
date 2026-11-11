@@ -971,10 +971,11 @@ async function processarPendenciasRm({ lojaId = null, limit = 100, incertos = fa
   return resultados;
 }
 
-async function listarGruposRmComErro({ lojaId = null, afterId = 0, maxId = null, limit = 100 } = {}) {
+async function listarGruposRmComErro({ lojaId = null, afterId = 0, maxId = null, limit = 100, erroTipo = null } = {}) {
   const binds = { afterId, limite: Math.min(500, Math.max(1, limit)) };
   const filtroLoja = lojaId ? 'and e.loja = :lojaId' : '';
   const filtroMaximo = maxId != null ? 'and e.envio_id <= :maxId' : '';
+  const filtroErro = erroTipo === 'duplicada' ? "and e.erro like '%Chave duplicada%'" : '';
   if (lojaId) binds.lojaId = lojaId;
   if (maxId != null) binds.maxId = maxId;
   return withConnection(async (connection) => {
@@ -984,7 +985,7 @@ async function listarGruposRmComErro({ lojaId = null, afterId = 0, maxId = null,
                 count(*) total_erros
            from sgn_esc_rm_envio e
           where e.status in ('INCERTO', 'FALHA')
-                ${filtroMaximo} ${filtroLoja}
+                ${filtroMaximo} ${filtroLoja} ${filtroErro}
           group by e.loja, e.mes_ref, e.escfunc_id
          having min(e.envio_id) > :afterId
           order by min(e.envio_id)
@@ -995,14 +996,27 @@ async function listarGruposRmComErro({ lojaId = null, afterId = 0, maxId = null,
   });
 }
 
-async function getMaiorEnvioErroId({ lojaId = null } = {}) {
+async function getMaiorEnvioErroId({ lojaId = null, erroTipo = null } = {}) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `select max(envio_id) maior_id from sgn_esc_rm_envio
-        where status in ('INCERTO', 'FALHA') ${lojaId ? 'and loja = :lojaId' : ''}`,
+        where status in ('INCERTO', 'FALHA') ${lojaId ? 'and loja = :lojaId' : ''}
+          ${erroTipo === 'duplicada' ? "and erro like '%Chave duplicada%'" : ''}`,
       lojaId ? { lojaId } : {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return Number(pick(result.rows?.[0], 'MAIOR_ID', 'maior_id') || 0);
+  });
+}
+
+async function getGrupoRmComErroPorEnvioId({ envioId }) {
+  return withConnection(async (connection) => {
+    const result = await connection.execute(
+      `select envio_id, loja, mes_ref, escfunc_id, status, erro
+         from sgn_esc_rm_envio
+        where envio_id = :envioId`,
+      { envioId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows?.[0] || null;
   });
 }
 
@@ -1173,6 +1187,7 @@ module.exports = {
   processarPendenciasRm,
   listarGruposRmComErro,
   getMaiorEnvioErroId,
+  getGrupoRmComErroPorEnvioId,
   prepararGrupoRmComErro,
   reprocessarGrupoRmComErro,
   reprocessarEnvioRm,

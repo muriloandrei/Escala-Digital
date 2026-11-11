@@ -309,8 +309,11 @@ test('RM reads only revisions up to the approved revision', async () => {
   await _private.getEscalaParaRm(connection, { lojaId: 52, mesRef: '2026-11-01', revisao: 40 });
   assert.equal(query.binds.inicio, '2026-11-01');
   assert.equal(query.binds.fim, '2026-11-29');
+  await _private.getEscalaParaRm(connection, { lojaId: 52, mesRef: '2026-12-01', revisao: 2 });
+  assert.equal(query.binds.inicio, '2026-11-30');
+  assert.equal(query.binds.fim, '2027-01-03');
   assert.doesNotMatch(query.sql, /nvl\(d\.programacao, 'TRB'\) <> 'TRB'/i);
-  assert.equal(query.binds.revisao, 40);
+  assert.equal(query.binds.revisao, 2);
 });
 
 test('RM separa dias cobertos de folgas e ignora ferias e afastamentos', () => {

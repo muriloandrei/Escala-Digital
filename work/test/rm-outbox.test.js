@@ -105,6 +105,15 @@ test('lote de erros usa cursor por grupo e congela o maior envio', async () => {
   assert.equal(query.binds.afterId, 40);
 });
 
+test('lote de duplicadas filtra apenas a mensagem correspondente', async () => {
+  const { service, statements } = loadService({ enabled: false, rows: [grupoErro] });
+  await service.getMaiorEnvioErroId({ erroTipo: 'duplicada' });
+  await service.listarGruposRmComErro({ erroTipo: 'duplicada', maxId: 1584 });
+  const consultas = statements.filter(({ sql }) => /Chave duplicada/.test(sql));
+  assert.equal(consultas.length, 2);
+  assert.ok(consultas.every(({ sql }) => /status in \('INCERTO', 'FALHA'\)/i.test(sql)));
+});
+
 test('lote bloqueia revisao atual nao oficializada sem criar pendencia', async () => {
   const { service, statements } = loadService({ enabled: true, rows: [],
     programacoesRows: [{ ...programacaoAtual, OFICIALIZADA: 0 }] });
