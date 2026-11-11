@@ -41,7 +41,7 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, people, scop
       .then((result) => { setDays(result.dias || []); setLoading(false); })
       .catch((reason) => {
         if (reason.name === 'AbortError') return;
-        setError(reason instanceof Error ? reason.message : 'Não foi possível ler a simulação.');
+        setError(reason instanceof Error ? reason.message : 'Não foi possível ler a escala 12x36.');
         setLoading(false);
       });
     return () => controller.abort();
@@ -59,7 +59,7 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, people, scop
   const counts = dates.map((date) => {
     const work = people.filter((person) => byEmployee.get(Number(person.ESCFUNC_ID))?.get(date)?.PROGRAMACAO === 'TRB').length;
     const rest = people.filter((person) => byEmployee.get(Number(person.ESCFUNC_ID))?.get(date)?.PROGRAMACAO === 'F').length;
-    return { work, rest };
+    return { work, rest, quality: people.length ? Math.round(work / people.length * 100) : 0 };
   });
 
   async function generate() {
@@ -68,19 +68,30 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, people, scop
       const response = await postJson<{ resultado: { funcionarios: number } }>('/api/escalas/simulacao-12x36/gerar', {
         lojaId, mesRef, escsecaoId, escfuncIds: scopePeople.map((person) => Number(person.ESCFUNC_ID)),
       });
-      setMessage(`Simulação gerada para ${response.resultado.funcionarios} funcionário(s).`);
+      setMessage(`Escala 12x36 gerada para ${response.resultado.funcionarios} funcionário(s).`);
       setConfirmGenerate(false);
       setReload((value) => value + 1);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Não foi possível gerar a simulação.');
+      setError(reason instanceof Error ? reason.message : 'Não foi possível gerar a escala 12x36.');
     } finally { setBusy(false); }
   }
 
-  function openEditor(person: Funcionario, date?: string) {
+  function openEditor(person: Funcionario, date?: string, anchorOverride?: string) {
     const saved = byEmployee.get(Number(person.ESCFUNC_ID));
     const day = date ? saved?.get(date) : saved?.values().next().value as SimDay | undefined;
-    setEditor({ person, date, anchor: day?.DT_ANCORA || dates[0],
-      hours: day ? { HR_ENT1: day.HR_ENT1, HR_SAI1: day.HR_SAI1, HR_ENT2: day.HR_ENT2, HR_SAI2: day.HR_SAI2 } : defaultHours });
+    const workDay = day?.PROGRAMACAO === 'TRB' ? day
+      : [...(saved?.values() || [])].find((item) => item.PROGRAMACAO === 'TRB');
+    setEditor({ person, date, anchor: anchorOverride || day?.DT_ANCORA || workDay?.DT_ANCORA || dates[0],
+      hours: workDay ? { HR_ENT1: workDay.HR_ENT1, HR_SAI1: workDay.HR_SAI1, HR_ENT2: workDay.HR_ENT2, HR_SAI2: workDay.HR_SAI2 } : defaultHours });
+    setError('');
+  }
+
+  function invertCurrentPeriod() {
+    if (!editor) return;
+    const restDay = [...(byEmployee.get(Number(editor.person.ESCFUNC_ID))?.values() || [])]
+      .find((day) => day.PROGRAMACAO === 'F');
+    if (!restDay) return;
+    setEditor({ ...editor, date: undefined, anchor: restDay.DIA });
     setError('');
   }
 
@@ -101,24 +112,25 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, people, scop
       setEditor(null);
       setReload((value) => value + 1);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Não foi possível salvar a simulação.');
+      setError(reason instanceof Error ? reason.message : 'Não foi possível salvar a escala 12x36.');
     } finally { setBusy(false); }
   }
 
-  return <section className="schedule-regime schedule-simulation" aria-label="Simulação 12x36">
-    <div className="schedule-regime-heading"><strong>Simulação 12x36</strong><span>Teste · sem oficialização ou envio ao RM · {people.length} funcionário(s)</span></div>
+  return <section className="schedule-regime schedule-simulation" aria-label="Escala 12x36">
+    <div className="schedule-regime-heading"><strong>Escala 12x36</strong><span>{people.length} funcionário(s)</span></div>
     <div className="schedule-actions">
-      <span>Mesmo quadro da escala 5x2 · {scopePeople.length} funcionário(s) no escopo</span>
-      <button className="button secondary" type="button" title="Atualizar simulação" disabled={busy} onClick={() => setReload((value) => value + 1)}><RefreshCw size={15} /> Atualizar</button>
-      {canEdit && <button className="button primary" type="button" disabled={busy || !scopePeople.length} onClick={() => setConfirmGenerate(true)}><Play size={15} /> Gerar simulação</button>}
+      <span>{scopePeople.length} funcionário(s) no escopo</span>
+      <button className="button secondary" type="button" title="Atualizar escala 12x36" disabled={busy} onClick={() => setReload((value) => value + 1)}><RefreshCw size={15} /> Atualizar</button>
+      {canEdit && <button className="button primary" type="button" disabled={busy || !scopePeople.length} onClick={() => setConfirmGenerate(true)}><Play size={15} /> Gerar escala</button>}
     </div>
     {message && <div className="notice success" role="status">{message}</div>}
     {error && !editor && <div className="notice error" role="alert">{error}</div>}
-    {loading ? <div className="empty-state" role="status">Carregando simulação...</div>
+    {loading ? <div className="empty-state" role="status">Carregando escala 12x36...</div>
       : !people.length ? <div className="empty-state">Nenhum funcionário encontrado neste filtro.</div>
-      : <div className="schedule-scroll" role="region" aria-label="Grade mensal da simulação 12x36" tabIndex={0}>
+      : <div className="schedule-scroll" role="region" aria-label="Grade mensal 12x36" tabIndex={0}>
         <table className="monthly-grid">
           <thead>
+            <tr className="monthly-coverage-row"><th className="employee-col">Qualidade (%)</th>{counts.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''} title={`${item.work} trabalhando, ${item.rest} em folga`}>{item.quality}%</th>)}</tr>
             <tr className="monthly-count-row"><th className="employee-col">Folgas</th>{counts.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}>{item.rest} F</th>)}</tr>
             <tr className="monthly-count-row"><th className="employee-col">Trabalhando</th>{counts.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}>{item.work} T</th>)}</tr>
             <tr><th rowSpan={2} className="employee-col">Funcionário</th>{dates.map((date, index) => <th key={date} className={isWeekStart(date, index) ? 'week-start' : ''}>{dayOfWeek(date)}</th>)}</tr>
@@ -131,27 +143,27 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, people, scop
             {dates.map((date, index) => {
               const day = byEmployee.get(Number(person.ESCFUNC_ID))?.get(date);
               return <td key={date} className={`${day?.PROGRAMACAO === 'F' ? 'rest' : day ? 'work' : 'empty'} ${isWeekStart(date, index) ? 'week-start' : ''}`}>
-                <button type="button" disabled={!canEdit || !day || day.PROGRAMACAO !== 'TRB'}
-                  title={day?.PROGRAMACAO === 'TRB' ? `${day.HR_ENT1} · ${day.HR_SAI1} · ${day.HR_ENT2} · ${day.HR_SAI2}` : day?.PROGRAMACAO === 'F' ? 'Descanso 12x36' : 'Não gerado'}
-                  onClick={() => openEditor(person, date)}>{day?.PROGRAMACAO === 'TRB' ? day.HR_ENT1 : day?.PROGRAMACAO || '–'}</button>
+                <button type="button" disabled={!canEdit || !day}
+                  title={day?.PROGRAMACAO === 'TRB' ? `${day.HR_ENT1} · ${day.HR_SAI1} · ${day.HR_ENT2} · ${day.HR_SAI2}` : day?.PROGRAMACAO === 'F' ? 'Inverter alternância do período' : 'Não gerado'}
+                  onClick={() => day?.PROGRAMACAO === 'F' ? openEditor(person, undefined, date) : openEditor(person, date)}>{day?.PROGRAMACAO === 'TRB' ? day.HR_ENT1 : day?.PROGRAMACAO || '–'}</button>
               </td>;
             })}
           </tr>)}</tbody>
         </table>
       </div>}
     {confirmGenerate && <div className="confirm-backdrop"><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="sim-generate-title">
-      <h2 id="sim-generate-title">Gerar simulação 12x36</h2>
-      <p>A simulação será refeita para {scopePeople.length} funcionário(s) deste escopo. Ajustes anteriores desses funcionários serão substituídos. A escala 5x2 não será alterada.</p>
+      <h2 id="sim-generate-title">Gerar escala 12x36</h2>
+      <p>A escala 12x36 será refeita para {scopePeople.length} funcionário(s) deste escopo. Ajustes anteriores desses funcionários serão substituídos. A escala 5x2 não será alterada.</p>
       {error && <div className="notice error" role="alert">{error}</div>}
       <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setConfirmGenerate(false)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={generate}>Confirmar geração</button></div>
     </div></div>}
     {editor && <div className="confirm-backdrop"><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="sim-edit-title">
       <h2 id="sim-edit-title">{editor.date ? `Plantão ${editor.date}` : 'Padrão 12x36'} · {editor.person.NOME}</h2>
       {!editor.date && <label className="sim-field">Primeiro dia de plantão<input type="date" min={dates[0]} max={dates[dates.length - 1]} value={editor.anchor} onChange={(event) => setEditor({ ...editor, anchor: event.target.value })} /></label>}
-      {!editor.date && <p>A mudança do padrão recria todos os dias simulados deste funcionário.</p>}
+      {!editor.date && <p>A mudança do padrão recria todos os dias 12x36 deste funcionário.</p>}
       <div className="sim-hours">{hourFields.map(([field, label]) => <label className="sim-field" key={field}>{label}<input type="time" value={editor.hours[field]} onChange={(event) => setEditor({ ...editor, hours: { ...editor.hours, [field]: event.target.value } })} /></label>)}</div>
       {error && <div className="notice error" role="alert">{error}</div>}
-      <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditor(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={saveEditor}>Salvar</button></div>
+      <div className="confirm-actions">{editor.date && <button className="button secondary" type="button" disabled={busy} onClick={invertCurrentPeriod}>Inverter alternância</button>}<button className="button secondary" type="button" disabled={busy} onClick={() => setEditor(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={saveEditor}>Salvar</button></div>
     </div></div>}
   </section>;
 }

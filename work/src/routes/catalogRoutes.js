@@ -714,7 +714,7 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId', resolveLojaParam, require
 
 router.post('/lojas/:lojaId/funcionarios/:escfuncId/regime', resolveLojaParam, requireLojaAccess,
   requirePermission('funcionarios', 'editar'), (req, res) => {
-    return res.status(410).json({ error: 'Configuracao individual de regime desativada. Use a simulacao 12x36 na escala do posto.' });
+    return res.status(410).json({ error: 'Configuracao individual de regime desativada. Use a escala 12x36 no posto.' });
   });
 
 router.get('/lojas/:lojaId/ausencias', resolveLojaParam, requireLojaAccess, async (req, res, next) => {

@@ -8,7 +8,7 @@ const DEFAULT_HOURS = Object.freeze({ HR_ENT1: '07:00', HR_SAI1: '12:30', HR_ENT
 
 function assertPostStore(lojaId) {
   if (!Number.isInteger(Number(lojaId)) || Number(lojaId) < 700 || Number(lojaId) > 799) {
-    const error = new Error('Simulacao 12x36 disponivel somente nos postos 700 a 799.');
+    const error = new Error('Escala 12x36 disponivel somente nos postos 700 a 799.');
     error.statusCode = 422;
     throw error;
   }
@@ -57,6 +57,32 @@ function simulationRows({ lojaId, mesRef, escsecaoId, escfuncId, anchor, hours, 
   }));
 }
 
+function planBalancedAnchors(employees, ids, dates) {
+  const sections = new Map();
+  for (const id of ids) {
+    const person = employees.get(id);
+    const subsection = String(person.ESCSUBSECAO_ID || 'sem');
+    if (!sections.has(subsection)) sections.set(subsection, []);
+    sections.get(subsection).push(person);
+  }
+  const anchors = new Map();
+  const totals = [0, 0];
+  for (const [, people] of [...sections.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    const local = [0, 0];
+    people.sort((left, right) => String(left.CHAPA || '').localeCompare(String(right.CHAPA || ''))
+      || Number(left.ESCFUNC_ID) - Number(right.ESCFUNC_ID));
+    for (const person of people) {
+      const phase = local[0] === local[1]
+        ? (totals[0] <= totals[1] ? 0 : 1)
+        : (local[0] < local[1] ? 0 : 1);
+      anchors.set(Number(person.ESCFUNC_ID), dates[phase]);
+      local[phase] += 1;
+      totals[phase] += 1;
+    }
+  }
+  return anchors;
+}
+
 async function replaceEmployee(connection, input) {
   const rows = simulationRows(input);
   await connection.execute(
@@ -99,17 +125,19 @@ async function generate({ lojaId, mesRef, escsecaoId, escfuncIds, actor }) {
   const employees = await employeesInSection(lojaId, mesRef, escsecaoId);
   const ids = [...new Set((escfuncIds || []).map(Number))];
   if (!ids.length) {
-    const error = new Error('Selecione ao menos um funcionario para simular.');
+    const error = new Error('Selecione ao menos um funcionario para gerar a escala 12x36.');
     error.statusCode = 422;
     throw error;
   }
   ids.forEach((id) => assertEmployee(employees, id));
+  const dates = periodDates(mesRef);
+  const anchors = planBalancedAnchors(employees, ids, dates);
   return withConnection(async (connection) => {
     try {
       let days = 0;
       for (const escfuncId of ids) {
         days += await replaceEmployee(connection, { lojaId, mesRef, escsecaoId, escfuncId,
-          anchor: periodDates(mesRef)[0], hours: DEFAULT_HOURS, actor });
+          anchor: anchors.get(escfuncId), hours: DEFAULT_HOURS, actor });
       }
       await connection.commit();
       return { funcionarios: ids.length, dias: days };
@@ -145,7 +173,7 @@ async function configureEmployee({ lojaId, mesRef, escsecaoId, escfuncId, anchor
 async function editDay({ lojaId, mesRef, escsecaoId, escfuncId, date, hours, actor }) {
   assertPostStore(lojaId);
   if (!periodDates(mesRef).includes(date)) {
-    const error = new Error('Dia fora do periodo da simulacao.');
+    const error = new Error('Dia fora do periodo da escala 12x36.');
     error.statusCode = 422;
     throw error;
   }
@@ -164,7 +192,7 @@ async function editDay({ lojaId, mesRef, escsecaoId, escfuncId, date, hours, act
     );
     if (result.rowsAffected !== 1) {
       await connection.rollback();
-      const error = new Error('Plantao nao encontrado. Gere a simulacao antes de editar.');
+      const error = new Error('Plantao nao encontrado. Gere a escala 12x36 antes de editar.');
       error.statusCode = 422;
       throw error;
     }
@@ -173,4 +201,5 @@ async function editDay({ lojaId, mesRef, escsecaoId, escfuncId, date, hours, act
   });
 }
 
-module.exports = { DEFAULT_HOURS, periodDates, simulationRows, list, generate, configureEmployee, editDay };
+module.exports = { DEFAULT_HOURS, periodDates, simulationRows, planBalancedAnchors,
+  list, generate, configureEmployee, editDay };

@@ -19,6 +19,37 @@ test('12x36 trial covers the operational month with alternating duty and rest', 
   assert.equal(rows[0].HR_SAI2, '19:00');
 });
 
+test('12x36 generation balances the two phases within subsections and across the store', () => {
+  const people = [
+    { ESCFUNC_ID: 1, CHAPA: '701.0001', ESCSUBSECAO_ID: 10 },
+    { ESCFUNC_ID: 2, CHAPA: '701.0002', ESCSUBSECAO_ID: 10 },
+    { ESCFUNC_ID: 3, CHAPA: '701.0003', ESCSUBSECAO_ID: 10 },
+    { ESCFUNC_ID: 4, CHAPA: '701.0004', ESCSUBSECAO_ID: 20 },
+    { ESCFUNC_ID: 5, CHAPA: '701.0005', ESCSUBSECAO_ID: 20 },
+    { ESCFUNC_ID: 6, CHAPA: '701.0006', ESCSUBSECAO_ID: 20 },
+  ];
+  const anchors = simulation.planBalancedAnchors(new Map(people.map((person) => [person.ESCFUNC_ID, person])),
+    [6, 4, 2, 1, 3, 5], ['2026-11-30', '2026-12-01']);
+  assert.equal([...anchors.values()].filter((date) => date === '2026-11-30').length, 3);
+  assert.equal([...anchors.values()].filter((date) => date === '2026-12-01').length, 3);
+  for (const subsection of [10, 20]) {
+    const phases = people.filter((person) => person.ESCSUBSECAO_ID === subsection)
+      .map((person) => anchors.get(person.ESCFUNC_ID));
+    assert.equal(new Set(phases).size, 2);
+  }
+});
+
+test('changing the anchor inverts the whole 12x36 period without isolated duty days', () => {
+  const common = { lojaId: 701, mesRef: '2026-12-01', escsecaoId: 1, escfuncId: 10,
+    hours: simulation.DEFAULT_HOURS, actor: { login: 'TESTE' } };
+  const original = simulation.simulationRows({ ...common, anchor: '2026-11-30' });
+  const inverted = simulation.simulationRows({ ...common, anchor: '2026-12-01' });
+  for (let index = 0; index < original.length; index += 1) {
+    assert.equal(original[index].diaIso, inverted[index].diaIso);
+    assert.notEqual(original[index].programacao, inverted[index].programacao);
+  }
+});
+
 test('old individual regime registrations no longer affect operational schedules', async () => {
   const result = await workRegimeService.listEffective(null, { lojaId: 700, mesRef: '2026-12-01' });
   assert.equal(result.size, 0);

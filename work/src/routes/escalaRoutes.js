@@ -125,7 +125,7 @@ router.get('/simulacao-12x36', requirePermission('escalas', 'visualizar'), resol
       await accessService.assertSecoesPermitidas(req.user, scope.lojaId, [scope.escsecaoId]);
       return res.json({ dias: await postSimulationService.list(scope) });
     } catch (error) {
-      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da simulacao invalidos.' });
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da escala 12x36 invalidos.' });
       return next(error);
     }
   });
@@ -140,7 +140,7 @@ router.post('/simulacao-12x36/gerar', requirePermission('escalas', 'editar'), re
         lojaId: payload.lojaId, mesRef: payload.mesRef, details: { escsecaoId: payload.escsecaoId, ...resultado } });
       return res.json({ resultado });
     } catch (error) {
-      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da simulacao invalidos.' });
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da escala 12x36 invalidos.' });
       return next(error);
     }
   });
@@ -156,7 +156,7 @@ router.put('/simulacao-12x36/funcionario', requirePermission('escalas', 'editar'
         lojaId: payload.lojaId, mesRef: payload.mesRef, details: { escsecaoId: payload.escsecaoId, escfuncId: payload.escfuncId, anchor: payload.anchor } });
       return res.json({ resultado });
     } catch (error) {
-      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da simulacao invalidos.' });
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da escala 12x36 invalidos.' });
       return next(error);
     }
   });
@@ -172,7 +172,7 @@ router.patch('/simulacao-12x36/dia', requirePermission('escalas', 'editar'), res
         lojaId: payload.lojaId, mesRef: payload.mesRef, details: { escsecaoId: payload.escsecaoId, escfuncId: payload.escfuncId, date: payload.date } });
       return res.json({ resultado });
     } catch (error) {
-      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da simulacao invalidos.' });
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da escala 12x36 invalidos.' });
       return next(error);
     }
   });
