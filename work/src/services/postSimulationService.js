@@ -52,7 +52,7 @@ function assertHours(hours) {
 function simulationRows({ lojaId, mesRef, escsecaoId, escfuncId, anchor, hours, actor }) {
   return periodDates(mesRef).map((date) => ({
     lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId), escfuncId: Number(escfuncId),
-    date, anchor, programacao: isDutyDay(anchor, date) ? 'TRB' : 'F',
+    diaIso: date, anchor, programacao: isDutyDay(anchor, date) ? 'TRB' : 'F',
     ...hours, login: String(actor?.login || 'SISTEMA').slice(0, 100)
   }));
 }
@@ -69,7 +69,7 @@ async function replaceEmployee(connection, input) {
        (loja, mes_ref, escsecao_id, escfunc_id, dia, dt_ancora, programacao,
         hr_ent1, hr_sai1, hr_ent2, hr_sai2, login, dt_hr_alter)
      values (:lojaId, to_date(:mesRef, 'YYYY-MM-DD'), :escsecaoId, :escfuncId,
-       to_date(:date, 'YYYY-MM-DD'), to_date(:anchor, 'YYYY-MM-DD'), :programacao,
+       to_date(:diaIso, 'YYYY-MM-DD'), to_date(:anchor, 'YYYY-MM-DD'), :programacao,
        :HR_ENT1, :HR_SAI1, :HR_ENT2, :HR_SAI2, :login, sysdate)`,
     rows, { autoCommit: false }
   );
@@ -157,9 +157,9 @@ async function editDay({ lojaId, mesRef, escsecaoId, escfuncId, date, hours, act
               hr_ent2 = :HR_ENT2, hr_sai2 = :HR_SAI2, login = :login, dt_hr_alter = sysdate
         where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
           and escsecao_id = :escsecaoId and escfunc_id = :escfuncId
-          and dia = to_date(:date, 'YYYY-MM-DD') and programacao = 'TRB'`,
+          and dia = to_date(:diaIso, 'YYYY-MM-DD') and programacao = 'TRB'`,
       { ...hours, login: String(actor?.login || 'SISTEMA').slice(0, 100),
-        lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId), escfuncId: Number(escfuncId), date },
+        lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId), escfuncId: Number(escfuncId), diaIso: date },
       { autoCommit: false }
     );
     if (result.rowsAffected !== 1) {
