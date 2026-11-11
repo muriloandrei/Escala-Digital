@@ -301,8 +301,16 @@ test('RM reads only revisions up to the approved revision', async () => {
   await _private.getEscalaParaRm(connection, { lojaId: 35, mesRef: '2026-10-01', revisao: 12 });
   assert.match(query.sql, /px\.revisao <= :revisao/);
   assert.match(query.sql, /left join sgn_esc_prog_dia d/i);
-  assert.doesNotMatch(query.sql, /nvl\(d\.programacao, 'TRB'\) <> 'TRB'/i);
+  assert.match(query.sql, /d\.dt >= to_date\(:inicio, 'YYYY-MM-DD'\) and d\.dt < to_date\(:fim, 'YYYY-MM-DD'\) \+ 1/i);
+  assert.match(query.sql, /ativo_d\.dt >= to_date\(:inicio, 'YYYY-MM-DD'\) and ativo_d\.dt < to_date\(:fim, 'YYYY-MM-DD'\) \+ 1/i);
+  assert.equal(query.binds.inicio, '2026-10-05');
+  assert.equal(query.binds.fim, '2026-10-31');
   assert.equal(query.binds.revisao, 12);
+  await _private.getEscalaParaRm(connection, { lojaId: 52, mesRef: '2026-11-01', revisao: 40 });
+  assert.equal(query.binds.inicio, '2026-11-01');
+  assert.equal(query.binds.fim, '2026-11-29');
+  assert.doesNotMatch(query.sql, /nvl\(d\.programacao, 'TRB'\) <> 'TRB'/i);
+  assert.equal(query.binds.revisao, 40);
 });
 
 test('RM separa dias cobertos de folgas e ignora ferias e afastamentos', () => {

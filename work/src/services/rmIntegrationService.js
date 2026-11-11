@@ -520,12 +520,13 @@ async function postFolgas(payload) {
 }
 
 async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId = null, escfuncIds = null, apenasOficializada = false, apenasNaoOficializada = false }) {
+  const { inicio, fim } = getOperationalPeriodIso(formatDate(mesRef));
   const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
   const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
   const cpfSelect = funcionarioColumns.has('CPF') ? 'f.cpf' : funcionarioColumns.has('CPF_FUNCIONARIO') ? 'f.cpf_funcionario as cpf' : 'cast(null as varchar2(20)) as cpf';
   const ativaSql = progColumns.has('ATIVA') ? 'and nvl(p.ativa, 1) = 1' : '';
   const ativaSubSql = progColumns.has('ATIVA') ? 'and nvl(px.ativa, 1) = 1' : '';
-  const binds = { lojaId, mesRef, revisao };
+  const binds = { lojaId, mesRef, revisao, inicio, fim };
   const filtroSecao = escsecaoId ? 'and p.escsecao_id = :escsecaoId' : '';
   if (escsecaoId) binds.escsecaoId = escsecaoId;
   const ids = Array.isArray(escfuncIds) ? [...new Set(escfuncIds.map(Number).filter(Boolean))] : null;
@@ -543,13 +544,15 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId
               then 1 else 0 end as apos_demissao
      from sgn_esc_prog p
      left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
+       and d.dt >= to_date(:inicio, 'YYYY-MM-DD') and d.dt < to_date(:fim, 'YYYY-MM-DD') + 1
      join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
      where p.loja = :lojaId
        and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
        ${filtroSecao}
        ${filtroIds}
        ${filtroOficializada}
-       and exists (select 1 from sgn_esc_prog_dia ativo_d where ativo_d.escprog_id = p.escprog_id)
+       and exists (select 1 from sgn_esc_prog_dia ativo_d where ativo_d.escprog_id = p.escprog_id
+         and ativo_d.dt >= to_date(:inicio, 'YYYY-MM-DD') and ativo_d.dt < to_date(:fim, 'YYYY-MM-DD') + 1)
        and p.revisao = (
          select max(px.revisao)
          from sgn_esc_prog px

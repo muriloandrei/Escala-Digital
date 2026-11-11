@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { planDecemberTransfer } = require('../src/domain/decemberTransfer');
+const { parseArgs } = require('../scripts/transferir-dias-dezembro-2026');
 
 function day(DT, PROGRAMACAO = 'TRB', HR_ENT1 = '08:00') {
   return { DT, PROGRAMACAO, HR_ENT1, HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };
@@ -22,6 +23,21 @@ test('blocks conflicting December days and fixed days without overwriting them',
   assert.match(planDecemberTransfer({ november, december: [{ days: [] }],
     novemberFixes: [day('2026-12-03', 'FXF')], decemberFixes: [day('2026-12-03', 'TRB')] }).reason,
   /Fixo de dezembro divergente/);
+});
+
+test('permite preservar dezembro divergente somente com funcionario explicitamente selecionado', () => {
+  const november = [{ days: [day('2026-11-30', 'F'), day('2026-12-01', 'TRB')] }];
+  const december = [{ days: [day('2026-12-01', 'F')] }];
+  assert.deepEqual(planDecemberTransfer({ november, december }, { preferDecember: true }), {
+    action: 'TRANSFER', sourceDays: 2, fixes: 0, addDays: 1, addFixes: 0,
+    preservedDecemberDays: ['2026-12-01']
+  });
+  assert.deepEqual(parseArgs(['--loja=52', '--escfunc=24541', '--prefer-december']), {
+    loja: 52, escfuncId: 24541, preferDecember: true, all: false, apply: false, by: null
+  });
+  assert.equal(parseArgs(['--loja=52', '--escfunc=24541', '--prefer-december', '--apply', '--by=opc']).by, 'opc');
+  assert.throws(() => parseArgs(['--loja=52', '--prefer-december']), /Use --loja/);
+  assert.throws(() => parseArgs(['--all', '--escfunc=24541', '--prefer-december']), /Use --loja/);
 });
 
 test('requires a single December revision and is idempotent after the source is moved', () => {

@@ -10,12 +10,16 @@ function parseArgs(args) {
   const store = args.find((arg) => /^--loja=[1-9]\d*$/.test(arg));
   const all = args.includes('--all');
   const apply = args.includes('--apply');
+  const employee = args.find((arg) => /^--escfunc=[1-9]\d*$/.test(arg));
+  const preferDecember = args.includes('--prefer-december');
   const by = args.find((arg) => /^--by=[\w.@-]{2,80}$/.test(arg));
   if (Boolean(store) === all || (apply && !by) || (!apply && by)
-    || args.length !== 1 + Number(apply) + Number(Boolean(by))) {
-    throw new Error('Use --loja=NUMERO ou --all [--apply --by=OPERADOR].');
+    || (employee && !store) || (preferDecember && (!store || !employee))
+    || args.length !== 1 + Number(Boolean(employee)) + Number(preferDecember) + Number(apply) + Number(Boolean(by))) {
+    throw new Error('Use --loja=NUMERO [--escfunc=ID --prefer-december] ou --all [--apply --by=OPERADOR].');
   }
-  return { loja: store ? Number(store.slice(7)) : null, all, apply, by: by?.slice(5) || null };
+  return { loja: store ? Number(store.slice(7)) : null, escfuncId: employee ? Number(employee.slice(10)) : null,
+    preferDecember, all, apply, by: by?.slice(5) || null };
 }
 
 function groupHeaders(rows) {
@@ -65,12 +69,12 @@ async function loadFixes(connection, loja, escfuncId, mesRef) {
   return result.rows || [];
 }
 
-async function loadPlan(connection, loja, escfuncId) {
+async function loadPlan(connection, loja, escfuncId, preferDecember = false) {
   const november = await loadMonth(connection, loja, escfuncId, NOVEMBER);
   const december = await loadMonth(connection, loja, escfuncId, DECEMBER);
   const novemberFixes = await loadFixes(connection, loja, escfuncId, NOVEMBER);
   const decemberFixes = await loadFixes(connection, loja, escfuncId, DECEMBER);
-  const plan = planDecemberTransfer({ november, december, novemberFixes, decemberFixes });
+  const plan = planDecemberTransfer({ november, december, novemberFixes, decemberFixes }, { preferDecember });
   if (plan.action === 'TRANSFER' && (!november.length || !november[0].days.some((day) => day.DT < START))) {
     return { plan: { action: 'BLOCKED', reason: 'Novembro sem dias anteriores a dezembro; revisar individualmente.' } };
   }
@@ -103,12 +107,12 @@ async function copyHeader(connection, sourceId, revision) {
   return id;
 }
 
-async function applyEmployee(connection, { loja, escfuncId, by, current }) {
+async function applyEmployee(connection, { loja, escfuncId, by, current, preferDecember }) {
   await connection.execute(
     'select escfunc_id from sgn_esc_funcionario where loja = :loja and escfunc_id = :escfuncId for update wait 5',
     { loja, escfuncId }, options
   );
-  const reloaded = await loadPlan(connection, loja, escfuncId);
+  const reloaded = await loadPlan(connection, loja, escfuncId, preferDecember);
   if (JSON.stringify(reloaded) !== JSON.stringify(current)) {
     throw new Error('Escala mudou desde a previa; execute novamente.');
   }
@@ -181,7 +185,8 @@ async function applyEmployee(connection, { loja, escfuncId, by, current }) {
       situacao: oldHeader.officialized ? 'POS_OFICIALIZACAO' : 'RASCUNHO',
       revisaoAnterior: oldHeader.revision, revisaoNova: newRevision,
       detalhe: { intervalo: [START, END], destino: DECEMBER, dias: current.plan.sourceDays,
-        fixos: current.plan.fixes, origemId: oldHeader.id }
+        fixos: current.plan.fixes, origemId: oldHeader.id,
+        precedencia: preferDecember ? 'DEZEMBRO' : 'SEM_DIVERGENCIA' }
     });
   }
   await connection.commit();
@@ -227,12 +232,13 @@ async function main() {
     let blocked = 0;
     let transferred = 0;
     for (const loja of stores) {
-      const ids = await withConnection((connection) => candidateEmployees(connection, loja));
+      const ids = args.escfuncId ? [args.escfuncId]
+        : await withConnection((connection) => candidateEmployees(connection, loja));
       let plannedStore = 0;
       let blockedStore = 0;
       let transferredStore = 0;
       for (const escfuncId of ids) {
-        const current = await withConnection((connection) => loadPlan(connection, loja, escfuncId));
+        const current = await withConnection((connection) => loadPlan(connection, loja, escfuncId, args.preferDecember));
         const info = { loja, escfuncId, ...current.plan };
         if (current.plan.action === 'BLOCKED') { blocked += 1; blockedStore += 1; }
         if (current.plan.action !== 'TRANSFER') { if (!args.all || current.plan.action === 'BLOCKED') console.log(JSON.stringify(info)); continue; }
@@ -240,7 +246,8 @@ async function main() {
         if (args.apply) {
           try {
             info.result = await withConnection(async (connection) => {
-              try { return await applyEmployee(connection, { loja, escfuncId, by: args.by, current }); }
+              try { return await applyEmployee(connection, { loja, escfuncId, by: args.by, current,
+                preferDecember: args.preferDecember }); }
               catch (error) { await connection.rollback(); throw error; }
             });
             transferred += 1;

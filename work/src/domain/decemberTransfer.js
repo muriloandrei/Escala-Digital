@@ -10,7 +10,7 @@ function sameDay(left, right) {
     .every((key) => String(left[key] || '') === String(right[key] || ''));
 }
 
-function planDecemberTransfer({ november = [], december = [], novemberFixes = [], decemberFixes = [] }) {
+function planDecemberTransfer({ november = [], december = [], novemberFixes = [], decemberFixes = [] }, { preferDecember = false } = {}) {
   const source = november.flatMap((item) => item.days || []).filter((day) => isTransferDate(day.DT));
   const fixes = novemberFixes.filter((day) => isTransferDate(day.DT));
   if (!source.length && !fixes.length) return { action: 'UNCHANGED', sourceDays: 0, fixes: 0 };
@@ -35,8 +35,10 @@ function planDecemberTransfer({ november = [], december = [], novemberFixes = []
     }
   }
   const target = new Map(december[0].days.map((day) => [day.DT, day]));
-  const conflict = source.find((day) => target.has(day.DT) && !sameDay(day, target.get(day.DT)));
-  if (conflict) return { action: 'BLOCKED', reason: `Escala de dezembro divergente em ${conflict.DT}.` };
+  const conflicts = source.filter((day) => target.has(day.DT) && !sameDay(day, target.get(day.DT)));
+  if (conflicts.length && !preferDecember) {
+    return { action: 'BLOCKED', reason: `Escala de dezembro divergente em ${conflicts[0].DT}.` };
+  }
   const targetFixes = new Map(decemberFixes.map((day) => [day.DT, day]));
   const crossConflict = source.find((day) => targetFixes.has(day.DT) && !sameDay(day, targetFixes.get(day.DT)))
     || fixes.find((day) => target.has(day.DT) && !sameDay(day, target.get(day.DT)));
@@ -45,7 +47,8 @@ function planDecemberTransfer({ november = [], december = [], novemberFixes = []
   if (fixConflict) return { action: 'BLOCKED', reason: `Fixo de dezembro divergente em ${fixConflict.DT}.` };
   return { action: 'TRANSFER', sourceDays: source.length, fixes: fixes.length,
     addDays: source.filter((day) => !target.has(day.DT)).length,
-    addFixes: fixes.filter((day) => !targetFixes.has(day.DT)).length };
+    addFixes: fixes.filter((day) => !targetFixes.has(day.DT)).length,
+    ...(preferDecember ? { preservedDecemberDays: conflicts.map((day) => day.DT) } : {}) };
 }
 
 module.exports = { START, END, isTransferDate, planDecemberTransfer };
