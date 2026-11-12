@@ -89,14 +89,12 @@ const tipoDescansoSchema = z.object({
 
 const horarioPadraoSchema = z.object({
   DESCR: z.string().trim().min(1).max(100),
-  HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
-  HR_SAI1: z.string().regex(/^\d{2}:\d{2}$/),
-  HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/),
-  HR_SAI2: z.string().regex(/^\d{2}:\d{2}$/),
-  JORNADA_MINUTOS: z.number().int().positive().max(1440).optional(),
-  INTERVALO_MINUTOS: z.number().int().positive().max(480).optional(),
+  JORNADA_MINUTOS: z.number().int().positive().max(1440),
+  INTERVALO_MINUTOS: z.number().int().positive().max(480),
   STATUS: z.enum(['A', 'I']).optional()
 }).strict();
+
+const jornadasPermitidas = new Set(['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']);
 
 router.use(requireAuth);
 
@@ -193,10 +191,8 @@ router.get('/horarios-padrao', async (req, res, next) => {
 router.post('/horarios-padrao', requirePermission('horarios-padrao', 'criar'), async (req, res, next) => {
   try {
     const data = horarioPadraoSchema.parse(req.body);
-    const errors = validateStandardShift(data, { allowProfiles: true, allowPostProfiles: true, exactInterval: true });
-    if (errors.length || !['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
-      .includes(`${data.JORNADA_MINUTOS}:${data.INTERVALO_MINUTOS}`)) {
-      return res.status(422).json({ error: 'Horario padrao invalido.', details: errors });
+    if (!jornadasPermitidas.has(`${data.JORNADA_MINUTOS}:${data.INTERVALO_MINUTOS}`)) {
+      return res.status(422).json({ error: 'Duracao de jornada ou intervalo invalida.' });
     }
     const horario = await catalogService.createHorarioPadrao(data);
     return res.status(201).json({ horario });
@@ -211,15 +207,13 @@ router.post('/horarios-padrao', requirePermission('horarios-padrao', 'criar'), a
 router.patch('/horarios-padrao/:horarioId', requirePermission('horarios-padrao', 'editar'), async (req, res, next) => {
   try {
     const data = horarioPadraoSchema.partial().parse(req.body);
-    if (['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2', 'JORNADA_MINUTOS', 'INTERVALO_MINUTOS'].some((key) => key in data)) {
+    if (['JORNADA_MINUTOS', 'INTERVALO_MINUTOS'].some((key) => key in data)) {
       const current = (await catalogService.listHorariosPadrao({ includeInactive: true }))
         .find((item) => Number(item.ESCHORPAD_ID) === Number(req.params.horarioId));
       if (!current) return res.status(404).json({ error: 'Horario padrao nao encontrado.' });
       const merged = { ...current, ...data };
-      const errors = validateStandardShift(merged, { allowProfiles: true, allowPostProfiles: true, exactInterval: true });
-      if (errors.length || !['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
-        .includes(`${merged.JORNADA_MINUTOS}:${merged.INTERVALO_MINUTOS}`)) {
-        return res.status(422).json({ error: 'Horario padrao invalido.', details: errors });
+      if (!jornadasPermitidas.has(`${merged.JORNADA_MINUTOS}:${merged.INTERVALO_MINUTOS}`)) {
+        return res.status(422).json({ error: 'Duracao de jornada ou intervalo invalida.' });
       }
     }
     const horario = await catalogService.updateHorarioPadrao(Number(req.params.horarioId), data);

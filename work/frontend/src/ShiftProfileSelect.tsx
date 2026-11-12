@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getJson } from './api';
-import type { StandardHours } from './shiftValidation';
-
-export type ShiftProfile = StandardHours & {
+export type ShiftProfile = {
   ESCHORPAD_ID: number;
   DESCR: string;
   JORNADA_MINUTOS: number;
@@ -11,6 +9,10 @@ export type ShiftProfile = StandardHours & {
 
 const allowed = new Set(['528:70', '360:70', '300:15']);
 const postAllowed = new Set(['528:100', '504:70', '504:100']);
+
+function duration(minutes: number) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
 
 export function ShiftProfileSelect({ onSelect, disabled = false, sundayOnly = false, postStore = false }: {
   onSelect: (profile: ShiftProfile) => void;
@@ -34,15 +36,15 @@ export function ShiftProfileSelect({ onSelect, disabled = false, sundayOnly = fa
 
   const available = profiles.filter((item) => (postStore || !postAllowed.has(`${item.JORNADA_MINUTOS}:${item.INTERVALO_MINUTOS}`))
     && (!sundayOnly || item.JORNADA_MINUTOS === 360));
-  return <label className="catalog-full-field">Horário cadastrado
+  return <label className="catalog-full-field">Jornada cadastrada
     <select value={selected} disabled={disabled || !available.length} onChange={(event) => {
       setSelected(event.target.value);
       const profile = available.find((item) => String(item.ESCHORPAD_ID) === event.target.value);
       if (profile) onSelect(profile);
     }}>
-      <option value="">{available.length ? 'Selecionar horário' : 'Nenhum horário cadastrado'}</option>
+      <option value="">{available.length ? 'Selecionar jornada' : 'Nenhuma jornada cadastrada'}</option>
       {available.map((item) => <option key={item.ESCHORPAD_ID} value={item.ESCHORPAD_ID}>
-        {item.DESCR} · {item.HR_ENT1}–{item.HR_SAI2}
+        {item.DESCR} · {duration(item.JORNADA_MINUTOS)} / {duration(item.INTERVALO_MINUTOS)}
       </option>)}
     </select>
     {error && <small role="alert">{error}</small>}

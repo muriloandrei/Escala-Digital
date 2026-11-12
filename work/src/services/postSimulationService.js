@@ -170,6 +170,58 @@ async function configureEmployee({ lojaId, mesRef, escsecaoId, escfuncId, anchor
   });
 }
 
+async function invertEmployee({ lojaId, mesRef, escsecaoId, escfuncId, anchor, actor }) {
+  assertPostStore(lojaId);
+  const dates = periodDates(mesRef);
+  if (!isIsoDate(anchor) || !dates.includes(anchor)) {
+    const error = new Error('O dia de plantao deve estar no periodo desta escala.');
+    error.statusCode = 422;
+    throw error;
+  }
+  assertEmployee(await employeesInSection(lojaId, mesRef, escsecaoId), escfuncId);
+  return withConnection(async (connection) => {
+    const binds = { lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId),
+      escfuncId: Number(escfuncId), anchor, inicio: dates[0], fim: dates.at(-1),
+      login: String(actor?.login || 'SISTEMA').slice(0, 100) };
+    try {
+      const existing = await connection.execute(
+        `select count(*) total from sgn_esc_sim_12x36
+          where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and escsecao_id = :escsecaoId and escfunc_id = :escfuncId
+            and dia between to_date(:inicio, 'YYYY-MM-DD') and to_date(:fim, 'YYYY-MM-DD')`,
+        { lojaId: binds.lojaId, mesRef, escsecaoId: binds.escsecaoId,
+          escfuncId: binds.escfuncId, inicio: binds.inicio, fim: binds.fim },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      if (Number(existing.rows?.[0]?.TOTAL) !== dates.length) {
+        const error = new Error('Gere a escala 12x36 completa antes de inverter a alternancia.');
+        error.statusCode = 422;
+        throw error;
+      }
+      const result = await connection.execute(
+        `update sgn_esc_sim_12x36
+            set dt_ancora = to_date(:anchor, 'YYYY-MM-DD'),
+                programacao = case when mod(trunc(dia) - to_date(:anchor, 'YYYY-MM-DD'), 2) = 0 then 'TRB' else 'F' end,
+                login = :login, dt_hr_alter = sysdate
+          where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and escsecao_id = :escsecaoId and escfunc_id = :escfuncId
+            and dia between to_date(:inicio, 'YYYY-MM-DD') and to_date(:fim, 'YYYY-MM-DD')`,
+        binds, { autoCommit: false }
+      );
+      if (result.rowsAffected !== dates.length) {
+        const error = new Error('Escala 12x36 alterada durante a inversao. Atualize e tente novamente.');
+        error.statusCode = 409;
+        throw error;
+      }
+      await connection.commit();
+      return { dias: result.rowsAffected };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    }
+  });
+}
+
 async function editDay({ lojaId, mesRef, escsecaoId, escfuncId, date, hours, actor }) {
   assertPostStore(lojaId);
   if (!periodDates(mesRef).includes(date)) {
@@ -202,4 +254,4 @@ async function editDay({ lojaId, mesRef, escsecaoId, escfuncId, date, hours, act
 }
 
 module.exports = { DEFAULT_HOURS, periodDates, simulationRows, planBalancedAnchors,
-  list, generate, configureEmployee, editDay };
+  list, generate, configureEmployee, invertEmployee, editDay };

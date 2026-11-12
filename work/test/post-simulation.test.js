@@ -67,7 +67,11 @@ test('trial rejects regular stores and invalid 12x36 hours before writing', asyn
 test('Oracle writes use non-reserved bind names for generation and day edits', async () => {
   const statements = [];
   const connection = {
-    async execute(sql) { statements.push(sql); return { rows: [], rowsAffected: 1 }; },
+    async execute(sql) {
+      statements.push(sql);
+      if (/select count\(\*\) total from sgn_esc_sim_12x36/i.test(sql)) return { rows: [{ TOTAL: 35 }] };
+      return { rows: [], rowsAffected: /update sgn_esc_sim_12x36[\s\S]*dt_ancora/i.test(sql) ? 35 : 1 };
+    },
     async executeMany(sql) { statements.push(sql); return { rowsAffected: 35 }; },
     async commit() {}, async rollback() {}
   };
@@ -88,6 +92,10 @@ test('Oracle writes use non-reserved bind names for generation and day edits', a
   const scope = { lojaId: 700, mesRef: '2026-12-01', escsecaoId: 1, escfuncId: 10, actor: { login: 'TESTE' } };
   await service.generate({ ...scope, escfuncIds: [10] });
   await service.editDay({ ...scope, date: '2026-11-30', hours: service.DEFAULT_HOURS });
+  await service.invertEmployee({ ...scope, anchor: '2026-12-01' });
   assert.equal(statements.some((sql) => /:date\b/i.test(sql)), false);
   assert.equal(statements.filter((sql) => /:diaIso\b/.test(sql)).length, 2);
+  const inversion = statements.find((sql) => /update sgn_esc_sim_12x36[\s\S]*dt_ancora/i.test(sql));
+  assert.match(inversion, /programacao = case when mod\(/i);
+  assert.doesNotMatch(inversion, /hr_ent1|hr_sai1|hr_ent2|hr_sai2/i);
 });

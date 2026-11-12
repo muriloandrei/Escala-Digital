@@ -86,7 +86,7 @@ export function Subsecoes({ user }: { user: User }) {
   }, [lojaId, secaoId, reload]);
 
   const secao = secoes.find((item) => String(item.ESCSECAO_ID) === secaoId);
-  const canManage = canEdit(user, 'escalas') && /frente de caixa/i.test(secao?.DESCR || '');
+  const canManage = Boolean(secao) && canEdit(user, 'escalas');
   const sectionPeople = useMemo(
     () => funcionarios.filter((item) => String(item.ESCSECAO_ID) === secaoId),
     [funcionarios, secaoId],

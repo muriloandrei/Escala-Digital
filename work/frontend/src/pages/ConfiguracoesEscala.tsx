@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pencil, Plus, RefreshCw, Search } from 'lucide-react';
-import { unfoldShiftMinutes } from '../shiftValidation';
 import { ApiError, canCreate, canEdit, getJson, patchJson, postJson, type User } from '../api';
 
 type Regra = { codigo: string; titulo: string; descricao: string };
@@ -8,15 +7,10 @@ type Horario = {
   ESCHORPAD_ID: number; DESCR: string; HR_ENT1: string; HR_SAI1: string; HR_ENT2: string; HR_SAI2: string;
   JORNADA_MINUTOS: number; INTERVALO_MINUTOS: number; STATUS: 'A' | 'I';
 };
-type Form = Pick<Horario, 'DESCR' | 'HR_ENT1' | 'HR_SAI1' | 'HR_ENT2' | 'HR_SAI2' | 'STATUS'>;
-const emptyForm: Form = { DESCR: '', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58', STATUS: 'A' };
-
-function durations(form: Form) {
-  const timeline = unfoldShiftMinutes([form.HR_ENT1, form.HR_SAI1, form.HR_ENT2, form.HR_SAI2]);
-  if (!timeline) return null;
-  const [start, breakStart, breakEnd, end] = timeline;
-  return { work: breakStart - start + end - breakEnd, interval: breakEnd - breakStart };
-}
+type Form = Pick<Horario, 'DESCR' | 'JORNADA_MINUTOS' | 'INTERVALO_MINUTOS' | 'STATUS'>;
+const emptyForm: Form = { DESCR: '', JORNADA_MINUTOS: 528, INTERVALO_MINUTOS: 70, STATUS: 'A' };
+const profiles = new Set(['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']);
+const workOptions = [528, 504, 360, 300];
 
 function formatMinutes(value: number) {
   return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
@@ -63,9 +57,9 @@ export function HorariosPadrao({ user }: { user: User }) {
   const [actionError, setActionError] = useState('');
   const [message, setMessage] = useState('');
   const [reload, setReload] = useState(0);
-  const preview = useMemo(() => durations(form), [form]);
+  const validProfile = useMemo(() => profiles.has(`${form.JORNADA_MINUTOS}:${form.INTERVALO_MINUTOS}`), [form]);
   const filtered = rows.filter((row) => (status === 'all' || row.STATUS === status)
-    && `${row.DESCR} ${row.HR_ENT1} ${row.HR_SAI2}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')));
+    && `${row.DESCR} ${formatMinutes(row.JORNADA_MINUTOS)} ${formatMinutes(row.INTERVALO_MINUTOS)}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')));
 
   useEffect(() => {
     const controller = new AbortController();
@@ -79,8 +73,8 @@ export function HorariosPadrao({ user }: { user: User }) {
 
   function openEditor(row: Horario | 'new') {
     setEditing(row);
-    setForm(row === 'new' ? emptyForm : { DESCR: row.DESCR, HR_ENT1: row.HR_ENT1, HR_SAI1: row.HR_SAI1,
-      HR_ENT2: row.HR_ENT2, HR_SAI2: row.HR_SAI2, STATUS: row.STATUS });
+    setForm(row === 'new' ? emptyForm : { DESCR: row.DESCR, JORNADA_MINUTOS: row.JORNADA_MINUTOS,
+      INTERVALO_MINUTOS: row.INTERVALO_MINUTOS, STATUS: row.STATUS });
     setActionError('');
     setUncertain(false);
   }
@@ -89,15 +83,13 @@ export function HorariosPadrao({ user }: { user: User }) {
     event.preventDefault();
     if (!editing || busy || uncertain) return;
     const descr = form.DESCR.trim();
-    const validProfile = preview && ['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
-      .includes(`${preview.work}:${preview.interval}`);
     if (!descr || descr.length > 100 || !validProfile) {
       setActionError('Use um perfil 08:48, 08:24, 06:00 ou 05:00 com o intervalo correspondente.'); return;
     }
     setBusy(true);
     setActionError('');
     try {
-      const payload = { ...form, DESCR: descr, JORNADA_MINUTOS: preview!.work, INTERVALO_MINUTOS: preview!.interval };
+      const payload = { ...form, DESCR: descr };
       const result = editing === 'new'
         ? await postJson<{ horario: Horario }>('/api/catalog/horarios-padrao', payload)
         : await patchJson<{ horario: Horario }>(`/api/catalog/horarios-padrao/${editing.ESCHORPAD_ID}`, payload);
@@ -128,26 +120,31 @@ export function HorariosPadrao({ user }: { user: User }) {
     } finally { setBusy(false); }
   }
 
-  return <main className="content directory-page"><div className="page-heading"><div><h1>Horários padrão</h1><p>Modelos de jornada para cadastro de funcionários.</p></div>
+  return <main className="content directory-page"><div className="page-heading"><div><h1>Jornadas padrão</h1><p>Duração de trabalho e intervalo para edição da escala.</p></div>
     <div className="heading-actions"><button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}><RefreshCw size={16} /> Atualizar</button>
-      {canCreate(user, 'horarios-padrao') && <button className="button primary" type="button" onClick={() => openEditor('new')}><Plus size={16} /> Novo horário</button>}</div></div>
+      {canCreate(user, 'horarios-padrao') && <button className="button primary" type="button" onClick={() => openEditor('new')}><Plus size={16} /> Nova jornada</button>}</div></div>
     {message && <div className="notice success" role="status">{message}</div>}
     {error && <div className="notice error" role="alert">{error} <button type="button" onClick={() => setReload((value) => value + 1)}>Tentar novamente</button></div>}
-    <section className="list-surface" aria-label="Horários padrão"><div className="filters"><label className="search-field"><Search size={17} /><span className="sr-only">Buscar horários</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Descrição ou horário" /></label>
+    <section className="list-surface" aria-label="Jornadas padrão"><div className="filters"><label className="search-field"><Search size={17} /><span className="sr-only">Buscar jornadas</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Descrição ou duração" /></label>
       <label className="catalog-status-filter">Status<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">Todos</option><option value="A">Ativos</option><option value="I">Inativos</option></select></label></div>
       {loading ? <div className="empty-state" role="status">Carregando horários...</div> : !filtered.length ? <div className="empty-state">Nenhum horário encontrado.</div>
-        : <div className="table-scroll"><table><thead><tr><th>Descrição</th><th>Entrada</th><th>Intervalo</th><th>Saída</th><th>Jornada</th><th>Status</th><th>Ações</th></tr></thead>
-          <tbody>{filtered.map((row) => <tr key={row.ESCHORPAD_ID}><td><strong>{row.DESCR}</strong></td><td>{row.HR_ENT1}</td><td>{row.HR_SAI1} – {row.HR_ENT2}</td><td>{row.HR_SAI2}</td><td>{formatMinutes(Number(row.JORNADA_MINUTOS || 0))}</td><td>{row.STATUS === 'A' ? 'Ativo' : 'Inativo'}</td>
+        : <div className="table-scroll"><table><thead><tr><th>Descrição</th><th>Jornada</th><th>Intervalo</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody>{filtered.map((row) => <tr key={row.ESCHORPAD_ID}><td><strong>{row.DESCR}</strong></td><td>{formatMinutes(Number(row.JORNADA_MINUTOS || 0))}</td><td>{formatMinutes(Number(row.INTERVALO_MINUTOS || 0))}</td><td>{row.STATUS === 'A' ? 'Ativo' : 'Inativo'}</td>
             <td className="catalog-actions">{canEdit(user, 'horarios-padrao') && <><button className="icon-action" type="button" title={`Editar ${row.DESCR}`} aria-label={`Editar ${row.DESCR}`} onClick={() => openEditor(row)}><Pencil size={16} /></button>
               <button className="button secondary" type="button" onClick={() => { setActionError(''); setUncertain(false); setConfirmStatus(row); }}>{row.STATUS === 'A' ? 'Inativar' : 'Reativar'}</button></>}</td></tr>)}</tbody></table></div>}
     </section>
     {editing && <div className="confirm-backdrop" role="presentation"><form className="confirm-dialog shift-dialog" role="dialog" aria-modal="true" aria-labelledby="horario-editor-title" onSubmit={save}>
-      <h2 id="horario-editor-title">{editing === 'new' ? 'Novo horário padrão' : `Editar ${editing.DESCR}`}</h2>
+      <h2 id="horario-editor-title">{editing === 'new' ? 'Nova jornada padrão' : `Editar ${editing.DESCR}`}</h2>
       <div className="shift-fields"><label className="catalog-full-field">Descrição<input required maxLength={100} value={form.DESCR} disabled={busy || uncertain} onChange={(event) => setForm({ ...form, DESCR: event.target.value })} /></label>
-        {(['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'] as const).map((field, index) => <label key={field}>{['Entrada', 'Saída para intervalo', 'Retorno do intervalo', 'Saída'][index]}<input required type="time" value={form[field]} disabled={busy || uncertain} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></label>)}</div>
-      <div className="shift-impact"><strong>{preview ? `Jornada ${formatMinutes(preview.work)} · intervalo ${formatMinutes(preview.interval)}` : 'Horários fora de ordem'}</strong><span>08:48/01:10, 06:00/01:10, 05:00/00:15; nos postos, 08:48/01:40 ou 08:24/01:10 ou 01:40.</span></div>
+        <label>Jornada<select value={form.JORNADA_MINUTOS} disabled={busy || uncertain} onChange={(event) => {
+          const work = Number(event.target.value);
+          const interval = profiles.has(`${work}:${form.INTERVALO_MINUTOS}`) ? form.INTERVALO_MINUTOS : work === 300 ? 15 : 70;
+          setForm({ ...form, JORNADA_MINUTOS: work, INTERVALO_MINUTOS: interval });
+        }}>{workOptions.map((value) => <option key={value} value={value}>{formatMinutes(value)}</option>)}</select></label>
+        <label>Intervalo<select value={form.INTERVALO_MINUTOS} disabled={busy || uncertain} onChange={(event) => setForm({ ...form, INTERVALO_MINUTOS: Number(event.target.value) })}>
+          {[15, 70, 100].filter((value) => profiles.has(`${form.JORNADA_MINUTOS}:${value}`)).map((value) => <option key={value} value={value}>{formatMinutes(value)}</option>)}</select></label></div>
       {actionError && <div className="notice error" role="alert">{actionError}{uncertain && ' Confira a lista antes de repetir.'}</div>}
-      <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditing(null)}>Cancelar</button><button className="button primary" type="submit" disabled={busy || uncertain || !preview || !(['528:70', '528:100', '504:70', '504:100', '360:70', '300:15'].includes(`${preview.work}:${preview.interval}`))}>{busy ? 'Salvando...' : 'Salvar horário'}</button></div>
+      <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditing(null)}>Cancelar</button><button className="button primary" type="submit" disabled={busy || uncertain || !validProfile}>{busy ? 'Salvando...' : 'Salvar jornada'}</button></div>
     </form></div>}
     {confirmStatus && <div className="confirm-backdrop" role="presentation"><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="horario-status-title">
       <h2 id="horario-status-title">{confirmStatus.STATUS === 'A' ? 'Inativar' : 'Reativar'} {confirmStatus.DESCR}?</h2><p>A alteração afeta a disponibilidade deste modelo no cadastro.</p>

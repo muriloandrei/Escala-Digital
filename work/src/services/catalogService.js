@@ -1031,19 +1031,15 @@ async function createHorarioPadrao(data) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
       `insert into sgn_esc_horario_padrao (
-         eschorpad_id, descr, hr_ent1, hr_sai1, hr_ent2, hr_sai2, jornada_minutos, intervalo_minutos, status, dt_hr_incl
+         eschorpad_id, descr, jornada_minutos, intervalo_minutos, status, dt_hr_incl
        ) values (
-         sgn_esc_horario_padrao_seq.nextval, :descr, :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :jornadaMinutos, :intervaloMinutos, :status, sysdate
+         sgn_esc_horario_padrao_seq.nextval, :descr, :jornadaMinutos, :intervaloMinutos, :status, sysdate
        )
        returning eschorpad_id into :id`,
       {
         descr: data.DESCR,
-        hrEnt1: data.HR_ENT1,
-        hrSai1: data.HR_SAI1,
-        hrEnt2: data.HR_ENT2,
-        hrSai2: data.HR_SAI2,
-        jornadaMinutos: data.JORNADA_MINUTOS || 528,
-        intervaloMinutos: data.INTERVALO_MINUTOS || 70,
+        jornadaMinutos: data.JORNADA_MINUTOS,
+        intervaloMinutos: data.INTERVALO_MINUTOS,
         status: data.STATUS || 'A',
         id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
       },
@@ -1055,7 +1051,7 @@ async function createHorarioPadrao(data) {
 
 async function updateHorarioPadrao(id, data) {
   return withConnection(async (connection) => {
-    const allowed = ['DESCR', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2', 'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS'];
+    const allowed = ['DESCR', 'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS'];
     const updates = Object.fromEntries(Object.entries(data || {}).filter(([field]) => allowed.includes(field)));
     if (!Object.keys(updates).length) return null;
     const assignments = Object.keys(updates).map((field) => `${field.toLowerCase()} = :${field}`).join(', ');

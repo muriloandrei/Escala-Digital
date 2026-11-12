@@ -54,6 +54,7 @@ require('./escala-eventos.test');
 require('./rh-retifications.test');
 require('./subsection-transfer.test');
 require('./catalog-subsecao-conflict.test');
+require('./catalog-horarios-duracoes.test');
 require('./training-progress.test');
 require('./editable-month.test');
 require('./auth-training-access.test');

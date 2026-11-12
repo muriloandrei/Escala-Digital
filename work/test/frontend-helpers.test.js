@@ -97,6 +97,14 @@ test('interactive editor supports registered 06:00/01:10 and 05:00/00:15 profile
   });
 });
 
+test('registered duration preserves employee entry, including overnight shifts', async () => {
+  const { applyShiftProfile } = await loadFrontendHelper('shiftAutofill.ts');
+  const current = { HR_ENT1: '20:00', HR_SAI1: '00:00', HR_ENT2: '01:10', HR_SAI2: '05:58' };
+  assert.deepEqual(applyShiftProfile(current, 504, 100), {
+    HR_ENT1: '20:00', HR_SAI1: '00:00', HR_ENT2: '01:40', HR_SAI2: '06:04'
+  });
+});
+
 test('apprentice editor adjusts both times while preserving 05:15', async () => {
   const { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } = await loadFrontendHelper('apprenticeHours.ts');
   const shifted = { HR_ENT1: '09:00', HR_SAI1: '14:15', HR_ENT2: '', HR_SAI2: '' };

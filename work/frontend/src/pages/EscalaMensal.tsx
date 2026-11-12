@@ -968,7 +968,7 @@ export function EscalaMensal({ user }: { user: User }) {
               </section>
               {isPosto && lojaId && mesRef && sectionId && view === 'mensal' && <Simulacao12x36
                 lojaId={Number(lojaId)} mesRef={mesRef} escsecaoId={Number(sectionId)}
-                dates={dates} people={visibleEmployees} scopePeople={scopePeople}
+                dates={dates} holidays={holidays} people={visibleEmployees} scopePeople={scopePeople}
                 canEdit={canEdit(user, 'escalas')} />}
               {selectedCell && (
                 <div className="cell-detail">

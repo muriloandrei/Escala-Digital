@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowUpRight, Check, MoreVertical, Pencil, Play, Printer, Ro
 import { createPortal } from 'react-dom';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { deleteJson, getJson, putJson, type User } from '../api';
 import { autofillStandardHours } from '../shiftAutofill';
 import { validateStandardHours, type StandardHours } from '../shiftValidation';
@@ -97,6 +97,8 @@ function cell(person: Person, date: string, stage: number) {
 }
 
 export function Treinamento({ user, onComplete }: { user: User; onComplete?: () => void }) {
+  const navigate = useNavigate();
+  const lojaReal = user.lojaPrincipal || user.lojas?.[0];
   const key = `escala:treinamento:v${VERSION}:${user.sub}`;
   const [stage, setStage] = useState(() => readProgress(key).stage);
   const [loading, setLoading] = useState(true);
@@ -176,6 +178,10 @@ export function Treinamento({ user, onComplete }: { user: User; onComplete?: () 
       setMenu(null);
       setFormError('');
       try { localStorage.setItem(key, JSON.stringify({ version: VERSION, stage: current })); } catch { /* Cache opcional. */ }
+      if (current >= steps.length) {
+        if (onComplete) onComplete();
+        else navigate('/escalas-liberadas', { replace: true });
+      }
     } catch (reason) {
       setProgressError(reason instanceof Error ? reason.message : 'Não foi possível salvar o progresso.');
     } finally { setBusy(false); }
@@ -240,8 +246,8 @@ export function Treinamento({ user, onComplete }: { user: User; onComplete?: () 
 
   return (
     <main className="content schedule-page training-tour">
-      <div className="page-heading"><div>{stage > 0 && <Link className="back-link" to="/escalas-liberadas"><ArrowLeft size={15} /> Escalas liberadas</Link>}<h1>{stage === 0 ? 'Escalas liberadas' : 'Escala · Loja Escola 10'}</h1><p>{stage === 0 ? 'Escalas disponíveis para a loja' : `${monthLabel} · ${formatDate(dates[0])} a ${formatDate(dates[dates.length - 1])} · AGENDADA`}</p></div><div className="heading-actions">{stage > 0 && <button className="button secondary" type="button" data-tour={stage === 15 ? 'active' : undefined} disabled={stage !== 15 || busy} onClick={() => setModal('imprimir')}><Printer size={16} /> Imprimir</button>}<button className="button secondary" type="button" disabled={busy} onClick={restart}><RotateCcw size={16} /> Reiniciar tour</button></div></div>
-      <div className="simulation-banner"><ShieldCheck size={18} /><span><strong>Treinamento · Loja Escola 10</strong> · Dados fictícios. Nenhuma escala, funcionário ou vínculo real será alterado.</span></div>
+      <div className="page-heading"><div>{stage > 0 && <Link className="back-link" to="/escalas-liberadas"><ArrowLeft size={15} /> Escalas liberadas</Link>}<h1>{stage === 0 ? 'Escalas liberadas' : 'Escala · Loja Escola 10 (treinamento)'}</h1><p>{stage === 0 ? 'Escalas disponíveis para a loja' : `${monthLabel} · ${formatDate(dates[0])} a ${formatDate(dates[dates.length - 1])} · AGENDADA`}</p></div><div className="heading-actions">{stage > 0 && <button className="button secondary" type="button" data-tour={stage === 15 ? 'active' : undefined} disabled={stage !== 15 || busy} onClick={() => setModal('imprimir')}><Printer size={16} /> Imprimir</button>}<button className="button secondary" type="button" disabled={busy} onClick={restart}><RotateCcw size={16} /> Reiniciar tour</button></div></div>
+      <div className="simulation-banner"><ShieldCheck size={18} /><span><strong>Treinamento · Loja Escola 10 (fictícia)</strong>{lojaReal ? ` · Sua loja: ${lojaReal}.` : ''} Nenhuma escala, funcionário ou vínculo real será alterado.</span></div>
       {progressError && <div className="notice warning" role="status">{progressError}</div>}
       <section className="tour-guide" aria-live="polite">{completed ? <><div><span className="eyebrow">Tour concluído</span><h2>Pronto para trabalhar na escala</h2><p>Você praticou fixos, edição rápida e detalhada, horários, transferência imediata e rascunho.</p></div>{onComplete ? <button className="button primary" type="button" onClick={onComplete}>Abrir escalas reais</button> : <Link className="button primary" to="/escalas-liberadas">Abrir escalas reais</Link>}</> : <><div><span className="eyebrow">Etapa {stage + 1} de {steps.length}</span><h2>{steps[stage].title}</h2><p>{steps[stage].hint}</p></div><div className="tour-progress" aria-label={`${stage} de ${steps.length} etapas concluídas`}><span>{stage}/{steps.length}</span><div><i style={{ width: `${stage / steps.length * 100}%` }} /></div></div></>}</section>
       {stage === 0 ? <section className="list-surface" aria-label="Escalas liberadas de treinamento"><div className="filters"><label className="search-field"><Search size={17} /><input value="Loja Escola 10" readOnly aria-label="Buscar escalas" /></label></div><div className="table-scroll"><table><thead><tr><th>Período</th><th>Loja</th><th>Status</th><th>Seções</th><th>Ações</th></tr></thead><tbody><tr><td>{monthLabel}<small>{formatDate(dates[0])} a {formatDate(dates[dates.length - 1])}</small></td><td>Loja Escola 10</td><td>AGENDADA</td><td>Frente de Caixa</td><td><button className="open-link" type="button" data-tour="active" disabled={busy} onClick={() => void advance()}><ArrowUpRight size={16} /> Abrir Escala</button></td></tr></tbody></table></div></section> : <>

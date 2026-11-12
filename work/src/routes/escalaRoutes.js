@@ -161,6 +161,23 @@ router.put('/simulacao-12x36/funcionario', requirePermission('escalas', 'editar'
     }
   });
 
+router.put('/simulacao-12x36/funcionario/alternancia', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess,
+  async (req, res, next) => {
+    try {
+      const payload = simulationScopeSchema.extend({ escfuncId: z.number().int().positive(),
+        anchor: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.body);
+      await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+      const resultado = await postSimulationService.invertEmployee({ ...payload, actor: req.user });
+      await auditService.registerAudit({ action: 'INVERTER_ALTERNANCIA_12X36', user: req.user,
+        lojaId: payload.lojaId, mesRef: payload.mesRef,
+        details: { escsecaoId: payload.escsecaoId, escfuncId: payload.escfuncId, anchor: payload.anchor } });
+      return res.json({ resultado });
+    } catch (error) {
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros da escala 12x36 invalidos.' });
+      return next(error);
+    }
+  });
+
 router.patch('/simulacao-12x36/dia', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess,
   async (req, res, next) => {
     try {

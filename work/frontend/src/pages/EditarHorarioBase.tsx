@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { patchJson, postJson, type DiaEscala, type Funcionario } from '../api';
-import { autofillStandardHours } from '../shiftAutofill';
+import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { validateStandardHours } from '../shiftValidation';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
 import { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
@@ -68,8 +68,10 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
       <p>{employee.CHAPA} · {employee.FUNCAO_DESCR || 'Cargo não informado'}</p>
       {currentDay && <p>Na escala: {[currentDay.HR_ENT1, currentDay.HR_SAI1, currentDay.HR_ENT2, currentDay.HR_SAI2].filter(Boolean).join(' · ')}</p>}
       {!apprentice && <ShiftProfileSelect postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+        const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
+        if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
-        setHours({ HR_ENT1: item.HR_ENT1, HR_SAI1: item.HR_SAI1, HR_ENT2: item.HR_ENT2, HR_SAI2: item.HR_SAI2 });
+        setHours(next);
         setImpact(null); setError('');
       }} />}
       <div className="shift-fields">{(apprentice ? ['HR_ENT1', 'HR_SAI1'] as const : ['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'] as const).map((field, index) =>

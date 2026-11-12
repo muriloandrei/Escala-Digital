@@ -6,7 +6,7 @@ import { isWeekStart } from '../scheduleWeeks';
 
 type Hours = { HR_ENT1: string; HR_SAI1: string; HR_ENT2: string; HR_SAI2: string };
 type SimDay = Hours & { ESCFUNC_ID: number; DIA: string; DT_ANCORA: string; PROGRAMACAO: 'TRB' | 'F' };
-type Editor = { person: Funcionario; date?: string; anchor: string; hours: Hours };
+type Editor = { person: Funcionario; date?: string; anchor: string; hours: Hours; mode: 'TRB' | 'F' };
 
 const defaultHours: Hours = { HR_ENT1: '07:00', HR_SAI1: '12:30', HR_ENT2: '13:30', HR_SAI2: '19:00' };
 const hourFields: [keyof Hours, string][] = [
@@ -19,8 +19,8 @@ function dayOfWeek(date: string) {
     .format(new Date(`${date}T00:00:00Z`)).replace('.', '');
 }
 
-export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, people, scopePeople, canEdit }: {
-  lojaId: number; mesRef: string; escsecaoId: number; dates: string[];
+export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, holidays, people, scopePeople, canEdit }: {
+  lojaId: number; mesRef: string; escsecaoId: number; dates: string[]; holidays: Record<string, string>;
   people: Funcionario[]; scopePeople: Funcionario[]; canEdit: boolean;
 }) {
   const [days, setDays] = useState<SimDay[]>([]);
@@ -76,33 +76,37 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, people, scop
     } finally { setBusy(false); }
   }
 
-  function openEditor(person: Funcionario, date?: string, anchorOverride?: string) {
+  function openEditor(person: Funcionario, date?: string) {
     const saved = byEmployee.get(Number(person.ESCFUNC_ID));
     const day = date ? saved?.get(date) : saved?.values().next().value as SimDay | undefined;
-    const workDay = day?.PROGRAMACAO === 'TRB' ? day
-      : [...(saved?.values() || [])].find((item) => item.PROGRAMACAO === 'TRB');
-    setEditor({ person, date, anchor: anchorOverride || day?.DT_ANCORA || workDay?.DT_ANCORA || dates[0],
-      hours: workDay ? { HR_ENT1: workDay.HR_ENT1, HR_SAI1: workDay.HR_SAI1, HR_ENT2: workDay.HR_ENT2, HR_SAI2: workDay.HR_SAI2 } : defaultHours });
-    setError('');
-  }
-
-  function invertCurrentPeriod() {
-    if (!editor) return;
-    const restDay = [...(byEmployee.get(Number(editor.person.ESCFUNC_ID))?.values() || [])]
-      .find((day) => day.PROGRAMACAO === 'F');
-    if (!restDay) return;
-    setEditor({ ...editor, date: undefined, anchor: restDay.DIA });
+    const hoursDay = day?.HR_ENT1 ? day : [...(saved?.values() || [])].find((item) => item.PROGRAMACAO === 'TRB');
+    setEditor({ person, date, anchor: day?.DT_ANCORA || dates[0], mode: day?.PROGRAMACAO || 'TRB',
+      hours: hoursDay ? { HR_ENT1: hoursDay.HR_ENT1, HR_SAI1: hoursDay.HR_SAI1, HR_ENT2: hoursDay.HR_ENT2, HR_SAI2: hoursDay.HR_SAI2 } : defaultHours });
     setError('');
   }
 
   async function saveEditor() {
     if (!editor) return;
-    const invalid = validate12x36Hours(editor.hours);
-    if (invalid) { setError(invalid); return; }
+    const saved = byEmployee.get(Number(editor.person.ESCFUNC_ID));
+    const original = editor.date ? saved?.get(editor.date) : undefined;
+    const switching = Boolean(original && original.PROGRAMACAO !== editor.mode);
+    if (!switching && editor.mode === 'F') { setError('Nenhuma alteração neste dia.'); return; }
+    if (!switching) {
+      const invalid = validate12x36Hours(editor.hours);
+      if (invalid) { setError(invalid); return; }
+    }
     setBusy(true); setError(''); setMessage('');
     const payload = { lojaId, mesRef, escsecaoId, escfuncId: Number(editor.person.ESCFUNC_ID), hours: editor.hours };
     try {
-      if (editor.date) {
+      if (switching && editor.date) {
+        const anchor = editor.mode === 'TRB' ? editor.date
+          : [...(saved?.values() || [])].find((day) => day.PROGRAMACAO === 'F')?.DIA;
+        if (!anchor) throw new Error('Não há folga para inverter a alternância deste funcionário.');
+        await putJson('/api/escalas/simulacao-12x36/funcionario/alternancia', {
+          lojaId, mesRef, escsecaoId, escfuncId: payload.escfuncId, anchor,
+        });
+        setMessage(`Alternância 12x36 de ${editor.person.NOME} invertida.`);
+      } else if (editor.date) {
         await patchJson('/api/escalas/simulacao-12x36/dia', { ...payload, date: editor.date });
         setMessage(`Plantão de ${editor.person.NOME} ajustado.`);
       } else {
@@ -133,8 +137,8 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, people, scop
             <tr className="monthly-coverage-row"><th className="employee-col">Qualidade (%)</th>{counts.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''} title={`${item.work} trabalhando, ${item.rest} em folga`}>{item.quality}%</th>)}</tr>
             <tr className="monthly-count-row"><th className="employee-col">Folgas</th>{counts.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}>{item.rest} F</th>)}</tr>
             <tr className="monthly-count-row"><th className="employee-col">Trabalhando</th>{counts.map((item, index) => <th key={dates[index]} className={isWeekStart(dates[index], index) ? 'week-start' : ''}>{item.work} T</th>)}</tr>
-            <tr><th rowSpan={2} className="employee-col">Funcionário</th>{dates.map((date, index) => <th key={date} className={isWeekStart(date, index) ? 'week-start' : ''}>{dayOfWeek(date)}</th>)}</tr>
-            <tr>{dates.map((date, index) => <th key={date} className={isWeekStart(date, index) ? 'week-start' : ''}>{date.slice(8)}{date.slice(5, 7) !== mesRef.slice(5, 7) ? `/${date.slice(5, 7)}` : ''}</th>)}</tr>
+            <tr><th rowSpan={2} className="employee-col">Funcionário</th>{dates.map((date, index) => <th key={date} className={`${isWeekStart(date, index) ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>{dayOfWeek(date)}</th>)}</tr>
+            <tr>{dates.map((date, index) => <th key={date} className={`${isWeekStart(date, index) ? 'week-start' : ''} ${holidays[date] ? 'holiday-date' : ''}`} title={holidays[date] || undefined}>{date.slice(8)}{date.slice(5, 7) !== mesRef.slice(5, 7) ? `/${date.slice(5, 7)}` : ''}</th>)}</tr>
           </thead>
           <tbody>{people.map((person) => <tr key={person.ESCFUNC_ID}>
             <th className="employee-col"><strong>{person.CHAPA} · {person.NOME}</strong><small>{person.FUNCAO_DESCR || 'Cargo não informado'}</small>
@@ -144,8 +148,8 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, people, scop
               const day = byEmployee.get(Number(person.ESCFUNC_ID))?.get(date);
               return <td key={date} className={`${day?.PROGRAMACAO === 'F' ? 'rest' : day ? 'work' : 'empty'} ${isWeekStart(date, index) ? 'week-start' : ''}`}>
                 <button type="button" disabled={!canEdit || !day}
-                  title={day?.PROGRAMACAO === 'TRB' ? `${day.HR_ENT1} · ${day.HR_SAI1} · ${day.HR_ENT2} · ${day.HR_SAI2}` : day?.PROGRAMACAO === 'F' ? 'Inverter alternância do período' : 'Não gerado'}
-                  onClick={() => day?.PROGRAMACAO === 'F' ? openEditor(person, undefined, date) : openEditor(person, date)}>{day?.PROGRAMACAO === 'TRB' ? day.HR_ENT1 : day?.PROGRAMACAO || '–'}</button>
+                  title={`${holidays[date] ? `Feriado: ${holidays[date]} · ` : ''}${day?.PROGRAMACAO === 'TRB' ? `${day.HR_ENT1} · ${day.HR_SAI1} · ${day.HR_ENT2} · ${day.HR_SAI2}` : day?.PROGRAMACAO === 'F' ? 'Folga 12x36' : 'Não gerado'}`}
+                  onClick={() => openEditor(person, date)}>{day?.PROGRAMACAO === 'TRB' ? day.HR_ENT1 : day?.PROGRAMACAO || '–'}</button>
               </td>;
             })}
           </tr>)}</tbody>
@@ -158,12 +162,18 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, people, scop
       <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setConfirmGenerate(false)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={generate}>Confirmar geração</button></div>
     </div></div>}
     {editor && <div className="confirm-backdrop"><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="sim-edit-title">
-      <h2 id="sim-edit-title">{editor.date ? `Plantão ${editor.date}` : 'Padrão 12x36'} · {editor.person.NOME}</h2>
+      <h2 id="sim-edit-title">{editor.date ? `Editar ${editor.date}` : 'Padrão 12x36'} · {editor.person.NOME}</h2>
+      {editor.date && <div className="segmented day-editor-mode" role="group" aria-label="Programação do dia">
+        <button type="button" className={editor.mode === 'TRB' ? 'selected' : ''} onClick={() => setEditor({ ...editor, mode: 'TRB' })}>Trabalho</button>
+        <button type="button" className={editor.mode === 'F' ? 'selected' : ''} onClick={() => setEditor({ ...editor, mode: 'F' })}>Folga</button>
+      </div>}
+      {editor.date && holidays[editor.date] && <div className="notice warning" role="status">Feriado nacional: {holidays[editor.date]}.</div>}
       {!editor.date && <label className="sim-field">Primeiro dia de plantão<input type="date" min={dates[0]} max={dates[dates.length - 1]} value={editor.anchor} onChange={(event) => setEditor({ ...editor, anchor: event.target.value })} /></label>}
       {!editor.date && <p>A mudança do padrão recria todos os dias 12x36 deste funcionário.</p>}
-      <div className="sim-hours">{hourFields.map(([field, label]) => <label className="sim-field" key={field}>{label}<input type="time" value={editor.hours[field]} onChange={(event) => setEditor({ ...editor, hours: { ...editor.hours, [field]: event.target.value } })} /></label>)}</div>
+      {editor.date && editor.mode !== byEmployee.get(Number(editor.person.ESCFUNC_ID))?.get(editor.date)?.PROGRAMACAO && <p>A alteração inverte trabalho e folga em todo o período deste funcionário. Horários gravados em cada data serão preservados.</p>}
+      {(editor.mode === 'TRB' && (!editor.date || byEmployee.get(Number(editor.person.ESCFUNC_ID))?.get(editor.date)?.PROGRAMACAO === 'TRB')) && <div className="sim-hours">{hourFields.map(([field, label]) => <label className="sim-field" key={field}>{label}<input type="time" value={editor.hours[field]} onChange={(event) => setEditor({ ...editor, hours: { ...editor.hours, [field]: event.target.value } })} /></label>)}</div>}
       {error && <div className="notice error" role="alert">{error}</div>}
-      <div className="confirm-actions">{editor.date && <button className="button secondary" type="button" disabled={busy} onClick={invertCurrentPeriod}>Inverter alternância</button>}<button className="button secondary" type="button" disabled={busy} onClick={() => setEditor(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={saveEditor}>Salvar</button></div>
+      <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditor(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={saveEditor}>Salvar</button></div>
     </div></div>}
   </section>;
 }

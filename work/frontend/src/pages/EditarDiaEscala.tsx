@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { createOperationId } from '../operationId';
-import { autofillStandardHours } from '../shiftAutofill';
+import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { validate12x36Hours, validateStandardHours } from '../shiftValidation';
 import { isDutyDay12x36 } from '../workRegime';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
@@ -274,8 +274,11 @@ export function EditarDiaEscala({
             {mode === 'TRB' && (
               <><div className="day-editor-times">
                 {!apprentice && !plantao12x36 && <ShiftProfileSelect sundayOnly={domingo6h} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+                  const next = applyShiftProfile({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
+                    HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
+                  if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
                   setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
-                  setShift({ hrEnt1: item.HR_ENT1, hrSai1: item.HR_SAI1, hrEnt2: item.HR_ENT2, hrSai2: item.HR_SAI2 });
+                  setShift({ hrEnt1: next.HR_ENT1, hrSai1: next.HR_SAI1, hrEnt2: next.HR_ENT2, hrSai2: next.HR_SAI2 });
                   setError('');
                 }} />}
                 {(

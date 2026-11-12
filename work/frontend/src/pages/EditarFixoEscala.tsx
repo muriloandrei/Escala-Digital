@@ -3,7 +3,7 @@ import { getJson, postJson, type DiaEscala, type EscalaMensal, type FixoEscala, 
 import { validateStandardHours, type StandardHours } from '../shiftValidation';
 import { validate12x36Hours } from '../shiftValidation';
 import { isDutyDay12x36 } from '../workRegime';
-import { autofillStandardHours } from '../shiftAutofill';
+import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
 import { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
 
@@ -137,8 +137,10 @@ export function EditarFixoEscala({
     </div>
     {mode === 'TRB' && <div className="day-editor-times">
       {!apprentice && !plantao12x36 && <ShiftProfileSelect sundayOnly={domingo6h} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+        const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
+        if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
-        setHours({ HR_ENT1: item.HR_ENT1, HR_SAI1: item.HR_SAI1, HR_ENT2: item.HR_ENT2, HR_SAI2: item.HR_SAI2 });
+        setHours(next);
         setError('');
       }} />}
       {(apprentice ? [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída']] as const

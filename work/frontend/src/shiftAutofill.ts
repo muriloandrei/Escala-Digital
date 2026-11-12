@@ -44,3 +44,7 @@ export function autofillStandardHours(current: StandardHours, field: Field, valu
   if (values.some((item) => item === null)) return null;
   return { HR_ENT1: values[0]!, HR_SAI1: values[1]!, HR_ENT2: values[2]!, HR_SAI2: values[3]! };
 }
+
+export function applyShiftProfile(current: StandardHours, workMinutes: number, intervalMinutes: number): StandardHours | null {
+  return autofillStandardHours(current, 'HR_ENT1', current.HR_ENT1, workMinutes, intervalMinutes);
+}
