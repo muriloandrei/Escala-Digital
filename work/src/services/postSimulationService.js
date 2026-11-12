@@ -148,6 +148,36 @@ async function generate({ lojaId, mesRef, escsecaoId, escfuncIds, actor }) {
   });
 }
 
+async function reset({ lojaId, mesRef, escsecaoId, escfuncIds }) {
+  assertPostStore(lojaId);
+  const employees = await employeesInSection(lojaId, mesRef, escsecaoId);
+  const ids = [...new Set((escfuncIds || []).map(Number))];
+  if (!ids.length) {
+    const error = new Error('Selecione ao menos um funcionario para resetar a escala 12x36.');
+    error.statusCode = 422;
+    throw error;
+  }
+  ids.forEach((id) => assertEmployee(employees, id));
+  return withConnection(async (connection) => {
+    try {
+      let dias = 0;
+      for (const escfuncId of ids) {
+        const result = await connection.execute(
+          `delete from sgn_esc_sim_12x36 where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and escsecao_id = :escsecaoId and escfunc_id = :escfuncId`,
+          { lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId), escfuncId }, { autoCommit: false }
+        );
+        dias += result.rowsAffected || 0;
+      }
+      await connection.commit();
+      return { funcionarios: ids.length, dias };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    }
+  });
+}
+
 async function configureEmployee({ lojaId, mesRef, escsecaoId, escfuncId, anchor, hours, actor }) {
   assertPostStore(lojaId);
   const dates = periodDates(mesRef);
@@ -170,7 +200,7 @@ async function configureEmployee({ lojaId, mesRef, escsecaoId, escfuncId, anchor
   });
 }
 
-async function invertEmployee({ lojaId, mesRef, escsecaoId, escfuncId, anchor, actor }) {
+async function invertEmployee({ lojaId, mesRef, escsecaoId, escfuncId, anchor, date, hours, actor }) {
   assertPostStore(lojaId);
   const dates = periodDates(mesRef);
   if (!isIsoDate(anchor) || !dates.includes(anchor)) {
@@ -178,6 +208,12 @@ async function invertEmployee({ lojaId, mesRef, escsecaoId, escfuncId, anchor, a
     error.statusCode = 422;
     throw error;
   }
+  if (hours && (!date || !dates.includes(date) || !isDutyDay(anchor, date))) {
+    const error = new Error('Informe um dia de plantao valido para ajustar o horario.');
+    error.statusCode = 422;
+    throw error;
+  }
+  if (hours) assertHours(hours);
   assertEmployee(await employeesInSection(lojaId, mesRef, escsecaoId), escfuncId);
   return withConnection(async (connection) => {
     const binds = { lojaId: Number(lojaId), mesRef, escsecaoId: Number(escsecaoId),
@@ -212,6 +248,22 @@ async function invertEmployee({ lojaId, mesRef, escsecaoId, escfuncId, anchor, a
         const error = new Error('Escala 12x36 alterada durante a inversao. Atualize e tente novamente.');
         error.statusCode = 409;
         throw error;
+      }
+      if (hours) {
+        const adjusted = await connection.execute(
+          `update sgn_esc_sim_12x36 set hr_ent1 = :HR_ENT1, hr_sai1 = :HR_SAI1,
+                  hr_ent2 = :HR_ENT2, hr_sai2 = :HR_SAI2
+            where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+              and escsecao_id = :escsecaoId and escfunc_id = :escfuncId
+              and dia = to_date(:diaIso, 'YYYY-MM-DD') and programacao = 'TRB'`,
+          { ...hours, lojaId: binds.lojaId, mesRef, escsecaoId: binds.escsecaoId,
+            escfuncId: binds.escfuncId, diaIso: date }, { autoCommit: false }
+        );
+        if (adjusted.rowsAffected !== 1) {
+          const error = new Error('Plantao nao encontrado apos inverter a alternancia.');
+          error.statusCode = 409;
+          throw error;
+        }
       }
       await connection.commit();
       return { dias: result.rowsAffected };
@@ -254,4 +306,4 @@ async function editDay({ lojaId, mesRef, escsecaoId, escfuncId, date, hours, act
 }
 
 module.exports = { DEFAULT_HOURS, periodDates, simulationRows, planBalancedAnchors,
-  list, generate, configureEmployee, invertEmployee, editDay };
+  list, generate, reset, configureEmployee, invertEmployee, editDay };

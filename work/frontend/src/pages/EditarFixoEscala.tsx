@@ -27,7 +27,8 @@ export function EditarFixoEscala({
   const plantao12x36 = employee.REGIME_ESCALA === '12X36';
   const diaPlantao = plantao12x36 && isDutyDay12x36(employee.DT_ANCORA_12X36 || '', date);
   const domingo6h = !plantao12x36 && domingo6hHabilitado && new Date(`${date}T12:00:00`).getDay() === 0 && !apprentice;
-  const [profile, setProfile] = useState({ work: plantao12x36 ? 660 : domingo6h ? 360 : 528, interval: plantao12x36 ? 60 : 70 });
+  const [profile, setProfile] = useState({ work: Number(existing?.JORNADA_MINUTOS || generatedDay?.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
+    interval: Number(existing?.INTERVALO_MINUTOS || generatedDay?.INTERVALO_MINUTOS) || (plantao12x36 ? 60 : 70) });
   const [mode, setMode] = useState<'FXF' | 'TRB'>(existing?.PROGRAMACAO === 'TRB' || plantao12x36 && diaPlantao ? 'TRB' : 'FXF');
   const [hours, setHours] = useState<StandardHours>(() => {
     if (apprentice) return apprenticeHoursFromStart((existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT1 : workDay?.HR_ENT1) || employee.HR_ENT1 || '08:00')
@@ -60,6 +61,8 @@ export function EditarFixoEscala({
     try {
       await postJson('/api/escalas/fixos', {
         ...base, PROGRAMACAO: mode,
+        jornadaMinutos: mode === 'TRB' && !apprentice && !plantao12x36 ? profile.work : null,
+        intervaloMinutos: mode === 'TRB' && !apprentice && !plantao12x36 ? profile.interval : null,
         ...(mode === 'TRB' ? { ...hours, HR_ENT2: apprentice ? null : hours.HR_ENT2,
           HR_SAI2: apprentice ? null : hours.HR_SAI2 } : {}),
         JUSTIFICATIVA: justification.trim() || null,
@@ -136,7 +139,7 @@ export function EditarFixoEscala({
       <button type="button" className={mode === 'TRB' ? 'selected' : ''} disabled={plantao12x36 && !diaPlantao} onClick={() => { setMode('TRB'); setError(''); }}>Horário fixo</button>
     </div>
     {mode === 'TRB' && <div className="day-editor-times">
-      {!apprentice && !plantao12x36 && <ShiftProfileSelect sundayOnly={domingo6h} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+      {!apprentice && !plantao12x36 && <ShiftProfileSelect value={profile} sundayOnly={domingo6h} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
         const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
         if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });

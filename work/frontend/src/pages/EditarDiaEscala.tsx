@@ -10,6 +10,8 @@ import { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHo
 type Shift = { hrEnt1: string; hrSai1: string; hrEnt2: string; hrSai2: string };
 export type PayloadDay = {
   data: string;
+  jornadaMinutos?: number | null;
+  intervaloMinutos?: number | null;
   hrEnt1: string | null;
   hrSai1: string | null;
   hrEnt2: string | null;
@@ -35,6 +37,8 @@ export function toPayloadDay(day: DiaEscala): PayloadDay {
   const rest = isRest(day);
   return {
     data: dateOnly(day.DT),
+    jornadaMinutos: day.JORNADA_MINUTOS ?? null,
+    intervaloMinutos: day.INTERVALO_MINUTOS ?? null,
     hrEnt1: rest ? null : day.HR_ENT1 || null,
     hrSai1: rest ? null : day.HR_SAI1 || null,
     hrEnt2: rest ? null : day.HR_ENT2 || null,
@@ -73,7 +77,8 @@ export function EditarDiaEscala({
   const reference = days.find((item) => !isRest(item) && item.HR_ENT1) || day;
   const [mode, setMode] = useState<'TRB' | 'F' | 'FDO'>(String(day.PROGRAMACAO).toUpperCase() === 'FDO' ? 'FDO' : isRest(day) ? 'F' : 'TRB');
   const domingo6h = !plantao12x36 && domingo6hHabilitado && new Date(`${dateOnly(day.DT)}T12:00:00`).getDay() === 0 && !apprentice;
-  const [profile, setProfile] = useState({ work: plantao12x36 ? 660 : domingo6h ? 360 : 528, interval: plantao12x36 ? 60 : 70 });
+  const [profile, setProfile] = useState({ work: Number(day.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
+    interval: Number(day.INTERVALO_MINUTOS) || (plantao12x36 ? 60 : 70) });
   const [shift, setShift] = useState<Shift>(() => {
     if (apprentice) {
       const hours = apprenticeHoursFromStart((isRest(day) ? reference.HR_ENT1 : day.HR_ENT1) || employee.HR_ENT1 || '08:00')
@@ -128,6 +133,8 @@ export function EditarDiaEscala({
     const submitted = (key: keyof Shift) => (apprentice ? shift[key] : String(form.get(key) || ''));
     const changed: PayloadDay = {
       data: date,
+      jornadaMinutos: mode === 'TRB' && !apprentice && !plantao12x36 ? profile.work : null,
+      intervaloMinutos: mode === 'TRB' && !apprentice && !plantao12x36 ? profile.interval : null,
       hrEnt1: mode !== 'TRB' ? null : submitted('hrEnt1') || null,
       hrSai1: mode !== 'TRB' ? null : submitted('hrSai1') || null,
       hrEnt2: mode !== 'TRB' || apprentice ? null : submitted('hrEnt2') || null,
@@ -197,7 +204,7 @@ export function EditarDiaEscala({
           (item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID) && dateOnly(item.DT) === date,
         );
         const actual = recorded ? toPayloadDay(recorded) : null;
-        const fields: (keyof PayloadDay)[] = ['data', 'programacao', 'hrEnt1', 'hrSai1', 'hrEnt2', 'hrSai2'];
+        const fields: (keyof PayloadDay)[] = ['data', 'programacao', 'hrEnt1', 'hrSai1', 'hrEnt2', 'hrSai2', 'jornadaMinutos', 'intervaloMinutos'];
         if (
           Number(recorded?.REVISAO) !== Number(saved.saved[0].revisao) ||
           !actual ||
@@ -273,7 +280,7 @@ export function EditarDiaEscala({
             </div>
             {mode === 'TRB' && (
               <><div className="day-editor-times">
-                {!apprentice && !plantao12x36 && <ShiftProfileSelect sundayOnly={domingo6h} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+                {!apprentice && !plantao12x36 && <ShiftProfileSelect value={profile} sundayOnly={domingo6h} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
                   const next = applyShiftProfile({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
                     HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
                   if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }

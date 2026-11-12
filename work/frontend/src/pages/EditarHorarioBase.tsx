@@ -24,7 +24,8 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
   const minimumMonth = currentMonth();
   const [month, setMonth] = useState(initialMonth < minimumMonth && !allowRetroactive ? minimumMonth : initialMonth);
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
-  const [profile, setProfile] = useState({ work: 528, interval: 70 });
+  const [profile, setProfile] = useState({ work: Number(currentDay?.JORNADA_MINUTOS) || 528,
+    interval: Number(currentDay?.INTERVALO_MINUTOS) || 70 });
   const [hours, setHours] = useState(() => apprentice
     ? apprenticeHoursFromStart(employee.HR_ENT1 || currentDay?.HR_ENT1 || '08:00') || apprenticeHoursFromStart('08:00')!
     : {
@@ -36,6 +37,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
   const [error, setError] = useState('');
   const payload = () => ({ lojaId: Number(lojaId), escfuncId: Number(employee.ESCFUNC_ID),
     mesRef: `${month}-01`, aplicarNaEscala: true, ...hours,
+    jornadaMinutos: apprentice ? null : profile.work, intervaloMinutos: apprentice ? null : profile.interval,
     HR_ENT2: apprentice ? null : hours.HR_ENT2, HR_SAI2: apprentice ? null : hours.HR_SAI2 });
 
   async function preview() {
@@ -67,7 +69,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
       <h2 id="shift-title">Editar horário · {employee.NOME}</h2>
       <p>{employee.CHAPA} · {employee.FUNCAO_DESCR || 'Cargo não informado'}</p>
       {currentDay && <p>Na escala: {[currentDay.HR_ENT1, currentDay.HR_SAI1, currentDay.HR_ENT2, currentDay.HR_SAI2].filter(Boolean).join(' · ')}</p>}
-      {!apprentice && <ShiftProfileSelect postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+      {!apprentice && <ShiftProfileSelect value={profile} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
         const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
         if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pencil, Play, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pencil, Play, RefreshCw, RotateCcw } from 'lucide-react';
 import { getJson, patchJson, postJson, putJson, type Funcionario } from '../api';
 import { validate12x36Hours } from '../shiftValidation';
 import { isWeekStart } from '../scheduleWeeks';
+import { isDutyDay12x36 } from '../workRegime';
 
 type Hours = { HR_ENT1: string; HR_SAI1: string; HR_ENT2: string; HR_SAI2: string };
 type SimDay = Hours & { ESCFUNC_ID: number; DIA: string; DT_ANCORA: string; PROGRAMACAO: 'TRB' | 'F' };
@@ -30,7 +31,9 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, holidays, pe
   const [message, setMessage] = useState('');
   const [reload, setReload] = useState(0);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [editor, setEditor] = useState<Editor | null>(null);
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const query = new URLSearchParams({ lojaId: String(lojaId), mesRef, escsecaoId: String(escsecaoId) });
 
   useEffect(() => {
@@ -61,6 +64,31 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, holidays, pe
     const rest = people.filter((person) => byEmployee.get(Number(person.ESCFUNC_ID))?.get(date)?.PROGRAMACAO === 'F').length;
     return { work, rest, quality: people.length ? Math.round(work / people.length * 100) : 0 };
   });
+  const critiques = useMemo(() => {
+    const result: string[] = [];
+    const minimumWorking = Math.floor(scopePeople.length / 2);
+    for (const person of scopePeople) {
+      const personDays = byEmployee.get(Number(person.ESCFUNC_ID));
+      if (!personDays || dates.some((date) => !personDays.has(date))) {
+        result.push(`${person.NOME}: escala 12x36 incompleta.`);
+        continue;
+      }
+      for (const date of dates) {
+        const day = personDays.get(date)!;
+        const expected = isDutyDay12x36(day.DT_ANCORA, date) ? 'TRB' : 'F';
+        if (day.PROGRAMACAO !== expected) result.push(`${person.NOME}: alternância 12x36 inconsistente em ${date}.`);
+        if (day.PROGRAMACAO === 'TRB') {
+          const invalid = validate12x36Hours(day);
+          if (invalid) result.push(`${person.NOME}: ${invalid} (${date}).`);
+        }
+      }
+    }
+    if (minimumWorking > 0) dates.forEach((date) => {
+      const working = scopePeople.filter((person) => byEmployee.get(Number(person.ESCFUNC_ID))?.get(date)?.PROGRAMACAO === 'TRB').length;
+      if (working < minimumWorking) result.push(`Cobertura 12x36 abaixo de ${minimumWorking} funcionário(s) em ${date}: ${working} trabalhando.`);
+    });
+    return result;
+  }, [scopePeople, byEmployee, dates]);
 
   async function generate() {
     setBusy(true); setError(''); setMessage('');
@@ -74,6 +102,50 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, holidays, pe
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Não foi possível gerar a escala 12x36.');
     } finally { setBusy(false); }
+  }
+
+  async function reset() {
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const response = await postJson<{ resultado: { dias: number } }>('/api/escalas/simulacao-12x36/resetar', {
+        lojaId, mesRef, escsecaoId, escfuncIds: scopePeople.map((person) => Number(person.ESCFUNC_ID)),
+      });
+      setMessage(`${response.resultado.dias} dia(s) da escala 12x36 removido(s).`);
+      setConfirmReset(false);
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível resetar a escala 12x36.');
+    } finally { setBusy(false); }
+  }
+
+  async function quickToggle(person: Funcionario, date: string) {
+    if (busy) return;
+    const day = byEmployee.get(Number(person.ESCFUNC_ID))?.get(date);
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const escfuncId = Number(person.ESCFUNC_ID);
+      if (!day) {
+        const anchor = dates.find((candidate) => !isDutyDay12x36(candidate, date));
+        if (!anchor) throw new Error('Não há data válida para iniciar esta escala.');
+        await putJson('/api/escalas/simulacao-12x36/funcionario', {
+          lojaId, mesRef, escsecaoId, escfuncId, anchor, hours: defaultHours,
+        });
+      } else {
+        const anchor = dates.find((candidate) => isDutyDay12x36(candidate, date) !== (day.PROGRAMACAO === 'TRB'));
+        if (!anchor) throw new Error('Não há data válida para inverter a alternância.');
+        await putJson('/api/escalas/simulacao-12x36/funcionario/alternancia', {
+          lojaId, mesRef, escsecaoId, escfuncId, anchor,
+        });
+      }
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível alterar o dia.');
+    } finally { setBusy(false); }
+  }
+
+  function scheduleClick(person: Funcionario, date: string) {
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    clickTimer.current = setTimeout(() => { clickTimer.current = null; void quickToggle(person, date); }, 230);
   }
 
   function openEditor(person: Funcionario, date?: string) {
@@ -90,20 +162,26 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, holidays, pe
     const saved = byEmployee.get(Number(editor.person.ESCFUNC_ID));
     const original = editor.date ? saved?.get(editor.date) : undefined;
     const switching = Boolean(original && original.PROGRAMACAO !== editor.mode);
-    if (!switching && editor.mode === 'F') { setError('Nenhuma alteração neste dia.'); return; }
-    if (!switching) {
+    if (original && !switching && editor.mode === 'F') { setError('Nenhuma alteração neste dia.'); return; }
+    if (editor.mode === 'TRB') {
       const invalid = validate12x36Hours(editor.hours);
       if (invalid) { setError(invalid); return; }
     }
     setBusy(true); setError(''); setMessage('');
     const payload = { lojaId, mesRef, escsecaoId, escfuncId: Number(editor.person.ESCFUNC_ID), hours: editor.hours };
     try {
-      if (switching && editor.date) {
+      if (!original && editor.date) {
+        const anchor = dates.find((candidate) => isDutyDay12x36(candidate, editor.date!) === (editor.mode === 'TRB'));
+        if (!anchor) throw new Error('Não há data válida para iniciar esta escala.');
+        await putJson('/api/escalas/simulacao-12x36/funcionario', { ...payload, anchor });
+        setMessage(`Escala 12x36 de ${editor.person.NOME} criada.`);
+      } else if (switching && editor.date) {
         const anchor = editor.mode === 'TRB' ? editor.date
           : [...(saved?.values() || [])].find((day) => day.PROGRAMACAO === 'F')?.DIA;
         if (!anchor) throw new Error('Não há folga para inverter a alternância deste funcionário.');
         await putJson('/api/escalas/simulacao-12x36/funcionario/alternancia', {
           lojaId, mesRef, escsecaoId, escfuncId: payload.escfuncId, anchor,
+          ...(editor.mode === 'TRB' ? { date: editor.date, hours: editor.hours } : {}),
         });
         setMessage(`Alternância 12x36 de ${editor.person.NOME} invertida.`);
       } else if (editor.date) {
@@ -125,8 +203,13 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, holidays, pe
     <div className="schedule-actions">
       <span>{scopePeople.length} funcionário(s) no escopo</span>
       <button className="button secondary" type="button" title="Atualizar escala 12x36" disabled={busy} onClick={() => setReload((value) => value + 1)}><RefreshCw size={15} /> Atualizar</button>
+      {canEdit && <button className="button secondary" type="button" disabled={busy || !scopePeople.length || !days.length} onClick={() => setConfirmReset(true)}><RotateCcw size={15} /> Resetar 12x36</button>}
       {canEdit && <button className="button primary" type="button" disabled={busy || !scopePeople.length} onClick={() => setConfirmGenerate(true)}><Play size={15} /> Gerar escala</button>}
     </div>
+    {!loading && critiques.length > 0 && <details className="notice error schedule-critiques">
+      <summary><strong>Críticas da escala 12x36 · {critiques.length}</strong></summary>
+      <ul>{critiques.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul>
+    </details>}
     {message && <div className="notice success" role="status">{message}</div>}
     {error && !editor && <div className="notice error" role="alert">{error}</div>}
     {loading ? <div className="empty-state" role="status">Carregando escala 12x36...</div>
@@ -147,9 +230,10 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, holidays, pe
             {dates.map((date, index) => {
               const day = byEmployee.get(Number(person.ESCFUNC_ID))?.get(date);
               return <td key={date} className={`${day?.PROGRAMACAO === 'F' ? 'rest' : day ? 'work' : 'empty'} ${isWeekStart(date, index) ? 'week-start' : ''}`}>
-                <button type="button" disabled={!canEdit || !day}
+                <button type="button" disabled={!canEdit || busy}
                   title={`${holidays[date] ? `Feriado: ${holidays[date]} · ` : ''}${day?.PROGRAMACAO === 'TRB' ? `${day.HR_ENT1} · ${day.HR_SAI1} · ${day.HR_ENT2} · ${day.HR_SAI2}` : day?.PROGRAMACAO === 'F' ? 'Folga 12x36' : 'Não gerado'}`}
-                  onClick={() => openEditor(person, date)}>{day?.PROGRAMACAO === 'TRB' ? day.HR_ENT1 : day?.PROGRAMACAO || '–'}</button>
+                  onClick={() => scheduleClick(person, date)}
+                  onDoubleClick={() => { if (clickTimer.current) clearTimeout(clickTimer.current); clickTimer.current = null; openEditor(person, date); }}>{day?.PROGRAMACAO === 'TRB' ? day.HR_ENT1 : day?.PROGRAMACAO || '–'}</button>
               </td>;
             })}
           </tr>)}</tbody>
@@ -161,6 +245,12 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, holidays, pe
       {error && <div className="notice error" role="alert">{error}</div>}
       <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setConfirmGenerate(false)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={generate}>Confirmar geração</button></div>
     </div></div>}
+    {confirmReset && <div className="confirm-backdrop"><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="sim-reset-title">
+      <h2 id="sim-reset-title">Resetar escala 12x36</h2>
+      <p>Remover os dias 12x36 de {scopePeople.length} funcionário(s) deste escopo? A escala 5x2 não será alterada.</p>
+      {error && <div className="notice error" role="alert">{error}</div>}
+      <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setConfirmReset(false)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={reset}>Confirmar reset</button></div>
+    </div></div>}
     {editor && <div className="confirm-backdrop"><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="sim-edit-title">
       <h2 id="sim-edit-title">{editor.date ? `Editar ${editor.date}` : 'Padrão 12x36'} · {editor.person.NOME}</h2>
       {editor.date && <div className="segmented day-editor-mode" role="group" aria-label="Programação do dia">
@@ -171,7 +261,7 @@ export function Simulacao12x36({ lojaId, mesRef, escsecaoId, dates, holidays, pe
       {!editor.date && <label className="sim-field">Primeiro dia de plantão<input type="date" min={dates[0]} max={dates[dates.length - 1]} value={editor.anchor} onChange={(event) => setEditor({ ...editor, anchor: event.target.value })} /></label>}
       {!editor.date && <p>A mudança do padrão recria todos os dias 12x36 deste funcionário.</p>}
       {editor.date && editor.mode !== byEmployee.get(Number(editor.person.ESCFUNC_ID))?.get(editor.date)?.PROGRAMACAO && <p>A alteração inverte trabalho e folga em todo o período deste funcionário. Horários gravados em cada data serão preservados.</p>}
-      {(editor.mode === 'TRB' && (!editor.date || byEmployee.get(Number(editor.person.ESCFUNC_ID))?.get(editor.date)?.PROGRAMACAO === 'TRB')) && <div className="sim-hours">{hourFields.map(([field, label]) => <label className="sim-field" key={field}>{label}<input type="time" value={editor.hours[field]} onChange={(event) => setEditor({ ...editor, hours: { ...editor.hours, [field]: event.target.value } })} /></label>)}</div>}
+      {editor.mode === 'TRB' && <div className="sim-hours">{hourFields.map(([field, label]) => <label className="sim-field" key={field}>{label}<input type="time" value={editor.hours[field]} onChange={(event) => setEditor({ ...editor, hours: { ...editor.hours, [field]: event.target.value } })} /></label>)}</div>}
       {error && <div className="notice error" role="alert">{error}</div>}
       <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditor(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={saveEditor}>Salvar</button></div>
     </div></div>}

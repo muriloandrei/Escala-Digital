@@ -386,6 +386,8 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
           hrSai1: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai1 || fixo.HR_SAI1, horario.hrSai1),
           hrEnt2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrEnt2 || fixo.HR_ENT2, horario.hrEnt2),
           hrSai2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2),
+          jornadaMinutos: descansoFixo ? null : fixo.jornadaMinutos ?? fixo.JORNADA_MINUTOS ?? null,
+          intervaloMinutos: descansoFixo ? null : fixo.intervaloMinutos ?? fixo.INTERVALO_MINUTOS ?? null,
           programacao: programacaoFixa,
           justificativa: fixo.justificativa || fixo.JUSTIFICATIVA || 'Horario/folga fixa'
         };
@@ -1206,6 +1208,8 @@ function montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, op
         hrSai1: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai1 || fixo.HR_SAI1, horario.hrSai1),
         hrEnt2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrEnt2 || fixo.HR_ENT2, horario.hrEnt2),
         hrSai2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2),
+        jornadaMinutos: descansoFixo ? null : fixo.jornadaMinutos ?? fixo.JORNADA_MINUTOS ?? null,
+        intervaloMinutos: descansoFixo ? null : fixo.intervaloMinutos ?? fixo.INTERVALO_MINUTOS ?? null,
         programacao: programacaoFixa,
         justificativa: fixo.justificativa || fixo.JUSTIFICATIVA || 'Horario/folga fixa'
       };

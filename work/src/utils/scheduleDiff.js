@@ -27,11 +27,15 @@ function normalizeScheduleDay(row = {}) {
     normalized[lowerKey] = value === undefined || value === null ? null : String(value).trim().toUpperCase();
   }
   normalized.justificativa = readValue(row, 'justificativa', 'JUSTIFICATIVA') || null;
+  normalized.jornadaMinutos = Number(readValue(row, 'jornadaMinutos', 'JORNADA_MINUTOS')) || null;
+  normalized.intervaloMinutos = Number(readValue(row, 'intervaloMinutos', 'INTERVALO_MINUTOS')) || null;
   return normalized;
 }
 
 function sameScheduleDay(previous, current) {
-  return FIELD_MAP.every(([key]) => (previous?.[key] || null) === (current?.[key] || null));
+  return FIELD_MAP.every(([key]) => (previous?.[key] || null) === (current?.[key] || null))
+    && (previous?.jornadaMinutos || null) === (current?.jornadaMinutos || null)
+    && (previous?.intervaloMinutos || null) === (current?.intervaloMinutos || null);
 }
 
 function buildDiaAlteracoes(diasAnteriores = [], diasNovos = []) {
@@ -50,8 +54,12 @@ function buildDiaAlteracoes(diasAnteriores = [], diasNovos = []) {
       if (anterior && sameScheduleDay(anterior, novo)) return null;
       return {
         data: novo.data,
-        anterior: anterior ? Object.fromEntries(FIELD_MAP.map(([key]) => [key, anterior[key]])) : null,
-        novo: Object.fromEntries(FIELD_MAP.map(([key]) => [key, novo[key]])),
+        anterior: anterior ? { ...Object.fromEntries(FIELD_MAP.map(([key]) => [key, anterior[key]])),
+          ...(anterior.jornadaMinutos || anterior.intervaloMinutos || novo.jornadaMinutos || novo.intervaloMinutos
+            ? { jornadaMinutos: anterior.jornadaMinutos, intervaloMinutos: anterior.intervaloMinutos } : {}) } : null,
+        novo: { ...Object.fromEntries(FIELD_MAP.map(([key]) => [key, novo[key]])),
+          ...(anterior?.jornadaMinutos || anterior?.intervaloMinutos || novo.jornadaMinutos || novo.intervaloMinutos
+            ? { jornadaMinutos: novo.jornadaMinutos, intervaloMinutos: novo.intervaloMinutos } : {}) },
         justificativa: novo.justificativa || null
       };
     })

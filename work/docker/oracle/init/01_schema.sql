@@ -132,6 +132,8 @@ create table SGN_ESC_PROG_DIA (
   HR_ENT2 varchar2(5) not null,
   HR_SAI2 varchar2(5) not null,
   PROGRAMACAO varchar2(3),
+  JORNADA_MINUTOS number(4),
+  INTERVALO_MINUTOS number(4),
   constraint SGN_ESC_PROG_DIA_PK primary key (ESCPROGDIA_ID),
   constraint SGN_ESC_PROG_DIA_1_UK unique (ESCPROG_ID, DT),
   constraint SGN_ESC_PROG_DIA_FK foreign key (ESCPROG_ID) references SGN_ESC_PROG (ESCPROG_ID)
@@ -145,6 +147,8 @@ create table SGN_ESC_FIXO_ESCALA (
   ESCSECAO_ID number(15) not null,
   DT date not null,
   PROGRAMACAO varchar2(3) default 'TRB' not null,
+  JORNADA_MINUTOS number(4),
+  INTERVALO_MINUTOS number(4),
   HR_ENT1 varchar2(5),
   HR_SAI1 varchar2(5),
   HR_ENT2 varchar2(5),

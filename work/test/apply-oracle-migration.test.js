@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
 test('executor accepts only the approved mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 26);
+  assert.equal(migrationNames.length, 27);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
@@ -17,6 +17,14 @@ test('duration-only profiles can omit fixed clock times after migration', () => 
   assert.match(sql, /SGN_ESC_HORARIO_PADRAO/);
   assert.match(sql, /HR_ENT1.*HR_SAI1.*HR_ENT2.*HR_SAI2/);
   assert.match(sql, /modify \('/);
+});
+
+test('selected shift duration is stored on schedule and fixed days', () => {
+  const { sql } = readMigration('20261112_jornada_selecionada_dia.sql');
+  assert.match(sql, /SGN_ESC_PROG_DIA.*JORNADA_MINUTOS/s);
+  assert.match(sql, /SGN_ESC_PROG_DIA.*INTERVALO_MINUTOS/s);
+  assert.match(sql, /SGN_ESC_FIXO_ESCALA.*JORNADA_MINUTOS/s);
+  assert.match(sql, /SGN_ESC_FIXO_ESCALA.*INTERVALO_MINUTOS/s);
 });
 
 test('Sunday 6h migration compiles before the new column exists', () => {

@@ -93,9 +93,12 @@ test('Oracle writes use non-reserved bind names for generation and day edits', a
   await service.generate({ ...scope, escfuncIds: [10] });
   await service.editDay({ ...scope, date: '2026-11-30', hours: service.DEFAULT_HOURS });
   await service.invertEmployee({ ...scope, anchor: '2026-12-01' });
+  await service.invertEmployee({ ...scope, anchor: '2026-11-30', date: '2026-11-30', hours: service.DEFAULT_HOURS });
+  await service.reset({ ...scope, escfuncIds: [10] });
   assert.equal(statements.some((sql) => /:date\b/i.test(sql)), false);
-  assert.equal(statements.filter((sql) => /:diaIso\b/.test(sql)).length, 2);
+  assert.equal(statements.filter((sql) => /:diaIso\b/.test(sql)).length, 3);
   const inversion = statements.find((sql) => /update sgn_esc_sim_12x36[\s\S]*dt_ancora/i.test(sql));
   assert.match(inversion, /programacao = case when mod\(/i);
   assert.doesNotMatch(inversion, /hr_ent1|hr_sai1|hr_ent2|hr_sai2/i);
+  assert.ok(statements.some((sql) => /delete from sgn_esc_sim_12x36[\s\S]*escsecao_id = :escsecaoId/i.test(sql)));
 });

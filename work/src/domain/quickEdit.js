@@ -36,9 +36,9 @@ function validateQuickRestWorkEdit(funcionario, diasAnteriores = [], { allowShif
   }
   const sunday = new Date(`${alteracoes[0].data}T12:00:00`).getDay() === 0;
   const errors = validateStandardShift({ HR_ENT1: novo.hrEnt1, HR_SAI1: novo.hrSai1,
-    HR_ENT2: novo.hrEnt2, HR_SAI2: novo.hrSai2 }, { workMinutes: domingo6h && sunday ? 360 : 528,
-    exactInterval: domingo6h && sunday, allowProfiles: !(domingo6h && sunday),
-    allowPostProfiles: Number(lojaId) >= 700 && Number(lojaId) <= 799 });
+    HR_ENT2: novo.hrEnt2, HR_SAI2: novo.hrSai2 }, { workMinutes: Number(novo.jornadaMinutos) || (domingo6h && sunday ? 360 : 528),
+    intervalMinutes: Number(novo.intervaloMinutos) || 70,
+    exactInterval: Boolean(novo.intervaloMinutos) || (domingo6h && sunday), allowProfiles: false });
   return errors[0] || '';
 }
 

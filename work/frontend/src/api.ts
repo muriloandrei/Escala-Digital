@@ -93,6 +93,8 @@ export type Secao = {
 
 export type DiaEscala = Funcionario & {
   DT: string;
+  JORNADA_MINUTOS?: number | null;
+  INTERVALO_MINUTOS?: number | null;
   REVISAO?: number;
   ESCPROGDIA_ID?: number;
   PROGRAMACAO?: string | null;
@@ -113,6 +115,8 @@ export type FixoEscala = {
   ESCSECAO_ID: number;
   DT: string;
   PROGRAMACAO: string;
+  JORNADA_MINUTOS?: number | null;
+  INTERVALO_MINUTOS?: number | null;
   HR_ENT1?: string | null;
   HR_SAI1?: string | null;
   HR_ENT2?: string | null;

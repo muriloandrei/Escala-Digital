@@ -136,12 +136,21 @@ function validarTurnoDia(funcionarioLabel, dia, { domingo6h = false, lojaId = nu
   }
   const domingoObrigatorio = domingo6h && isSunday(data);
   const posto = Number(lojaId) >= 700 && Number(lojaId) <= 799;
-  const jornadasPermitidas = domingoObrigatorio ? [360] : posto ? [528, 504, 360, 300] : [528, 360, 300];
-  if (!jornadasPermitidas.includes(jornada)) {
-    errors.push(`${funcionarioLabel}: jornada total deve ser ${jornadasPermitidas.map(minutesToTime).join(', ')} em ${data}. Atual: ${minutesToTime(jornada)}.`);
+  const jornadaSelecionada = Number(dia.jornadaMinutos ?? dia.JORNADA_MINUTOS) || (domingoObrigatorio ? 360 : 528);
+  const intervaloSelecionado = Number(dia.intervaloMinutos ?? dia.INTERVALO_MINUTOS) || 70;
+  const perfisPermitidos = new Set(posto
+    ? ['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
+    : ['528:70', '360:70', '300:15']);
+  if (!perfisPermitidos.has(`${jornadaSelecionada}:${intervaloSelecionado}`)
+    || (domingoObrigatorio && jornadaSelecionada !== 360)) {
+    errors.push(`${funcionarioLabel}: jornada selecionada invalida em ${data}.`);
   }
-  const intervaloEsperado = jornada === 300 && !domingoObrigatorio ? 15 : 70;
-  const intervaloExato = jornada === 300 || jornada === 360 || domingoObrigatorio;
+  if (jornada !== jornadaSelecionada) {
+    errors.push(`${funcionarioLabel}: jornada total deve ser ${minutesToTime(jornadaSelecionada)} em ${data}. Atual: ${minutesToTime(jornada)}.`);
+  }
+  const intervaloEsperado = intervaloSelecionado;
+  const intervaloExato = Boolean(dia.jornadaMinutos ?? dia.JORNADA_MINUTOS)
+    || intervaloSelecionado !== 70 || jornadaSelecionada === 300 || jornadaSelecionada === 360 || domingoObrigatorio;
   if (intervalo < intervaloEsperado || (intervaloExato && intervalo !== intervaloEsperado)) {
     errors.push(`${funcionarioLabel}: intervalo deve ser ${intervaloExato ? 'exatamente' : 'no minimo'} ${minutesToTime(intervaloEsperado)} em ${data}. Atual: ${minutesToTime(intervalo)}.`);
   }

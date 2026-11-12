@@ -58,6 +58,8 @@ function normalizeDiaComparavel(dia) {
     hrSai1: descanso ? null : (dia?.hrSai1 ?? dia?.HR_SAI1 ?? null),
     hrEnt2: descanso ? null : (dia?.hrEnt2 ?? dia?.HR_ENT2 ?? null),
     hrSai2: descanso ? null : (dia?.hrSai2 ?? dia?.HR_SAI2 ?? null),
+    jornadaMinutos: descanso ? null : (dia?.jornadaMinutos ?? dia?.JORNADA_MINUTOS ?? null),
+    intervaloMinutos: descanso ? null : (dia?.intervaloMinutos ?? dia?.INTERVALO_MINUTOS ?? null),
     programacao
   };
 }
@@ -69,6 +71,8 @@ function diasSaoIguais(a, b) {
     && left.hrSai1 === right.hrSai1
     && left.hrEnt2 === right.hrEnt2
     && left.hrSai2 === right.hrSai2
+    && Number(left.jornadaMinutos || 0) === Number(right.jornadaMinutos || 0)
+    && Number(left.intervaloMinutos || 0) === Number(right.intervaloMinutos || 0)
     && left.programacao === right.programacao;
 }
 
@@ -453,6 +457,8 @@ function normalizeDiaBind(escprogId, dia) {
     hrSai1: normalizeHorario(dia.hrSai1, fallback),
     hrEnt2: normalizeHorario(dia.hrEnt2, fallback),
     hrSai2: normalizeHorario(dia.hrSai2, fallback),
+    jornadaMinutos: dia.jornadaMinutos == null ? null : Number(dia.jornadaMinutos),
+    intervaloMinutos: dia.intervaloMinutos == null ? null : Number(dia.intervaloMinutos),
     programacao
   };
 }
@@ -672,6 +678,8 @@ function buildFixoSnapshots(rows = []) {
       hrSai1: pick(row, 'HR_SAI1', 'hr_sai1'),
       hrEnt2: pick(row, 'HR_ENT2', 'hr_ent2'),
       hrSai2: pick(row, 'HR_SAI2', 'hr_sai2'),
+      jornadaMinutos: pick(row, 'JORNADA_MINUTOS', 'jornada_minutos') || null,
+      intervaloMinutos: pick(row, 'INTERVALO_MINUTOS', 'intervalo_minutos') || null,
       justificativa: pick(row, 'JUSTIFICATIVA', 'justificativa') || null
     });
   }
@@ -1202,7 +1210,8 @@ async function listFixosEscalaComConnection(connection, { lojaId, mesRef, escsec
     }
     const result = await connection.execute(
       `select escfixo_id, loja, mes_ref, escfunc_id, escsecao_id, dt, programacao,
-              hr_ent1, hr_sai1, hr_ent2, hr_sai2, justificativa, status, dt_hr_incl
+              hr_ent1, hr_sai1, hr_ent2, hr_sai2, jornada_minutos, intervalo_minutos,
+              justificativa, status, dt_hr_incl
          from sgn_esc_fixo_escala
         where ${filters.join(' and ')}
         order by escsecao_id, escfunc_id, dt`,
@@ -1291,7 +1300,9 @@ function diasComFixoAtualizado(diasAtuais, data, fixo) {
     hrEnt1: fixo.hrEnt1,
     hrSai1: fixo.hrSai1,
     hrEnt2: fixo.hrEnt2,
-    hrSai2: fixo.hrSai2
+    hrSai2: fixo.hrSai2,
+    jornadaMinutos: fixo.jornadaMinutos,
+    intervaloMinutos: fixo.intervaloMinutos
   });
   if (diasSaoIguais(anterior, dia)) return null;
   return dias.sort((left, right) => left.data.localeCompare(right.data));
@@ -1347,11 +1358,13 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
         hrSai1: descanso ? programacao : data.HR_SAI1,
         hrEnt2: descanso ? programacao : data.HR_ENT2,
         hrSai2: descanso ? programacao : data.HR_SAI2,
+        jornadaMinutos: descanso ? null : data.jornadaMinutos ?? null,
+        intervaloMinutos: descanso ? null : data.intervaloMinutos ?? null,
         justificativa: data.JUSTIFICATIVA || data.justificativa || null
       };
 
       const anterior = await connection.execute(
-        `select programacao, hr_ent1, hr_sai1, hr_ent2, hr_sai2, justificativa, status
+        `select programacao, hr_ent1, hr_sai1, hr_ent2, hr_sai2, jornada_minutos, intervalo_minutos, justificativa, status
            from sgn_esc_fixo_escala
           where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
             and escfunc_id = :escfuncId and dt = to_date(:dt, 'YYYY-MM-DD')
@@ -1377,15 +1390,17 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
            t.hr_sai1 = :hrSai1,
            t.hr_ent2 = :hrEnt2,
            t.hr_sai2 = :hrSai2,
+           t.jornada_minutos = :jornadaMinutos,
+           t.intervalo_minutos = :intervaloMinutos,
            t.justificativa = :justificativa,
            t.status = 'A',
            t.dt_hr_incl = sysdate
          when not matched then insert (
            escfixo_id, loja, mes_ref, escfunc_id, escsecao_id, dt, programacao,
-           hr_ent1, hr_sai1, hr_ent2, hr_sai2, justificativa, status, dt_hr_incl
+           hr_ent1, hr_sai1, hr_ent2, hr_sai2, jornada_minutos, intervalo_minutos, justificativa, status, dt_hr_incl
          ) values (
            sgn_esc_fixo_escala_seq.nextval, :lojaId, to_date(:mesRef, 'YYYY-MM-DD'), :escfuncId, :escsecaoId,
-           to_date(:dt, 'YYYY-MM-DD'), :programacao, :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :justificativa, 'A', sysdate
+           to_date(:dt, 'YYYY-MM-DD'), :programacao, :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :jornadaMinutos, :intervaloMinutos, :justificativa, 'A', sysdate
          )`,
         binds,
         { autoCommit: false }
@@ -1550,7 +1565,7 @@ async function listDiasSecaoAtual({ lojaId, mesRef, escsecaoId }) {
           d.hr_sai1,
           d.hr_ent2,
           d.hr_sai2,
-          d.programacao
+          d.programacao, d.jornada_minutos, d.intervalo_minutos
        from sgn_esc_prog p
        left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
        where p.loja = :lojaId
@@ -1631,7 +1646,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           d.hr_sai1,
           d.hr_ent2,
           d.hr_sai2,
-          d.programacao,
+          d.programacao, d.jornada_minutos, d.intervalo_minutos,
           case
             when ${MES_FINALIZADO_SQL} then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
@@ -1889,7 +1904,7 @@ async function getEscalaHeader(escprogId) {
 async function getEscalaDias(escprogId) {
   return withConnection(async (connection) => {
     const result = await connection.execute(
-      `select escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+      `select escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
        from sgn_esc_prog_dia
        where escprog_id = :escprogId
        order by dt`,
@@ -1923,7 +1938,7 @@ async function getEscalaFuncionarioAtual({ lojaId, mesRef, escfuncId }) {
           d.hr_sai1,
           d.hr_ent2,
           d.hr_sai2,
-          d.programacao
+          d.programacao, d.jornada_minutos, d.intervalo_minutos
        from sgn_esc_prog p
        left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
        where p.loja = :lojaId
@@ -1967,7 +1982,7 @@ async function getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesR
         d.hr_sai1,
         d.hr_ent2,
         d.hr_sai2,
-        d.programacao
+        d.programacao, d.jornada_minutos, d.intervalo_minutos
      from sgn_esc_prog p
      left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
      where p.loja = :lojaId
@@ -2032,7 +2047,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       }
 
       const targetDayResult = await connection.execute(
-        `select dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+        `select dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
          from sgn_esc_prog_dia
          where escprogdia_id = :escprogdiaId
            and escprog_id = :escprogId`,
@@ -2075,7 +2090,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       const newTargetEscprogId = headerInsert.outBinds.escprogId[0];
       await connection.execute(
         `insert into sgn_esc_prog_dia (
-            escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+            escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
          )
          select sgn_esc_prog_dia_seq.nextval,
                 :newTargetEscprogId,
@@ -2084,7 +2099,8 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
                 case when escprogdia_id = :escprogdiaId then :hrSai1 else hr_sai1 end,
                 case when escprogdia_id = :escprogdiaId then :hrEnt2 else hr_ent2 end,
                 case when escprogdia_id = :escprogdiaId then :hrSai2 else hr_sai2 end,
-                case when escprogdia_id = :escprogdiaId then :programacao else programacao end
+                case when escprogdia_id = :escprogdiaId then :programacao else programacao end,
+                jornada_minutos, intervalo_minutos
          from sgn_esc_prog_dia
          where escprog_id = :escprogId`,
         {
@@ -2116,7 +2132,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       await connection.commit();
 
       const updated = await connection.execute(
-        `select escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+        `select escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
          from sgn_esc_prog_dia
          where escprog_id = :newTargetEscprogId
            and dt = :targetDate`,
@@ -2214,9 +2230,9 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
   if (binds.length > 0) {
     await connection.executeMany(
       `insert into sgn_esc_prog_dia (
-          escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+          escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
        ) values (
-          sgn_esc_prog_dia_seq.nextval, :escprogId, to_date(:dt, 'YYYY-MM-DD'), :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :programacao
+          sgn_esc_prog_dia_seq.nextval, :escprogId, to_date(:dt, 'YYYY-MM-DD'), :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :programacao, :jornadaMinutos, :intervaloMinutos
        )`,
       binds,
       { autoCommit: false }
@@ -2461,9 +2477,9 @@ async function copyPreviousRevision(connection, { lojaId, mesRef, latestRevision
     const newEscprogId = header.outBinds.escprogId[0];
     await connection.execute(
       `insert into sgn_esc_prog_dia (
-          escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+          escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
        )
-       select sgn_esc_prog_dia_seq.nextval, :newEscprogId, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+       select sgn_esc_prog_dia_seq.nextval, :newEscprogId, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
        from sgn_esc_prog_dia
        where escprog_id = :oldEscprogId`,
       { newEscprogId, oldEscprogId },
@@ -2526,9 +2542,9 @@ async function upsertEscalasNaRevisaoAtual(connection, { lojaId, mesRef, funcion
       if (binds.length > 0) {
         await connection.executeMany(
           `insert into sgn_esc_prog_dia (
-              escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+              escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
            ) values (
-              sgn_esc_prog_dia_seq.nextval, :escprogId, to_date(:dt, 'YYYY-MM-DD'), :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :programacao
+              sgn_esc_prog_dia_seq.nextval, :escprogId, to_date(:dt, 'YYYY-MM-DD'), :hrEnt1, :hrSai1, :hrEnt2, :hrSai2, :programacao, :jornadaMinutos, :intervaloMinutos
            )`,
           binds,
           { autoCommit: false }
@@ -2872,11 +2888,15 @@ function aplicarHorarioBaseNosDias(diasAtuais, horario, hojeIso, datasFixas = ne
     const data = formatDateValue(pick(dia, 'DT', 'dt'));
     const programacao = String(pick(dia, 'PROGRAMACAO', 'programacao') || 'TRB').trim().toUpperCase();
     const editavel = data >= hojeIso && !datasFixas.has(data) && !datasManuais.has(data) && !isDescansoProgramacao(programacao);
-    const alterado = editavel && campos.some(([campo]) => pick(dia, campo, campo.toLowerCase()) !== horario[campo]);
+    const alterado = editavel && (campos.some(([campo]) => pick(dia, campo, campo.toLowerCase()) !== horario[campo])
+      || Number(pick(dia, 'JORNADA_MINUTOS', 'jornada_minutos') || 0) !== Number(horario.jornadaMinutos || 0)
+      || Number(pick(dia, 'INTERVALO_MINUTOS', 'intervalo_minutos') || 0) !== Number(horario.intervaloMinutos || 0));
     if (alterado) diasAlterados += 1;
     return {
       data,
       programacao,
+      jornadaMinutos: alterado ? horario.jornadaMinutos : pick(dia, 'JORNADA_MINUTOS', 'jornada_minutos'),
+      intervaloMinutos: alterado ? horario.intervaloMinutos : pick(dia, 'INTERVALO_MINUTOS', 'intervalo_minutos'),
       ...Object.fromEntries(campos.map(([campo, destino]) => [
         destino, alterado ? horario[campo] : pick(dia, campo, campo.toLowerCase())
       ])),
@@ -3027,7 +3047,8 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
            hr_ent1 = :HR_ENT1, hr_sai1 = :HR_SAI1,
            hr_ent2 = :HR_ENT2, hr_sai2 = :HR_SAI2
          where escfunc_id = :escfuncId and loja = :lojaId`,
-        { ...horario, escfuncId, lojaId },
+        { HR_ENT1: horario.HR_ENT1, HR_SAI1: horario.HR_SAI1,
+          HR_ENT2: horario.HR_ENT2, HR_SAI2: horario.HR_SAI2, escfuncId, lojaId },
         { autoCommit: false }
       );
       const mesRefEvento = mesRef || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
@@ -3123,8 +3144,8 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
           revisao: nextRevision
         });
         await connection.execute(
-          `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao)
-           select sgn_esc_prog_dia_seq.nextval, :newEscprogId, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+          `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos)
+           select sgn_esc_prog_dia_seq.nextval, :newEscprogId, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
            from sgn_esc_prog_dia
            where escprog_id = :oldEscprogId`,
           { newEscprogId: inserted.escprogId, oldEscprogId: pick(row, 'ESCPROG_ID', 'escprog_id') },
@@ -3350,7 +3371,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
         [`prog${index}`, Number(pick(row, 'ESCPROG_ID', 'escprog_id'))]));
       const diasEscopo = await connection.execute(
         `select p.escfunc_id, p.chapa, f.nome, f.dt_demiss, fn.descr as funcao_descr,
-                d.dt, d.hr_ent1, d.hr_sai1, d.hr_ent2, d.hr_sai2, d.programacao
+                d.dt, d.hr_ent1, d.hr_sai1, d.hr_ent2, d.hr_sai2, d.programacao, d.jornada_minutos, d.intervalo_minutos
            from sgn_esc_prog p
            left join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
            left join sgn_esc_funcao fn on fn.escfuncao_id = p.escfuncao_id

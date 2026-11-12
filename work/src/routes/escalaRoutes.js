@@ -56,6 +56,8 @@ const saveSchema = z.object({
     escsecaoTurnoId: z.coerce.number().int().positive().nullable().optional(),
     dias: z.array(z.object({
       data: z.string().min(10).max(10),
+      jornadaMinutos: z.number().int().positive().nullable().optional(),
+      intervaloMinutos: z.number().int().positive().nullable().optional(),
       hrEnt1: z.string().max(5).nullable().optional(),
       hrSai1: z.string().max(5).nullable().optional(),
       hrEnt2: z.string().max(5).nullable().optional(),
@@ -85,11 +87,24 @@ const horarioFuncionarioSchema = z.object({
   mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   escfuncId: z.number().int().positive(),
   aplicarNaEscala: z.boolean().optional().default(true),
+  jornadaMinutos: z.number().int().positive().nullable().optional(),
+  intervaloMinutos: z.number().int().positive().nullable().optional(),
   HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
   HR_SAI1: z.string().regex(/^\d{2}:\d{2}$/),
   HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
   HR_SAI2: z.string().regex(/^\d{2}:\d{2}$/).nullable()
 }).strict();
+function validarHorarioBaseSelecionado(payload, funcionario, { domingo6h = false } = {}) {
+  if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) return validateApprenticeShift(payload);
+  const workMinutes = Number(payload.jornadaMinutos) || (domingo6h ? 360 : 528);
+  const intervalMinutes = Number(payload.intervaloMinutos) || 70;
+  const permitidos = domingo6h ? ['360:70'] : workRegimeService.isPostStore(payload.lojaId)
+    ? ['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
+    : ['528:70', '360:70', '300:15'];
+  if (!permitidos.includes(`${workMinutes}:${intervalMinutes}`)) return ['Jornada cadastrada invalida para esta loja.'];
+  return validateStandardShift(payload, { workMinutes, intervalMinutes,
+    exactInterval: domingo6h || Boolean(payload.jornadaMinutos), allowProfiles: false });
+}
 const fixoEscalaSchema = z.object({
   lojaId: z.number().int().positive(),
   mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -97,6 +112,8 @@ const fixoEscalaSchema = z.object({
   escsecaoId: z.number().int().positive(),
   DT: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   PROGRAMACAO: z.string().max(3).optional().default('TRB'),
+  jornadaMinutos: z.number().int().positive().nullable().optional(),
+  intervaloMinutos: z.number().int().positive().nullable().optional(),
   HR_ENT1: z.string().max(5).nullable().optional(),
   HR_SAI1: z.string().max(5).nullable().optional(),
   HR_ENT2: z.string().max(5).nullable().optional(),
@@ -145,6 +162,21 @@ router.post('/simulacao-12x36/gerar', requirePermission('escalas', 'editar'), re
     }
   });
 
+router.post('/simulacao-12x36/resetar', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess,
+  async (req, res, next) => {
+    try {
+      const payload = simulationScopeSchema.extend({ escfuncIds: z.array(z.number().int().positive()).min(1) }).parse(req.body);
+      await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
+      const resultado = await postSimulationService.reset(payload);
+      await auditService.registerAudit({ action: 'RESETAR_ESCALA_12X36', user: req.user,
+        lojaId: payload.lojaId, mesRef: payload.mesRef, details: { escsecaoId: payload.escsecaoId, ...resultado } });
+      return res.json({ resultado });
+    } catch (error) {
+      if (error.name === 'ZodError') return res.status(400).json({ error: 'Parametros de reset da escala 12x36 invalidos.' });
+      return next(error);
+    }
+  });
+
 router.put('/simulacao-12x36/funcionario', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess,
   async (req, res, next) => {
     try {
@@ -165,7 +197,9 @@ router.put('/simulacao-12x36/funcionario/alternancia', requirePermission('escala
   async (req, res, next) => {
     try {
       const payload = simulationScopeSchema.extend({ escfuncId: z.number().int().positive(),
-        anchor: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.body);
+        anchor: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        hours: simulationHoursSchema.optional() }).parse(req.body);
       await accessService.assertSecoesPermitidas(req.user, payload.lojaId, [payload.escsecaoId]);
       const resultado = await postSimulationService.invertEmployee({ ...payload, actor: req.user });
       await auditService.registerAudit({ action: 'INVERTER_ALTERNANCIA_12X36', user: req.user,
@@ -303,10 +337,8 @@ router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest
       if (is12x36 && !isDutyDay(funcionario.DT_ANCORA_12X36, payload.DT)) {
         return res.status(422).json({ error: 'Descanso 12x36 obrigatorio neste dia.' });
       }
-      const errors = is12x36 ? validate12x36Shift(payload) : aprendiz ? validateApprenticeShift(payload) : validateStandardShift(payload,
-        { workMinutes: domingo6h && sunday ? 360 : 528, exactInterval: domingo6h && sunday,
-          allowProfiles: !(domingo6h && sunday),
-          allowPostProfiles: workRegimeService.isPostStore(payload.lojaId) });
+      const errors = is12x36 ? validate12x36Shift(payload) : validarHorarioBaseSelecionado(payload, funcionario,
+        { domingo6h: !aprendiz && domingo6h && sunday });
       if (errors.length) return res.status(422).json({ error: 'Horario fixo invalido.', details: errors });
     }
     const fixo = await escalaService.saveFixoEscala({
@@ -932,6 +964,12 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
         lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: payload.funcionarios[0].escfuncId
       })];
       if (!anteriores[0]) return res.status(422).json({ error: 'A edicao rapida exige uma escala existente para um funcionario.' });
+      const diaEditado = payload.funcionarios[0].dias[0];
+      const diaAnterior = anteriores[0].dias.find((dia) => normalizeScheduleDay(dia).data === diaEditado.data);
+      if (diaAnterior) {
+        if (diaEditado.jornadaMinutos === undefined) diaEditado.jornadaMinutos = diaAnterior.JORNADA_MINUTOS ?? null;
+        if (diaEditado.intervaloMinutos === undefined) diaEditado.intervaloMinutos = diaAnterior.INTERVALO_MINUTOS ?? null;
+      }
       const quickError = validateQuickRestWorkEdit(payload.funcionarios[0], anteriores[0].dias,
         { allowShiftChange: payload.edicaoPontual === true, domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId),
           lojaId: payload.lojaId });
@@ -1074,9 +1112,7 @@ router.post('/funcionario/horario/preview', requirePermission('escalas', 'editar
     if (!isEditableMonth(payload.mesRef) && req.user?.perfil !== 'ADMIN') return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
     const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
     if (effectiveRegime(funcionario) === TWELVE_THIRTY_SIX) return res.status(422).json({ error: 'Altere o horario 12x36 na configuracao do regime do funcionario.' });
-    const errors = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))
-      ? validateApprenticeShift(payload) : validateStandardShift(payload, { allowProfiles: true,
-        allowPostProfiles: workRegimeService.isPostStore(payload.lojaId) });
+    const errors = validarHorarioBaseSelecionado(payload, funcionario);
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
     const impacto = await escalaService.previewHorarioFuncionarioEscala({
       lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: payload.escfuncId,
@@ -1099,16 +1135,16 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
     if (!isEditableMonth(payload.mesRef) && req.user?.perfil !== 'ADMIN') return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
     const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
     if (effectiveRegime(funcionario) === TWELVE_THIRTY_SIX) return res.status(422).json({ error: 'Altere o horario 12x36 na configuracao do regime do funcionario.' });
-    const errors = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))
-      ? validateApprenticeShift(payload) : validateStandardShift(payload, { allowProfiles: true,
-        allowPostProfiles: workRegimeService.isPostStore(payload.lojaId) });
+    const errors = validarHorarioBaseSelecionado(payload, funcionario);
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
 
     const horario = {
       HR_ENT1: payload.HR_ENT1,
       HR_SAI1: payload.HR_SAI1,
       HR_ENT2: payload.HR_ENT2,
-      HR_SAI2: payload.HR_SAI2
+      HR_SAI2: payload.HR_SAI2,
+      jornadaMinutos: payload.jornadaMinutos ?? null,
+      intervaloMinutos: payload.intervaloMinutos ?? null
     };
     const atualizacao = await escalaService.updateHorarioFuncionarioEscala({
       lojaId: payload.lojaId,

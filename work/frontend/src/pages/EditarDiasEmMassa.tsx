@@ -143,13 +143,19 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
       const changed = new Map<string, PayloadDay>();
       const swapWork = mode === 'TROCA' ? targetDays.find((day) => String(day?.PROGRAMACAO || '').toUpperCase() === 'TRB') : null;
       for (const day of targetDays) {
-        if (mode === 'HORARIO' ? sameHours(day, hours) : mode !== 'TROCA' && String(day!.PROGRAMACAO || '').toUpperCase() === mode) continue;
+        if (mode === 'HORARIO' ? sameHours(day, hours)
+          && Number(day?.JORNADA_MINUTOS || 528) === (sunday6hSelection ? 360 : profile.work)
+          && Number(day?.INTERVALO_MINUTOS || 70) === (sunday6hSelection ? 70 : profile.interval)
+          : mode !== 'TROCA' && String(day!.PROGRAMACAO || '').toUpperCase() === mode) continue;
         const date = onlyDate(day!.DT);
         const nextMode = mode === 'TROCA' ? String(day!.PROGRAMACAO || '').toUpperCase() === 'TRB' ? 'F' : 'TRB' : mode === 'HORARIO' ? 'TRB' : mode;
         const rest = nextMode === 'F' || nextMode === 'FDO';
         const workHours = mode === 'HORARIO' ? hours : quickShift(person, swapWork || undefined,
           domingo6hHabilitado && new Date(`${date}T12:00:00`).getDay() === 0);
         changed.set(date, { data: date, programacao: nextMode,
+          jornadaMinutos: rest ? null : mode === 'HORARIO' ? (sunday6hSelection ? 360 : profile.work)
+            : domingo6hHabilitado && new Date(`${date}T12:00:00`).getDay() === 0 ? 360 : 528,
+          intervaloMinutos: rest ? null : mode === 'HORARIO' ? (sunday6hSelection ? 70 : profile.interval) : 70,
           hrEnt1: rest ? null : workHours.HR_ENT1,
           hrSai1: rest ? null : workHours.HR_SAI1,
           hrEnt2: rest ? null : workHours.HR_ENT2 || null,
@@ -216,7 +222,7 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
         <button className={mode === 'HORARIO' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('HORARIO'); setSelectedDates([]); setIssues([]); }}>Horário</button>
         <button className={mode === 'TROCA' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('TROCA'); setSelectedDates([]); setIssues([]); }}>Trocar folga</button></div></div>
     {mode === 'HORARIO' && <div className="bulk-hours">
-      {!selectedApprentice && <ShiftProfileSelect sundayOnly={sunday6hSelection} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+      {!selectedApprentice && <ShiftProfileSelect value={profile} sundayOnly={sunday6hSelection} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
         const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
         if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });

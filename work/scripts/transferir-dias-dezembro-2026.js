@@ -123,20 +123,20 @@ async function applyEmployee(connection, { loja, escfuncId, by, current, preferD
   const novNew = await copyHeader(connection, oldNov.id, novRevision);
   const decNew = await copyHeader(connection, oldDec.id, decRevision);
   await connection.execute(
-    `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao)
-     select sgn_esc_prog_dia_seq.nextval, :newId, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+    `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos)
+     select sgn_esc_prog_dia_seq.nextval, :newId, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
        from sgn_esc_prog_dia where escprog_id = :oldId and dt < date '2026-11-30'`,
     { newId: novNew, oldId: oldNov.id }, { autoCommit: false }
   );
   await connection.execute(
-    `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao)
-     select sgn_esc_prog_dia_seq.nextval, :newId, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao
+    `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos)
+     select sgn_esc_prog_dia_seq.nextval, :newId, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos
        from sgn_esc_prog_dia where escprog_id = :oldId`,
     { newId: decNew, oldId: oldDec.id }, { autoCommit: false }
   );
   await connection.execute(
-    `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao)
-     select sgn_esc_prog_dia_seq.nextval, :newId, d.dt, d.hr_ent1, d.hr_sai1, d.hr_ent2, d.hr_sai2, d.programacao
+    `insert into sgn_esc_prog_dia (escprogdia_id, escprog_id, dt, hr_ent1, hr_sai1, hr_ent2, hr_sai2, programacao, jornada_minutos, intervalo_minutos)
+     select sgn_esc_prog_dia_seq.nextval, :newId, d.dt, d.hr_ent1, d.hr_sai1, d.hr_ent2, d.hr_sai2, d.programacao, d.jornada_minutos, d.intervalo_minutos
        from sgn_esc_prog_dia d
       where d.escprog_id = :oldNov and d.dt between date '2026-11-30' and date '2026-12-06'
         and not exists (select 1 from sgn_esc_prog_dia x where x.escprog_id = :newId and x.dt = d.dt)`,

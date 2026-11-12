@@ -86,10 +86,21 @@ test('12x36 follows its anchor without applying 5x2 weekly rest rules', () => {
 
 test('08h24 post shift is rejected outside post stores', () => {
   const day = trabalho('2026-09-01', { hrEnt1: '07:00', hrSai1: '11:30',
-    hrEnt2: '13:10', hrSai2: '17:04' });
+    hrEnt2: '13:10', hrSai2: '17:04', jornadaMinutos: 504, intervaloMinutos: 100 });
   const employee = { escfuncId: 10, nome: 'Posto', dias: [day] };
   assert.deepEqual(validarCriticasEscopo({ lojaId: 700, mesRef: '2026-09-01', funcionarios: [employee] }), []);
-  assert.match(validarCriticasEscopo({ lojaId: 35, mesRef: '2026-09-01', funcionarios: [employee] }).join(' '), /jornada total/);
+  assert.match(validarCriticasEscopo({ lojaId: 35, mesRef: '2026-09-01', funcionarios: [employee] }).join(' '), /jornada selecionada invalida/);
+  const unchanged = { ...day, jornadaMinutos: null, intervaloMinutos: null };
+  assert.match(validarCriticasEscopo({ lojaId: 700, mesRef: '2026-09-01',
+    funcionarios: [{ ...employee, dias: [unchanged] }] }).join(' '), /jornada total deve ser 08:48/);
+});
+
+test('selected 08h48 with 01h40 interval is valid only for posts', () => {
+  const day = trabalho('2026-09-01', { hrEnt1: '08:00', hrSai1: '12:00',
+    hrEnt2: '13:40', hrSai2: '18:28', jornadaMinutos: 528, intervaloMinutos: 100 });
+  const employee = { escfuncId: 10, nome: 'Posto', dias: [day] };
+  assert.deepEqual(validarCriticasEscopo({ lojaId: 701, mesRef: '2026-09-01', funcionarios: [employee] }), []);
+  assert.match(validarCriticasEscopo({ lojaId: 35, mesRef: '2026-09-01', funcionarios: [employee] }).join(' '), /jornada selecionada invalida/);
 });
 
 test('FDO pode coexistir com duas folgas semanais sem contar como terceira folga', () => {
@@ -116,7 +127,7 @@ test('FDO nao substitui uma das duas folgas semanais', () => {
 test('regra parametrizada exige seis horas e intervalo de 1h10 no domingo', () => {
   const domingo = trabalho('2026-09-13', { hrEnt1: '08:00', hrSai1: '11:00', hrEnt2: '12:10', hrSai2: '15:10' });
   assert.equal(validateEscalaPayload(buildPayload([domingo]), { domingo6h: true }).some((item) => item.includes('jornada total')), false);
-  assert.equal(validateEscalaPayload(buildPayload([domingo]), { domingo6h: false }).some((item) => item.includes('jornada total')), false);
+  assert.equal(validateEscalaPayload(buildPayload([domingo]), { domingo6h: false }).some((item) => item.includes('jornada total')), true);
   const intervaloLongo = { ...domingo, hrEnt2: '12:20', hrSai2: '15:20' };
   assert.equal(validateEscalaPayload(buildPayload([intervaloLongo]), { domingo6h: true }).some((item) => item.includes('intervalo')), true);
 });
@@ -370,7 +381,8 @@ test('backend rejects total journey different from 08:48', () => {
 });
 
 test('backend accepts 5h with 15m interval and rejects a wrong interval', () => {
-  const five = trabalho('2026-09-01', { hrEnt1: '08:00', hrSai1: '10:30', hrEnt2: '10:45', hrSai2: '13:15' });
+  const five = trabalho('2026-09-01', { hrEnt1: '08:00', hrSai1: '10:30', hrEnt2: '10:45', hrSai2: '13:15',
+    jornadaMinutos: 300, intervaloMinutos: 15 });
   assert.equal(validateEscalaPayload(buildPayload([five])).some((error) => error.includes('jornada total') || error.includes('intervalo')), false);
   const invalid = { ...five, hrEnt2: '11:40', hrSai2: '14:10' };
   assert.equal(validateEscalaPayload(buildPayload([invalid])).some((error) => error.includes('intervalo')), true);

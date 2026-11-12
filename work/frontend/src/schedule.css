@@ -13,6 +13,40 @@
   width: max-content;
   margin: 17px 0;
 }
+.shift-profiles {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 7px;
+}
+.shift-profiles-label {
+  color: #334861;
+  font-size: 12px;
+  font-weight: 650;
+}
+.shift-profile-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.shift-profile-options button {
+  min-height: 32px;
+  border: 1px solid #8d9fb5;
+  border-radius: 18px;
+  padding: 4px 12px;
+  background: #fff;
+  color: #17283e;
+  font-size: 12px;
+  cursor: pointer;
+}
+.shift-profile-options button.selected {
+  border-color: #123579;
+  background: #123579;
+  color: #fff;
+}
+.shift-profile-options button:focus-visible {
+  outline: 2px solid #2470d3;
+  outline-offset: 2px;
+}
 .day-editor-times {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
