@@ -765,6 +765,40 @@ router.post('/rm/reprocessar', requirePermission('integracao-rm', 'reprocessar')
   }
 });
 
+router.get('/rm/reenvio-candidatos', requireAdmin, resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({
+      lojaId: z.coerce.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/)
+    }).parse(req.query);
+    const candidatos = await rmIntegrationService.listarCandidatosReenvioRm(payload);
+    return res.json({ candidatos, periodo: getOperationalPeriodIso(payload.mesRef) });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Informe loja e competencia validas.' });
+    return next(error);
+  }
+});
+
+router.post('/rm/reenviar-revisao', requireAdmin, resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({
+      lojaId: z.number().int().positive(),
+      mesRef: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/),
+      escfuncId: z.number().int().positive(),
+      revisaoEsperada: z.number().int().min(0)
+    }).strict().parse(req.body);
+    const resultado = await rmIntegrationService.reenviarRevisaoAtualRm(payload);
+    await auditService.registerAudit({ action: 'REENVIAR_REVISAO_RM', user: req.user,
+      lojaId: payload.lojaId, mesRef: payload.mesRef, revisao: payload.revisaoEsperada,
+      details: { escfuncId: payload.escfuncId, chapa: resultado.chapa, status: resultado.status,
+        oficializada: resultado.oficializada, erros: resultado.erros?.join('; ') || null } });
+    return res.json({ ok: resultado.status === 'ENVIADO', resultado });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Dados de reenvio invalidos.' });
+    return next(error);
+  }
+});
+
 router.get('/rm/envios', requirePermission('integracao-rm', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;

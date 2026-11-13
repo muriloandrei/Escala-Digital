@@ -25,6 +25,7 @@
     "rm:processar-pendentes": "node scripts/processar-pendencias-rm.js",
     "rm:reprocessar-erros": "node scripts/reprocessar-envios-rm-com-erro.js",
     "rm:reprocessar-ids": "node scripts/reprocessar-envios-rm-por-id.js",
+    "rm:reenviar-revisoes": "node scripts/reenviar-revisoes-rm.js",
     "rm:reprocessar-duplicadas": "node scripts/reprocessar-folgas-duplicadas-rm.js",
     "turnos:padrao": "node scripts/recriar-turnos-padrao-secao.js",
     "seed:dashboard": "node scripts/seed-dashboard-test-data.js",

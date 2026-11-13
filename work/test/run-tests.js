@@ -38,6 +38,7 @@ require('./rm-outbox.test');
 require('./rm-reprocess-cli.test');
 require('./rm-reprocess-ids-cli.test');
 require('./rm-reprocess-duplicadas-cli.test');
+require('./rm-reenvio-revisoes.test');
 require('./horario-funcionario.test');
 require('./draft-confirmation.test');
 require('./retroactive-admin.test');

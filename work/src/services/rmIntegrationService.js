@@ -519,7 +519,7 @@ async function postFolgas(payload) {
   return { body: await enviarDetalhes(), cabecalhoCriado: true };
 }
 
-async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId = null, escfuncIds = null, apenasOficializada = false, apenasNaoOficializada = false }) {
+async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId = null, escfuncIds = null, apenasOficializada = false, apenasNaoOficializada = false, exigirRevisaoAtual = false }) {
   const { inicio, fim } = getOperationalPeriodIso(formatDate(mesRef));
   const funcionarioColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
   const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
@@ -537,6 +537,8 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId
   }).join(', ')})` : '';
   const filtroOficializada = apenasOficializada ? 'and nvl(p.oficializada, 0) = 1'
     : apenasNaoOficializada ? 'and nvl(p.oficializada, 0) = 0' : '';
+  const filtroRevisao = exigirRevisaoAtual ? 'and p.revisao = :revisao' : '';
+  const limiteRevisao = exigirRevisaoAtual ? '' : 'and px.revisao <= :revisao';
   const result = await connection.execute(
     `select p.loja, p.mes_ref, p.revisao, p.escfunc_id, p.chapa, f.nome, f.codcoligada, ${cpfSelect},
             d.dt, d.programacao,
@@ -551,6 +553,7 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId
        ${filtroSecao}
        ${filtroIds}
        ${filtroOficializada}
+       ${filtroRevisao}
        and exists (select 1 from sgn_esc_prog_dia ativo_d where ativo_d.escprog_id = p.escprog_id
          and ativo_d.dt >= to_date(:inicio, 'YYYY-MM-DD') and ativo_d.dt < to_date(:fim, 'YYYY-MM-DD') + 1)
        and p.revisao = (
@@ -559,7 +562,7 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId
          where px.loja = p.loja
            and px.mes_ref = p.mes_ref
            and px.escfunc_id = p.escfunc_id
-           and px.revisao <= :revisao
+           ${limiteRevisao}
            ${ativaSubSql}
        )
        ${ativaSql}
@@ -658,10 +661,11 @@ async function validarPreRequisitosRm({ lojaId, mesRef, revisao, escsecaoId, esc
   });
 }
 
-async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds, exigirEscala = false, somenteVerificar = false }) {
+async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds, exigirEscala = false, somenteVerificar = false, incluirNaoOficializada = false, exigirRevisaoAtual = false }) {
   const rmConfig = getEnv().rm;
   return withConnection(async (connection) => {
-    const rows = await getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId, escfuncIds, apenasOficializada: true });
+    const rows = await getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId, escfuncIds,
+      apenasOficializada: !incluirNaoOficializada, exigirRevisaoAtual });
     if (exigirEscala && !rows.length) {
       throw new Error('Programacao oficializada nao encontrada para a pendencia RM. Verifique a revisao antes de reprocessar.');
     }
@@ -772,6 +776,86 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
     await connection.commit();
     return { enabled: true, enviados, falhas, erros };
   });
+}
+
+function avaliarCandidatoReenvioRm(candidato) {
+  if (Number(candidato.CABECALHOS) !== 1) return 'Revisao ativa ambigua.';
+  if (Number(candidato.DIAS) < 1) return 'Ultima revisao sem dias no periodo.';
+  if (Number(candidato.DIAS_APOS_DEMISSAO) > 0) return 'Ha programacao apos a demissao.';
+  if (!Number(candidato.TEM_CPF)) return 'CPF nao cadastrado.';
+  return null;
+}
+
+async function listarCandidatosReenvioRm({ lojaId, mesRef, escfuncId = null }) {
+  const { inicio, fim } = getOperationalPeriodIso(mesRef);
+  return withConnection(async (connection) => {
+    const progColumns = await getTableColumns(connection, 'SGN_ESC_PROG');
+    const funcColumns = await getTableColumns(connection, 'SGN_ESC_FUNCIONARIO');
+    const ativaP = progColumns.has('ATIVA') ? 'and nvl(p.ativa, 1) = 1' : '';
+    const ativaPx = progColumns.has('ATIVA') ? 'and nvl(px.ativa, 1) = 1' : '';
+    const cpf = funcColumns.has('CPF') ? 'f.cpf' : funcColumns.has('CPF_FUNCIONARIO') ? 'f.cpf_funcionario' : 'null';
+    const filtroFuncionario = escfuncId ? 'and p.escfunc_id = :escfuncId' : '';
+    const result = await connection.execute(
+      `select p.escfunc_id, max(f.chapa) chapa, max(f.nome) nome,
+              max(p.escsecao_id) escsecao_id, max(p.revisao) revisao,
+              max(nvl(p.oficializada, 0)) oficializada,
+              count(distinct p.escprog_id) cabecalhos,
+              count(distinct d.escprogdia_id) dias,
+              sum(case when d.programacao in ('F', 'FOLGA', 'FXF', 'FOLGA_FIXA') then 1 else 0 end) folgas,
+              sum(case when f.dt_demiss is not null and trunc(d.dt) > trunc(f.dt_demiss) then 1 else 0 end) dias_apos_demissao,
+              max(case when ${cpf} is not null then 1 else 0 end) tem_cpf
+         from sgn_esc_prog p
+         join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
+         left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
+           and d.dt >= to_date(:inicio, 'YYYY-MM-DD') and d.dt < to_date(:fim, 'YYYY-MM-DD') + 1
+        where p.loja = :lojaId and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+          ${filtroFuncionario} ${ativaP}
+          and p.revisao = (select max(px.revisao) from sgn_esc_prog px
+             where px.loja = p.loja and px.mes_ref = p.mes_ref
+               and px.escfunc_id = p.escfunc_id ${ativaPx})
+        group by p.escfunc_id
+        order by max(f.chapa), p.escfunc_id`,
+      { lojaId: Number(lojaId), mesRef, inicio, fim, ...(escfuncId ? { escfuncId: Number(escfuncId) } : {}) },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return (result.rows || []).map((row) => ({ ...row, BLOQUEIO: avaliarCandidatoReenvioRm(row) }));
+  });
+}
+
+async function reenviarRevisaoAtualRm({ lojaId, mesRef, escfuncId, revisaoEsperada }) {
+  if (!getEnv().rm.enabled) throw new Error('Integracao RM desabilitada. Nenhum envio foi iniciado.');
+  const [candidato] = await listarCandidatosReenvioRm({ lojaId, mesRef, escfuncId });
+  if (!candidato || Number(candidato.REVISAO) !== Number(revisaoEsperada)) {
+    const error = new Error('Revisao ativa mudou desde a previa ou nao foi encontrada. Atualize a lista.');
+    error.statusCode = 409;
+    throw error;
+  }
+  if (candidato.BLOQUEIO) {
+    const error = new Error(candidato.BLOQUEIO);
+    error.statusCode = 422;
+    throw error;
+  }
+  const rm = await oficializarNoRm({ lojaId, mesRef, revisao: Number(revisaoEsperada),
+    escsecaoId: Number(candidato.ESCSECAO_ID), escfuncIds: [Number(escfuncId)],
+    exigirEscala: true, incluirNaoOficializada: true, exigirRevisaoAtual: true });
+  if (!rm.falhas && Number(candidato.OFICIALIZADA) === 1) {
+    await withConnection(async (connection) => {
+      await connection.execute(
+        `update sgn_esc_rm_envio
+            set status = 'ENVIADO', erro = null, dt_hr_alter = sysdate
+          where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
+            and escfunc_id = :escfuncId and escsecao_id = :escsecaoId and revisao = :revisao
+            and status in ('PENDENTE', 'INCERTO', 'FALHA')`,
+        { lojaId: Number(lojaId), mesRef, escfuncId: Number(escfuncId),
+          escsecaoId: Number(candidato.ESCSECAO_ID), revisao: Number(revisaoEsperada) },
+        { autoCommit: false }
+      );
+      await connection.commit();
+    });
+  }
+  return { ...rm, escfuncId: Number(escfuncId), revisao: Number(revisaoEsperada),
+    oficializada: Number(candidato.OFICIALIZADA) === 1, chapa: candidato.CHAPA,
+    status: rm.falhas ? 'FALHA' : 'ENVIADO' };
 }
 
 async function listEnviosRm({ lojaId, mesRef, lojasPermitidas = [] }) {
@@ -1182,6 +1266,8 @@ async function listRmLogs({ lojaId, mesRef, lojasPermitidas = [] }) {
 
 module.exports = {
   oficializarNoRm,
+  listarCandidatosReenvioRm,
+  reenviarRevisaoAtualRm,
   processarOperacaoRm,
   listPendenciasRm,
   processarPendenciasRm,
@@ -1196,6 +1282,7 @@ module.exports = {
   listRmLogs,
   validarPreRequisitosRm,
   _private: {
+    avaliarCandidatoReenvioRm,
     requestRm,
     postFolgas,
     getEscalaParaRm,
