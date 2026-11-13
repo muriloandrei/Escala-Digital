@@ -114,7 +114,7 @@ export function ReenvioRm({ user }: { user: User }) {
 
   return <main className="content directory-page rm-resend-page">
     <div className="page-heading"><div><h1>Reenvio de escalas ao RM</h1>
-      <p>Última revisão ativa de cada funcionário, independente da oficialização.</p></div>
+      <p>Última revisão ativa com dias no período, independente da oficialização.</p></div>
       <button className="button secondary" type="button" disabled={busy || loading} onClick={() => setReload((value) => value + 1)}><RefreshCw size={16} /> Atualizar</button>
     </div>
     {error && <div className="notice error" role="alert">{error}</div>}
@@ -135,7 +135,7 @@ export function ReenvioRm({ user }: { user: User }) {
         : !visible.length ? <div className="empty-state">Nenhuma escala encontrada para o filtro.</div>
           : <div className="table-scroll rm-resend-table"><table><thead><tr>
             <th><input type="checkbox" aria-label="Selecionar funcionários aptos visíveis" disabled={busy || !eligibleVisible.length} checked={allVisibleSelected} onChange={toggleVisible} /></th>
-            <th>Funcionário</th><th>Seção</th><th>Revisão</th><th>Escala</th><th>Dias</th><th>Folgas RM</th><th>Resultado</th>
+            <th>Funcionário</th><th>Seção</th><th>Revisão enviada</th><th>Escala</th><th>Dias</th><th>Folgas RM</th><th>Resultado</th>
           </tr></thead><tbody>{visible.map((item) => <tr key={item.ESCFUNC_ID}>
             <td><input type="checkbox" aria-label={`Selecionar ${item.NOME}`} checked={selected.has(item.ESCFUNC_ID)} disabled={busy || Boolean(item.BLOQUEIO)} onChange={() => toggleOne(item.ESCFUNC_ID)} /></td>
             <td><strong>{item.NOME}</strong><small>{item.CHAPA}</small></td>
@@ -150,7 +150,7 @@ export function ReenvioRm({ user }: { user: User }) {
     </section>
     {confirming && <div className="confirm-backdrop" role="presentation"><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="rm-resend-title">
       <h2 id="rm-resend-title">Reenviar {selection.length} escala(s) ao RM?</h2>
-      <p>Serão reconciliadas as folgas da última revisão ativa no período {period?.inicio} a {period?.fim}. {unofficialized} escala(s) ainda não oficializada(s) também serão enviadas. Nenhuma revisão ou oficialização será alterada.</p>
+      <p>Serão reconciliadas as folgas da última revisão ativa com dias no período {period?.inicio} a {period?.fim}. Revisões vazias mais recentes serão ignoradas. {unofficialized} escala(s) ainda não oficializada(s) também serão enviadas. Nenhuma revisão ou oficialização será alterada.</p>
       <div className="confirm-actions"><button className="button secondary" type="button" onClick={() => setConfirming(false)}>Cancelar</button>
         <button className="button primary" type="button" onClick={() => void sendSelected()}>Confirmar reenvio</button></div>
     </div></div>}

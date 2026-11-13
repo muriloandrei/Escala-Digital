@@ -59,8 +59,20 @@ test('preview da loja 306 consulta ultima revisao ativa e apenas 01 a 29 de nove
   assert.equal(query.binds.inicio, '2026-11-01');
   assert.equal(query.binds.fim, '2026-11-29');
   assert.match(query.sql, /max\(px\.revisao\)/i);
+  assert.match(query.sql, /p\.revisao = nvl\(/i);
+  assert.match(query.sql, /px_d\.escprog_id = px\.escprog_id/i);
   assert.match(query.sql, /nvl\(px\.ativa, 1\) = 1/i);
   assert.doesNotMatch(query.sql, /p\.oficializada\s*=\s*1/i);
+});
+
+test('revisao vazia mais recente nao impede o reenvio da ultima revisao com dias', async () => {
+  const anteriorComDias = { ...candidate, REVISAO: 49, OFICIALIZADA: 1, DIAS: 29, FOLGAS: 9 };
+  const { service, context } = loadService([anteriorComDias]);
+  vm.runInContext('oficializarNoRm = async (args) => { globalThis.sent = args; return { enabled: true, enviados: 9, falhas: 0 }; }', context);
+  const result = await service.reenviarRevisaoAtualRm({ lojaId: 306, mesRef: '2026-11-01', escfuncId: 90, revisaoEsperada: 49 });
+  assert.equal(result.status, 'ENVIADO');
+  assert.equal(context.sent.revisao, 49);
+  assert.equal(context.sent.exigirRevisaoAtual, true);
 });
 
 test('reenvio aceita revisao nao oficializada sem criar nova revisao', async () => {
@@ -126,6 +138,7 @@ test('consulta RM exige revisao corrente exata ao reenviar manualmente', async (
   const query = statements.find(({ sql }) => /select p\.loja, p\.mes_ref/i.test(sql));
   assert.match(query.sql, /p\.revisao = :revisao/i);
   assert.doesNotMatch(query.sql, /px\.revisao <= :revisao/i);
+  assert.match(query.sql, /px_d\.escprog_id = px\.escprog_id/i);
   assert.equal(query.binds.inicio, '2026-11-01');
   assert.equal(query.binds.fim, '2026-11-29');
 });

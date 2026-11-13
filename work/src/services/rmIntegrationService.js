@@ -539,6 +539,12 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId
     : apenasNaoOficializada ? 'and nvl(p.oficializada, 0) = 0' : '';
   const filtroRevisao = exigirRevisaoAtual ? 'and p.revisao = :revisao' : '';
   const limiteRevisao = exigirRevisaoAtual ? '' : 'and px.revisao <= :revisao';
+  const revisaoComDias = exigirRevisaoAtual ? `and exists (
+             select 1 from sgn_esc_prog_dia px_d
+              where px_d.escprog_id = px.escprog_id
+                and px_d.dt >= to_date(:inicio, 'YYYY-MM-DD')
+                and px_d.dt < to_date(:fim, 'YYYY-MM-DD') + 1
+           )` : '';
   const result = await connection.execute(
     `select p.loja, p.mes_ref, p.revisao, p.escfunc_id, p.chapa, f.nome, f.codcoligada, ${cpfSelect},
             d.dt, d.programacao,
@@ -564,6 +570,7 @@ async function getEscalaParaRm(connection, { lojaId, mesRef, revisao, escsecaoId
            and px.escfunc_id = p.escfunc_id
            ${limiteRevisao}
            ${ativaSubSql}
+           ${revisaoComDias}
        )
        ${ativaSql}
      order by p.chapa, d.dt`,
@@ -780,7 +787,7 @@ async function oficializarNoRm({ lojaId, mesRef, revisao, escsecaoId, escfuncIds
 
 function avaliarCandidatoReenvioRm(candidato) {
   if (Number(candidato.CABECALHOS) !== 1) return 'Revisao ativa ambigua.';
-  if (Number(candidato.DIAS) < 1) return 'Ultima revisao sem dias no periodo.';
+  if (Number(candidato.DIAS) < 1) return 'Nenhuma revisao ativa contem dias no periodo.';
   if (Number(candidato.DIAS_APOS_DEMISSAO) > 0) return 'Ha programacao apos a demissao.';
   if (!Number(candidato.TEM_CPF)) return 'CPF nao cadastrado.';
   return null;
@@ -810,9 +817,17 @@ async function listarCandidatosReenvioRm({ lojaId, mesRef, escfuncId = null }) {
            and d.dt >= to_date(:inicio, 'YYYY-MM-DD') and d.dt < to_date(:fim, 'YYYY-MM-DD') + 1
         where p.loja = :lojaId and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
           ${filtroFuncionario} ${ativaP}
-          and p.revisao = (select max(px.revisao) from sgn_esc_prog px
-             where px.loja = p.loja and px.mes_ref = p.mes_ref
-               and px.escfunc_id = p.escfunc_id ${ativaPx})
+          and p.revisao = nvl(
+            (select max(px.revisao) from sgn_esc_prog px
+              where px.loja = p.loja and px.mes_ref = p.mes_ref
+                and px.escfunc_id = p.escfunc_id ${ativaPx}
+                and exists (select 1 from sgn_esc_prog_dia px_d
+                  where px_d.escprog_id = px.escprog_id
+                    and px_d.dt >= to_date(:inicio, 'YYYY-MM-DD')
+                    and px_d.dt < to_date(:fim, 'YYYY-MM-DD') + 1)),
+            (select max(px.revisao) from sgn_esc_prog px
+              where px.loja = p.loja and px.mes_ref = p.mes_ref
+                and px.escfunc_id = p.escfunc_id ${ativaPx}))
         group by p.escfunc_id
         order by max(f.chapa), p.escfunc_id`,
       { lojaId: Number(lojaId), mesRef, inicio, fim, ...(escfuncId ? { escfuncId: Number(escfuncId) } : {}) },
