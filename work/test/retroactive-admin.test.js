@@ -71,16 +71,21 @@ function payload(perfil) {
   };
 }
 
-test('only Admin can bypass historical date and finalized-month locks', async () => {
+test('Admin and RH can rectify historical days, while leaders remain blocked', async () => {
   const { service, operations, context } = loadService();
   assert.equal(service._private.podeEditarRetroativamente({ perfil: 'ADMIN' }), true);
   assert.equal(service._private.podeEditarRetroativamente({ perfil: 'LIDER' }), false);
   assert.equal(service._private.podeEditarRetroativamente({ perfil: 'GERENTE' }), false);
   assert.equal(service._private.podeEditarRetroativamente({ perfil: 'RH' }), false);
+  assert.equal(service._private.podeRetificarRetroativamente({ perfil: 'RH' }, 'EDITAR_ESCALA_FUNCIONARIO'), true);
+  assert.equal(service._private.podeRetificarRetroativamente({ perfil: 'RH' }, 'EDITAR_DIA_FIXO'), true);
+  assert.equal(service._private.podeRetificarRetroativamente({ perfil: 'RH' }, 'REMOVER_DIA_FIXO'), true);
+  assert.equal(service._private.podeRetificarRetroativamente({ perfil: 'RH' }, 'EDITAR_HORARIO_ESCALA'), false);
+  assert.equal(service._private.podeRetificarRetroativamente({ perfil: 'LIDER' }, 'EDITAR_ESCALA_FUNCIONARIO'), false);
   await assert.rejects(service.saveEscalasFuncionariosRevision(payload('LIDER')), /Escala finalizada/);
   assert.deepEqual(operations, ['rollback']);
 
-  const saved = await service.saveEscalasFuncionariosRevision(payload('ADMIN'));
+  const saved = await service.saveEscalasFuncionariosRevision(payload('RH'));
   assert.equal(saved[0].revisao, 8);
   assert.equal(context.savedPayload.oficializada, 0);
   assert.equal(context.savedPayload.dias[0].programacao, 'F');
@@ -88,14 +93,22 @@ test('only Admin can bypass historical date and finalized-month locks', async ()
   assert.deepEqual(operations, ['rollback', 'event', 'commit']);
 });
 
-test('past-day lock remains active for non-Admin in an otherwise editable month', async () => {
+test('RH can rectify past days in an otherwise editable month', async () => {
   const { service, operations, context } = loadService();
   vm.runInContext('isMesFinalizado = () => false;', context);
   await assert.rejects(service.saveEscalasFuncionariosRevision(payload('GERENTE')), /Dias ja passados/);
   assert.deepEqual(operations, ['rollback']);
-  const saved = await service.saveEscalasFuncionariosRevision(payload('ADMIN'));
+  const saved = await service.saveEscalasFuncionariosRevision(payload('RH'));
   assert.equal(saved[0].revisao, 8);
   assert.deepEqual(operations, ['rollback', 'event', 'commit']);
+});
+
+test('RH cannot use retroactive base-hour revision path', async () => {
+  const { service, operations } = loadService();
+  await assert.rejects(service.saveEscalasFuncionariosRevision({
+    ...payload('RH'), acao: 'EDITAR_HORARIO_ESCALA'
+  }), /Escala finalizada/);
+  assert.deepEqual(operations, ['rollback']);
 });
 
 test('leader cannot reofficialize a finalized month through the route', async () => {

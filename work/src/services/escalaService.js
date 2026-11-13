@@ -599,6 +599,12 @@ function podeEditarRetroativamente(actor) {
   return actor?.perfil === 'ADMIN';
 }
 
+function podeRetificarRetroativamente(actor, acao) {
+  return podeEditarRetroativamente(actor) || (actor?.perfil === 'RH' && [
+    'EDITAR_ESCALA_FUNCIONARIO', 'EDITAR_DIA_ESCALA', 'EDITAR_DIA_FIXO', 'REMOVER_DIA_FIXO'
+  ].includes(acao));
+}
+
 function isUniqueConstraintError(error) {
   return error?.errorNum === 1 || error?.code === 'ORA-00001';
 }
@@ -1322,12 +1328,12 @@ function diasSemFixo(diasAtuais, data, fixo) {
 async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, actor }) {
   return withConnection(async (connection) => {
     try {
-      if (isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
+      if (isMesFinalizado(mesRef) && !podeRetificarRetroativamente(actor, 'EDITAR_DIA_FIXO')) {
         const error = new Error('Escala finalizada nao pode ser editada.');
         error.statusCode = 422;
         throw error;
       }
-      if (isDiaBloqueadoParaEdicao(data.DT || data.dt) && !podeEditarRetroativamente(actor)) {
+      if (isDiaBloqueadoParaEdicao(data.DT || data.dt) && !podeRetificarRetroativamente(actor, 'EDITAR_DIA_FIXO')) {
         const error = new Error('Dias ja passados nao podem receber fixos de escala.');
         error.statusCode = 422;
         throw error;
@@ -1442,12 +1448,12 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
 async function deleteFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, dt, actor }) {
   return withConnection(async (connection) => {
     try {
-      if (isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
+      if (isMesFinalizado(mesRef) && !podeRetificarRetroativamente(actor, 'REMOVER_DIA_FIXO')) {
         const error = new Error('Escala finalizada nao pode ser editada.');
         error.statusCode = 422;
         throw error;
       }
-      if (isDiaBloqueadoParaEdicao(dt) && !podeEditarRetroativamente(actor)) {
+      if (isDiaBloqueadoParaEdicao(dt) && !podeRetificarRetroativamente(actor, 'REMOVER_DIA_FIXO')) {
         const error = new Error('Dias ja passados nao podem ter fixos de escala removidos.');
         error.statusCode = 422;
         throw error;
@@ -2022,7 +2028,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       const loja = Number(pick(header, 'LOJA', 'loja'));
       const revisaoAtual = Number(pick(header, 'REVISAO', 'revisao'));
       const escfuncId = Number(pick(header, 'ESCFUNC_ID', 'escfunc_id'));
-      if (isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
+      if (isMesFinalizado(mesRef) && !podeRetificarRetroativamente(actor, 'EDITAR_DIA_ESCALA')) {
         const error = new Error('Escala finalizada nao pode ser editada.');
         error.statusCode = 422;
         throw error;
@@ -2059,7 +2065,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       const targetDate = pick(targetDay, 'DT', 'dt');
       assertSemNovaProgramacaoAposDemissao([{ data: targetDate }], [], pick(locked.rows[0], 'DT_DEMISS', 'dt_demiss'));
       assertSemDiasFuturosParaInativo([{ data: targetDate }], pick(locked.rows[0], 'STATUS', 'status'));
-      if (isDiaBloqueadoParaEdicao(targetDate) && !podeEditarRetroativamente(actor)) {
+      if (isDiaBloqueadoParaEdicao(targetDate) && !podeRetificarRetroativamente(actor, 'EDITAR_DIA_ESCALA')) {
         const error = new Error('Dias ja passados nao podem ser alterados manualmente.');
         error.statusCode = 422;
         throw error;
@@ -2667,7 +2673,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
   datasAdicionaisPermitidas = []
 }) {
   assertUniqueFuncionarios(funcionarios);
-  if (isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
+  if (isMesFinalizado(mesRef) && !podeRetificarRetroativamente(actor, acao)) {
     const error = new Error('Escala finalizada nao pode ser editada.');
     error.statusCode = 422;
     throw error;
@@ -2725,7 +2731,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
     assertSemNovaProgramacaoAposDemissao(funcionario.dias || [], atual?.dias || [], demissoes.get(escfuncId));
     assertSemDiasFuturosParaInativo(funcionario.dias || [], situacoes.get(escfuncId));
     assertPreservaDatasEscala(atual?.dias || [], funcionario.dias || [], datasAdicionaisPermitidas);
-    if (!podeEditarRetroativamente(actor)) {
+    if (!podeRetificarRetroativamente(actor, acao)) {
       assertSemAlteracaoEmDiasBloqueados(atual?.dias || [], funcionario.dias || []);
     }
     const revisaoQualquer = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
@@ -2953,12 +2959,16 @@ async function listarMesesComDiasFuturosFuncionario(connection, { lojaId, escfun
   return (result.rows || []).map((row) => pick(row, 'MES_REF', 'mes_ref'));
 }
 
+function selecionarMesesParaHorarioBase(meses, mesRef) {
+  return [...new Set(meses)].filter((mes) => !mesRef || mes >= mesRef);
+}
+
 async function calcularImpactoHorarioFuturo(connection, { lojaId, escfuncId, horario, mesRef, actor }) {
   const adminSelectedMonth = podeEditarRetroativamente(actor) && Boolean(mesRef);
-  const meses = [...new Set([
+  const meses = selecionarMesesParaHorarioBase([
     ...(adminSelectedMonth ? [mesRef] : []),
     ...await listarMesesComDiasFuturosFuncionario(connection, { lojaId, escfuncId })
-  ])].filter((mes) => !isMesFinalizado(mes) || (adminSelectedMonth && mes === mesRef));
+  ], mesRef).filter((mes) => !isMesFinalizado(mes) || (adminSelectedMonth && mes === mesRef));
   const alteracoes = [];
   for (const mes of meses) {
     const resultado = await calcularAlteracaoHorarioEscalaComConnection(connection, {
@@ -3076,7 +3086,7 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
 async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias, oficializada = 0, actor }) {
   return withConnection(async (connection) => {
     try {
-      if (isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
+      if (isMesFinalizado(mesRef) && !podeRetificarRetroativamente(actor, 'EDITAR_ESCALA_FUNCIONARIO')) {
         const error = new Error('Escala finalizada nao pode ser editada.');
         error.statusCode = 422;
         throw error;
@@ -3109,7 +3119,7 @@ async function saveEscalaFuncionarioRevision({ lojaId, mesRef, funcionario, dias
       assertRevisaoBase(funcionario, latestFuncionarioRevision);
       const escalaAtualFuncionario = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
       assertSemNovaProgramacaoAposDemissao(dias || [], escalaAtualFuncionario?.dias || [], pick(locked.rows[0], 'DT_DEMISS', 'dt_demiss'));
-      if (!podeEditarRetroativamente(actor)) {
+      if (!podeRetificarRetroativamente(actor, 'EDITAR_ESCALA_FUNCIONARIO')) {
         assertSemAlteracaoEmDiasBloqueados(escalaAtualFuncionario?.dias || [], dias || []);
       }
       const latestAnyFuncionarioRevision = await getLatestFuncionarioRevision(connection, { lojaId, mesRef, escfuncId, includeInactive: true });
@@ -3641,6 +3651,7 @@ module.exports = {
   validateAusencias,
   _private: {
     podeEditarRetroativamente,
+    podeRetificarRetroativamente,
     getAlteracoesDiasBloqueados,
     assertSemNovaProgramacaoAposDemissao,
     assertSemDiasFuturosParaInativo,
@@ -3667,6 +3678,7 @@ module.exports = {
     projetarPortariaNaFrente,
     filtrarLinhasForaDoEscopoAtual,
     aplicarHorarioBaseNosDias,
+    selecionarMesesParaHorarioBase,
     diasComFixoAtualizado,
     diasSemFixo
   }

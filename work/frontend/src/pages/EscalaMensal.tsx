@@ -115,6 +115,7 @@ type DomingoAnterior = { data: string; dias: DiaEscala[] };
 
 export function EscalaMensal({ user }: { user: User }) {
   const canEditHistorical = user.perfil === 'ADMIN';
+  const canRectifyHistorical = canEditHistorical || user.perfil === 'RH';
   const { lojaId, mesRef } = useParams();
   const [params, setParams] = useSearchParams();
   const [escala, setEscala] = useState<EscalaMensal | null>(null);
@@ -566,7 +567,7 @@ export function EscalaMensal({ user }: { user: User }) {
         if (day && !day.FIXO_ESCALA && !day.AUSENCIA_OBRIGATORIA
           && !['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase())
           && canEdit(user, 'escalas') && canEdit(user, 'escalas-funcionarios')
-          && (canEditHistorical || (escala?.status !== 'FINALIZADA' && date >= localToday()))) {
+          && (canRectifyHistorical || (escala?.status !== 'FINALIZADA' && date >= localToday()))) {
           setEditingCell({ employee, day });
         } else setSelectedCell({ employee, date, day });
         return;
@@ -583,8 +584,8 @@ export function EscalaMensal({ user }: { user: User }) {
     if ((!permiteEscala(employee.STATUS) && !(canEditHistorical && date < localToday()))
       || (employee.DT_DEMISS && date > iso(employee.DT_DEMISS))) return;
     if (!canEdit(user, 'escalas') || !canEdit(user, 'escalas-funcionarios')
-      || (escala?.status === 'FINALIZADA' && !canEditHistorical)
-      || (date < localToday() && !canEditHistorical)) { setSelectedCell({ employee, date, day }); return; }
+      || (escala?.status === 'FINALIZADA' && !canRectifyHistorical)
+      || (date < localToday() && !canRectifyHistorical)) { setSelectedCell({ employee, date, day }); return; }
     if (day && !day.FIXO_ESCALA && !day.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day.PROGRAMACAO || '').toUpperCase())) setEditingCell({ employee, day });
     else if (!day?.AUSENCIA_OBRIGATORIA && !['FER', 'AFA'].includes(String(day?.PROGRAMACAO || '').toUpperCase())) setFixedCell({ employee, date });
     else setSelectedCell({ employee, date, day });
@@ -816,7 +817,7 @@ export function EscalaMensal({ user }: { user: User }) {
                     Escopo: <strong>{scopeName}</strong> · {scopePeople.length} funcionário(s)
                   </span>
                   {mixedSubsectionScope && <span title="Operações por subseção com transferência no mês exigem recorte por data.">Transferência no mês: operações em lote disponíveis na seção inteira</span>}
-                  {canEdit(user, 'escalas-funcionarios') && <button className="button secondary" type="button" disabled={!scopePeople.length || loading || mixedSubsectionScope || (escala?.status === 'FINALIZADA' && !canEditHistorical)} onClick={() => setBulkEditing(true)}><Pencil size={15} /> Editar vários</button>}
+                  {canEdit(user, 'escalas-funcionarios') && <button className="button secondary" type="button" disabled={!scopePeople.length || loading || mixedSubsectionScope || (escala?.status === 'FINALIZADA' && !canRectifyHistorical)} onClick={() => setBulkEditing(true)}><Pencil size={15} /> Editar vários</button>}
                   <button
                     className="button secondary"
                     type="button"
@@ -997,7 +998,7 @@ export function EscalaMensal({ user }: { user: User }) {
                     !selectedCell.day.FIXO_ESCALA &&
                     !selectedCell.day.AUSENCIA_OBRIGATORIA &&
                     !['FER', 'AFA'].includes(String(selectedCell.day.PROGRAMACAO || '').toUpperCase()) &&
-                    (canEditHistorical || (escala?.status !== 'FINALIZADA' && selectedCell.date >= localToday())) && (
+                    (canRectifyHistorical || (escala?.status !== 'FINALIZADA' && selectedCell.date >= localToday())) && (
                       <button
                         type="button"
                         className="button primary"
@@ -1011,7 +1012,7 @@ export function EscalaMensal({ user }: { user: User }) {
                   {canEdit(user, 'escalas') && canEdit(user, 'escalas-funcionarios') &&
                     (!selectedCell.employee.DT_DEMISS || selectedCell.date <= iso(selectedCell.employee.DT_DEMISS)) &&
                     (permiteEscala(selectedCell.employee.STATUS) || (canEditHistorical && selectedCell.date < localToday())) &&
-                    (canEditHistorical || (escala?.status !== 'FINALIZADA' && selectedCell.date >= localToday())) &&
+                    (canRectifyHistorical || (escala?.status !== 'FINALIZADA' && selectedCell.date >= localToday())) &&
                     !selectedCell.day?.AUSENCIA_OBRIGATORIA &&
                     !['FER', 'AFA'].includes(String(selectedCell.day?.PROGRAMACAO || '').toUpperCase()) &&
                     <button type="button" className="button secondary" onClick={() => setFixedCell({ employee: selectedCell.employee, date: selectedCell.date })}>
@@ -1108,7 +1109,7 @@ export function EscalaMensal({ user }: { user: User }) {
           day={editingCell.day}
           holidayName={holidays[iso(editingCell.day.DT)]}
           domingo6hHabilitado={domingo6hHabilitado}
-          allowRetroactive={canEditHistorical}
+          allowRetroactive={canRectifyHistorical}
           days={(escala?.dias || []).filter(
             (item) => Number(item.ESCFUNC_ID) === Number(editingCell.employee.ESCFUNC_ID),
           )}
@@ -1124,7 +1125,7 @@ export function EscalaMensal({ user }: { user: User }) {
       {bulkEditing && lojaId && mesRef && <EditarDiasEmMassa
         lojaId={lojaId} mesRef={mesRef} dates={dates} people={scopePeople} allDays={escala?.dias || []} holidays={holidays}
         domingo6hHabilitado={domingo6hHabilitado}
-        allowRetroactive={canEditHistorical}
+        allowRetroactive={canRectifyHistorical}
         initialDate={selectedDate} onClose={() => setBulkEditing(false)}
         onSaved={(count) => { setBulkEditing(false); setSelectedCell(null); setActionMessage(`${count} colaborador(es) atualizados; revisão confirmada pela leitura da escala.`); setReload((value) => value + 1); }}
       />}

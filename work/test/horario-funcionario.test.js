@@ -1,12 +1,21 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { _private: { aplicarHorarioBaseNosDias, diasComFixoAtualizado, diasSemFixo } } = require('../src/services/escalaService');
+const { _private: { aplicarHorarioBaseNosDias, selecionarMesesParaHorarioBase,
+  diasComFixoAtualizado, diasSemFixo } } = require('../src/services/escalaService');
 const escalaRouter = require('../src/routes/escalaRoutes');
 
 const horario = { HR_ENT1: '09:00', HR_SAI1: '13:00', HR_ENT2: '14:10', HR_SAI2: '18:58' };
 const jornada = (dt, programacao = 'TRB') => ({
   DT: dt, PROGRAMACAO: programacao,
   HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58'
+});
+
+test('horario-base de dezembro nao seleciona a escala de novembro', () => {
+  const meses = ['2026-11-01', '2026-12-01', '2027-01-01', '2026-12-01'];
+  assert.deepEqual(selecionarMesesParaHorarioBase(meses, '2026-12-01'),
+    ['2026-12-01', '2027-01-01']);
+  assert.deepEqual(selecionarMesesParaHorarioBase(meses, '2026-11-01'),
+    ['2026-11-01', '2026-12-01', '2027-01-01']);
 });
 
 test('edicao de horario-base altera somente jornadas futuras editaveis', () => {
