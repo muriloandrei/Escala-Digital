@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
 test('executor accepts only the approved mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 29);
+  assert.equal(migrationNames.length, 30);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
@@ -18,6 +18,13 @@ test('monthly base hours and Sunday 1x1 store configuration are versioned', () =
   assert.match(monthly, /primary key \(escfunc_id, mes_ref\)/i);
   assert.match(sunday, /domingo_1x1_habilitado number\(1\) default 1 not null/i);
   assert.match(sunday, /loja between 400 and 499 or loja between 700 and 799/i);
+});
+
+test('journey assignments seed 08:24 for practical stores', () => {
+  const sql = readMigration('20261118_horarios_padrao_por_loja.sql').sql;
+  assert.match(sql, /create table sgn_esc_horpad_loja/i);
+  assert.match(sql, /l\.loja between 400 and 499 and h\.jornada_minutos = 504/i);
+  assert.match(sql, /h\.intervalo_minutos in \(70, 100\)/i);
 });
 
 test('duration-only profiles can omit fixed clock times after migration', () => {

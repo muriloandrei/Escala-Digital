@@ -423,7 +423,8 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
     validate: (candidateDays) => validateEscalaPayload({
       lojaId: Number(funcionario.LOJA || 0) || 1, mesRef,
       funcionarios: [{ ...rascunho, dias: candidateDays }]
-    }, { domingo6h: opcoes.domingo6h, domingo1x1: opcoes.domingo1x1 !== false })
+    }, { domingo6h: opcoes.domingo6h, domingo1x1: opcoes.domingo1x1 !== false,
+      allowedProfiles: opcoes.allowedProfiles })
   });
   return { ...rascunho, dias: holidayPlan.days };
 }
@@ -795,7 +796,8 @@ function escolherPadraoBalanceado({
   diasFixos = new Map(),
   intervaloSuspensao = null,
   domingo6h = false,
-  domingo1x1 = true
+  domingo1x1 = true,
+  allowedProfiles = null
 }) {
   const datasGeradas = getDatasGeradas(diasMes, hojeIso)
     .filter((data) => !dataIndisponivel(intervaloSuspensao, funcionario, indiceAusencias, data));
@@ -839,7 +841,8 @@ function escolherPadraoBalanceado({
     if (!hasMaxFolgasPorSemanaDatas(folgasEfetivas, maxFolgasSemanaFuncionario)) return;
     if (!hasMaxFolgasAutomaticasComFixos(folgasEfetivas, descansosObrigatoriosFuncionario, maxFolgasSemanaFuncionario)) return;
     const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, folgasEfetivas,
-      { indiceAusencias, diasFixos, intervaloSuspensao, domingo6h, domingo1x1, restCounts: contagemFolgasSecao });
+      { indiceAusencias, diasFixos, intervaloSuspensao, domingo6h, domingo1x1,
+        allowedProfiles, restCounts: contagemFolgasSecao });
     const folgasProjetadas = rascunho.dias
       .filter((dia) => ['F', 'FDO'].includes(dia.programacao)
         && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${dia.data}`))
@@ -853,7 +856,7 @@ function escolherPadraoBalanceado({
       lojaId: Number(funcionario.LOJA || 0) || 1,
       mesRef,
       funcionarios: [rascunho]
-    }, { domingo6h, domingo1x1 });
+    }, { domingo6h, domingo1x1, allowedProfiles });
     if (errors.some((error) => /domingos/i.test(String(error || '')))) return;
 
     const projetadaSecao = new Map(contagemFolgasSecao);
@@ -1141,11 +1144,13 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
           diasFixos,
           intervaloSuspensao,
           domingo6h: opcoes.domingo6h,
-          domingo1x1: opcoes.domingo1x1 !== false
+          domingo1x1: opcoes.domingo1x1 !== false,
+          allowedProfiles: opcoes.allowedProfiles
         });
         const rascunho = buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso, escolhido.folgas,
           { indiceAusencias, diasFixos, intervaloSuspensao, domingo6h: opcoes.domingo6h,
-            domingo1x1: opcoes.domingo1x1 !== false, restCounts: contagemFolgasSecao });
+            domingo1x1: opcoes.domingo1x1 !== false, allowedProfiles: opcoes.allowedProfiles,
+            restCounts: contagemFolgasSecao });
         rascunho.dias.filter((dia) => ['F', 'FDO'].includes(dia.programacao)
           && !diasFixos.has(`${funcionario.ESCFUNC_ID || funcionario.escfuncId}|${dia.data}`)).forEach(({ data }) => {
           contagemFolgasSecao.set(data, (contagemFolgasSecao.get(data) || 0) + 1);
@@ -1175,7 +1180,8 @@ function buildFuncionariosRascunhoBalanceado(funcionarios, turnos, mesRef, hojeI
         validate: (candidateDays) => validateEscalaPayload({
           lojaId: Number(opcoes.lojaId || secao[0]?.funcionario.LOJA || 1), mesRef,
           funcionarios: [{ ...rascunho, dias: candidateDays }]
-        }, { domingo6h: opcoes.domingo6h, domingo1x1: opcoes.domingo1x1 !== false })
+        }, { domingo6h: opcoes.domingo6h, domingo1x1: opcoes.domingo1x1 !== false,
+          allowedProfiles: opcoes.allowedProfiles })
       });
       payload.push({ ...rascunho, dias: plan.days });
     }
@@ -1397,14 +1403,15 @@ async function liberarEscalaLojaMes({
 async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null, hojeIso = formatDateValue(new Date()), actor }) {
   const inicio = getMonthStartIso(mesRef);
   const fim = getMonthEndIso(mesRef);
-  const [funcionarios, turnos, ausencias, fixos, suspensoes, domingo6h, domingo1x1] = await Promise.all([
+  const [funcionarios, turnos, ausencias, fixos, suspensoes, domingo6h, domingo1x1, allowedProfiles] = await Promise.all([
     catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas: [Number(escsecaoId)], includeInactive: true }),
     catalogService.listTurnosByLoja(lojaId),
     catalogService.listAusenciasByLojaMes(lojaId, inicio, fim),
     escalaService.listFixosEscala({ lojaId, mesRef, escsecaoId }),
     pendenciaFuncionarioService.listarIntervalosSuspensos({ lojaId, inicio, fim }),
     sundayShiftService.getStoreEnabled(lojaId),
-    sundayAlternationService.getStoreEnabled(lojaId)
+    sundayAlternationService.getStoreEnabled(lojaId),
+    catalogService.getAllowedProfileKeys(lojaId)
   ]);
   const diasAtuaisSecao = await escalaService.listDiasSecaoAtual({ lojaId, mesRef, escsecaoId });
   const expectedSnapshots = escalaService.buildEscalaSnapshots(diasAtuaisSecao);
@@ -1425,7 +1432,8 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
   const turnosSecao = turnos.filter((turno) => Number(turno.ESCSECAO_ID) === Number(escsecaoId));
   const funcionariosPayloadCompleto = anexarDiasPassados(
     [
-      ...buildFuncionariosRascunhoBalanceado(funcionariosGeraveis, turnosSecao, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes, domingo6h, domingo1x1 }),
+      ...buildFuncionariosRascunhoBalanceado(funcionariosGeraveis, turnosSecao, mesRef, hojeIso,
+        { indiceAusencias, fixos, suspensoes, domingo6h, domingo1x1, allowedProfiles }),
       ...buildFuncionariosLiberacao(funcionariosParaLimpar, turnosSecao, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes })
     ],
     diasAtuaisSecao,
@@ -1461,7 +1469,7 @@ async function gerarEscalaSecao({ lojaId, mesRef, escsecaoId, escfuncIds = null,
   }
 
   const ruleErrors = [
-    ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload }, { domingo6h, domingo1x1 }),
+    ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosPayload }, { domingo6h, domingo1x1, allowedProfiles }),
     ...getCriticasCoberturaMinima(funcionariosPayloadCompleto, 60, hojeIso)
   ];
   const saved = await escalaService.saveEscalasBatch({

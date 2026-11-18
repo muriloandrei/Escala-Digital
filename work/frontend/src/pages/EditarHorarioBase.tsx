@@ -69,7 +69,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
       <h2 id="shift-title">Editar horário · {employee.NOME}</h2>
       <p>{employee.CHAPA} · {employee.FUNCAO_DESCR || 'Cargo não informado'}</p>
       {currentDay && <p>Na escala: {[currentDay.HR_ENT1, currentDay.HR_SAI1, currentDay.HR_ENT2, currentDay.HR_SAI2].filter(Boolean).join(' · ')}</p>}
-      {!apprentice && <ShiftProfileSelect value={profile} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+      {!apprentice && <ShiftProfileSelect value={profile} lojaId={lojaId} onSelect={(item) => {
         const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
         if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });

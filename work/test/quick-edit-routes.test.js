@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const router = require('../src/routes/escalaRoutes');
 const escalaService = require('../src/services/escalaService');
 const catalogService = require('../src/services/catalogService');
+catalogService.getAllowedProfileKeys = async () => new Set(['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']);
 const accessService = require('../src/services/accessService');
 const auditService = require('../src/services/auditService');
 const sundayShiftService = require('../src/services/sundayShiftService');

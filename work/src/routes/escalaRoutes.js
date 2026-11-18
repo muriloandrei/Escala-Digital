@@ -28,10 +28,11 @@ const { isEditableMonth } = require('../domain/editableMonth');
 const router = express.Router();
 
 async function getRuleOptions(lojaId) {
-  const [domingo6h, domingo1x1] = await Promise.all([
-    sundayShiftService.getStoreEnabled(lojaId), sundayAlternationService.getStoreEnabled(lojaId)
+  const [domingo6h, domingo1x1, allowedProfiles] = await Promise.all([
+    sundayShiftService.getStoreEnabled(lojaId), sundayAlternationService.getStoreEnabled(lojaId),
+    catalogService.getAllowedProfileKeys(lojaId)
   ]);
-  return { domingo6h, domingo1x1 };
+  return { domingo6h, domingo1x1, allowedProfiles };
 }
 
 function requireRhReview(req, res, next) {
@@ -102,14 +103,12 @@ const horarioFuncionarioSchema = z.object({
   HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
   HR_SAI2: z.string().regex(/^\d{2}:\d{2}$/).nullable()
 }).strict();
-function validarHorarioBaseSelecionado(payload, funcionario, { domingo6h = false } = {}) {
+function validarHorarioBaseSelecionado(payload, funcionario, { domingo6h = false, allowedProfiles = null } = {}) {
   if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) return validateApprenticeShift(payload);
   const workMinutes = Number(payload.jornadaMinutos) || (domingo6h ? 360 : 528);
   const intervalMinutes = Number(payload.intervaloMinutos) || 70;
-  const permitidos = domingo6h ? ['360:70'] : workRegimeService.isPostStore(payload.lojaId)
-    ? ['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
-    : ['528:70', '360:70', '300:15'];
-  if (!permitidos.includes(`${workMinutes}:${intervalMinutes}`)) return ['Jornada cadastrada invalida para esta loja.'];
+  if (domingo6h && workMinutes !== 360) return ['Jornada de domingo deve ser 06:00 nesta loja.'];
+  if (allowedProfiles && !allowedProfiles.has(`${workMinutes}:${intervalMinutes}`)) return ['Jornada nao atribuida a esta loja.'];
   return validateStandardShift(payload, { workMinutes, intervalMinutes,
     exactInterval: domingo6h || Boolean(payload.jornadaMinutos), allowProfiles: false });
 }
@@ -340,13 +339,13 @@ router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest
     }
     if (String(payload.PROGRAMACAO).toUpperCase() === 'TRB') {
       const aprendiz = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''));
-      const domingo6h = await sundayShiftService.getStoreEnabled(payload.lojaId);
+      const { domingo6h, allowedProfiles } = await getRuleOptions(payload.lojaId);
       const sunday = new Date(`${payload.DT}T12:00:00`).getDay() === 0;
       if (is12x36 && !isDutyDay(funcionario.DT_ANCORA_12X36, payload.DT)) {
         return res.status(422).json({ error: 'Descanso 12x36 obrigatorio neste dia.' });
       }
       const errors = is12x36 ? validate12x36Shift(payload) : validarHorarioBaseSelecionado(payload, funcionario,
-        { domingo6h: !aprendiz && domingo6h && sunday });
+        { domingo6h: !aprendiz && domingo6h && sunday, allowedProfiles });
       if (errors.length) return res.status(422).json({ error: 'Horario fixo invalido.', details: errors });
     }
     const fixo = await escalaService.saveFixoEscala({
@@ -713,13 +712,13 @@ router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaR
         regimeEscala: funcionario.REGIME_ESCALA, dtAncora12x36: funcionario.DT_ANCORA_12X36,
         dias: (escala.dias || []).filter((dia) => Number(dia.ESCFUNC_ID) === Number(funcionario.ESCFUNC_ID))
       }));
-    const { domingo6h, domingo1x1 } = await getRuleOptions(query.lojaId);
+    const { domingo6h, domingo1x1, allowedProfiles } = await getRuleOptions(query.lojaId);
     const domingoAnterior = await previousSundayService.getPriorSunday({ lojaId: query.lojaId, mesRef: query.mesRef,
       employeeIds: funcionarios.map((person) => person.escfuncId) });
     const domingoAnteriorPorFuncionario = previousSundayService.priorSundayByEmployee(domingoAnterior);
     const criticas = validarCriticasEscopo({ lojaId: query.lojaId, mesRef: query.mesRef, funcionarios,
-      domingo6h, domingo1x1, domingoAnteriorPorFuncionario });
-    const grupos = agruparCriticasPorSubsecao({ escala, lojaId: query.lojaId, domingo6h, domingo1x1, domingoAnteriorPorFuncionario })
+      domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario });
+    const grupos = agruparCriticasPorSubsecao({ escala, lojaId: query.lojaId, domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario })
       .filter((grupo) => Number(grupo.escsecaoId) === query.escsecaoId);
     return res.json({ criticas, grupos });
   } catch (error) {
@@ -855,7 +854,7 @@ router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaR
     });
     if (!progresso.habilitada) return res.status(403).json({ error: 'Oficializacao nao habilitada para esta loja.' });
     const secao = progresso.secoes.find((item) => item.escsecaoId === payload.escsecaoId);
-    if (!secao || !secao.completa || secao.criticas || !Array.isArray(secao.escfuncIds) || !secao.escfuncIds.length) {
+    if (!secao || !secao.completa || secao.criticasBloqueantes || !Array.isArray(secao.escfuncIds) || !secao.escfuncIds.length) {
       return res.status(422).json({ error: 'Gere todos os dias e resolva as criticas da secao antes de oficializar.' });
     }
 
@@ -1168,7 +1167,7 @@ router.post('/funcionario/horario/preview', requirePermission('escalas', 'editar
     if (!isEditableMonth(payload.mesRef) && req.user?.perfil !== 'ADMIN') return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
     const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
     if (effectiveRegime(funcionario) === TWELVE_THIRTY_SIX) return res.status(422).json({ error: 'Altere o horario 12x36 na configuracao do regime do funcionario.' });
-    const errors = validarHorarioBaseSelecionado(payload, funcionario);
+    const errors = validarHorarioBaseSelecionado(payload, funcionario, await getRuleOptions(payload.lojaId));
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
     const impacto = await escalaService.previewHorarioFuncionarioEscala({
       lojaId: payload.lojaId, mesRef: payload.mesRef, escfuncId: payload.escfuncId,
@@ -1191,7 +1190,7 @@ router.patch('/funcionario/horario', requirePermission('escalas', 'editar'), res
     if (!isEditableMonth(payload.mesRef) && req.user?.perfil !== 'ADMIN') return res.status(422).json({ error: 'Horarios de meses anteriores nao podem ser alterados.' });
     const funcionario = await getFuncionarioParaEdicaoHorario(req, payload);
     if (effectiveRegime(funcionario) === TWELVE_THIRTY_SIX) return res.status(422).json({ error: 'Altere o horario 12x36 na configuracao do regime do funcionario.' });
-    const errors = validarHorarioBaseSelecionado(payload, funcionario);
+    const errors = validarHorarioBaseSelecionado(payload, funcionario, await getRuleOptions(payload.lojaId));
     if (errors.length) return res.status(422).json({ error: 'Horario do funcionario invalido.', details: errors });
 
     const horario = {

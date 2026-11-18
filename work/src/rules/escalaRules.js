@@ -112,7 +112,7 @@ function getHorarioDia(dia, apprentice = false) {
     retornoIntervalo: timeline?.[2] ?? null, saida: timeline?.[3] ?? null };
 }
 
-function validarTurnoDia(funcionarioLabel, dia, { domingo6h = false, lojaId = null } = {}) {
+function validarTurnoDia(funcionarioLabel, dia, { domingo6h = false, lojaId = null, allowedProfiles = null } = {}) {
   if (isDescanso(dia)) return [];
   const data = formatDate(dia.data || dia.DT);
   const horario = getHorarioDia(dia);
@@ -137,7 +137,7 @@ function validarTurnoDia(funcionarioLabel, dia, { domingo6h = false, lojaId = nu
   const posto = Number(lojaId) >= 700 && Number(lojaId) <= 799;
   const jornadaSelecionada = Number(dia.jornadaMinutos ?? dia.JORNADA_MINUTOS) || (domingoObrigatorio ? 360 : 528);
   const intervaloSelecionado = Number(dia.intervaloMinutos ?? dia.INTERVALO_MINUTOS) || 70;
-  const perfisPermitidos = new Set(posto
+  const perfisPermitidos = allowedProfiles || new Set(posto
     ? ['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
     : ['528:70', '360:70', '300:15']);
   if (!perfisPermitidos.has(`${jornadaSelecionada}:${intervaloSelecionado}`)
@@ -359,17 +359,29 @@ function getCriticasCoberturaMinima(funcionarios = [], percentualMinimo = 60, ho
     .map(([data, item]) => `Cobertura minima da secao abaixo de ${percentualMinimo}% em ${data}. Trabalhando: ${item.trabalhando}/${item.total}.`);
 }
 
-function validarCriticasEscopo({ lojaId, mesRef, funcionarios, domingo6h = false, domingo1x1 = true, domingoAnteriorPorFuncionario = null }) {
+function validarCriticasEscopo({ lojaId, mesRef, funcionarios, domingo6h = false, domingo1x1 = true,
+  domingoAnteriorPorFuncionario = null, apenasBloqueantes = false, hojeIso = null, allowedProfiles = null }) {
   const incompletos = funcionarios.filter((funcionario) => !funcionario.dias?.length)
     .map((funcionario) => `${funcionario.nome || funcionario.chapa || funcionario.escfuncId}: escala sem dias gerados.`);
+  if (apenasBloqueantes) {
+    const limite = hojeIso || new Date().toISOString().slice(0, 10);
+    const bloqueantes = [...incompletos];
+    for (const funcionario of funcionarios.filter((item) => item.dias?.length)) {
+      validarRegrasFuncionario(funcionario, ({ mensagem, datas }) => {
+        if (!datas?.length || datas.some((data) => data >= limite)) bloqueantes.push(mensagem);
+      }, { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, lojaId });
+    }
+    return bloqueantes;
+  }
   return [
     ...incompletos,
     ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionarios.filter((funcionario) => funcionario.dias?.length) },
-      { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, lojaId })
+      { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, lojaId })
   ];
 }
 
-function agruparCriticasPorSubsecao({ escala, lojaId = null, domingo6h = false, domingo1x1 = true, domingoAnteriorPorFuncionario = null }) {
+function agruparCriticasPorSubsecao({ escala, lojaId = null, domingo6h = false, domingo1x1 = true,
+  domingoAnteriorPorFuncionario = null, allowedProfiles = null }) {
   const secoes = new Map((escala.secoes || []).map((secao) => [Number(secao.ESCSECAO_ID), secao]));
   const diasPorFuncionario = new Map();
   for (const dia of escala.dias || []) {
@@ -411,7 +423,7 @@ function agruparCriticasPorSubsecao({ escala, lojaId = null, domingo6h = false, 
       }
       criticas.push(...validarRegrasFuncionario(funcionario, ({ mensagem, datas }) => {
         marcadores.push({ escfuncId: funcionario.escfuncId, datas, mensagem });
-      }, { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, lojaId }));
+      }, { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, lojaId }));
     }
     return { ...grupo, criticas, marcadores };
   }).filter((grupo) => grupo.criticas.length > 0);

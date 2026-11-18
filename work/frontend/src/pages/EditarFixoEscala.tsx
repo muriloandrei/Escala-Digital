@@ -139,7 +139,7 @@ export function EditarFixoEscala({
       <button type="button" className={mode === 'TRB' ? 'selected' : ''} disabled={plantao12x36 && !diaPlantao} onClick={() => { setMode('TRB'); setError(''); }}>Horário fixo</button>
     </div>
     {mode === 'TRB' && <div className="day-editor-times">
-      {!apprentice && !plantao12x36 && <ShiftProfileSelect value={profile} sundayOnly={domingo6h} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+      {!apprentice && !plantao12x36 && <ShiftProfileSelect value={profile} sundayOnly={domingo6h} lojaId={lojaId} onSelect={(item) => {
         const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
         if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });

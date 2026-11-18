@@ -33,7 +33,8 @@ const migrationNames = [
   '20261112_horarios_padrao_duracoes.sql',
   '20261112_jornada_selecionada_dia.sql',
   '20261118_domingo_1x1_por_loja.sql',
-  '20261118_horario_base_mensal.sql'
+  '20261118_horario_base_mensal.sql',
+  '20261118_horarios_padrao_por_loja.sql'
 ];
 
 function parseSinglePlsqlBlock(source) {

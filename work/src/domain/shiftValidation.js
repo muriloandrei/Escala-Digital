@@ -38,7 +38,7 @@ const POST_SHIFT_PROFILES = [
 ];
 
 function validateStandardShift(data, { exactInterval = false, workMinutes = 528,
-  intervalMinutes = 70, allowProfiles = false, allowPostProfiles = false } = {}) {
+  intervalMinutes = 70, allowProfiles = false, allowPostProfiles = false, profileKeys = null } = {}) {
   const values = [data.HR_ENT1, data.HR_SAI1, data.HR_ENT2, data.HR_SAI2];
   if (values.some((value) => timeToMinutes(value) === null)) {
     return ['Informe todos os horarios no formato HH:MM.'];
@@ -51,7 +51,12 @@ function validateStandardShift(data, { exactInterval = false, workMinutes = 528,
   const intervalo = ent2 - sai1;
   const segundaJornada = sai2 - ent2;
   const jornadaTotal = primeiraJornada + segundaJornada;
-  const profiles = allowPostProfiles ? [...SHIFT_PROFILES, ...POST_SHIFT_PROFILES] : SHIFT_PROFILES;
+  const profiles = profileKeys instanceof Set
+    ? [...profileKeys].map((key) => {
+      const [work, interval] = key.split(':').map(Number);
+      return { workMinutes: work, intervalMinutes: interval, exactInterval: true };
+    })
+    : allowPostProfiles ? [...SHIFT_PROFILES, ...POST_SHIFT_PROFILES] : SHIFT_PROFILES;
   const profile = allowProfiles ? profiles.find((item) => item.workMinutes === jornadaTotal
     && item.intervalMinutes === intervalo)
     || profiles.find((item) => item.workMinutes === jornadaTotal) : null;
@@ -64,7 +69,7 @@ function validateStandardShift(data, { exactInterval = false, workMinutes = 528,
   if (intervalo <= 0) errors.push('Entrada 2 deve ser maior que Saida 1.');
   if (primeiraJornada > 360) errors.push(`Primeiro periodo nao pode passar de 06:00. Atual: ${minutesToTime(primeiraJornada)}.`);
   if (segundaJornada > 360) errors.push(`Segundo periodo nao pode passar de 06:00. Atual: ${minutesToTime(segundaJornada)}.`);
-  if (allowProfiles && !profile) errors.push(`Jornada total deve ser 08:48, 06:00, 05:00${allowPostProfiles ? ' ou 08:24' : ''}. Atual: ${minutesToTime(jornadaTotal)}.`);
+  if (allowProfiles && !profile) errors.push(`Jornada total deve ser ${[...new Set(profiles.map((item) => minutesToTime(item.workMinutes)))].join(', ')}. Atual: ${minutesToTime(jornadaTotal)}.`);
   else if (jornadaTotal !== expectedWork) errors.push(`Jornada total deve ser exatamente ${minutesToTime(expectedWork)}. Atual: ${minutesToTime(jornadaTotal)}.`);
   if (intervalMustBeExact && intervalo !== expectedInterval) errors.push(`Intervalo entre as jornadas deve ser exatamente ${minutesToTime(expectedInterval)}. Atual: ${minutesToTime(intervalo)}.`);
   else if (!intervalMustBeExact && intervalo < expectedInterval) errors.push(`Intervalo entre as jornadas deve ter no minimo ${minutesToTime(expectedInterval)}. Atual: ${minutesToTime(intervalo)}.`);

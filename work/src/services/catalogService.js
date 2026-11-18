@@ -1025,7 +1025,7 @@ async function listTiposDescanso({ includeInactive = false } = {}) {
   });
 }
 
-async function listHorariosPadrao({ includeInactive = false } = {}) {
+async function listHorariosPadrao({ includeInactive = false, lojaId = null } = {}) {
   return withConnection(async (connection) => {
     try {
       const whereSql = includeInactive ? '' : "where status = 'A'";
@@ -1037,7 +1037,19 @@ async function listHorariosPadrao({ includeInactive = false } = {}) {
         {},
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
-      return result.rows.map(normalizeHorarioPadrao);
+      const assignments = await connection.execute(
+        'select eschorpad_id, loja from sgn_esc_horpad_loja', {},
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const lojasPorHorario = new Map();
+      for (const row of assignments.rows || []) {
+        const id = Number(pick(row, 'ESCHORPAD_ID', 'eschorpad_id'));
+        if (!lojasPorHorario.has(id)) lojasPorHorario.set(id, []);
+        lojasPorHorario.get(id).push(Number(pick(row, 'LOJA', 'loja')));
+      }
+      return result.rows.map((row) => ({ ...normalizeHorarioPadrao(row),
+        LOJAS: lojasPorHorario.get(Number(pick(row, 'ESCHORPAD_ID', 'eschorpad_id'))) || [] }))
+        .filter((horario) => lojaId === null || horario.LOJAS.includes(Number(lojaId)));
     } catch (error) {
       if (isMissingObjectError(error)) return [];
       throw error;
@@ -1045,9 +1057,35 @@ async function listHorariosPadrao({ includeInactive = false } = {}) {
   });
 }
 
+async function getAllowedProfileKeys(lojaId, connection = null) {
+  const run = async (db) => {
+    const result = await db.execute(
+      `select distinct h.jornada_minutos, h.intervalo_minutos
+         from sgn_esc_horario_padrao h
+         join sgn_esc_horpad_loja hl on hl.eschorpad_id = h.eschorpad_id
+        where hl.loja = :lojaId and h.status = 'A'`,
+      { lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return new Set((result.rows || []).map((row) =>
+      `${pick(row, 'JORNADA_MINUTOS', 'jornada_minutos')}:${pick(row, 'INTERVALO_MINUTOS', 'intervalo_minutos')}`));
+  };
+  return connection ? run(connection) : withConnection(run);
+}
+
+async function replaceHorarioLojas(connection, id, lojas) {
+  await connection.execute('delete from sgn_esc_horpad_loja where eschorpad_id = :id', { id }, { autoCommit: false });
+  for (const loja of lojas) {
+    await connection.execute(
+      'insert into sgn_esc_horpad_loja (eschorpad_id, loja) values (:id, :loja)',
+      { id, loja }, { autoCommit: false }
+    );
+  }
+}
+
 async function createHorarioPadrao(data) {
   return withConnection(async (connection) => {
-    const result = await connection.execute(
+    try {
+      const result = await connection.execute(
       `insert into sgn_esc_horario_padrao (
          eschorpad_id, descr, jornada_minutos, intervalo_minutos, status, dt_hr_incl
        ) values (
@@ -1061,9 +1099,13 @@ async function createHorarioPadrao(data) {
         status: data.STATUS || 'A',
         id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
       },
-      { autoCommit: true }
+      { autoCommit: false }
     );
-    return { ESCHORPAD_ID: result.outBinds.id[0], ...data, STATUS: data.STATUS || 'A' };
+      const id = result.outBinds.id[0];
+      await replaceHorarioLojas(connection, id, data.LOJAS || []);
+      await connection.commit();
+      return { ESCHORPAD_ID: id, ...data, STATUS: data.STATUS || 'A' };
+    } catch (error) { await connection.rollback(); throw error; }
   });
 }
 
@@ -1071,14 +1113,23 @@ async function updateHorarioPadrao(id, data) {
   return withConnection(async (connection) => {
     const allowed = ['DESCR', 'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS'];
     const updates = Object.fromEntries(Object.entries(data || {}).filter(([field]) => allowed.includes(field)));
-    if (!Object.keys(updates).length) return null;
-    const assignments = Object.keys(updates).map((field) => `${field.toLowerCase()} = :${field}`).join(', ');
-    const result = await connection.execute(
-      `update sgn_esc_horario_padrao set ${assignments} where eschorpad_id = :id`,
-      { ...updates, id },
-      { autoCommit: true }
-    );
-    if (!result.rowsAffected) return null;
+    if (!Object.keys(updates).length && !Array.isArray(data.LOJAS)) return null;
+    try {
+      const found = await connection.execute(
+        'select eschorpad_id from sgn_esc_horario_padrao where eschorpad_id = :id for update wait 5',
+        { id }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      if (!found.rows.length) { await connection.rollback(); return null; }
+      if (Object.keys(updates).length) {
+        const assignments = Object.keys(updates).map((field) => `${field.toLowerCase()} = :${field}`).join(', ');
+        await connection.execute(
+          `update sgn_esc_horario_padrao set ${assignments} where eschorpad_id = :id`,
+          { ...updates, id }, { autoCommit: false }
+        );
+      }
+      if (Array.isArray(data.LOJAS)) await replaceHorarioLojas(connection, id, data.LOJAS);
+      await connection.commit();
+    } catch (error) { await connection.rollback(); throw error; }
     const horarios = await listHorariosPadrao({ includeInactive: true });
     return horarios.find((horario) => Number(horario.ESCHORPAD_ID) === Number(id)) || null;
   });
@@ -1255,6 +1306,7 @@ module.exports = {
   listAusenciasByLojaMes,
   listTiposDescanso,
   listHorariosPadrao,
+  getAllowedProfileKeys,
   createTipoDescanso,
   createHorarioPadrao,
   updateTipoDescanso,

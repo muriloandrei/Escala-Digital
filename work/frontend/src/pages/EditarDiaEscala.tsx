@@ -258,7 +258,7 @@ export function EditarDiaEscala({
             </div>
             {mode === 'TRB' && (
               <><div className="day-editor-times">
-                {!apprentice && !plantao12x36 && <ShiftProfileSelect value={profile} sundayOnly={domingo6h} postStore={Number(lojaId) >= 700 && Number(lojaId) <= 799} onSelect={(item) => {
+              {!apprentice && !plantao12x36 && <ShiftProfileSelect value={profile} sundayOnly={domingo6h} lojaId={lojaId} onSelect={(item) => {
                   const next = applyShiftProfile({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
                     HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
                   if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }

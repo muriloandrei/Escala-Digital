@@ -10,6 +10,8 @@ test('duration-only profile insert does not require fixed start or end times', a
   const serviceRequire = createRequire(servicePath);
   const statements = [];
   const connection = {
+    async commit() {},
+    async rollback() {},
     async execute(sql, binds) {
       statements.push({ sql, binds });
       return { outBinds: { id: [42] } };
@@ -30,4 +32,5 @@ test('duration-only profile insert does not require fixed start or end times', a
   assert.doesNotMatch(statements[0].sql, /hr_ent1|hr_sai1|hr_ent2|hr_sai2/i);
   assert.deepEqual(Object.keys(statements[0].binds).sort(),
     ['descr', 'id', 'intervaloMinutos', 'jornadaMinutos', 'status'].sort());
+  assert.match(statements[1].sql, /delete from sgn_esc_horpad_loja/i);
 });

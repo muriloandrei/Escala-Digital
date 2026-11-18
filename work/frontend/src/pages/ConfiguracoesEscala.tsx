@@ -5,10 +5,10 @@ import { ApiError, canCreate, canEdit, getJson, patchJson, postJson, type User }
 type Regra = { codigo: string; titulo: string; descricao: string };
 type Horario = {
   ESCHORPAD_ID: number; DESCR: string; HR_ENT1: string; HR_SAI1: string; HR_ENT2: string; HR_SAI2: string;
-  JORNADA_MINUTOS: number; INTERVALO_MINUTOS: number; STATUS: 'A' | 'I';
+  JORNADA_MINUTOS: number; INTERVALO_MINUTOS: number; STATUS: 'A' | 'I'; LOJAS: number[];
 };
-type Form = Pick<Horario, 'DESCR' | 'JORNADA_MINUTOS' | 'INTERVALO_MINUTOS' | 'STATUS'>;
-const emptyForm: Form = { DESCR: '', JORNADA_MINUTOS: 528, INTERVALO_MINUTOS: 70, STATUS: 'A' };
+type Form = Pick<Horario, 'DESCR' | 'JORNADA_MINUTOS' | 'INTERVALO_MINUTOS' | 'STATUS' | 'LOJAS'>;
+const emptyForm: Form = { DESCR: '', JORNADA_MINUTOS: 528, INTERVALO_MINUTOS: 70, STATUS: 'A', LOJAS: [] };
 const profiles = new Set(['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']);
 const workOptions = [528, 504, 360, 300];
 
@@ -45,6 +45,8 @@ export function RegrasEscala() {
 
 export function HorariosPadrao({ user }: { user: User }) {
   const [rows, setRows] = useState<Horario[]>([]);
+  const [lojas, setLojas] = useState<number[]>([]);
+  const [lojaSearch, setLojaSearch] = useState('');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [editing, setEditing] = useState<Horario | 'new' | null>(null);
@@ -71,10 +73,19 @@ export function HorariosPadrao({ user }: { user: User }) {
     return () => controller.abort();
   }, [reload]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    getJson<{ lojas: { LOJA: number }[] }>('/api/catalog/lojas', controller.signal)
+      .then((result) => setLojas((result.lojas || []).map((loja) => Number(loja.LOJA)).filter(Boolean).sort((a, b) => a - b)))
+      .catch((reason) => { if (reason.name !== 'AbortError') setError(reason.message); });
+    return () => controller.abort();
+  }, [reload]);
+
   function openEditor(row: Horario | 'new') {
     setEditing(row);
-    setForm(row === 'new' ? emptyForm : { DESCR: row.DESCR, JORNADA_MINUTOS: row.JORNADA_MINUTOS,
-      INTERVALO_MINUTOS: row.INTERVALO_MINUTOS, STATUS: row.STATUS });
+    setForm(row === 'new' ? { ...emptyForm, LOJAS: [] } : { DESCR: row.DESCR, JORNADA_MINUTOS: row.JORNADA_MINUTOS,
+      INTERVALO_MINUTOS: row.INTERVALO_MINUTOS, STATUS: row.STATUS, LOJAS: row.LOJAS || [] });
+    setLojaSearch('');
     setActionError('');
     setUncertain(false);
   }
@@ -128,8 +139,8 @@ export function HorariosPadrao({ user }: { user: User }) {
     <section className="list-surface" aria-label="Jornadas padrão"><div className="filters"><label className="search-field"><Search size={17} /><span className="sr-only">Buscar jornadas</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Descrição ou duração" /></label>
       <label className="catalog-status-filter">Status<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">Todos</option><option value="A">Ativos</option><option value="I">Inativos</option></select></label></div>
       {loading ? <div className="empty-state" role="status">Carregando horários...</div> : !filtered.length ? <div className="empty-state">Nenhum horário encontrado.</div>
-        : <div className="table-scroll"><table><thead><tr><th>Descrição</th><th>Jornada</th><th>Intervalo</th><th>Status</th><th>Ações</th></tr></thead>
-          <tbody>{filtered.map((row) => <tr key={row.ESCHORPAD_ID}><td><strong>{row.DESCR}</strong></td><td>{formatMinutes(Number(row.JORNADA_MINUTOS || 0))}</td><td>{formatMinutes(Number(row.INTERVALO_MINUTOS || 0))}</td><td>{row.STATUS === 'A' ? 'Ativo' : 'Inativo'}</td>
+        : <div className="table-scroll"><table><thead><tr><th>Descrição</th><th>Jornada</th><th>Intervalo</th><th>Lojas</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody>{filtered.map((row) => <tr key={row.ESCHORPAD_ID}><td><strong>{row.DESCR}</strong></td><td>{formatMinutes(Number(row.JORNADA_MINUTOS || 0))}</td><td>{formatMinutes(Number(row.INTERVALO_MINUTOS || 0))}</td><td title={(row.LOJAS || []).join(', ')}>{(row.LOJAS || []).length}</td><td>{row.STATUS === 'A' ? 'Ativo' : 'Inativo'}</td>
             <td className="catalog-actions">{canEdit(user, 'horarios-padrao') && <><button className="icon-action" type="button" title={`Editar ${row.DESCR}`} aria-label={`Editar ${row.DESCR}`} onClick={() => openEditor(row)}><Pencil size={16} /></button>
               <button className="button secondary" type="button" onClick={() => { setActionError(''); setUncertain(false); setConfirmStatus(row); }}>{row.STATUS === 'A' ? 'Inativar' : 'Reativar'}</button></>}</td></tr>)}</tbody></table></div>}
     </section>
@@ -143,6 +154,15 @@ export function HorariosPadrao({ user }: { user: User }) {
         }}>{workOptions.map((value) => <option key={value} value={value}>{formatMinutes(value)}</option>)}</select></label>
         <label>Intervalo<select value={form.INTERVALO_MINUTOS} disabled={busy || uncertain} onChange={(event) => setForm({ ...form, INTERVALO_MINUTOS: Number(event.target.value) })}>
           {[15, 70, 100].filter((value) => profiles.has(`${form.JORNADA_MINUTOS}:${value}`)).map((value) => <option key={value} value={value}>{formatMinutes(value)}</option>)}</select></label></div>
+      <fieldset className="shift-store-fieldset" disabled={busy || uncertain}>
+        <legend>Lojas ({form.LOJAS.length})</legend>
+        <div className="shift-store-toolbar"><input aria-label="Buscar loja" placeholder="Buscar loja" value={lojaSearch} onChange={(event) => setLojaSearch(event.target.value)} />
+          <button className="button secondary" type="button" onClick={() => setForm({ ...form, LOJAS: lojas })}>Todas</button>
+          <button className="button secondary" type="button" onClick={() => setForm({ ...form, LOJAS: [] })}>Nenhuma</button></div>
+        <div className="shift-store-list">{lojas.filter((loja) => String(loja).includes(lojaSearch.trim())).map((loja) =>
+          <label key={loja}><input type="checkbox" checked={form.LOJAS.includes(loja)} onChange={(event) => setForm({ ...form, LOJAS: event.target.checked
+            ? [...form.LOJAS, loja].sort((a, b) => a - b) : form.LOJAS.filter((value) => value !== loja) })} />Loja {loja}</label>)}</div>
+      </fieldset>
       {actionError && <div className="notice error" role="alert">{actionError}{uncertain && ' Confira a lista antes de repetir.'}</div>}
       <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditing(null)}>Cancelar</button><button className="button primary" type="submit" disabled={busy || uncertain || !validProfile}>{busy ? 'Salvando...' : 'Salvar jornada'}</button></div>
     </form></div>}

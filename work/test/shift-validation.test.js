@@ -60,3 +60,11 @@ test('post shift profiles are available only with the post-store flag', () => {
   assert.match(validateStandardShift({ ...postFiveTwo, HR_ENT2: '12:50', HR_SAI2: '16:44' },
     { allowProfiles: true, allowPostProfiles: true, exactInterval: true }).join(' '), /Jornada total|Intervalo/);
 });
+
+test('assigned 08:24 profile is available to practical stores with its exact interval', () => {
+  const shift = { HR_ENT1: '07:00', HR_SAI1: '11:30', HR_ENT2: '12:40', HR_SAI2: '16:34' };
+  assert.deepEqual(validateStandardShift(shift, { allowProfiles: true, profileKeys: new Set(['528:70', '504:70']) }), []);
+  assert.match(validateStandardShift(shift, { allowProfiles: true, profileKeys: new Set(['528:70']) }).join(' '), /Jornada total/);
+  assert.match(validateStandardShift({ ...shift, HR_ENT2: '13:10', HR_SAI2: '17:04' },
+    { allowProfiles: true, profileKeys: new Set(['504:70']) }).join(' '), /Intervalo/);
+});

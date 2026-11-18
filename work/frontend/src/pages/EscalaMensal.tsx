@@ -109,7 +109,7 @@ type CritiqueGroup = {
   marcadores: { escfuncId: number; datas: string[]; mensagem: string }[];
 };
 
-type SectionProgress = { escsecaoId: number; completa: boolean; oficializada: boolean; podeOficializar: boolean; criticas: number };
+type SectionProgress = { escsecaoId: number; completa: boolean; oficializada: boolean; podeOficializar: boolean; criticas: number; criticasBloqueantes: number };
 type ScheduleProgress = { habilitada: boolean; secoes: SectionProgress[]; oficializada: boolean };
 type DomingoAnterior = { data: string; dias: DiaEscala[] };
 
@@ -619,15 +619,15 @@ export function EscalaMensal({ user }: { user: User }) {
           </p>
         </div>
         <div className="heading-actions">
-          <Link
-            className="button secondary"
-            to={`/escalas/${encodeURIComponent(lojaId || '')}/${encodeURIComponent(mesRef || '')}/imprimir?secao=${sectionId || ''}`}
-          >
+          {sectionProgress?.oficializada ? <Link className="button secondary"
+            to={`/escalas/${encodeURIComponent(lojaId || '')}/${encodeURIComponent(mesRef || '')}/imprimir?secao=${sectionId || ''}`}>
             <Printer size={16} /> Imprimir
-          </Link>
+          </Link> : <button className="button secondary" type="button" disabled title="Oficialize a seção antes de imprimir">
+            <Printer size={16} /> Imprimir
+          </button>}
           {canOfficialize && !sectionProgress?.oficializada && <button className="button success" type="button"
             disabled={loading || actionBusy || !progress?.habilitada || !sectionProgress?.podeOficializar || (escala?.status === 'FINALIZADA' && !canEditHistorical)}
-            title={!progress?.habilitada ? 'Oficialização desabilitada nesta loja' : !sectionProgress?.completa ? 'Gere todos os dias da seção' : sectionProgress.criticas ? 'Resolva as críticas da seção' : undefined}
+            title={!progress?.habilitada ? 'Oficialização desabilitada nesta loja' : !sectionProgress?.completa ? 'Gere todos os dias da seção' : sectionProgress?.criticasBloqueantes ? 'Resolva as críticas de hoje e dos próximos dias' : undefined}
             onClick={() => { setActionError(''); setPendingAction('oficializar'); }}><ShieldCheck size={16} /> Oficializar</button>}
           {canSeeProgress && <button className="button secondary" type="button" onClick={() => updateFilter('progresso', '1')}>Progresso da escala</button>}
           <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}>

@@ -45,6 +45,20 @@ test('section progress requires every employee day and individual critiques to b
   assert.equal(approved.oficializada, true);
 });
 
+test('past-only critiques remain visible but do not block officialization', () => {
+  const dias = week();
+  dias[0] = { ...dias[0], HR_SAI2: '16:30' };
+  const input = { escala: { dias }, secoes: [section], pessoas: [person],
+    periodo: period, lojaId: 10, mesRef: '2026-11-01' };
+  const past = buildProgress({ ...input, todayIso: '2026-11-09' }).secoes[0];
+  assert.ok(past.criticas > 0);
+  assert.equal(past.criticasBloqueantes, 0);
+  assert.equal(past.podeOficializar, true);
+  const current = buildProgress({ ...input, todayIso: '2026-11-02' }).secoes[0];
+  assert.ok(current.criticasBloqueantes > 0);
+  assert.equal(current.podeOficializar, false);
+});
+
 test('01/11 nao bloqueia oficializacao de novembro mesmo sem dia gerado', () => {
   const input = { secoes: [section], pessoas: [person],
     periodo: { inicio: '2026-11-01', fim: '2026-11-08' }, lojaId: 10, mesRef: '2026-11-01' };

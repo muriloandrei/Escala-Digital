@@ -7,7 +7,6 @@ const pendenciaFuncionarioService = require('../services/pendenciaFuncionarioSer
 const subsectionTransferService = require('../services/subsectionTransferService');
 const escalaService = require('../services/escalaService');
 const auditService = require('../services/auditService');
-const workRegimeService = require('../services/workRegimeService');
 const { validateStandardShift } = require('../domain/shiftValidation');
 
 const router = express.Router();
@@ -91,16 +90,27 @@ const horarioPadraoSchema = z.object({
   DESCR: z.string().trim().min(1).max(100),
   JORNADA_MINUTOS: z.number().int().positive().max(1440),
   INTERVALO_MINUTOS: z.number().int().positive().max(480),
+  LOJAS: z.array(z.number().int().positive()).max(1000).refine((lojas) => new Set(lojas).size === lojas.length).optional(),
   STATUS: z.enum(['A', 'I']).optional()
 }).strict();
 
 const jornadasPermitidas = new Set(['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']);
 
+async function assertHorarioLojasValidas(lojas) {
+  if (!lojas) return;
+  const existentes = new Set((await catalogService.listLojas()).map((loja) => Number(loja.LOJA)));
+  if (lojas.some((loja) => !existentes.has(loja))) {
+    const error = new Error('A jornada contem lojas nao cadastradas.');
+    error.statusCode = 422;
+    throw error;
+  }
+}
+
 router.use(requireAuth);
 
-function assertValidSecaoTurno(data, lojaId) {
+async function assertValidSecaoTurno(data, lojaId) {
   const errors = validateStandardShift(data, { allowProfiles: true,
-    allowPostProfiles: workRegimeService.isPostStore(lojaId) });
+    profileKeys: await catalogService.getAllowedProfileKeys(lojaId) });
   if (!errors.length) return;
   const error = new Error('Campos de turno da secao invalidos.');
   error.statusCode = 422;
@@ -181,7 +191,10 @@ router.patch('/tipos-descanso/:tipoId', requirePermission('tipos-descanso', 'edi
 
 router.get('/horarios-padrao', async (req, res, next) => {
   try {
-    const horarios = await catalogService.listHorariosPadrao({ includeInactive: req.query.includeInactive === '1' });
+    const lojaId = req.query.lojaId ? Number(req.query.lojaId) : null;
+    if (req.query.lojaId && (!Number.isInteger(lojaId) || lojaId <= 0)) return res.status(400).json({ error: 'Loja invalida.' });
+    const lojaPermitida = lojaId === null ? null : (await getLojasPermitidas(req, lojaId))[0];
+    const horarios = await catalogService.listHorariosPadrao({ includeInactive: req.query.includeInactive === '1', lojaId: lojaPermitida });
     return res.json({ horarios });
   } catch (error) {
     return next(error);
@@ -194,6 +207,7 @@ router.post('/horarios-padrao', requirePermission('horarios-padrao', 'criar'), a
     if (!jornadasPermitidas.has(`${data.JORNADA_MINUTOS}:${data.INTERVALO_MINUTOS}`)) {
       return res.status(422).json({ error: 'Duracao de jornada ou intervalo invalida.' });
     }
+    await assertHorarioLojasValidas(data.LOJAS);
     const horario = await catalogService.createHorarioPadrao(data);
     return res.status(201).json({ horario });
   } catch (error) {
@@ -207,6 +221,7 @@ router.post('/horarios-padrao', requirePermission('horarios-padrao', 'criar'), a
 router.patch('/horarios-padrao/:horarioId', requirePermission('horarios-padrao', 'editar'), async (req, res, next) => {
   try {
     const data = horarioPadraoSchema.partial().parse(req.body);
+    await assertHorarioLojasValidas(data.LOJAS);
     if (['JORNADA_MINUTOS', 'INTERVALO_MINUTOS'].some((key) => key in data)) {
       const current = (await catalogService.listHorariosPadrao({ includeInactive: true }))
         .find((item) => Number(item.ESCHORPAD_ID) === Number(req.params.horarioId));
@@ -600,7 +615,7 @@ router.get('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, a
 router.post('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, requirePermission('turnos-secao', 'criar'), async (req, res, next) => {
   try {
     const data = turnoSecaoSchema.parse(req.body);
-    assertValidSecaoTurno(data, req.params.lojaId);
+    await assertValidSecaoTurno(data, req.params.lojaId);
     const turno = await catalogService.saveSecaoTurno({
       lojaId: Number(req.params.lojaId),
       escsecaoId: data.ESCSECAO_ID,
@@ -626,7 +641,7 @@ router.post('/lojas/:lojaId/turnos-secao', resolveLojaParam, requireLojaAccess, 
 router.put('/lojas/:lojaId/turnos-secao/:escsecaoTurnoId', resolveLojaParam, requireLojaAccess, requirePermission('turnos-secao', 'editar'), async (req, res, next) => {
   try {
     const data = turnoSecaoSchema.parse(req.body);
-    assertValidSecaoTurno(data, req.params.lojaId);
+    await assertValidSecaoTurno(data, req.params.lojaId);
     const turno = await catalogService.saveSecaoTurno({
       lojaId: Number(req.params.lojaId),
       escsecaoTurnoId: Number(req.params.escsecaoTurnoId),
@@ -653,7 +668,7 @@ router.put('/lojas/:lojaId/turnos-secao/:escsecaoTurnoId', resolveLojaParam, req
 router.patch('/lojas/:lojaId/secoes/:escsecaoId/turno', resolveLojaParam, requireLojaAccess, requirePermission('turnos-secao', 'editar'), async (req, res, next) => {
   try {
     const data = secaoTurnoSchema.parse(req.body);
-    assertValidSecaoTurno(data, req.params.lojaId);
+    await assertValidSecaoTurno(data, req.params.lojaId);
     const turno = await catalogService.saveSecaoTurno({
       lojaId: Number(req.params.lojaId),
       escsecaoId: Number(req.params.escsecaoId),

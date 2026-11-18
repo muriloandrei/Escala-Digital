@@ -3494,7 +3494,9 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
           data: formatDateValue(pick(row, 'DT', 'dt')),
           hrEnt1: pick(row, 'HR_ENT1', 'hr_ent1'), hrSai1: pick(row, 'HR_SAI1', 'hr_sai1'),
           hrEnt2: pick(row, 'HR_ENT2', 'hr_ent2'), hrSai2: pick(row, 'HR_SAI2', 'hr_sai2'),
-          programacao: pick(row, 'PROGRAMACAO', 'programacao')
+          programacao: pick(row, 'PROGRAMACAO', 'programacao'),
+          jornadaMinutos: pick(row, 'JORNADA_MINUTOS', 'jornada_minutos'),
+          intervaloMinutos: pick(row, 'INTERVALO_MINUTOS', 'intervalo_minutos')
         });
       }
       const domingoConfig = await connection.execute(
@@ -3503,6 +3505,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
       );
       const domingo6h = Number(domingoConfig.rows?.[0]?.DOMINGO_6H_HABILITADO) === 1;
       const domingo1x1 = Number(domingoConfig.rows?.[0]?.DOMINGO_1X1_HABILITADO) === 1;
+      const allowedProfiles = await catalogService.getAllowedProfileKeys(lojaId, connection);
       const regimes = Number(lojaId) >= 700 && Number(lojaId) <= 799
         ? await require('./workRegimeService').listEffective(connection, { lojaId, mesRef }) : new Map();
       for (const funcionario of funcionarios.values()) {
@@ -3518,7 +3521,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
             { lojaId, employeeIds: [...funcionarios.keys()] }));
       }
       const criticas = validarCriticasEscopo({ lojaId, mesRef, funcionarios: [...funcionarios.values()],
-        domingo6h, domingo1x1, domingoAnteriorPorFuncionario });
+        domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario, apenasBloqueantes: true, hojeIso: getHojeIso() });
       if (criticas.length) {
         const error = new Error('Resolva as criticas da secao/subsecao antes de oficializar.');
         error.statusCode = 422;

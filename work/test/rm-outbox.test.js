@@ -426,7 +426,7 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
   const module = { exports: {} };
   const dependencies = {
     '../db/oracle': { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } },
-    './catalogService': {},
+    './catalogService': { getAllowedProfileKeys: async () => new Set(['528:70', '360:70', '300:15']) },
     './escalaEventService': {
       createOperationId: () => 'op-queue',
       appendEvent: async () => { operations.push('event'); }

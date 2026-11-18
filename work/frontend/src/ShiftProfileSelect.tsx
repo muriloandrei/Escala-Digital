@@ -7,19 +7,15 @@ export type ShiftProfile = {
   INTERVALO_MINUTOS: number;
 };
 
-const allowed = new Set(['528:70', '360:70', '300:15']);
-const postAllowed = new Set(['528:100', '504:70', '504:100']);
-const baseProfile: ShiftProfile = { ESCHORPAD_ID: 0, DESCR: 'Jornada padrão', JORNADA_MINUTOS: 528, INTERVALO_MINUTOS: 70 };
-
 function duration(minutes: number) {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
-export function ShiftProfileSelect({ onSelect, disabled = false, sundayOnly = false, postStore = false, value }: {
+export function ShiftProfileSelect({ onSelect, disabled = false, sundayOnly = false, lojaId, value }: {
   onSelect: (profile: ShiftProfile) => void;
   disabled?: boolean;
   sundayOnly?: boolean;
-  postStore?: boolean;
+  lojaId: string | number;
   value?: { work: number; interval: number };
 }) {
   const [profiles, setProfiles] = useState<ShiftProfile[]>([]);
@@ -28,18 +24,15 @@ export function ShiftProfileSelect({ onSelect, disabled = false, sundayOnly = fa
 
   useEffect(() => {
     const controller = new AbortController();
-    getJson<{ horarios: ShiftProfile[] }>('/api/catalog/horarios-padrao', controller.signal)
-      .then(({ horarios }) => setProfiles((horarios || []).filter((item) =>
-        allowed.has(`${item.JORNADA_MINUTOS}:${item.INTERVALO_MINUTOS}`)
-          || postAllowed.has(`${item.JORNADA_MINUTOS}:${item.INTERVALO_MINUTOS}`))))
+    getJson<{ horarios: ShiftProfile[] }>(`/api/catalog/horarios-padrao?lojaId=${encodeURIComponent(String(lojaId))}`, controller.signal)
+      .then(({ horarios }) => setProfiles(horarios || []))
       .catch((reason) => { if (reason.name !== 'AbortError') setError('Horários cadastrados indisponíveis.'); });
     return () => controller.abort();
-  }, []);
+  }, [lojaId]);
 
-  const available = [baseProfile, ...profiles].filter((item, index, all) =>
+  const available = profiles.filter((item, index, all) =>
     all.findIndex((other) => other.JORNADA_MINUTOS === item.JORNADA_MINUTOS && other.INTERVALO_MINUTOS === item.INTERVALO_MINUTOS) === index)
-    .filter((item) => (postStore || !postAllowed.has(`${item.JORNADA_MINUTOS}:${item.INTERVALO_MINUTOS}`))
-      && (!sundayOnly || item.JORNADA_MINUTOS === 360));
+    .filter((item) => !sundayOnly || item.JORNADA_MINUTOS === 360);
   const active = value ? `${value.work}:${value.interval}` : selected;
   return <div className="shift-profiles" role="group" aria-label="Jornada">
     <span className="shift-profiles-label">Jornada</span>

@@ -31,7 +31,8 @@ function dateKey(value) {
 }
 
 function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], suspensoes = [], periodo, lojaId, mesRef,
-  includeEmpty = false, includeCritiques = true, domingo6h = false, domingo1x1 = true, domingoAnteriorPorFuncionario = null,
+  includeEmpty = false, includeCritiques = true, domingo6h = false, domingo1x1 = true,
+  allowedProfiles = null, domingoAnteriorPorFuncionario = null,
   todayIso = dateKey(new Date()) }) {
   const dates = datesInPeriod(periodo).filter((date) => !isIgnoredOfficializationDate(mesRef, date));
   const suspensionByEmployee = new Map();
@@ -110,7 +111,9 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
           && !isIgnoredOfficializationDate(mesRef, dateKey(day.DT)))
     }));
     const criticas = includeCritiques && people.length ? validarCriticasEscopo({ lojaId, mesRef, funcionarios,
-      domingo6h, domingo1x1, domingoAnteriorPorFuncionario }) : [];
+      domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario }) : [];
+    const criticasBloqueantes = includeCritiques && people.length ? validarCriticasEscopo({ lojaId, mesRef, funcionarios,
+      domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario, apenasBloqueantes: true, hojeIso: todayIso }) : [];
     const completa = expected > 0 && filled === expected;
     return {
       escsecaoId, secao: secao.DESCR, codigo: secao.COD_SECAO,
@@ -118,9 +121,9 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
         .map((person) => person.escfuncId),
       funcionarios: people.length, previstos: expected, preenchidos: filled,
       percentual: expected ? Math.round(filled / expected * 100) : 0,
-      criticas: criticas.length, completa,
+      criticas: criticas.length, criticasBloqueantes: criticasBloqueantes.length, completa,
       oficializada: completa && official === expected,
-      podeOficializar: completa && criticas.length === 0 && official !== expected
+      podeOficializar: completa && criticasBloqueantes.length === 0 && official !== expected
     };
   }).filter((section) => includeEmpty || section.funcionarios > 0);
   return { secoes: results, oficializada: results.length > 0 && results.every((section) => section.oficializada) };
@@ -148,6 +151,7 @@ function groupProgressSections(secoes, { lojaId, finalized = false } = {}) {
       preenchidos,
       percentual: previstos ? Math.round(preenchidos / previstos * 100) : 0,
       criticas: parts.reduce((sum, part) => sum + part.criticas, 0),
+      criticasBloqueantes: parts.reduce((sum, part) => sum + (part.criticasBloqueantes || 0), 0),
       completa: parts.some((part) => part.funcionarios > 0) && parts.every((part) => !part.funcionarios || part.completa),
       oficializada: parts.some((part) => part.funcionarios > 0) && parts.every((part) => !part.funcionarios || part.oficializada),
       partes: parts.map((part) => ({ ...part,
@@ -218,7 +222,7 @@ async function setStoreEnabled(lojaId, enabled) {
 async function getProgress({ lojaId, mesRef, secoesPermitidas = null, escala = null,
   includeEmpty = false, includeCritiques = true }) {
   const periodo = getOperationalPeriodIso(mesRef);
-  const [schedule, secoes, pessoas, suspensoes, enabled, todasSecoesEnabled, domingo6h, domingo1x1] = await Promise.all([
+  const [schedule, secoes, pessoas, suspensoes, enabled, todasSecoesEnabled, domingo6h, domingo1x1, allowedProfiles] = await Promise.all([
     escala || escalaService.getEscalaMensal({ lojaId, mesRef, secoesPermitidas }),
     catalogService.listSecoesByLoja(lojaId, { secoesPermitidas }),
     catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }),
@@ -226,14 +230,15 @@ async function getProgress({ lojaId, mesRef, secoesPermitidas = null, escala = n
     getStoreEnabled(lojaId),
     sectionRolloutService.getStoreEnabled(lojaId),
     sundayShiftService.getStoreEnabled(lojaId),
-    sundayAlternationService.getStoreEnabled(lojaId)
+    sundayAlternationService.getStoreEnabled(lojaId),
+    catalogService.getAllowedProfileKeys(lojaId)
   ]);
   const operacionais = selectProgressSections(secoes, lojaId, todasSecoesEnabled);
   const domingoAnterior = includeCritiques
     ? await previousSundayService.getPriorSunday({ lojaId, mesRef,
       employeeIds: pessoas.map((person) => Number(person.ESCFUNC_ID)).filter(Number.isSafeInteger) }) : null;
   const progress = buildProgress({ escala: schedule, secoes: operacionais, pessoas, suspensoes, periodo, lojaId, mesRef,
-    includeEmpty, includeCritiques, domingo6h, domingo1x1,
+    includeEmpty, includeCritiques, domingo6h, domingo1x1, allowedProfiles,
     domingoAnteriorPorFuncionario: previousSundayService.priorSundayByEmployee(domingoAnterior) });
   return { ...progress, grupos: groupProgressSections(progress.secoes, { lojaId,
     finalized: schedule.status === 'FINALIZADA' }), habilitada: enabled === true };
