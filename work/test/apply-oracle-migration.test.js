@@ -23,6 +23,7 @@ test('monthly base hours and Sunday 1x1 store configuration are versioned', () =
 test('journey assignments seed 08:24 for practical stores', () => {
   const sql = readMigration('20261118_horarios_padrao_por_loja.sql').sql;
   assert.match(sql, /create table sgn_esc_horpad_loja/i);
+  assert.match(sql, /execute immediate q'\[\s*insert into sgn_esc_horpad_loja/i);
   assert.match(sql, /l\.loja between 400 and 499 and h\.jornada_minutos = 504/i);
   assert.match(sql, /h\.intervalo_minutos in \(70, 100\)/i);
 });
