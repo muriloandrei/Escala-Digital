@@ -1,7 +1,6 @@
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
 const { validateStandardShift, validateApprenticeShift, validate12x36Shift } = require('./shiftValidation');
 const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('./workRegime');
-const { getNationalHoliday } = require('./nationalHolidays');
 
 function validateQuickRestWorkEdit(funcionario, diasAnteriores = [], { allowShiftChange = false, domingo6h = false, lojaId = null } = {}) {
   const alteracoes = buildDiaAlteracoes(diasAnteriores, funcionario.dias || []);
@@ -20,7 +19,6 @@ function validateQuickRestWorkEdit(funcionario, diasAnteriores = [], { allowShif
     const duty = isDutyDay(funcionario.dtAncora12x36 || funcionario.DT_ANCORA_12X36, date);
     if (novo.programacao === 'TRB' && !duty) return 'Descanso 12x36 obrigatorio neste dia.';
     if (novo.programacao === 'F' && duty) return 'Plantao 12x36 previsto neste dia.';
-    if (novo.programacao === 'FDO' && !getNationalHoliday(date)) return 'FDO so e permitida em feriado nacional.';
     if (novo.programacao === 'TRB') return validate12x36Shift({
       HR_ENT1: novo.hrEnt1, HR_SAI1: novo.hrSai1,
       HR_ENT2: novo.hrEnt2, HR_SAI2: novo.hrSai2

@@ -1077,11 +1077,12 @@ export function EscalaMensal({ user }: { user: User }) {
         subsecoes={isPortariaView ? frontSubsections : sectionCatalog?.SUBSECOES || []}
         canRetry={user.perfil === 'ADMIN'}
         onClose={() => setTransferTarget(null)}
-        onTransferred={({ destination, warning, scheduled, reapprovalRequired }) => {
+        onTransferred={({ destination, sectionId: destinationSectionId, warning, scheduled, reapprovalRequired }) => {
           setTransferTarget(null);
           setReload((value) => value + 1);
           if (!scheduled) {
-            if (isPortariaView) selectSubsectionInFront(destination);
+            if (Number(destinationSectionId) !== Number(sectionId)) updateFilter('secao', String(destinationSectionId), true);
+            else if (isPortariaView) selectSubsectionInFront(destination);
             else updateFilter('subsecao', destination);
           }
           setActionMessage(warning || (scheduled

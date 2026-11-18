@@ -7,6 +7,7 @@ const escalaService = require('../src/services/escalaService');
 const rmIntegrationService = require('../src/services/rmIntegrationService');
 const auditService = require('../src/services/auditService');
 const sectionRolloutService = require('../src/services/sectionRolloutService');
+const sundayAlternationService = require('../src/services/sundayAlternationService');
 
 function response() {
   return { code: 200, body: null,
@@ -31,6 +32,26 @@ test('admin store scope toggle is persisted and audited', async () => {
     assert.equal(calls[1].lojaId, 64);
   } finally {
     sectionRolloutService.setStoreEnabled = originalSet;
+    auditService.registerAudit = originalAudit;
+  }
+});
+
+test('admin can enable Sunday 1x1 by store and the action is audited', async () => {
+  const handle = router.stack.find((layer) => layer.route?.path === '/domingo-1x1-loja').route.stack.at(-1).handle;
+  const originalSet = sundayAlternationService.setStoreEnabled;
+  const originalAudit = auditService.registerAudit;
+  const calls = [];
+  sundayAlternationService.setStoreEnabled = async (...args) => { calls.push(args); return true; };
+  auditService.registerAudit = async (payload) => { calls.push(payload); };
+  try {
+    const res = response();
+    await handle({ body: { lojaId: 701, habilitada: false }, user: { perfil: 'ADMIN', sub: 1 } }, res,
+      (error) => { throw error; });
+    assert.deepEqual(res.body, { ok: true, habilitada: false });
+    assert.deepEqual(calls[0], [701, false]);
+    assert.equal(calls[1].action, 'ALTERAR_DOMINGO_1X1_LOJA');
+  } finally {
+    sundayAlternationService.setStoreEnabled = originalSet;
     auditService.registerAudit = originalAudit;
   }
 });

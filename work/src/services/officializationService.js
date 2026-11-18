@@ -8,6 +8,7 @@ const { isSecaoEscopoOperacional, isSecaoFiscalRemoto } = require('./monthlyRele
 const { isPortariaSection } = require('../domain/portariaSection');
 const sectionRolloutService = require('./sectionRolloutService');
 const sundayShiftService = require('./sundayShiftService');
+const sundayAlternationService = require('./sundayAlternationService');
 const previousSundayService = require('./previousSundayService');
 const { isIgnoredOfficializationDate, isRequiredOfficializationDate } = require('../domain/officializationDates');
 
@@ -30,7 +31,7 @@ function dateKey(value) {
 }
 
 function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], suspensoes = [], periodo, lojaId, mesRef,
-  includeEmpty = false, includeCritiques = true, domingo6h = false, domingoAnteriorPorFuncionario = null,
+  includeEmpty = false, includeCritiques = true, domingo6h = false, domingo1x1 = true, domingoAnteriorPorFuncionario = null,
   todayIso = dateKey(new Date()) }) {
   const dates = datesInPeriod(periodo).filter((date) => !isIgnoredOfficializationDate(mesRef, date));
   const suspensionByEmployee = new Map();
@@ -50,10 +51,17 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
   const diasPorFuncionario = new Map();
   const secaoPorId = new Map(secoes.map((secao) => [Number(secao.ESCSECAO_ID), secao]));
   const secaoDaEscala = new Map();
+  const secaoDia = (dia) => {
+    const anterior = Number(dia.ESCSECAO_ID_ESCALA);
+    const atual = Number(dia.ESCSECAO_ID);
+    const migracaoPortaria = anterior && isPortariaSection(secaoPorId.get(anterior))
+      && /[.]02[.]002$/.test(String(secaoPorId.get(atual)?.COD_SECAO || ''));
+    return escala.status === 'FINALIZADA' || migracaoPortaria ? anterior || atual : atual || anterior;
+  };
   for (const dia of escala.dias || []) {
     const id = Number(dia.ESCFUNC_ID);
     if (!diasPorFuncionario.has(id)) diasPorFuncionario.set(id, new Map());
-    const secaoId = Number(dia.ESCSECAO_ID_ESCALA || dia.ESCSECAO_ID);
+    const secaoId = secaoDia(dia);
     diasPorFuncionario.get(id).set(`${secaoId}|${dateKey(dia.DT)}`, dia);
     if (!dia.AUSENCIA_PROJETADA && secaoPorId.has(secaoId)) secaoDaEscala.set(id, secaoId);
   }
@@ -98,11 +106,11 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
       funcao: person.FUNCAO_DESCR,
       regimeEscala: person.REGIME_ESCALA, dtAncora12x36: person.DT_ANCORA_12X36,
       dias: [...(diasPorFuncionario.get(Number(person.ESCFUNC_ID))?.values() || [])]
-        .filter((day) => Number(day.ESCSECAO_ID_ESCALA || day.ESCSECAO_ID) === escsecaoId
+        .filter((day) => secaoDia(day) === escsecaoId
           && !isIgnoredOfficializationDate(mesRef, dateKey(day.DT)))
     }));
     const criticas = includeCritiques && people.length ? validarCriticasEscopo({ lojaId, mesRef, funcionarios,
-      domingo6h, domingoAnteriorPorFuncionario }) : [];
+      domingo6h, domingo1x1, domingoAnteriorPorFuncionario }) : [];
     const completa = expected > 0 && filled === expected;
     return {
       escsecaoId, secao: secao.DESCR, codigo: secao.COD_SECAO,
@@ -210,21 +218,22 @@ async function setStoreEnabled(lojaId, enabled) {
 async function getProgress({ lojaId, mesRef, secoesPermitidas = null, escala = null,
   includeEmpty = false, includeCritiques = true }) {
   const periodo = getOperationalPeriodIso(mesRef);
-  const [schedule, secoes, pessoas, suspensoes, enabled, todasSecoesEnabled, domingo6h] = await Promise.all([
+  const [schedule, secoes, pessoas, suspensoes, enabled, todasSecoesEnabled, domingo6h, domingo1x1] = await Promise.all([
     escala || escalaService.getEscalaMensal({ lojaId, mesRef, secoesPermitidas }),
     catalogService.listSecoesByLoja(lojaId, { secoesPermitidas }),
     catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }),
     getSuspensions(lojaId, periodo),
     getStoreEnabled(lojaId),
     sectionRolloutService.getStoreEnabled(lojaId),
-    sundayShiftService.getStoreEnabled(lojaId)
+    sundayShiftService.getStoreEnabled(lojaId),
+    sundayAlternationService.getStoreEnabled(lojaId)
   ]);
   const operacionais = selectProgressSections(secoes, lojaId, todasSecoesEnabled);
   const domingoAnterior = includeCritiques
     ? await previousSundayService.getPriorSunday({ lojaId, mesRef,
       employeeIds: pessoas.map((person) => Number(person.ESCFUNC_ID)).filter(Number.isSafeInteger) }) : null;
   const progress = buildProgress({ escala: schedule, secoes: operacionais, pessoas, suspensoes, periodo, lojaId, mesRef,
-    includeEmpty, includeCritiques, domingo6h,
+    includeEmpty, includeCritiques, domingo6h, domingo1x1,
     domingoAnteriorPorFuncionario: previousSundayService.priorSundayByEmployee(domingoAnterior) });
   return { ...progress, grupos: groupProgressSections(progress.secoes, { lojaId,
     finalized: schedule.status === 'FINALIZADA' }), habilitada: enabled === true };

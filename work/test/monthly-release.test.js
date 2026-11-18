@@ -8,8 +8,18 @@ const catalogService = require('../src/services/catalogService');
 const escalaService = require('../src/services/escalaService');
 const pendenciaFuncionarioService = require('../src/services/pendenciaFuncionarioService');
 const sundayShiftService = require('../src/services/sundayShiftService');
+const sundayAlternationService = require('../src/services/sundayAlternationService');
 pendenciaFuncionarioService.listarIntervalosSuspensos = async () => new Map();
 sundayShiftService.getStoreEnabled = async () => false;
+sundayAlternationService.getStoreEnabled = async () => true;
+
+test('domingo 1x1 parametrizado amplia os padroes de folga sem liberar mais de duas folgas semanais', () => {
+  const enforced = getPadroesFolgaValidos(true);
+  const relaxed = getPadroesFolgaValidos(false);
+  assert.ok(relaxed.length > enforced.length);
+  assert.ok(relaxed.some((pattern) => pattern.filter((day) => day === 6 || day === 13).length === 0));
+  assert.ok(enforced.every((pattern) => pattern.filter((day) => day === 6 || day === 13).length === 1));
+});
 
 test('monthly release builds draft only from today onward', () => {
   const funcionario = {

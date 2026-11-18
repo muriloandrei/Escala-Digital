@@ -6,7 +6,9 @@ const catalogService = require('../src/services/catalogService');
 const accessService = require('../src/services/accessService');
 const auditService = require('../src/services/auditService');
 const sundayShiftService = require('../src/services/sundayShiftService');
+const sundayAlternationService = require('../src/services/sundayAlternationService');
 sundayShiftService.getStoreEnabled = async () => false;
+sundayAlternationService.getStoreEnabled = async () => true;
 
 function handler(path) {
   return router.stack.find((layer) => layer.route?.path === path && layer.route.methods.post).route.stack.at(-1).handle;

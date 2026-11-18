@@ -59,7 +59,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
     try {
       const result = await patchJson<{ diasAlterados: number; mesesAtualizados: string[]; mesesParaReoficializar: string[] }>(
         '/api/escalas/funcionario/horario', payload());
-      onSaved(`Horário-base de ${employee.NOME} atualizado${result.diasAlterados ? ` · ${result.diasAlterados} dia(s) em ${result.mesesAtualizados.length} mês(es) ajustado(s)` : ''}.${result.mesesParaReoficializar?.length ? ` Reoficialize em ${result.mesesParaReoficializar.join(', ')} para envio ao RM.` : ''}`);
+      onSaved(`Horário-base de ${employee.NOME} atualizado para ${month}${result.diasAlterados ? ` · ${result.diasAlterados} dia(s) ajustado(s)` : ''}.${result.mesesParaReoficializar?.length ? ` Reoficialize em ${result.mesesParaReoficializar.join(', ')} para envio ao RM.` : ''}`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível salvar o horário.'); setImpact(null); }
     finally { setBusy(false); }
   }
@@ -88,7 +88,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
         </label>)}</div>
       <div className="shift-options"><label>Mês de referência<input type="month" min={allowRetroactive ? undefined : minimumMonth} value={month} onChange={(event) => { setMonth(event.target.value); setImpact(null); }} required /></label></div>
       {initialMonth < minimumMonth && !allowRetroactive && <p>A escala aberta é de um mês anterior. A alteração começará no mês vigente.</p>}
-      {impact && <div className="shift-impact"><strong>Prévia</strong><span>{impact.possuiEscala ? `${impact.diasAlterados} dia(s) em ${impact.mesesImpactados.length} mês(es).` : 'Nenhuma escala futura existente.'}</span><span>{impact.diasManuais} dia(s) com ajuste manual preservado(s).</span>{impact.mesesParaReoficializar?.length > 0 && <span>Reoficialização necessária em {impact.mesesParaReoficializar.join(', ')}.</span>}</div>}
+      {impact && <div className="shift-impact"><strong>Prévia · {month}</strong><span>{impact.possuiEscala ? `${impact.diasAlterados} dia(s) ajustado(s) nesta escala.` : 'Horário-base salvo para este mês; será usado na geração.'}</span><span>{impact.diasManuais} dia(s) com ajuste manual preservado(s).</span>{impact.mesesParaReoficializar?.length > 0 && <span>Reoficialização necessária em {impact.mesesParaReoficializar.join(', ')}.</span>}</div>}
       {error && <div className="notice error" role="alert">{error}</div>}
       <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={onClose}>Cancelar</button><button className="button primary" type="button" disabled={busy || !month} onClick={impact ? save : preview}>{busy ? 'Aguarde...' : impact ? 'Salvar horário' : 'Ver prévia'}</button></div>
     </div>

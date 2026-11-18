@@ -785,13 +785,13 @@ async function getAtivaSql(connection, alias = 'p') {
   return (await hasProgAtivaColumn(connection)) ? `nvl(${alias}.ativa, 1) = 1` : '1 = 1';
 }
 
-async function getSecaoAtivaProgSql(connection, alias = 'p') {
+async function getSecaoAtivaProgSql(connection, alias = 'p', mesRef = null) {
   const columns = await getTableColumns(connection, 'SGN_ESC_SECAO');
   if (!columns.has('STATUS')) return '1 = 1';
   return `exists (
     select 1
     from sgn_esc_secao s_status
-    where s_status.escsecao_id = ${alias}.escsecao_id
+    where s_status.escsecao_id = ${mesRef ? secaoEscopoSql(mesRef, alias) : `${alias}.escsecao_id`}
       and ${activeSectionSql('s_status', `${alias}.loja`)}
   )`;
 }
@@ -811,12 +811,17 @@ function addSecoesPermitidasFilter(filters, binds, fieldSql, secoesPermitidas) {
   filters.push(`${fieldSql} in (${placeholders.join(', ')})`);
 }
 
+function secaoEscopoSql(mesRef, alias = 'p') {
+  return isMesFinalizado(mesRef) ? `${alias}.escsecao_id`
+    : `nvl((select f.escsecao_id from sgn_esc_funcionario f where f.escfunc_id = ${alias}.escfunc_id), ${alias}.escsecao_id)`;
+}
+
 async function getLatestRevision(connection, { lojaId, mesRef, includeInactive = false, secoesPermitidas = null }) {
   const ativaSql = includeInactive ? '1 = 1' : await getAtivaSql(connection, 'p');
-  const secaoAtivaSql = includeInactive ? '1 = 1' : await getSecaoAtivaProgSql(connection, 'p');
+  const secaoAtivaSql = includeInactive ? '1 = 1' : await getSecaoAtivaProgSql(connection, 'p', mesRef);
   const binds = { lojaId, mesRef };
   const secaoFilters = [];
-  addSecoesPermitidasFilter(secaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
+  addSecoesPermitidasFilter(secaoFilters, binds, secaoEscopoSql(mesRef), secoesPermitidas);
   const secaoSql = secaoFilters.length ? `and ${secaoFilters.join(' and ')}` : '';
   const result = await connection.execute(
     `select max(p.revisao) as revisao
@@ -927,12 +932,16 @@ function filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo = [], r
   const secoesDaEscala = new Set((rows || [])
     .map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id')))
     .filter(Boolean));
+  const funcionariosDaEscala = new Set((rows || [])
+    .map((row) => Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')))
+    .filter(Boolean));
   const migradosDaPortaria = new Set((rows || [])
     .filter(isPortariaSection)
     .map((row) => Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'))));
   if (!secoesDaEscala.size) return funcionariosCatalogo || [];
   return (funcionariosCatalogo || [])
     .filter((funcionario) => secoesDaEscala.has(Number(pick(funcionario, 'ESCSECAO_ID', 'escsecao_id')))
+      || funcionariosDaEscala.has(Number(pick(funcionario, 'ESCFUNC_ID', 'escfunc_id')))
       || isPortariaSection(funcionario)
       || migradosDaPortaria.has(Number(pick(funcionario, 'ESCFUNC_ID', 'escfunc_id'))));
 }
@@ -996,10 +1005,10 @@ async function listEscalas({ lojaId, mesRef, secoesPermitidas = null }) {
     if (latestRevision === null) return [];
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
-    const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
+    const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p', mesRef);
     const binds = { lojaId, mesRef };
     const secaoFilters = [];
-    addSecoesPermitidasFilter(secaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
+    addSecoesPermitidasFilter(secaoFilters, binds, secaoEscopoSql(mesRef), secoesPermitidas);
     const secaoSql = secaoFilters.length ? `and ${secaoFilters.join(' and ')}` : '';
 
     const result = await connection.execute(
@@ -1531,7 +1540,7 @@ async function isEscalaSecaoOficializada({ lojaId, mesRef, escsecaoId, escfuncId
          from sgn_esc_prog p
         where p.loja = :lojaId
           and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-          and p.escsecao_id = :escsecaoId
+          and ${secaoEscopoSql(mesRef)} = :escsecaoId
           ${filtroIds}
           and nvl(p.oficializada, 0) = 1
           and p.revisao = (
@@ -1563,7 +1572,7 @@ async function listDiasSecaoAtual({ lojaId, mesRef, escsecaoId }) {
           p.loja,
           p.chapa,
           p.escfunc_id,
-          p.escsecao_id,
+          ${secaoEscopoSql(mesRef)} as escsecao_id,
           p.escfuncao_id,
           d.escprogdia_id,
           d.dt,
@@ -1576,7 +1585,7 @@ async function listDiasSecaoAtual({ lojaId, mesRef, escsecaoId }) {
        left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-         and p.escsecao_id = :escsecaoId
+         and ${secaoEscopoSql(mesRef)} = :escsecaoId
          and p.revisao = (
            select max(px.revisao)
              from sgn_esc_prog px
@@ -1617,10 +1626,11 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     const subsecaoJoinSql = hasFuncionarioSubsecao ? 'left join sgn_esc_subsecao ss on ss.escsubsecao_id = f.escsubsecao_id and ss.escsecao_id = p.escsecao_id' : '';
     const ativaSql = await getAtivaSql(connection, 'p');
     const ativaSubSql = await getAtivaSql(connection, 'px');
-    const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
+    const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p', mesRef);
     const binds = { lojaId, mesRef };
     const secaoFilters = [];
-    addSecoesPermitidasFilter(secaoFilters, binds, 'p.escsecao_id', secoesPermitidas);
+    addSecoesPermitidasFilter(secaoFilters, binds,
+      isMesFinalizado(mesRef) ? 'p.escsecao_id' : 'nvl(f.escsecao_id, p.escsecao_id)', secoesPermitidas);
     const secaoSql = secaoFilters.length ? `and ${secaoFilters.join(' and ')}` : '';
 
     const result = await connection.execute(
@@ -1695,7 +1705,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     }
     const rows = filtrarLinhasForaDoEscopoAtual(filtrarCabecalhosInativosSemDias(rowsProjetadas), mesRef, lojaId, todasSecoesHabilitadas);
     rows.forEach((row) => { row.ESCSECAO_ID_ESCALA = row.ESCSECAO_ID; });
-    const funcionariosCatalogoCompleto = await catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas }).catch(() => []);
+    const funcionariosCatalogoCompleto = await catalogService.listFuncionariosByLoja(lojaId, { mesRef, secoesPermitidas });
     const funcionariosCatalogo = todasSecoesHabilitadas ? funcionariosCatalogoCompleto
       : filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogoCompleto, rows);
     const catalogoPorFuncionario = new Map((funcionariosCatalogo || [])
@@ -1705,10 +1715,17 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       if (!atual) return;
       row.CHAPA = pick(atual, 'CHAPA', 'chapa') || pick(row, 'CHAPA', 'chapa');
       row.NOME = pick(atual, 'NOME', 'nome') || pick(row, 'NOME', 'nome');
-      row.ESCSUBSECAO_ID = pick(atual, 'ESCSUBSECAO_ID', 'escsubsecao_id');
-      row.SUBSECAO_DESCR = pick(atual, 'SUBSECAO_DESCR', 'subsecao_descr');
-      row.ESCFUNCAO_ID = pick(atual, 'ESCFUNCAO_ID', 'escfuncao_id') || pick(row, 'ESCFUNCAO_ID', 'escfuncao_id');
-      row.FUNCAO_DESCR = pick(atual, 'FUNCAO_DESCR', 'funcao_descr') || pick(row, 'FUNCAO_DESCR', 'funcao_descr');
+      if (!isMesFinalizado(mesRef)) {
+        row.ESCSECAO_ID = pick(atual, 'ESCSECAO_ID', 'escsecao_id');
+        row.COD_SECAO = pick(atual, 'COD_SECAO', 'cod_secao');
+        row.SECAO_DESCR = pick(atual, 'SECAO_DESCR', 'secao_descr');
+      }
+      if (!isMesFinalizado(mesRef)) {
+        row.ESCSUBSECAO_ID = pick(atual, 'ESCSUBSECAO_ID', 'escsubsecao_id');
+        row.SUBSECAO_DESCR = pick(atual, 'SUBSECAO_DESCR', 'subsecao_descr');
+        row.ESCFUNCAO_ID = pick(atual, 'ESCFUNCAO_ID', 'escfuncao_id') || pick(row, 'ESCFUNCAO_ID', 'escfuncao_id');
+        row.FUNCAO_DESCR = pick(atual, 'FUNCAO_DESCR', 'funcao_descr') || pick(row, 'FUNCAO_DESCR', 'funcao_descr');
+      }
     });
     const transferHistory = await connection.execute(
       `select t.escfunc_id, to_char(t.dt_vigencia, 'YYYY-MM-DD') as vigencia,
@@ -1724,6 +1741,14 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       { lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     aplicarHistoricoSubsecoes(rows, transferHistory.rows || []);
+    if (!isMesFinalizado(mesRef)) {
+      rows.forEach((row) => {
+        if (Number(row.ESCSECAO_ID_ESCALA) === Number(row.ESCSECAO_ID)) return;
+        const atual = catalogoPorFuncionario.get(String(row.ESCFUNC_ID));
+        row.ESCSUBSECAO_ID = pick(atual, 'ESCSUBSECAO_ID', 'escsubsecao_id') || null;
+        row.SUBSECAO_DESCR = pick(atual, 'SUBSECAO_DESCR', 'subsecao_descr') || null;
+      });
+    }
     projetarPortariaNaFrente(rows, funcionariosCatalogo, mesRef);
     const inicio = getOperationalPeriod(mesRef).inicio;
     const fim = getMonthEndIso(mesRef);
@@ -1758,7 +1783,13 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
     });
     if (Array.isArray(secoesPermitidas)) {
       const permitidasSet = new Set(secoesPermitidas.map(Number).filter(Boolean));
-      fixos = fixos.filter((fixo) => permitidasSet.has(Number(pick(fixo, 'ESCSECAO_ID', 'escsecao_id'))));
+      fixos = fixos.filter((fixo) => {
+        const secaoCadastro = catalogoPorFuncionario.get(String(pick(fixo, 'ESCFUNC_ID', 'escfunc_id')));
+        const secaoId = !isMesFinalizado(mesRef) && secaoCadastro
+          ? pick(secaoCadastro, 'ESCSECAO_ID', 'escsecao_id')
+          : pick(fixo, 'ESCSECAO_ID', 'escsecao_id');
+        return permitidasSet.has(Number(secaoId));
+      });
     }
     const fixosMap = new Map(fixos.map((fixo) => [
       `${pick(fixo, 'ESCFUNC_ID', 'escfunc_id')}|${formatDateValue(pick(fixo, 'DT', 'dt'))}`,
@@ -1825,10 +1856,12 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
         ESCSECAO_ID_ESCALA: pick(funcionario, 'ESCSECAO_ID_ESCALA', 'escsecao_id_escala') || atual.ESCSECAO_ID_ESCALA || null,
         ESCSUBSECAO_ID: preservarAlocacao && atual.ESCSECAO_ID ? atual.ESCSUBSECAO_ID : pick(funcionario, 'ESCSUBSECAO_ID', 'escsubsecao_id'),
         SUBSECAO_DESCR: preservarAlocacao && atual.ESCSECAO_ID ? atual.SUBSECAO_DESCR : pick(funcionario, 'SUBSECAO_DESCR', 'subsecao_descr'),
-        ESCFUNCAO_ID: pick(funcionario, 'ESCFUNCAO_ID', 'escfuncao_id') || atual.ESCFUNCAO_ID,
+        ESCFUNCAO_ID: preservarAlocacao && atual.ESCFUNCAO_ID ? atual.ESCFUNCAO_ID
+          : pick(funcionario, 'ESCFUNCAO_ID', 'escfuncao_id') || atual.ESCFUNCAO_ID,
         COD_SECAO: preservarAlocacao && atual.ESCSECAO_ID ? atual.COD_SECAO : pick(funcionario, 'COD_SECAO', 'cod_secao') || atual.COD_SECAO,
         SECAO_DESCR: preservarAlocacao && atual.ESCSECAO_ID ? atual.SECAO_DESCR : pick(funcionario, 'SECAO_DESCR', 'secao_descr') || atual.SECAO_DESCR,
-        FUNCAO_DESCR: pick(funcionario, 'FUNCAO_DESCR', 'funcao_descr') || atual.FUNCAO_DESCR,
+        FUNCAO_DESCR: preservarAlocacao && atual.FUNCAO_DESCR ? atual.FUNCAO_DESCR
+          : pick(funcionario, 'FUNCAO_DESCR', 'funcao_descr') || atual.FUNCAO_DESCR,
         REGIME_ESCALA: pick(funcionario, 'REGIME_ESCALA', 'regime_escala') || atual.REGIME_ESCALA || '5X2',
         DT_ANCORA_12X36: pick(funcionario, 'DT_ANCORA_12X36', 'dt_ancora_12x36') || atual.DT_ANCORA_12X36 || null,
         REGIME_MES_INICIO: pick(funcionario, 'REGIME_MES_INICIO', 'regime_mes_inicio') || atual.REGIME_MES_INICIO || null,
@@ -1858,7 +1891,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
       const atual = funcionariosMap.get(String(escfuncId));
       const portariaHistorica = atual && isPortariaSection({ COD_SECAO: atual.COD_SECAO, DESCR: atual.SECAO_DESCR })
         && Number(atual.ESCSECAO_ID) !== Number(pick(funcionario, 'ESCSECAO_ID', 'escsecao_id'));
-      ensureFuncionarioMap(funcionario, atual?.GERADA || 0, !portariaHistorica);
+      ensureFuncionarioMap(funcionario, atual?.GERADA || 0, isMesFinalizado(mesRef) && !portariaHistorica);
       const secao = ensureSecaoMap(funcionario);
       if (secao) secao.FUNCIONARIOS.add(String(escfuncId));
     });
@@ -2035,7 +2068,7 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
       }
 
       const locked = await connection.execute(
-        `select escfunc_id, dt_demiss, status from sgn_esc_funcionario
+        `select escfunc_id, escsecao_id, escfuncao_id, dt_demiss, status from sgn_esc_funcionario
          where escfunc_id = :escfuncId and loja = :loja for update wait 5`,
         { escfuncId, loja }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
@@ -2083,8 +2116,10 @@ async function updateEscalaDia({ escprogId, escprogdiaId, data, actor }) {
         {
           mesRef,
           escfuncId,
-          escsecaoId: pick(header, 'ESCSECAO_ID', 'escsecao_id'),
-          escfuncaoId: pick(header, 'ESCFUNCAO_ID', 'escfuncao_id'),
+          escsecaoId: isMesFinalizado(mesRefKey) ? pick(header, 'ESCSECAO_ID', 'escsecao_id')
+            : pick(locked.rows[0], 'ESCSECAO_ID', 'escsecao_id'),
+          escfuncaoId: isMesFinalizado(mesRefKey) ? pick(header, 'ESCFUNCAO_ID', 'escfuncao_id')
+            : pick(locked.rows[0], 'ESCFUNCAO_ID', 'escfuncao_id'),
           loja,
           chapa: pick(header, 'CHAPA', 'chapa'),
           revisao: nextRevision,
@@ -2172,8 +2207,12 @@ async function insertEscalaOracle(connection, { lojaId, mesRef, funcionario, dia
     throw error;
   }
 
-  const escsecaoId = funcionario.escsecaoId || funcionario.ESCSECAO_ID || funcionarioDb.ESCSECAO_ID;
-  const escfuncaoId = funcionario.escfuncaoId || funcionario.ESCFUNCAO_ID || funcionarioDb.ESCFUNCAO_ID;
+  const escsecaoId = isMesFinalizado(mesRef)
+    ? funcionario.escsecaoId || funcionario.ESCSECAO_ID || funcionarioDb.ESCSECAO_ID
+    : funcionarioDb.ESCSECAO_ID;
+  const escfuncaoId = isMesFinalizado(mesRef)
+    ? funcionario.escfuncaoId || funcionario.ESCFUNCAO_ID || funcionarioDb.ESCFUNCAO_ID
+    : funcionarioDb.ESCFUNCAO_ID;
   const lojaFuncionario = Number(funcionarioDb.LOJA) || Number(lojaId);
   const chapa = funcionario.chapa || funcionario.CHAPA || funcionarioDb.CHAPA;
   const progColumnDetails = await getTableColumnDetails(connection, 'SGN_ESC_PROG');
@@ -2254,7 +2293,7 @@ async function reconciliarDesligamentosComConnection(connection, { lojaId, mesRe
   const ativaSubSql = await getAtivaSql(connection, 'px');
   const binds = { lojaId, mesRef, hojeIso, periodoFim: getOperationalPeriodIso(mesRef).fim };
   const filters = [];
-  addSecoesPermitidasFilter(filters, binds, 'p.escsecao_id', secoesPermitidas);
+  addSecoesPermitidasFilter(filters, binds, secaoEscopoSql(mesRef), secoesPermitidas);
   const filtroSecoes = filters.length ? `and ${filters.join(' and ')}` : '';
   const candidatos = await connection.execute(
     `select distinct p.escfunc_id, nvl(f.status, 'A') as funcionario_status
@@ -2959,25 +2998,13 @@ async function listarMesesComDiasFuturosFuncionario(connection, { lojaId, escfun
   return (result.rows || []).map((row) => pick(row, 'MES_REF', 'mes_ref'));
 }
 
-function selecionarMesesParaHorarioBase(meses, mesRef) {
-  return [...new Set(meses)].filter((mes) => !mesRef || mes >= mesRef);
-}
-
 async function calcularImpactoHorarioFuturo(connection, { lojaId, escfuncId, horario, mesRef, actor }) {
-  const adminSelectedMonth = podeEditarRetroativamente(actor) && Boolean(mesRef);
-  const meses = selecionarMesesParaHorarioBase([
-    ...(adminSelectedMonth ? [mesRef] : []),
-    ...await listarMesesComDiasFuturosFuncionario(connection, { lojaId, escfuncId })
-  ], mesRef).filter((mes) => !isMesFinalizado(mes) || (adminSelectedMonth && mes === mesRef));
-  const alteracoes = [];
-  for (const mes of meses) {
-    const resultado = await calcularAlteracaoHorarioEscalaComConnection(connection, {
-      lojaId, mesRef: mes, escfuncId, horario,
-      inicioEdicaoIso: adminSelectedMonth && mes === mesRef ? getOperationalPeriodIso(mes).inicio : getHojeIso()
-    });
-    alteracoes.push({ mesRef: mes, ...resultado });
-  }
-  return alteracoes;
+  const inicioEdicaoIso = podeEditarRetroativamente(actor) && isMesFinalizado(mesRef)
+    ? getOperationalPeriodIso(mesRef).inicio : getHojeIso();
+  const resultado = await calcularAlteracaoHorarioEscalaComConnection(connection, {
+    lojaId, mesRef, escfuncId, horario, inicioEdicaoIso
+  });
+  return [{ mesRef, ...resultado }];
 }
 
 async function previewHorarioFuncionarioEscala({ lojaId, mesRef, escfuncId, horario, actor }) {
@@ -3053,12 +3080,19 @@ async function updateHorarioFuncionarioEscala({ lojaId, mesRef, funcionario, hor
       }
 
       await connection.execute(
-        `update sgn_esc_funcionario set
-           hr_ent1 = :HR_ENT1, hr_sai1 = :HR_SAI1,
-           hr_ent2 = :HR_ENT2, hr_sai2 = :HR_SAI2
-         where escfunc_id = :escfuncId and loja = :lojaId`,
+        `merge into sgn_esc_horario_base_mes dest
+         using (select :escfuncId as escfunc_id, :lojaId as loja,
+                       to_date(:mesRef, 'YYYY-MM-DD') as mes_ref from dual) src
+            on (dest.escfunc_id = src.escfunc_id and dest.mes_ref = src.mes_ref)
+         when matched then update set
+           dest.hr_ent1 = :HR_ENT1, dest.hr_sai1 = :HR_SAI1,
+           dest.hr_ent2 = :HR_ENT2, dest.hr_sai2 = :HR_SAI2, dest.dt_hr_alter = sysdate
+         when not matched then insert
+           (escfunc_id, loja, mes_ref, hr_ent1, hr_sai1, hr_ent2, hr_sai2)
+           values (src.escfunc_id, src.loja, src.mes_ref,
+                   :HR_ENT1, :HR_SAI1, :HR_ENT2, :HR_SAI2)`,
         { HR_ENT1: horario.HR_ENT1, HR_SAI1: horario.HR_SAI1,
-          HR_ENT2: horario.HR_ENT2, HR_SAI2: horario.HR_SAI2, escfuncId, lojaId },
+          HR_ENT2: horario.HR_ENT2, HR_SAI2: horario.HR_SAI2, escfuncId, lojaId, mesRef },
         { autoCommit: false }
       );
       const mesRefEvento = mesRef || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
@@ -3331,12 +3365,12 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
       }).join(', ')})` : '';
       const ativaSql = await getAtivaSql(connection, 'p');
       const ativaSubSql = await getAtivaSql(connection, 'px');
-      const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p');
+      const secaoAtivaSql = await getSecaoAtivaProgSql(connection, 'p', mesRef);
       const candidatos = await connection.execute(
         `select distinct p.escfunc_id from sgn_esc_prog p
           where p.loja = :lojaId
             and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-            and p.escsecao_id = :escsecaoId
+            and ${secaoEscopoSql(mesRef)} = :escsecaoId
             ${filtroIds}
             and ${ativaSql}`,
         binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
@@ -3347,7 +3381,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
            from sgn_esc_prog p
           where p.loja = :lojaId
             and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-            and p.escsecao_id = :escsecaoId
+            and ${secaoEscopoSql(mesRef)} = :escsecaoId
             ${filtroIds}
             and p.revisao = (
               select max(px.revisao) from sgn_esc_prog px
@@ -3464,10 +3498,11 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
         });
       }
       const domingoConfig = await connection.execute(
-        'select domingo_6h_habilitado from sgn_esc_loja where loja = :lojaId',
+        'select domingo_6h_habilitado, domingo_1x1_habilitado from sgn_esc_loja where loja = :lojaId',
         { lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
       const domingo6h = Number(domingoConfig.rows?.[0]?.DOMINGO_6H_HABILITADO) === 1;
+      const domingo1x1 = Number(domingoConfig.rows?.[0]?.DOMINGO_1X1_HABILITADO) === 1;
       const regimes = Number(lojaId) >= 700 && Number(lojaId) <= 799
         ? await require('./workRegimeService').listEffective(connection, { lojaId, mesRef }) : new Map();
       for (const funcionario of funcionarios.values()) {
@@ -3483,7 +3518,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
             { lojaId, employeeIds: [...funcionarios.keys()] }));
       }
       const criticas = validarCriticasEscopo({ lojaId, mesRef, funcionarios: [...funcionarios.values()],
-        domingo6h, domingoAnteriorPorFuncionario });
+        domingo6h, domingo1x1, domingoAnteriorPorFuncionario });
       if (criticas.length) {
         const error = new Error('Resolva as criticas da secao/subsecao antes de oficializar.');
         error.statusCode = 422;
@@ -3678,7 +3713,6 @@ module.exports = {
     projetarPortariaNaFrente,
     filtrarLinhasForaDoEscopoAtual,
     aplicarHorarioBaseNosDias,
-    selecionarMesesParaHorarioBase,
     diasComFixoAtualizado,
     diasSemFixo
   }

@@ -3,13 +3,21 @@ const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
 test('executor accepts only the approved mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 27);
+  assert.equal(migrationNames.length, 29);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
     assert.match(migration.sql, /\bend;$/i);
     assert.equal(migration.checksum.length, 64);
   }
+});
+
+test('monthly base hours and Sunday 1x1 store configuration are versioned', () => {
+  const monthly = readMigration('20261118_horario_base_mensal.sql').sql;
+  const sunday = readMigration('20261118_domingo_1x1_por_loja.sql').sql;
+  assert.match(monthly, /primary key \(escfunc_id, mes_ref\)/i);
+  assert.match(sunday, /domingo_1x1_habilitado number\(1\) default 1 not null/i);
+  assert.match(sunday, /loja between 400 and 499 or loja between 700 and 799/i);
 });
 
 test('duration-only profiles can omit fixed clock times after migration', () => {

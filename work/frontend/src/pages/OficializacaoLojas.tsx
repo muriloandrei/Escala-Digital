@@ -62,16 +62,18 @@ export function OficializacaoLojas() {
     return () => controller.abort();
   }, [visible, month, reload]);
 
-  async function toggle(store: Store, kind: 'oficializacao' | 'secoes' | 'domingo6h') {
+  async function toggle(store: Store, kind: 'oficializacao' | 'secoes' | 'domingo6h' | 'domingo1x1') {
     if (busy !== null) return;
     setBusy(store.LOJA);
     setError('');
     try {
       const field = kind === 'oficializacao' ? 'OFICIALIZACAO_HABILITADA'
-        : kind === 'secoes' ? 'TODAS_SECOES_HABILITADAS' : 'DOMINGO_6H_HABILITADO';
+        : kind === 'secoes' ? 'TODAS_SECOES_HABILITADAS'
+          : kind === 'domingo6h' ? 'DOMINGO_6H_HABILITADO' : 'DOMINGO_1X1_HABILITADO';
       const habilitada = Number(store[field]) !== 1;
       const path = kind === 'oficializacao' ? '/api/escalas/oficializacao-loja'
-        : kind === 'secoes' ? '/api/escalas/escopo-secoes-loja' : '/api/escalas/domingo-6h-loja';
+        : kind === 'secoes' ? '/api/escalas/escopo-secoes-loja'
+          : kind === 'domingo6h' ? '/api/escalas/domingo-6h-loja' : '/api/escalas/domingo-1x1-loja';
       await putJson(path, { lojaId: Number(store.LOJA), habilitada });
       setStores((current) => current.map((item) => item.LOJA === store.LOJA
         ? { ...item, [field]: habilitada ? 1 : 0 } : item));
@@ -87,7 +89,7 @@ export function OficializacaoLojas() {
       <label>Loja<input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Número ou nome" /></label>
     </div>
     <section className="list-surface" aria-label="Relatório de oficialização por seção">
-      {loading ? <div className="empty-state" role="status">Carregando lojas...</div> : <div className="table-scroll"><table className="officialization-table"><thead><tr><th>Loja / seção</th><th>Funcionários</th><th>Situação</th><th>Oficialização</th><th>Todas as seções</th><th>Domingo 6h</th></tr></thead>
+      {loading ? <div className="empty-state" role="status">Carregando lojas...</div> : <div className="table-scroll"><table className="officialization-table"><thead><tr><th>Loja / seção</th><th>Funcionários</th><th>Situação</th><th>Oficialização</th><th>Todas as seções</th><th>Domingo 6h</th><th>Domingo 1x1</th></tr></thead>
         <tbody>{visible.map((store) => {
           const result = progress[store.LOJA];
           const failure = progressErrors[store.LOJA];
@@ -101,11 +103,12 @@ export function OficializacaoLojas() {
                 onChange={() => toggle(store, 'oficializacao')} /> Habilitada</label>
             </td><td><label className="store-toggle"><input type="checkbox" checked={Number(store.TODAS_SECOES_HABILITADAS) === 1} disabled={busy !== null}
               onChange={() => toggle(store, 'secoes')} /> Liberadas</label></td><td><label className="store-toggle"><input type="checkbox" checked={Number(store.DOMINGO_6H_HABILITADO) === 1} disabled={busy !== null}
-                onChange={() => toggle(store, 'domingo6h')} /> Habilitada</label></td></tr>
-            {failure && <tr><td colSpan={6} className="officialization-message" role="alert">{failure}</td></tr>}
+                onChange={() => toggle(store, 'domingo6h')} /> Habilitada</label></td><td><label className="store-toggle"><input type="checkbox" checked={Number(store.DOMINGO_1X1_HABILITADO) === 1} disabled={busy !== null}
+                onChange={() => toggle(store, 'domingo1x1')} /> Habilitada</label></td></tr>
+            {failure && <tr><td colSpan={7} className="officialization-message" role="alert">{failure}</td></tr>}
             {result?.grupos.map((group) => <Fragment key={group.escsecaoId}>
-              <tr><td className="officialization-section">{group.partes.length > 1 ? `${group.codigo} · ${group.secao}` : <Link to={`/escalas/${store.LOJA}/${month}-01?secao=${group.escsecaoId}`}>{group.codigo} · {group.secao}</Link>}</td><td>{group.funcionarios}</td><td><span className={`officialization-status ${group.oficializada ? 'complete' : 'pending'}`}>{!group.funcionarios ? 'Sem funcionários' : group.oficializada ? 'Oficializada' : `${group.percentual}% preenchida`}</span></td><td>–</td><td>–</td><td>–</td></tr>
-              {group.partes.length > 1 && group.partes.map((part) => <tr key={part.escsecaoId}><td className="officialization-part"><Link to={`/escalas/${store.LOJA}/${month}-01?secao=${part.escsecaoId}`}>{part.codigo} · {part.secao}</Link></td><td>{part.funcionarios}</td><td><span className={`officialization-status ${part.oficializada ? 'complete' : 'pending'}`}>{!part.funcionarios ? 'Sem funcionários' : part.oficializada ? 'Oficializada' : `${part.percentual}% preenchida`}</span></td><td>–</td><td>–</td><td>–</td></tr>)}
+              <tr><td className="officialization-section">{group.partes.length > 1 ? `${group.codigo} · ${group.secao}` : <Link to={`/escalas/${store.LOJA}/${month}-01?secao=${group.escsecaoId}`}>{group.codigo} · {group.secao}</Link>}</td><td>{group.funcionarios}</td><td><span className={`officialization-status ${group.oficializada ? 'complete' : 'pending'}`}>{!group.funcionarios ? 'Sem funcionários' : group.oficializada ? 'Oficializada' : `${group.percentual}% preenchida`}</span></td><td>–</td><td>–</td><td>–</td><td>–</td></tr>
+              {group.partes.length > 1 && group.partes.map((part) => <tr key={part.escsecaoId}><td className="officialization-part"><Link to={`/escalas/${store.LOJA}/${month}-01?secao=${part.escsecaoId}`}>{part.codigo} · {part.secao}</Link></td><td>{part.funcionarios}</td><td><span className={`officialization-status ${part.oficializada ? 'complete' : 'pending'}`}>{!part.funcionarios ? 'Sem funcionários' : part.oficializada ? 'Oficializada' : `${part.percentual}% preenchida`}</span></td><td>–</td><td>–</td><td>–</td><td>–</td></tr>)}
             </Fragment>)}
           </Fragment>;
         })}</tbody></table></div>}

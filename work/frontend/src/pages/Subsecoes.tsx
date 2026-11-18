@@ -575,9 +575,9 @@ export function Subsecoes({ user }: { user: User }) {
           canRetry={user.perfil === 'ADMIN'}
           initialDestination={selected !== 'sem' ? selected : undefined}
           onClose={() => setTransferTarget(null)}
-          onTransferred={({ destination, warning, scheduled }) => {
+          onTransferred={({ destination, sectionId: destinationSectionId, warning, scheduled }) => {
             setTransferTarget(null);
-            if (!scheduled) setParams({ subsecao: destination });
+            if (!scheduled && Number(destinationSectionId) === Number(secaoId)) setParams({ subsecao: destination });
             setActionMessage(warning || (scheduled ? `Transferência agendada para ${scheduled}. O vínculo atual permanece até essa data.` : 'Funcionário transferido de subseção.'));
             setReload((value) => value + 1);
           }}

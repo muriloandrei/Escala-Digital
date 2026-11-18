@@ -12,7 +12,9 @@ const previousSundayService = require('../src/services/previousSundayService');
 const rmIntegrationService = require('../src/services/rmIntegrationService');
 const auditService = require('../src/services/auditService');
 const sundayShiftService = require('../src/services/sundayShiftService');
+const sundayAlternationService = require('../src/services/sundayAlternationService');
 sundayShiftService.getStoreEnabled = async () => false;
+sundayAlternationService.getStoreEnabled = async () => true;
 const serviceRequire = createRequire(path.join(__dirname, '../src/services/escalaService.js'));
 
 function response() {

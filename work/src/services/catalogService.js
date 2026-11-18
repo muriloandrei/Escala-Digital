@@ -19,7 +19,8 @@ function normalizeLoja(row) {
     CODCOLIGADA: pick(row, 'CODCOLIGADA', 'codcoligada'),
     OFICIALIZACAO_HABILITADA: Number(pick(row, 'OFICIALIZACAO_HABILITADA', 'oficializacao_habilitada') || 0),
     TODAS_SECOES_HABILITADAS: Number(pick(row, 'TODAS_SECOES_HABILITADAS', 'todas_secoes_habilitadas') || 0),
-    DOMINGO_6H_HABILITADO: Number(pick(row, 'DOMINGO_6H_HABILITADO', 'domingo_6h_habilitado') || 0)
+    DOMINGO_6H_HABILITADO: Number(pick(row, 'DOMINGO_6H_HABILITADO', 'domingo_6h_habilitado') || 0),
+    DOMINGO_1X1_HABILITADO: Number(pick(row, 'DOMINGO_1X1_HABILITADO', 'domingo_1x1_habilitado') ?? 1)
   };
 }
 
@@ -298,8 +299,9 @@ async function listLojas() {
     const oficializacaoSelect = columns.has('OFICIALIZACAO_HABILITADA') ? 'oficializacao_habilitada' : 'cast(0 as number) as oficializacao_habilitada';
     const todasSecoesSelect = columns.has('TODAS_SECOES_HABILITADAS') ? 'todas_secoes_habilitadas' : 'cast(0 as number) as todas_secoes_habilitadas';
     const domingo6hSelect = columns.has('DOMINGO_6H_HABILITADO') ? 'domingo_6h_habilitado' : 'cast(0 as number) as domingo_6h_habilitado';
+    const domingo1x1Select = columns.has('DOMINGO_1X1_HABILITADO') ? 'domingo_1x1_habilitado' : 'cast(1 as number) as domingo_1x1_habilitado';
     const result = await connection.execute(
-      `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, ${codcoligadaSelect}, ${oficializacaoSelect}, ${todasSecoesSelect}, ${domingo6hSelect}
+      `select escloja_id, loja, qtde_brigadista_exigido, qtde_brigadista_exigido_dia, ${codcoligadaSelect}, ${oficializacaoSelect}, ${todasSecoesSelect}, ${domingo6hSelect}, ${domingo1x1Select}
        from sgn_esc_loja
        order by loja`,
       {},
@@ -347,6 +349,13 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
     const funcaoJoinColigada = funcaoColumns.has('CODCOLIGADA') ? 'and fu.codcoligada = f.codcoligada' : '';
     const funcionarioColigadaWhere = lojaCodcoligada !== null ? 'and f.codcoligada = :codcoligada' : '';
     const progColumns = options.mesRef ? await getTableColumns(connection, 'SGN_ESC_PROG') : new Set();
+    const horarioBaseColumns = options.mesRef ? await getTableColumns(connection, 'SGN_ESC_HORARIO_BASE_MES') : new Set();
+    const hasHorarioBaseMes = horarioBaseColumns.has('MES_REF') && horarioBaseColumns.has('ESCFUNC_ID');
+    const horarioSelect = (field) => options.mesRef
+      ? hasHorarioBaseMes
+        ? `case when hb.mes_ref is not null then hb.${field} else coalesce(e.${field}, f.${field}) end`
+        : `coalesce(e.${field}, f.${field})`
+      : `f.${field}`;
     const escalaAtivaSql = progColumns.has('ATIVA') ? 'and nvl(p.ativa, 1) = 1' : '';
     const escalaAtivaInnerSql = progColumns.has('ATIVA') ? 'and nvl(px.ativa, 1) = 1' : '';
     const secaoAtivaWhere = options.includeInactiveSecoes || !secaoColumns.has('STATUS') ? ''
@@ -399,10 +408,10 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
           ${subsecaoDescrSelect},
           f.escfuncao_id,
           fu.descr as funcao_descr,
-          ${options.mesRef ? 'coalesce(e.hr_ent1, f.hr_ent1)' : 'f.hr_ent1'} as hr_ent1,
-          ${options.mesRef ? 'coalesce(e.hr_sai1, f.hr_sai1)' : 'f.hr_sai1'} as hr_sai1,
-          ${options.mesRef ? 'coalesce(e.hr_ent2, f.hr_ent2)' : 'f.hr_ent2'} as hr_ent2,
-          ${options.mesRef ? 'coalesce(e.hr_sai2, f.hr_sai2)' : 'f.hr_sai2'} as hr_sai2,
+          ${horarioSelect('hr_ent1')} as hr_ent1,
+          ${horarioSelect('hr_sai1')} as hr_sai1,
+          ${horarioSelect('hr_ent2')} as hr_ent2,
+          ${horarioSelect('hr_sai2')} as hr_sai2,
           ${options.mesRef ? 'e.programacao as escala_programacao, e.revisao as escala_revisao, e.oficializada as escala_oficializada' : "cast(null as varchar2(3)) as escala_programacao, cast(null as number) as escala_revisao, cast(null as number) as escala_oficializada"},
           f.dt_hr_incl,
           ${statusSelect},
@@ -411,6 +420,11 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
        left join sgn_esc_secao s on s.escsecao_id = f.escsecao_id ${secaoJoinLoja} ${secaoJoinColigada}
        left join sgn_esc_funcao fu on fu.escfuncao_id = f.escfuncao_id ${funcaoJoinColigada}
        ${subsecaoJoinSql}
+       ${hasHorarioBaseMes ? `left join sgn_esc_horario_base_mes hb
+         on hb.escfunc_id = f.escfunc_id and hb.mes_ref = (
+           select max(hbm.mes_ref) from sgn_esc_horario_base_mes hbm
+            where hbm.escfunc_id = f.escfunc_id
+              and hbm.mes_ref <= to_date(:mesRef, 'YYYY-MM-DD'))` : ''}
        ${options.mesRef ? `left join (
           select p.escfunc_id,
                  p.revisao,
@@ -456,6 +470,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
       const funcionario = normalizeFuncionario(row);
       return {
         ...funcionario,
+        SECAO_STATUS: options.includeInactiveSecoes ? funcionario.SECAO_STATUS : 'A',
         REGIME_ESCALA: '5X2',
         DT_ANCORA_12X36: null,
         REGIME_MES_INICIO: null,
@@ -509,7 +524,10 @@ async function listSecoesByLoja(lojaId, options = {}) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    const secoes = secoesResult.rows.map((row) => normalizeSecao(row, []));
+    const secoes = secoesResult.rows.map((row) => ({
+      ...normalizeSecao(row, []),
+      STATUS: options.includeInactive ? pick(row, 'STATUS', 'status') || 'A' : 'A'
+    }));
     const subsecoesMap = await listSubsecoesBySecaoIdsInConnection(connection, secoes.map((secao) => secao.ESCSECAO_ID));
     return secoes.map((secao) => ({
       ...secao,

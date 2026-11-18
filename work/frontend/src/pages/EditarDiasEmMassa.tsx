@@ -100,10 +100,6 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
 
   function toggleDate(date: string) {
     if (busy || uncertain) return;
-    if (mode === 'FDO' && !holidays[date]) {
-      setError('FDO pode ser aplicada apenas em feriado cadastrado.');
-      return;
-    }
     if (!selectedDates.includes(date) && selectedDates.length >= (mode === 'TROCA' ? 2 : 7)) {
       setError(mode === 'TROCA' ? 'Escolha apenas os dois dias da troca.' : 'Selecione no máximo 7 dias por operação.');
       return;
@@ -240,7 +236,7 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
     </div>}
     {!editableDates.length && <div className="notice error">Não há dias editáveis neste período.</div>}
     <fieldset className="bulk-dates" disabled={busy || uncertain || !selectedId}><legend>Dias ({selectedDates.length}/{mode === 'TROCA' ? 2 : 7})</legend><div className="bulk-calendar">
-      {dates.map((item) => { const day = selectedDays.find((entry) => onlyDate(entry.DT) === item); const code = String(day?.PROGRAMACAO || '').toUpperCase(); const protectedDay = day && isProtected(day); return <button key={item} type="button" className={`${selectedDates.includes(item) ? 'selected' : ''} ${code === 'TRB' ? 'work' : code ? 'rest' : ''}`} disabled={(!allowRetroactive && item < today()) || !day || Boolean(protectedDay) || (mode === 'FDO' && !holidays[item])} aria-pressed={selectedDates.includes(item)} title={`${item}${holidays[item] ? ` · ${holidays[item]}` : ''}${protectedDay ? ' · protegido' : ''}`} onClick={() => toggleDate(item)}><small>{new Date(`${item}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC', weekday: 'short' })}</small><strong>{item.slice(8)}/{item.slice(5, 7)}</strong><span>{code === 'TRB' ? day?.HR_ENT1 || 'TRB' : code || '–'}</span></button>; })}
+      {dates.map((item) => { const day = selectedDays.find((entry) => onlyDate(entry.DT) === item); const code = String(day?.PROGRAMACAO || '').toUpperCase(); const protectedDay = day && isProtected(day); return <button key={item} type="button" className={`${selectedDates.includes(item) ? 'selected' : ''} ${code === 'TRB' ? 'work' : code ? 'rest' : ''}`} disabled={(!allowRetroactive && item < today()) || !day || Boolean(protectedDay)} aria-pressed={selectedDates.includes(item)} title={`${item}${holidays[item] ? ` · ${holidays[item]}` : ''}${protectedDay ? ' · protegido' : ''}`} onClick={() => toggleDate(item)}><small>{new Date(`${item}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC', weekday: 'short' })}</small><strong>{item.slice(8)}/{item.slice(5, 7)}</strong><span>{code === 'TRB' ? day?.HR_ENT1 || 'TRB' : code || '–'}</span></button>; })}
     </div></fieldset>
     {selectedId && !selected && selectedDates.length > 0 && <div className="notice warning">{candidates.find((item) => Number(item.person.ESCFUNC_ID) === selectedId)?.reason}</div>}
     <label className="bulk-search">Justificativa<input value={justification} maxLength={500} disabled={busy || uncertain} onChange={(event) => setJustification(event.target.value)} placeholder="Motivo da alteração" /></label>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getJson, patchJson, postJson, type Funcionario, type Subsecao } from '../api';
+import { getJson, patchJson, postJson, type Funcionario, type Secao, type Subsecao } from '../api';
 
-type TransferResult = { destination: string; warning?: string; scheduled?: string; reapprovalRequired?: boolean };
+type TransferResult = { destination: string; sectionId: number; warning?: string; scheduled?: string; reapprovalRequired?: boolean };
 type ScheduledTransfer = {
   TRANSF_ID: number;
   VIGENCIA: string;
@@ -34,15 +34,13 @@ export function TransferirSubsecao({
   onTransferred: (result: TransferResult) => void;
 }) {
   const [currentEmployee, setCurrentEmployee] = useState<Funcionario | null>(null);
+  const [currentSection, setCurrentSection] = useState<Secao | null>(null);
+  const [availableSubsections, setAvailableSubsections] = useState(subsecoes);
   const [loadingEmployee, setLoadingEmployee] = useState(true);
-  const destinations = subsecoes.filter(
+  const destinations = availableSubsections.filter(
     (item) => item.STATUS !== 'I' && Number(item.ESCSUBSECAO_ID) !== Number(currentEmployee?.ESCSUBSECAO_ID),
   );
-  const [destination, setDestination] = useState(
-    destinations.some((item) => String(item.ESCSUBSECAO_ID) === initialDestination)
-      ? initialDestination!
-      : String(destinations[0]?.ESCSUBSECAO_ID || ''),
-  );
+  const [destination, setDestination] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [warning, setWarning] = useState<TransferResult | null>(null);
@@ -65,19 +63,34 @@ export function TransferirSubsecao({
   useEffect(() => {
     const controller = new AbortController();
     setLoadingEmployee(true);
-    getJson<{ funcionarios: Funcionario[] }>(
-      `/api/catalog/lojas/${encodeURIComponent(lojaId)}/funcionarios`, controller.signal,
-    ).then(({ funcionarios }) => {
+    Promise.all([
+      getJson<{ funcionarios: Funcionario[] }>(
+        `/api/catalog/lojas/${encodeURIComponent(lojaId)}/funcionarios`, controller.signal,
+      ),
+      getJson<{ secoes: Secao[] }>(
+        `/api/catalog/lojas/${encodeURIComponent(lojaId)}/secoes`, controller.signal,
+      ),
+    ]).then(([{ funcionarios }, { secoes }]) => {
       const current = funcionarios.find((item) => Number(item.ESCFUNC_ID) === Number(employee.ESCFUNC_ID));
-      if (!current || Number(current.ESCSECAO_ID) !== Number(sourceSectionId)) {
-        setError('O cadastro atual não está vinculado a esta seção. Atualize a escala antes de transferir.');
+      if (!current) {
+        setError('Funcionário não encontrado nas seções disponíveis para este usuário.');
+        return;
+      }
+      const section = secoes.find((item) => Number(item.ESCSECAO_ID) === Number(current.ESCSECAO_ID));
+      if (!section) {
+        setError('A seção atual do funcionário não está disponível para este usuário.');
         return;
       }
       setCurrentEmployee(current);
-      const available = subsecoes.filter((item) => item.STATUS !== 'I'
+      setCurrentSection(section);
+      const currentSubsections = Number(current.ESCSECAO_ID) === Number(sourceSectionId)
+        ? subsecoes : section.SUBSECOES || [];
+      setAvailableSubsections(currentSubsections);
+      const available = currentSubsections.filter((item) => item.STATUS !== 'I'
         && Number(item.ESCSUBSECAO_ID) !== Number(current.ESCSUBSECAO_ID));
-      setDestination((value) => available.some((item) => String(item.ESCSUBSECAO_ID) === value)
-        ? value : String(available[0]?.ESCSUBSECAO_ID || ''));
+      setDestination(Number(current.ESCSECAO_ID) === Number(sourceSectionId)
+        && available.some((item) => String(item.ESCSUBSECAO_ID) === initialDestination)
+        ? initialDestination! : String(available[0]?.ESCSUBSECAO_ID || ''));
     }).catch((reason) => { if (reason.name !== 'AbortError') setError(reason.message); })
       .finally(() => { if (!controller.signal.aborted) setLoadingEmployee(false); });
     getJson<{ transferencias: ScheduledTransfer[] }>(
@@ -86,7 +99,7 @@ export function TransferirSubsecao({
     ).then((data) => setScheduled(data.transferencias || []))
       .catch((reason) => { if (reason.name !== 'AbortError') setError(reason.message); });
     return () => controller.abort();
-  }, [lojaId, employee.ESCFUNC_ID, sourceSectionId, subsecoes]);
+  }, [lojaId, employee.ESCFUNC_ID, sourceSectionId, subsecoes, initialDestination]);
 
   async function transfer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,7 +116,8 @@ export function TransferirSubsecao({
           VIGENCIA: vigencia,
         },
       );
-      const result: TransferResult = { destination, reapprovalRequired: response.transferencia?.revisaoPendente === true };
+      const result: TransferResult = { destination, sectionId: Number(currentEmployee.ESCSECAO_ID),
+        reapprovalRequired: response.transferencia?.revisaoPendente === true };
       if (response.agendamento) {
         result.scheduled = response.agendamento.vigencia;
         onTransferred(result);
@@ -164,6 +178,8 @@ export function TransferirSubsecao({
                 ? 'A vinculação muda imediatamente. Os dias aprovados serão preservados em uma nova revisão, que precisará de oficialização.'
                 : `A vinculação muda imediatamente. ${mesRef ? 'A escala deste funcionário será recalculada somente de hoje em diante.' : 'Escalas existentes não serão recalculadas nesta tela.'}`
               : 'A vinculação permanece como está até a data de vigência. Depois, o sistema regerará somente os dias futuros deste funcionário.'}</p>
+            {currentSection && Number(currentSection.ESCSECAO_ID) !== Number(sourceSectionId) &&
+              <div className="notice warning">Cadastro atual: {currentSection.DESCR}. As subseções abaixo pertencem a esta seção.</div>}
             <label className="transfer-field">Nova subseção
               <select required value={destination} onChange={(event) => setDestination(event.target.value)} disabled={busy || loadingEmployee || !currentEmployee}>
                 {loadingEmployee ? <option value="">Carregando subseções...</option> : !destinations.length && <option value="">Nenhuma subseção disponível</option>}

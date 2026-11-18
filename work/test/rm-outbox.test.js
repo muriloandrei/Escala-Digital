@@ -390,7 +390,9 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
         return { rows: binds.tableName === 'SGN_ESC_SECAO'
           ? [{ COLUMN_NAME: 'STATUS' }] : [{ COLUMN_NAME: 'ATIVA' }] };
       }
-      if (/select domingo_6h_habilitado from sgn_esc_loja/i.test(sql)) return { rows: [{ DOMINGO_6H_HABILITADO: 0 }] };
+      if (/select domingo_6h_habilitado, domingo_1x1_habilitado from sgn_esc_loja/i.test(sql)) {
+        return { rows: [{ DOMINGO_6H_HABILITADO: 0, DOMINGO_1X1_HABILITADO: 1 }] };
+      }
       if (/select max\(p\.revisao\)/i.test(sql)) return { rows: [{ REVISAO: 7 }] };
       if (/from sgn_esc_pendencia_func/i.test(sql)) return { rows: [] };
       if (/select distinct p\.escfunc_id/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90 }] };

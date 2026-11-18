@@ -12,6 +12,7 @@ const officializationService = require('../services/officializationService');
 const previousSundayService = require('../services/previousSundayService');
 const sectionRolloutService = require('../services/sectionRolloutService');
 const sundayShiftService = require('../services/sundayShiftService');
+const sundayAlternationService = require('../services/sundayAlternationService');
 const workRegimeService = require('../services/workRegimeService');
 const postSimulationService = require('../services/postSimulationService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
@@ -25,6 +26,13 @@ const { validateQuickRestWorkEdit } = require('../domain/quickEdit');
 const { isEditableMonth } = require('../domain/editableMonth');
 
 const router = express.Router();
+
+async function getRuleOptions(lojaId) {
+  const [domingo6h, domingo1x1] = await Promise.all([
+    sundayShiftService.getStoreEnabled(lojaId), sundayAlternationService.getStoreEnabled(lojaId)
+  ]);
+  return { domingo6h, domingo1x1 };
+}
 
 function requireRhReview(req, res, next) {
   return ['ADMIN', 'RH'].includes(String(req.user?.perfil || '').toUpperCase())
@@ -668,6 +676,20 @@ router.put('/domingo-6h-loja', requireAdmin, resolveLojaRequest, requireLojaAcce
   }
 });
 
+router.put('/domingo-1x1-loja', requireAdmin, resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+  try {
+    const payload = z.object({ lojaId: z.number().int().positive(), habilitada: z.boolean() }).parse(req.body);
+    const found = await sundayAlternationService.setStoreEnabled(payload.lojaId, payload.habilitada);
+    if (!found) return res.status(404).json({ error: 'Loja nao encontrada.' });
+    await auditService.registerAudit({ action: 'ALTERAR_DOMINGO_1X1_LOJA', user: req.user,
+      lojaId: payload.lojaId, details: { habilitada: payload.habilitada } });
+    return res.json({ ok: true, habilitada: payload.habilitada });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Configuracao invalida.' });
+    return next(error);
+  }
+});
+
 router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const query = z.object({
@@ -691,13 +713,13 @@ router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaR
         regimeEscala: funcionario.REGIME_ESCALA, dtAncora12x36: funcionario.DT_ANCORA_12X36,
         dias: (escala.dias || []).filter((dia) => Number(dia.ESCFUNC_ID) === Number(funcionario.ESCFUNC_ID))
       }));
-    const domingo6h = await sundayShiftService.getStoreEnabled(query.lojaId);
+    const { domingo6h, domingo1x1 } = await getRuleOptions(query.lojaId);
     const domingoAnterior = await previousSundayService.getPriorSunday({ lojaId: query.lojaId, mesRef: query.mesRef,
       employeeIds: funcionarios.map((person) => person.escfuncId) });
     const domingoAnteriorPorFuncionario = previousSundayService.priorSundayByEmployee(domingoAnterior);
     const criticas = validarCriticasEscopo({ lojaId: query.lojaId, mesRef: query.mesRef, funcionarios,
-      domingo6h, domingoAnteriorPorFuncionario });
-    const grupos = agruparCriticasPorSubsecao({ escala, lojaId: query.lojaId, domingo6h, domingoAnteriorPorFuncionario })
+      domingo6h, domingo1x1, domingoAnteriorPorFuncionario });
+    const grupos = agruparCriticasPorSubsecao({ escala, lojaId: query.lojaId, domingo6h, domingo1x1, domingoAnteriorPorFuncionario })
       .filter((grupo) => Number(grupo.escsecaoId) === query.escsecaoId);
     return res.json({ criticas, grupos });
   } catch (error) {
@@ -967,7 +989,7 @@ router.post('/validar', requirePermission('escalas', 'editar'), resolveLojaReque
   try {
     const payload = saveSchema.parse(req.body);
     await assertPayloadDentroDoEscopo(req, payload);
-    const ruleErrors = validateEscalaPayload(payload, { domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId) });
+    const ruleErrors = validateEscalaPayload(payload, await getRuleOptions(payload.lojaId));
     const ausenciaErrors = await escalaService.validateAusencias({
       lojaId: payload.lojaId,
       funcionarios: payload.funcionarios
@@ -1019,7 +1041,7 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
         dia.data === alteracao.data ? payload.funcionarios[0].dias[0] : dia);
       payload.funcionarios[0].dias = dias;
     }
-    const errors = validateEscalaPayload(payload, { domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId) });
+    const errors = validateEscalaPayload(payload, await getRuleOptions(payload.lojaId));
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
     if (ausenciaErrors.length || (!payload.edicaoRapida && !payload.edicaoPontual && errors.length)) return res.status(422).json({ errors: [...errors, ...ausenciaErrors] });
     if (!anteriores) anteriores = await Promise.all(payload.funcionarios.map((funcionario) =>
@@ -1076,7 +1098,7 @@ router.post('/funcionario/revisao', requirePermission('escalas-funcionarios', 'e
       return res.status(400).json({ error: 'Informe exatamente um funcionario para a revisao individual.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
-    const ruleErrors = validateEscalaPayload(payload, { domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId) });
+    const ruleErrors = validateEscalaPayload(payload, await getRuleOptions(payload.lojaId));
     if (ruleErrors.length > 0) return res.status(422).json({ errors: ruleErrors });
     const ausenciaErrors = await escalaService.validateAusencias({ funcionarios: payload.funcionarios });
     if (ausenciaErrors.length > 0) return res.status(422).json({ errors: ausenciaErrors });
@@ -1354,7 +1376,7 @@ router.post('/', requirePermission('escalas', 'criar'), resolveLojaRequest, requ
       return res.status(403).json({ error: 'Perfil Lider nao pode criar novas escalas.' });
     }
     await assertPayloadDentroDoEscopo(req, payload);
-    const ruleErrors = validateEscalaPayload(payload, { domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId) });
+    const ruleErrors = validateEscalaPayload(payload, await getRuleOptions(payload.lojaId));
     if (ruleErrors.length > 0) {
       return res.status(422).json({ errors: ruleErrors });
     }

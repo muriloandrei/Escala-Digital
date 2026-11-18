@@ -1,5 +1,4 @@
 const { unfoldShiftMinutes, validate12x36Shift } = require('../domain/shiftValidation');
-const { getNationalHoliday } = require('../domain/nationalHolidays');
 const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('../domain/workRegime');
 
 const REGRAS_VIGENTES = [
@@ -207,9 +206,6 @@ function validarRegras12x36(funcionario, onCritica) {
     const code = String(day.programacao || day.PROGRAMACAO || 'TRB').trim().toUpperCase();
     const work = code === 'TRB';
     const protectedAbsence = ['AFA', 'FER'].includes(code);
-    if (code === 'FDO' && !getNationalHoliday(date)) {
-      addCritica(`${label}: FDO permitida apenas em feriado nacional cadastrado (${date}).`, [date]);
-    }
     if (duty && !work && !protectedAbsence && code !== 'FDO') {
       addCritica(`${label}: plantao 12x36 esperado em ${date}; encontrado ${code}.`, [date]);
     }
@@ -242,7 +238,7 @@ function validarRegrasFuncionario(funcionario, onCritica, options = {}) {
   };
   let ultimoTrabalho = null;
   const domingoAnterior = options.domingoAnteriorPorFuncionario?.get(Number(funcionario.escfuncId || funcionario.ESCFUNC_ID));
-  let ultimoDomingoTrabalhado = domingoAnterior?.PROGRAMACAO === 'TRB'
+  let ultimoDomingoTrabalhado = options.domingo1x1 !== false && domingoAnterior?.PROGRAMACAO === 'TRB'
     ? new Date(`${domingoAnterior.DT}T00:00:00Z`) : null;
   let diasTrabalhadosConsecutivos = 0;
   const maxDiasConsecutivos = Number(funcionario.maxDiasConsecutivos || 5);
@@ -254,9 +250,6 @@ function validarRegrasFuncionario(funcionario, onCritica, options = {}) {
 
   for (const dia of dias) {
     const dataIso = formatDate(dia.data || dia.DT);
-    if (String(dia.programacao || dia.PROGRAMACAO || '').toUpperCase() === 'FDO' && !getNationalHoliday(dataIso)) {
-      addCritica(`${label}: FDO permitida apenas em feriado nacional cadastrado (${dataIso}).`, [dataIso]);
-    }
     const data = new Date(`${dataIso}T00:00:00`);
     const descanso = isDescanso(dia);
     const weekKey = getWeekKey(dataIso);
@@ -298,7 +291,7 @@ function validarRegrasFuncionario(funcionario, onCritica, options = {}) {
       }
     }
 
-    if (data.getDay() === 0) {
+    if (options.domingo1x1 !== false && data.getDay() === 0) {
       if (ultimoDomingoTrabalhado) {
         const diffDomingos = Math.round((data - ultimoDomingoTrabalhado) / 86400000);
         if (diffDomingos === 7) {
@@ -366,17 +359,17 @@ function getCriticasCoberturaMinima(funcionarios = [], percentualMinimo = 60, ho
     .map(([data, item]) => `Cobertura minima da secao abaixo de ${percentualMinimo}% em ${data}. Trabalhando: ${item.trabalhando}/${item.total}.`);
 }
 
-function validarCriticasEscopo({ lojaId, mesRef, funcionarios, domingo6h = false, domingoAnteriorPorFuncionario = null }) {
+function validarCriticasEscopo({ lojaId, mesRef, funcionarios, domingo6h = false, domingo1x1 = true, domingoAnteriorPorFuncionario = null }) {
   const incompletos = funcionarios.filter((funcionario) => !funcionario.dias?.length)
     .map((funcionario) => `${funcionario.nome || funcionario.chapa || funcionario.escfuncId}: escala sem dias gerados.`);
   return [
     ...incompletos,
     ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionarios.filter((funcionario) => funcionario.dias?.length) },
-      { domingo6h, domingoAnteriorPorFuncionario, lojaId })
+      { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, lojaId })
   ];
 }
 
-function agruparCriticasPorSubsecao({ escala, lojaId = null, domingo6h = false, domingoAnteriorPorFuncionario = null }) {
+function agruparCriticasPorSubsecao({ escala, lojaId = null, domingo6h = false, domingo1x1 = true, domingoAnteriorPorFuncionario = null }) {
   const secoes = new Map((escala.secoes || []).map((secao) => [Number(secao.ESCSECAO_ID), secao]));
   const diasPorFuncionario = new Map();
   for (const dia of escala.dias || []) {
@@ -418,7 +411,7 @@ function agruparCriticasPorSubsecao({ escala, lojaId = null, domingo6h = false, 
       }
       criticas.push(...validarRegrasFuncionario(funcionario, ({ mensagem, datas }) => {
         marcadores.push({ escfuncId: funcionario.escfuncId, datas, mensagem });
-      }, { domingo6h, domingoAnteriorPorFuncionario, lojaId }));
+      }, { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, lojaId }));
     }
     return { ...grupo, criticas, marcadores };
   }).filter((grupo) => grupo.criticas.length > 0);

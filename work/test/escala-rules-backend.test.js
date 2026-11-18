@@ -212,6 +212,20 @@ test('backend rejects two consecutive worked Sundays', () => {
   ]));
 
   assert.ok(errors.some((error) => error.includes('dois domingos consecutivos')));
+  const relaxed = validateEscalaPayload(buildPayload([
+    trabalho('2026-09-06'), trabalho('2026-09-13')
+  ]), { domingo1x1: false });
+  assert.equal(relaxed.some((error) => error.includes('dois domingos consecutivos')), false);
+});
+
+test('FDO em dia comum nao conta como folga semanal', () => {
+  const dias = [
+    descanso('2026-09-07'), descanso('2026-09-08'), trabalho('2026-09-09'),
+    descanso('2026-09-10', 'FDO'), trabalho('2026-09-11'), trabalho('2026-09-12'),
+    trabalho('2026-09-13')
+  ];
+  const errors = validateEscalaPayload(buildPayload(dias), { domingo1x1: false });
+  assert.equal(errors.some((error) => error.includes('3 folgas') || error.includes('feriado')), false);
 });
 
 test('November 1 is a standalone week without two mandatory rests, but keeps Sunday 1x1', () => {

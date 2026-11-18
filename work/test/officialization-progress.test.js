@@ -102,6 +102,17 @@ test('section progress does not use historical days from another section', () =>
   assert.equal(result.oficializada, false);
 });
 
+test('open month counts transferred employee days in the current section', () => {
+  const mercearia = { ESCSECAO_ID: 99, COD_SECAO: '010.02.006', DESCR: 'Mercearia' };
+  const dias = week().map((day) => ({ ...day, ESCSECAO_ID: 99,
+    ESCSECAO_ID_ESCALA: section.ESCSECAO_ID, OFICIALIZADA: 1 }));
+  const result = buildProgress({ escala: { dias, status: 'AGENDADA' },
+    secoes: [section, mercearia], pessoas: [{ ...person, ESCSECAO_ID: 99 }],
+    periodo: period, lojaId: 10, mesRef: '2026-11-01' });
+  assert.equal(result.secoes.find((item) => item.escsecaoId === 99).preenchidos, 7);
+  assert.equal(result.secoes.find((item) => item.escsecaoId === 99).oficializada, true);
+});
+
 test('progress follows the active physical section during the Portaria migration', () => {
   const portaria = { ESCSECAO_ID: 13, COD_SECAO: '010.02.012', DESCR: 'Estacionamento' };
   const people = [{ ...person, ESCSECAO_ID: 13 }];
