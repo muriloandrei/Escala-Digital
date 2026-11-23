@@ -3475,6 +3475,14 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
               and (dt_fim is null or dt_fim >= to_date(:inicio, 'YYYY-MM-DD'))`,
           { lojaId, inicio, fim }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
+        const absences = await connection.execute(
+          `select f.escfunc_id, a.dt_inic, a.dt_fim from sgn_esc_ausencia a
+            join sgn_esc_funcionario f on (f.escfunc_id = a.escfunc_id or f.chapa = a.chapa)
+            where f.loja = :lojaId
+              and a.dt_inic < to_date(:fim, 'YYYY-MM-DD') + 1
+              and nvl(a.dt_fim, a.dt_inic) >= to_date(:inicio, 'YYYY-MM-DD')`,
+          { lojaId, inicio, fim }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
         const suspendedByEmployee = new Map();
         for (const row of suspensions.rows || []) {
           const id = Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'));
@@ -3482,6 +3490,15 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
           suspendedByEmployee.get(id).push({
             inicio: formatDateValue(pick(row, 'DT_INICIO', 'dt_inicio')),
             fim: pick(row, 'DT_FIM', 'dt_fim') ? formatDateValue(pick(row, 'DT_FIM', 'dt_fim')) : '9999-12-31'
+          });
+        }
+        const absencesByEmployee = new Map();
+        for (const row of absences.rows || []) {
+          const id = Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'));
+          if (!absencesByEmployee.has(id)) absencesByEmployee.set(id, []);
+          absencesByEmployee.get(id).push({
+            inicio: formatDateValue(pick(row, 'DT_INIC', 'dt_inic')),
+            fim: formatDateValue(pick(row, 'DT_FIM', 'dt_fim') || pick(row, 'DT_INIC', 'dt_inic'))
           });
         }
         const incomplete = [];
@@ -3500,6 +3517,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
             mesRef, date, todayIso: hojeIso, hasPersistedDay: item.dates.has(date)
           }) && (!admission || date >= admission) && (!dismissal || date <= dismissal)
             && !(suspendedByEmployee.get(id) || []).some((period) => period.inicio <= date && period.fim >= date)
+            && !(absencesByEmployee.get(id) || []).some((period) => period.inicio <= date && period.fim >= date)
             && !item.dates.has(date))) incomplete.push(id);
         }
         if (incomplete.length) {

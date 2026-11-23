@@ -82,6 +82,27 @@ test('ausencia projetada sem dia gravado aparece como pendencia identificada', (
     [['2026-11-02', 'AUSENCIA_NAO_GRAVADA']]);
 });
 
+test('ferias do RM cobrem dias sem lancamento e nao exigem folga', () => {
+  const vacation = { ESCFUNC_ID: 999, CHAPA: '42', DT_INIC: '2026-11-30', DT_FIM: '2026-12-02', MOTIVO: 'FERIAS' };
+  const dias = ['2026-11-30', '2026-12-01', '2026-12-02'].map((date) => ({
+    ESCFUNC_ID: 42, ESCSECAO_ID: 12, DT: date, PROGRAMACAO: 'FER', AUSENCIA_PROJETADA: 1
+  }));
+  const workDays = ['2026-12-03', '2026-12-04', '2026-12-05', '2026-12-06'].map((date) => ({
+    ESCFUNC_ID: 42, ESCSECAO_ID: 12, DT: date, PROGRAMACAO: 'TRB', OFICIALIZADA: 0
+  }));
+  const input = { escala: { dias: [...dias, ...workDays], ausencias: [vacation] },
+    secoes: [section], pessoas: [person], periodo: { inicio: '2026-11-30', fim: '2026-12-06' },
+    lojaId: 10, mesRef: '2026-12-01', todayIso: '2026-11-23', includeCritiques: false };
+  const progress = buildProgress(input).secoes[0];
+  assert.equal(progress.previstos, 4);
+  assert.equal(progress.preenchidos, 4);
+  assert.deepEqual(progress.diasPendentes, []);
+  assert.equal(progress.podeOficializar, true);
+  const approved = buildProgress({ ...input, escala: { ...input.escala,
+    dias: [...dias, ...workDays.map((day) => ({ ...day, OFICIALIZADA: 1 }))] } }).secoes[0];
+  assert.equal(approved.oficializada, true);
+});
+
 test('fixo visivel sem dia na revisao ativa continua pendente para o RM', () => {
   const result = buildProgress({ escala: { dias: week().slice(0, 6), fixos: [
     { ESCFUNC_ID: 42, DT: '2026-11-08', PROGRAMACAO: 'FXF' }
@@ -210,7 +231,7 @@ test('admin report can include an empty section without treating it as officiali
   assert.equal(result.secoes[0].oficializada, false);
 });
 
-test('RM-projected absence is visible without counting as a persisted officialization day', () => {
+test('RM-projected absence is visible without requiring a persisted officialization day', () => {
   const absence = { ESCFUNC_ID: 42, DT_INIC: '2026-11-05', DT_FIM: '2026-11-08' };
   const projected = week().slice(3).map((day) => ({
     ...day, PROGRAMACAO: 'AFA', HR_ENT1: 'AFA', HR_SAI1: 'AFA',
@@ -219,8 +240,10 @@ test('RM-projected absence is visible without counting as a persisted officializ
   const escala = { dias: [...week().slice(0, 3), ...projected], ausencias: [absence] };
   const progress = buildProgress({ escala, secoes: [section], pessoas: [person],
     periodo: period, lojaId: 10, mesRef: '2026-11-01' });
+  assert.equal(progress.secoes[0].previstos, 3);
   assert.equal(progress.secoes[0].preenchidos, 3);
-  assert.equal(progress.secoes[0].completa, false);
+  assert.equal(progress.secoes[0].completa, true);
+  assert.deepEqual(progress.secoes[0].diasPendentes, []);
   const fullAbsence = buildProgress({ escala: { dias: projected, ausencias: [{ ...absence, DT_INIC: period.inicio }] },
     secoes: [section], pessoas: [person], periodo: period, lojaId: 10, mesRef: '2026-11-01' });
   assert.deepEqual(fullAbsence.secoes, []);

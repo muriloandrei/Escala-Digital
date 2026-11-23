@@ -45,10 +45,18 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
     .some((suspension) => suspension.start <= date && suspension.end >= date);
   const absencesByEmployee = new Map();
   for (const absence of escala.ausencias || []) {
-    const id = Number(absence.ESCFUNC_ID);
-    if (!absencesByEmployee.has(id)) absencesByEmployee.set(id, []);
-    absencesByEmployee.get(id).push({ start: dateKey(absence.DT_INIC), end: dateKey(absence.DT_FIM || absence.DT_INIC) });
+    const period = { start: dateKey(absence.DT_INIC), end: dateKey(absence.DT_FIM || absence.DT_INIC) };
+    const keys = [absence.ESCFUNC_ID ? `id:${Number(absence.ESCFUNC_ID)}` : null,
+      absence.CHAPA ? `chapa:${String(absence.CHAPA).trim()}` : null].filter(Boolean);
+    for (const key of keys) {
+      if (!absencesByEmployee.has(key)) absencesByEmployee.set(key, []);
+      absencesByEmployee.get(key).push(period);
+    }
   }
+  const hasAbsence = (person, date) => [person.ESCFUNC_ID ? `id:${Number(person.ESCFUNC_ID)}` : null,
+    person.CHAPA ? `chapa:${String(person.CHAPA).trim()}` : null].filter(Boolean)
+    .some((key) => (absencesByEmployee.get(key) || [])
+      .some((absence) => absence.start <= date && absence.end >= date));
   const fixosPorFuncionarioDia = new Set((escala.fixos || [])
     .map((fixo) => `${Number(fixo.ESCFUNC_ID)}|${dateKey(fixo.DT)}`));
   const diasPorFuncionario = new Map();
@@ -87,9 +95,7 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
       && !(person.DT_ADMISS && dateKey(person.DT_ADMISS) > periodo.fim)
       && !(person.DT_DEMISS && dateKey(person.DT_DEMISS) <= todayIso
         && dateKey(person.DT_DEMISS) <= periodo.fim)
-      && !dates.every((date) => isSuspended(person, date)
-        || (absencesByEmployee.get(Number(person.ESCFUNC_ID)) || [])
-          .some((absence) => absence.start <= date && absence.end >= date)));
+      && !dates.every((date) => isSuspended(person, date) || hasAbsence(person, date)));
     let expected = 0;
     let filled = 0;
     let official = 0;
@@ -102,6 +108,7 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
         const day = days.get(`${escsecaoId}|${date}`);
         const persisted = Boolean(day && !day.AUSENCIA_PROJETADA);
         if (!isRequiredOfficializationDate({ mesRef, date, todayIso, hasPersistedDay: persisted })) continue;
+        if (!persisted && hasAbsence(person, date)) continue;
         expected += 1;
         if (persisted) filled += 1;
         else diasPendentes.push({ escfuncId: Number(person.ESCFUNC_ID), chapa: person.CHAPA,

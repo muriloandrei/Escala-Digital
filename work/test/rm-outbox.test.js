@@ -380,7 +380,7 @@ test('lote de INCERTO por timeout anterior apenas verifica, sem novo POST', asyn
 });
 
 function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], admissionDate = null, dismissalDate = null,
-  missingDay = null, periodStart = '2026-10-05', periodEnd = '2026-11-01' } = {}) {
+  missingDay = null, absences = [], periodStart = '2026-10-05', periodEnd = '2026-11-01' } = {}) {
   const operations = [];
   const statements = [];
   const connection = {
@@ -395,6 +395,7 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
       }
       if (/select max\(p\.revisao\)/i.test(sql)) return { rows: [{ REVISAO: 7 }] };
       if (/from sgn_esc_pendencia_func/i.test(sql)) return { rows: [] };
+      if (/from sgn_esc_ausencia/i.test(sql)) return { rows: absences };
       if (/select distinct p\.escfunc_id/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90 }] };
       if (/select escfunc_id, dt_demiss, status from sgn_esc_funcionario/i.test(sql)) return { rows: [{ ESCFUNC_ID: 90, DT_DEMISS: dismissalDate, STATUS: 'A' }] };
       if (/select p\.escprog_id, p\.escfunc_id, p\.revisao/i.test(sql)) {
@@ -488,6 +489,16 @@ test('oficializacao da secao recusa um dia ausente na transacao', async () => {
     (error) => error.statusCode === 422 && /dias sem programacao/.test(error.message)
   );
   assert.deepEqual(operations, ['rollback']);
+});
+
+test('oficializacao aceita dia sem lancamento quando coberto por ferias do RM', async () => {
+  const { service, operations } = loadEscalaService({ missingDay: '2026-10-12',
+    absences: [{ ESCFUNC_ID: 90, DT_INIC: '2026-10-12', DT_FIM: '2026-10-12' }] });
+  const result = await service.oficializarEscala({
+    lojaId: 35, mesRef: '2026-10-01', escsecaoId: 2003, escfuncIds: [90]
+  });
+  assert.equal(result.affectedRows, 1);
+  assert.deepEqual(operations, ['approve', 'queue', 'event', 'commit']);
 });
 
 test('oficializacao nao exige dia anterior a admissao do funcionario', async () => {
