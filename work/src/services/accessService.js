@@ -247,6 +247,10 @@ function normalizeUsuarioRows(rows = []) {
 
 async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
   if (isGlobalStoreAccessUser(requestUser)) return null;
+  if (normalizePerfilName(requestUser) === 'RH') {
+    if (lojaId) assertLojaAcesso(requestUser, lojaId);
+    return null;
+  }
   const usuarioId = Number(requestUser?.sub || requestUser?.id || requestUser?.usuarioId || requestUser?.USUARIO_ID || 0);
   if (!usuarioId) return [];
 
@@ -280,15 +284,29 @@ async function assertSecoesPermitidas(requestUser, lojaId, secaoIds = []) {
   if (isGlobalStoreAccessUser(requestUser)) return;
 
   const permitidas = await getSecoesPermitidasUsuario(requestUser, lojaId);
-  const permitidasSet = new Set((permitidas || []).map(Number));
   const solicitadas = [...new Set((secaoIds || []).map(Number).filter(Boolean))];
+  if (permitidas === null && solicitadas.length) {
+    const binds = { lojaId: Number(lojaId) };
+    const total = await withConnection(async (connection) => {
+      const lojaColumn = await getSecaoLojaColumn(connection);
+      const filter = buildInClause('escsecao_id', solicitadas, binds, 'secao');
+      const result = await connection.execute(
+        `select count(*) as total from sgn_esc_secao
+          where ${lojaColumn.toLowerCase()} = :lojaId and ${filter}`,
+        binds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      return Number(pick(result.rows[0], 'TOTAL', 'total'));
+    });
+    if (total === solicitadas.length) return;
+  }
+  const permitidasSet = new Set((permitidas || []).map(Number));
   const bloqueadas = solicitadas.filter((secaoId) => !permitidasSet.has(secaoId));
   if (bloqueadas.length === 0 && solicitadas.length > 0) return;
 
   const error = new Error(
     bloqueadas.length
-      ? 'Usuario lider sem acesso a uma ou mais secoes informadas.'
-      : 'Usuario lider sem secoes liberadas para esta loja.'
+      ? 'Usuario sem acesso a uma ou mais secoes informadas.'
+      : 'Usuario sem secoes liberadas para esta loja.'
   );
   error.statusCode = 403;
   error.details = bloqueadas;

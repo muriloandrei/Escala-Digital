@@ -83,6 +83,47 @@ test('leader sees released store in summary while monthly data remains section-s
   }
 });
 
+test('RH without a store in the login sees schedules from assigned stores', async () => {
+  const originals = {
+    summary: escalaService.listEscalasResumo,
+    monthly: escalaService.getEscalaMensal,
+    progress: officializationService.getProgress,
+    sunday: previousSundayService.getPriorSunday
+  };
+  escalaService.listEscalasResumo = async (options) => {
+    assert.deepEqual(options.lojasPermitidas, [301, 302]);
+    assert.equal(options.secoesPermitidas, null);
+    assert.equal(options.escopoPorLoja, false);
+    return [{ LOJA: 301, MES_REF: '2026-12-01' }];
+  };
+  escalaService.getEscalaMensal = async (options) => {
+    assert.equal(options.lojaId, 301);
+    assert.equal(options.secoesPermitidas, null);
+    return { secoes: [], funcionarios: [], dias: [] };
+  };
+  officializationService.getProgress = async (options) => {
+    assert.equal(options.secoesPermitidas, null);
+    return { secoes: [] };
+  };
+  previousSundayService.getPriorSunday = async () => null;
+  const user = { perfil: 'RH', login: 'RH.CORPORATIVO', lojas: [301, 302], sub: 20 };
+  try {
+    const list = response();
+    await route('/resumo')({ user, query: {} }, list, (error) => { throw error; });
+    assert.equal(list.code, 200);
+    assert.deepEqual(list.body.escalas.map((item) => item.LOJA), [301]);
+    const month = response();
+    await route('/mensal')({ user, query: { lojaId: '301', mesRef: '2026-12-01' } }, month,
+      (error) => { throw error; });
+    assert.equal(month.code, 200);
+  } finally {
+    escalaService.listEscalasResumo = originals.summary;
+    escalaService.getEscalaMensal = originals.monthly;
+    officializationService.getProgress = originals.progress;
+    previousSundayService.getPriorSunday = originals.sunday;
+  }
+});
+
 test('critiques response includes only the selected section', async () => {
   const originalSections = accessService.getSecoesPermitidasUsuario;
   const originalMonthly = escalaService.getEscalaMensal;

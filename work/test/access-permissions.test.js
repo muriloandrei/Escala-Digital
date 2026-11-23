@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { _private, isGlobalStoreAccessUser } = require('../src/services/accessService');
+const { _private, isGlobalStoreAccessUser, getSecoesPermitidasUsuario, assertSecoesPermitidas } = require('../src/services/accessService');
 
 test('admin and controladoria can see new stores even with existing store links', () => {
   assert.equal(isGlobalStoreAccessUser({ perfil: 'ADMIN', lojas: [1, 2] }), true);
@@ -88,6 +88,31 @@ test('store user with FRENTE login is scoped to assigned sections', async () => 
     { statusCode: 403 }
   );
   assert.equal(await module.exports.getSecoesPermitidasUsuario({ sub: 1, perfil: 'ADMIN' }, 2), null);
+});
+
+test('RH sees every section only in stores assigned to the user', async () => {
+  const rh = { sub: 20, perfil: 'RH', login: 'RH.CORPORATIVO', lojas: [301, 302] };
+  assert.equal(await getSecoesPermitidasUsuario(rh, 301), null);
+  assert.equal(await getSecoesPermitidasUsuario(rh), null);
+  await assert.rejects(getSecoesPermitidasUsuario(rh, 303), { statusCode: 403 });
+  await assert.rejects(assertSecoesPermitidas(rh, 303, [4200]), { statusCode: 403 });
+
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/accessService.js'), 'utf8');
+  const module = { exports: {} };
+  const connection = { execute: async (sql, binds) => {
+    if (sql.includes('from user_tab_columns')) return { rows: [{ COLUMN_NAME: 'CODFILIAL' }] };
+    assert.match(sql, /from sgn_esc_secao/);
+    assert.match(sql, /codfilial = :lojaId/);
+    assert.equal(binds.lojaId, 301);
+    const requested = Object.entries(binds).filter(([key]) => /^secao\d+$/.test(key)).map(([, id]) => id);
+    return { rows: [{ TOTAL: requested.filter((id) => [4200, 4201].includes(id)).length }] };
+  } };
+  const context = vm.createContext({ module, require: (name) => name === '../db/oracle'
+    ? { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } }
+    : name === '../domain/sectionRollout' ? require('../src/domain/sectionRollout') : require(name) });
+  vm.runInContext(source, context);
+  await module.exports.assertSecoesPermitidas(rh, 301, [4200, 4201]);
+  await assert.rejects(module.exports.assertSecoesPermitidas(rh, 301, [4200, 9300]), { statusCode: 403 });
 });
 
 test('leader of another section sees only the explicitly assigned section', async () => {
