@@ -63,6 +63,45 @@ test('progress endpoint rejects roles outside RH, gerente and admin', async () =
   assert.equal(result.code, 403);
 });
 
+test('progress endpoint accepts profiles explicitly allowed to officialize', async () => {
+  const handle = router.stack.find((layer) => layer.route?.path === '/progresso').route.stack.at(-1).handle;
+  const originalSections = accessService.getSecoesPermitidasUsuario;
+  const originalProgress = officializationService.getProgress;
+  accessService.getSecoesPermitidasUsuario = async () => [12];
+  officializationService.getProgress = async () => ({ secoes: [] });
+  try {
+    const res = response();
+    await handle({ user: { perfil: 'OPERADOR', permissoes: [{ PAGINA: 'escalas', PODE_OFICIALIZAR: 1 }] },
+      query: { lojaId: '10', mesRef: '2026-11-01' } }, res, (error) => { throw error; });
+    assert.equal(res.code, 200);
+  } finally {
+    accessService.getSecoesPermitidasUsuario = originalSections;
+    officializationService.getProgress = originalProgress;
+  }
+});
+
+test('officialization middleware requires the configured permission, not edit access', async () => {
+  const permission = router.stack.find((layer) => layer.route?.path === '/oficializar').route.stack[0].handle;
+  const originalGet = accessService.getPermissaoPerfil;
+  accessService.getPermissaoPerfil = async (_perfil, page) => {
+    assert.equal(page, 'escalas');
+    return { PODE_EDITAR: 1, PODE_OFICIALIZAR: 0 };
+  };
+  try {
+    const denied = response();
+    let continued = false;
+    await permission({ user: { perfil: 'RH' } }, denied, () => { continued = true; });
+    assert.equal(denied.code, 403);
+    assert.equal(continued, false);
+    accessService.getPermissaoPerfil = async () => ({ PODE_EDITAR: 0, PODE_OFICIALIZAR: 1 });
+    const allowed = response();
+    await permission({ user: { perfil: 'RH' } }, allowed, () => { continued = true; });
+    assert.equal(continued, true);
+  } finally {
+    accessService.getPermissaoPerfil = originalGet;
+  }
+});
+
 test('only admin can request empty sections in the officialization report', async () => {
   const handle = router.stack.find((layer) => layer.route?.path === '/progresso').route.stack.at(-1).handle;
   const originalSections = accessService.getSecoesPermitidasUsuario;
@@ -136,7 +175,8 @@ test('leader can officialize only a whole enabled complete section', async () =>
     assert.equal(writes, 1);
     const rh = response();
     await handle({ ...req, user: { perfil: 'RH', sub: 2 } }, rh, (error) => { throw error; });
-    assert.equal(rh.code, 403);
+    assert.equal(rh.code, 200);
+    assert.equal(writes, 2);
   } finally {
     accessService.getSecoesPermitidasUsuario = originals.getSecoesPermitidasUsuario;
     accessService.assertSecoesPermitidas = originals.assertSecoesPermitidas;

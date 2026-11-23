@@ -614,7 +614,9 @@ router.get('/mensal', requirePermission('escalas', 'visualizar'), resolveLojaReq
 
 router.get('/progresso', requirePermission('escalas', 'visualizar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
-    if (!['ADMIN', 'RH', 'GERENTE'].includes(String(req.user?.perfil || '').toUpperCase())) {
+    const podeOficializar = req.user?.permissoes?.some((permissao) =>
+      permissao.PAGINA === 'escalas' && Number(permissao.PODE_OFICIALIZAR) === 1);
+    if (!['ADMIN', 'RH', 'GERENTE'].includes(String(req.user?.perfil || '').toUpperCase()) && !podeOficializar) {
       return res.status(403).json({ error: 'Perfil sem permissao para consultar o progresso.' });
     }
     const query = z.object({
@@ -834,7 +836,7 @@ router.get('/rm/envios', requirePermission('integracao-rm', 'visualizar'), resol
   }
 });
 
-router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
+router.post('/oficializar', requirePermission('escalas', 'oficializar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = z.object({
       lojaId: z.number().int().positive(),
@@ -842,9 +844,6 @@ router.post('/oficializar', requirePermission('escalas', 'editar'), resolveLojaR
       escsecaoId: z.number().int().positive()
     }).strict().parse(req.body);
 
-    if (!['ADMIN', 'LIDER', 'GERENTE'].includes(String(req.user?.perfil || '').toUpperCase())) {
-      return res.status(403).json({ error: 'Perfil sem permissao para oficializar.' });
-    }
     if (!isEditableMonth(payload.mesRef) && req.user.perfil !== 'ADMIN') {
       return res.status(403).json({ error: 'Somente Admin pode reoficializar escalas de meses anteriores.' });
     }

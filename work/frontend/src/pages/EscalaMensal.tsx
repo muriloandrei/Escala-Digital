@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   canEdit,
+  canOfficialize,
   ApiError,
   getJson,
   postJson,
@@ -601,8 +602,8 @@ export function EscalaMensal({ user }: { user: User }) {
     scopeIds.has(Number(day.ESCFUNC_ID)) && (subsection === 'all' || daySubKey(day) === subsection));
   const scopeHasOfficial = scopedDays.some((day) => Number(day.OFICIALIZADA) === 1);
   const sectionProgress = progress?.secoes.find((item) => item.escsecaoId === Number(sectionId));
-  const canOfficialize = ['ADMIN', 'LIDER', 'GERENTE'].includes(user.perfil);
-  const canSeeProgress = ['ADMIN', 'RH', 'GERENTE'].includes(user.perfil);
+  const canOfficializeSchedule = canOfficialize(user);
+  const canSeeProgress = ['ADMIN', 'RH', 'GERENTE'].includes(user.perfil) || canOfficializeSchedule;
 
   return (
     <main className="content schedule-page">
@@ -625,7 +626,7 @@ export function EscalaMensal({ user }: { user: User }) {
           </Link> : <button className="button secondary" type="button" disabled title="Oficialize a seção antes de imprimir">
             <Printer size={16} /> Imprimir
           </button>}
-          {canOfficialize && !sectionProgress?.oficializada && <button className="button success" type="button"
+          {canOfficializeSchedule && !sectionProgress?.oficializada && <button className="button success" type="button"
             disabled={loading || actionBusy || !progress?.habilitada || !sectionProgress?.podeOficializar || (escala?.status === 'FINALIZADA' && !canEditHistorical)}
             title={!progress?.habilitada ? 'Oficialização desabilitada nesta loja' : !sectionProgress?.completa ? 'Gere todos os dias da seção' : sectionProgress?.criticasBloqueantes ? 'Resolva as críticas de hoje e dos próximos dias' : undefined}
             onClick={() => { setActionError(''); setPendingAction('oficializar'); }}><ShieldCheck size={16} /> Oficializar</button>}

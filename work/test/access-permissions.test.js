@@ -23,13 +23,15 @@ test('explicit profile denial is not overwritten by role defaults', () => {
   assert.equal(permission.PODE_EDITAR, 0);
 });
 
-test('missing profile row receives operational defaults but officialization remains admin only', () => {
+test('officialization is a separate configurable permission on schedules', () => {
   const gerente = _private.completarPermissoesPerfil({ NOME: 'GERENTE', PERMISSOES: [] });
   const permission = gerente.PERMISSOES.find((item) => item.PAGINA === 'escalas');
   assert.equal(permission.PODE_VISUALIZAR, 1);
   assert.equal(permission.PODE_CRIAR, 1);
   assert.equal(permission.PODE_OFICIALIZAR, 0);
-  assert.equal(_private.normalizePermission({ PAGINA: 'escalas', PODE_OFICIALIZAR: 1 }, 'RH').PODE_OFICIALIZAR, 0);
+  assert.equal(_private.normalizePermission({ PAGINA: 'escalas', PODE_OFICIALIZAR: 1 }, 'RH').PODE_OFICIALIZAR, 1);
+  assert.equal(_private.normalizePermission({ PAGINA: 'escalas', PODE_EDITAR: 1, PODE_OFICIALIZAR: 0 }, 'RH').PODE_OFICIALIZAR, 0);
+  assert.equal(_private.normalizePermission({ PAGINA: 'funcionarios', PODE_OFICIALIZAR: 1 }, 'RH').PODE_OFICIALIZAR, 0);
   assert.equal(_private.normalizePermission({ PAGINA: 'escalas' }, 'ADMIN').PODE_OFICIALIZAR, 1);
 });
 

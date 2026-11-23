@@ -3,13 +3,20 @@ const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
 test('executor accepts only the approved mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 30);
+  assert.equal(migrationNames.length, 31);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
     assert.match(migration.sql, /\bend;$/i);
     assert.equal(migration.checksum.length, 64);
   }
+});
+
+test('officialization migration preserves operational profiles without granting custom profiles', () => {
+  const { sql } = readMigration('20261123_oficializacao_por_perfil.sql');
+  assert.match(sql, /PODE_OFICIALIZAR = case/i);
+  assert.match(sql, /upper\(p\.NOME\) in \('LIDER', 'GERENTE', 'RH'\)/i);
+  assert.match(sql, /upper\(p\.NOME\) <> 'ADMIN'/i);
 });
 
 test('monthly base hours and Sunday 1x1 store configuration are versioned', () => {

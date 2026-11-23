@@ -120,7 +120,8 @@ function normalizePermission(rawPermission = {}, perfilNome = '') {
   return {
     PAGINA: rawPermission.PAGINA,
     ...Object.fromEntries(ALL_PERMISSION_FIELDS.map((field) => [field, Number(rawPermission[field] ?? defaults[field])])),
-    PODE_OFICIALIZAR: 0
+    PODE_OFICIALIZAR: rawPermission.PAGINA === 'escalas'
+      ? Number(rawPermission.PODE_OFICIALIZAR ?? defaults.PODE_OFICIALIZAR) : 0
   };
 }
 

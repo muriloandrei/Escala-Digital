@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, ShieldCheck } from 'lucide-react';
 import { ApiError, getJson, patchJson, postJson } from '../api';
 
-type PermissionKey = 'PODE_VISUALIZAR' | 'PODE_CRIAR' | 'PODE_EDITAR' | 'PODE_EXCLUIR' | 'PODE_REPROCESSAR' | 'PODE_ADMINISTRAR';
-type Permission = { PAGINA: string; PODE_OFICIALIZAR?: number } & Record<PermissionKey, number>;
+type PermissionKey = 'PODE_VISUALIZAR' | 'PODE_CRIAR' | 'PODE_EDITAR' | 'PODE_OFICIALIZAR' | 'PODE_EXCLUIR' | 'PODE_REPROCESSAR' | 'PODE_ADMINISTRAR';
+type Permission = { PAGINA: string } & Record<PermissionKey, number>;
 type Profile = { PERFIL_ID: number; NOME: string; DESCR: string | null; STATUS: 'A' | 'I'; PERMISSOES: Permission[] };
 type Page = { key: string; label: string };
 const columns: { key: PermissionKey; label: string }[] = [
   { key: 'PODE_VISUALIZAR', label: 'Ver' }, { key: 'PODE_CRIAR', label: 'Criar' },
-  { key: 'PODE_EDITAR', label: 'Editar' }, { key: 'PODE_EXCLUIR', label: 'Excluir' },
+  { key: 'PODE_EDITAR', label: 'Editar' }, { key: 'PODE_OFICIALIZAR', label: 'Oficializar' },
+  { key: 'PODE_EXCLUIR', label: 'Excluir' },
   { key: 'PODE_REPROCESSAR', label: 'Reprocessar' }, { key: 'PODE_ADMINISTRAR', label: 'Administrar' },
 ];
 function restrictedByServer(profile: string, page: string) {
@@ -97,7 +98,8 @@ export function PerfisAcesso() {
         NOME: creating ? name : selected.NOME, DESCR: draft.DESCR, STATUS: draft.STATUS,
         PERMISSOES: draft.PERMISSOES.map((item) => ({
           ...item, ...(restrictedByServer(name, item.PAGINA) ? Object.fromEntries(columns.map(({ key }) => [key, 0])) : {}),
-          PODE_OFICIALIZAR: 0,
+          PODE_OFICIALIZAR: item.PAGINA === 'escalas' && !restrictedByServer(name, item.PAGINA)
+            ? item.PODE_OFICIALIZAR : 0,
         })),
       };
       if (creating) {
@@ -146,7 +148,7 @@ export function PerfisAcesso() {
             <tbody>{pages.map((page) => {
               const permission = draft.PERMISSOES.find((item) => item.PAGINA === page.key);
               const restricted = restrictedByServer(draft.NOME, page.key);
-              return <tr key={page.key}><td><strong>{page.label}</strong>{restricted && <small className="table-subline">Bloqueado pela API</small>}</td>{columns.map(({ key, label }) => <td key={key}><input type="checkbox" aria-label={`${label} · ${page.label}`} title={restricted ? 'A API bloqueia esta área para o perfil' : undefined} checked={restricted ? false : Boolean(permission?.[key])} disabled={locked || busy || saveUncertain || !permission || restricted} onChange={() => togglePermission(page.key, key)} /></td>)}</tr>;
+              return <tr key={page.key}><td><strong>{page.label}</strong>{restricted && <small className="table-subline">Bloqueado pela API</small>}</td>{columns.map(({ key, label }) => <td key={key}>{key === 'PODE_OFICIALIZAR' && page.key !== 'escalas' ? '-' : <input type="checkbox" aria-label={`${label} · ${page.label}`} title={restricted ? 'A API bloqueia esta área para o perfil' : undefined} checked={restricted ? false : Boolean(permission?.[key])} disabled={locked || busy || saveUncertain || !permission || restricted} onChange={() => togglePermission(page.key, key)} />}</td>)}</tr>;
             })}</tbody></table></div>
         </>}
       </section></div>}

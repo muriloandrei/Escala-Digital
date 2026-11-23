@@ -16,7 +16,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { canView, getJson, preferredStore, type User } from './api';
+import { canOfficialize, canView, getJson, preferredStore, type User } from './api';
 import { EscalasLiberadas } from './pages/EscalasLiberadas';
 import { EscalaMensal } from './pages/EscalaMensal';
 import { ImprimirEscala } from './pages/ImprimirEscala';
@@ -226,7 +226,7 @@ function App() {
         <Routes>
           {canSeeEscalas && <Route path="/escalas-liberadas" element={<EscalasLiberadas user={user} />} />}
           {canSeeEscalas && <Route path="/escalas/:lojaId/:mesRef" element={<EscalaMensal user={user} />} />}
-          {canSeeEscalas && ['ADMIN', 'RH', 'GERENTE'].includes(user.perfil) && <Route path="/escalas/:lojaId/:mesRef/progresso" element={<LegacyProgressRedirect />} />}
+          {canSeeEscalas && (['ADMIN', 'RH', 'GERENTE'].includes(user.perfil) || canOfficialize(user)) && <Route path="/escalas/:lojaId/:mesRef/progresso" element={<LegacyProgressRedirect />} />}
           {canSeeEscalas && <Route path="/escalas-funcionarios" element={<EscalasFuncionarios user={user} />} />}
           {canSeeEscalas && (
             <Route path="/escalas/:lojaId/:mesRef/imprimir" element={<ImprimirEscala user={user} />} />

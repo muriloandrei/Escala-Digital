@@ -5,7 +5,7 @@ export type User = {
   perfil: string;
   lojaPrincipal?: number;
   lojas?: number[];
-  permissoes?: { PAGINA: string; PODE_VISUALIZAR: number; PODE_EDITAR?: number; PODE_CRIAR?: number }[];
+  permissoes?: { PAGINA: string; PODE_VISUALIZAR: number; PODE_EDITAR?: number; PODE_CRIAR?: number; PODE_OFICIALIZAR?: number }[];
 };
 
 export function canView(user: User, page: string) {
@@ -25,6 +25,11 @@ export function canEdit(user: User, page: string) {
 export function canCreate(user: User, page: string) {
   return user.perfil === 'ADMIN' ||
     user.permissoes?.some((item) => item.PAGINA === page && Number(item.PODE_CRIAR) === 1) === true;
+}
+
+export function canOfficialize(user: User) {
+  return user.perfil === 'ADMIN' ||
+    user.permissoes?.some((item) => item.PAGINA === 'escalas' && Number(item.PODE_OFICIALIZAR) === 1) === true;
 }
 
 export function preferredStore(user: User, lojas: Loja[]) {
