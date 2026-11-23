@@ -976,9 +976,12 @@ async function saveSecaoTurno({ lojaId, escsecaoTurnoId, escsecaoId, data }) {
   });
 }
 
-async function listAusenciasByLojaMes(lojaId, inicio, fim) {
+async function listAusenciasByLojaMes(lojaId, inicio, fim, { secoesPermitidas = null } = {}) {
   const lojaCodigo = await resolveLojaCodigo(lojaId);
   return withConnection(async (connection) => {
+    const binds = { lojaId: lojaCodigo, inicio, fim };
+    const filters = [];
+    addSecoesPermitidasFilter(filters, binds, 'f.escsecao_id', secoesPermitidas);
     const result = await connection.execute(
       `select distinct
           a.escausen_id,
@@ -994,8 +997,9 @@ async function listAusenciasByLojaMes(lojaId, inicio, fim) {
        where f.loja = :lojaId
          and a.dt_inic < to_date(:fim, 'YYYY-MM-DD') + 1
          and nvl(a.dt_fim, a.dt_inic) >= to_date(:inicio, 'YYYY-MM-DD')
+         ${filters.length ? `and ${filters.join(' and ')}` : ''}
        order by a.dt_inic, a.chapa`,
-      { lojaId: lojaCodigo, inicio, fim },
+      binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 

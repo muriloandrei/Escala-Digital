@@ -35,16 +35,21 @@ test('officialization is a separate configurable permission on schedules', () =>
   assert.equal(_private.normalizePermission({ PAGINA: 'escalas' }, 'ADMIN').PODE_OFICIALIZAR, 1);
 });
 
-test('section access follows assigned stores, not the login or individual section grants', async () => {
+test('leader sees only active section grants in assigned stores, regardless of login', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/services/accessService.js'), 'utf8');
   const module = { exports: {} };
   const connection = {
     execute: async (sql, binds) => {
-      if (sql.includes('from user_tab_columns')) return { rows: [{ COLUMN_NAME: 'CODFILIAL' }] };
-      assert.match(sql, /from sgn_esc_secao/);
-      assert.match(sql, /codfilial = :lojaId/);
-      assert.equal(binds.lojaId, 2);
-      return { rows: [{ TOTAL: Number(binds.secao0 === 4200) }] };
+      if (sql.includes('from user_tab_columns')) {
+        return { rows: [{ COLUMN_NAME: binds.tableName === 'SGN_ESC_USUARIO_SECAO' ? 'STATUS' : 'CODFILIAL' }] };
+      }
+      if (sql.includes('from sgn_esc_usuario_secao us')) {
+        assert.match(sql, /nvl\(us\.status, 'A'\) = 'A'/);
+        assert.match(sql, /s\.codfilial = :lojaId/);
+        assert.equal(binds.lojaId, 2);
+        return { rows: [{ ESCSECAO_ID: 4200 }] };
+      }
+      throw new Error(`SQL inesperado: ${sql}`);
     }
   };
   const context = vm.createContext({
@@ -56,9 +61,8 @@ test('section access follows assigned stores, not the login or individual sectio
         : require(name)
   });
   vm.runInContext(source, context);
-  const user = { sub: 7, login: 'CPD', perfil: 'LIDER', lojas: [2] };
-  assert.equal(await module.exports.getSecoesPermitidasUsuario(user, 2), null);
-  assert.equal(await module.exports.getSecoesPermitidasUsuario(user), null);
+  const user = { sub: 7, login: 'LIDER.FRENTE02', perfil: 'LIDER', lojas: [2] };
+  assert.deepEqual(Array.from(await module.exports.getSecoesPermitidasUsuario(user, 2)), [4200]);
   await module.exports.assertSecoesPermitidas(user, 2, [4200]);
   await assert.rejects(
     module.exports.assertSecoesPermitidas(user, 2, [4201]),
@@ -93,9 +97,29 @@ test('RH sees every section only in stores assigned to the user', async () => {
   await assert.rejects(module.exports.assertSecoesPermitidas(rh, 301, [4200, 9300]), { statusCode: 403 });
 });
 
-test('leader with several assigned stores can open each store without section links', async () => {
+test('leader without section grants sees no sections even when stores are assigned', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/accessService.js'), 'utf8');
+  const module = { exports: {} };
+  const connection = { execute: async (sql, binds) => {
+    if (sql.includes('from user_tab_columns')) {
+      return { rows: [{ COLUMN_NAME: binds.tableName === 'SGN_ESC_USUARIO_SECAO' ? 'STATUS' : 'CODFILIAL' }] };
+    }
+    assert.match(sql, /from sgn_esc_usuario_secao us/);
+    if (binds.lojaId) {
+      assert.match(sql, /s\.codfilial = :lojaId/);
+      assert.equal(binds.lojaId, 2);
+    } else {
+      assert.match(sql, /s\.codfilial in \(:lojaPermitida0, :lojaPermitida1\)/);
+      assert.deepEqual([binds.lojaPermitida0, binds.lojaPermitida1], [2, 64]);
+    }
+    return { rows: [] };
+  } };
+  const context = vm.createContext({ module, require: (name) => name === '../db/oracle'
+    ? { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } }
+    : name === '../domain/sectionRollout' ? require('../src/domain/sectionRollout') : require(name) });
+  vm.runInContext(source, context);
   const user = { sub: 64, login: 'CPD', perfil: 'LIDER', lojas: [2, 64] };
-  assert.equal(await getSecoesPermitidasUsuario(user, 2), null);
-  assert.equal(await getSecoesPermitidasUsuario(user, 64), null);
-  await assert.rejects(getSecoesPermitidasUsuario(user, 65), { statusCode: 403 });
+  assert.deepEqual(Array.from(await module.exports.getSecoesPermitidasUsuario(user)), []);
+  await assert.rejects(module.exports.assertSecoesPermitidas(user, 2, [4200]), { statusCode: 403 });
+  await assert.rejects(module.exports.getSecoesPermitidasUsuario(user, 65), { statusCode: 403 });
 });

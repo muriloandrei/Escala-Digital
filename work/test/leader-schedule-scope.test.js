@@ -5,6 +5,7 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 const vm = require('node:vm');
 const router = require('../src/routes/escalaRoutes');
+const catalogRouter = require('../src/routes/catalogRoutes');
 const accessService = require('../src/services/accessService');
 const escalaService = require('../src/services/escalaService');
 const catalogService = require('../src/services/catalogService');
@@ -29,7 +30,97 @@ function route(pathname) {
     layer.route.methods.get).route.stack.at(-1).handle;
 }
 
-test('leader with assigned store sees its released schedule without section grants', async () => {
+function catalogRoute(pathname) {
+  return catalogRouter.stack.find((layer) => layer.route?.path === pathname &&
+    layer.route.methods.get).route.stack.at(-1).handle;
+}
+
+test('leader catalog lists and absences use only linked sections', async () => {
+  const originals = {
+    sections: accessService.getSecoesPermitidasUsuario,
+    employees: catalogService.listFuncionariosByLojas,
+    storeEmployees: catalogService.listFuncionariosByLoja,
+    storeSections: catalogService.listSecoesByLoja,
+    sectionsByStores: catalogService.listSecoesByLojas,
+    absences: catalogService.listAusenciasByLojaMes
+  };
+  const user = { perfil: 'LIDER', login: 'LIDER.FRENTE10', lojas: [10], sub: 1 };
+  accessService.getSecoesPermitidasUsuario = async (_user, lojaId) => {
+    assert.ok(lojaId === null || lojaId === 10);
+    return [20];
+  };
+  catalogService.listFuncionariosByLojas = async (lojas, options) => {
+    assert.deepEqual(lojas, [10]);
+    assert.deepEqual(options.secoesPermitidas, [20]);
+    return [{ ESCFUNC_ID: 42, ESCSECAO_ID: 20 }];
+  };
+  catalogService.listFuncionariosByLoja = async (lojaId, options) => {
+    assert.equal(lojaId, 10);
+    assert.deepEqual(options.secoesPermitidas, [20]);
+    return [{ ESCFUNC_ID: 42, ESCSECAO_ID: 20 }];
+  };
+  catalogService.listSecoesByLojas = async (lojas, options) => {
+    assert.deepEqual(lojas, [10]);
+    assert.deepEqual(options.secoesPermitidas, [20]);
+    return [{ ESCSECAO_ID: 20 }];
+  };
+  catalogService.listSecoesByLoja = async (lojaId, options) => {
+    assert.equal(lojaId, 10);
+    assert.deepEqual(options.secoesPermitidas, [20]);
+    return [{ ESCSECAO_ID: 20 }];
+  };
+  catalogService.listAusenciasByLojaMes = async (lojaId, _inicio, _fim, options) => {
+    assert.equal(lojaId, 10);
+    assert.deepEqual(options.secoesPermitidas, [20]);
+    return [];
+  };
+  try {
+    for (const [path, req] of [
+      ['/funcionarios', { query: {} }],
+      ['/secoes', { query: {} }],
+      ['/lojas/:lojaId/funcionarios', { params: { lojaId: '10' }, query: {} }],
+      ['/lojas/:lojaId/secoes', { params: { lojaId: '10' }, query: {} }],
+      ['/lojas/:lojaId/ausencias', { params: { lojaId: '10' }, query: { inicio: '2026-12-01', fim: '2026-12-31' } }]
+    ]) {
+      const res = response();
+      await catalogRoute(path)({ user, ...req }, res, (error) => { throw error; });
+      assert.equal(res.code, 200);
+    }
+  } finally {
+    accessService.getSecoesPermitidasUsuario = originals.sections;
+    catalogService.listFuncionariosByLojas = originals.employees;
+    catalogService.listFuncionariosByLoja = originals.storeEmployees;
+    catalogService.listSecoesByLoja = originals.storeSections;
+    catalogService.listSecoesByLojas = originals.sectionsByStores;
+    catalogService.listAusenciasByLojaMes = originals.absences;
+  }
+});
+
+test('absence query restricts rows to the linked employee sections', async () => {
+  const catalogPath = path.join(__dirname, '../src/services/catalogService.js');
+  const catalogRequire = createRequire(catalogPath);
+  const calls = [];
+  const connection = { execute: async (sql, binds) => {
+    calls.push({ sql, binds });
+    return { rows: [] };
+  } };
+  const module = { exports: {} };
+  const context = vm.createContext({ module, require: (name) => name === '../db/oracle'
+    ? { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } }
+    : catalogRequire(name) });
+  vm.runInContext(fs.readFileSync(catalogPath, 'utf8'), context);
+  vm.runInContext('resolveLojaCodigo = async () => 10;', context);
+
+  await module.exports.listAusenciasByLojaMes(10, '2026-12-01', '2026-12-31', { secoesPermitidas: [20] });
+  assert.match(calls[0].sql, /f\.escsecao_id in \(:secaoPermitida0\)/);
+  assert.equal(calls[0].binds.secaoPermitida0, 20);
+
+  calls.length = 0;
+  await module.exports.listAusenciasByLojaMes(10, '2026-12-01', '2026-12-31', { secoesPermitidas: [] });
+  assert.match(calls[0].sql, /and 1 = 0/);
+});
+
+test('leader sees released store and monthly data only for linked sections', async () => {
   const originals = {
     sections: accessService.getSecoesPermitidasUsuario,
     summary: escalaService.listEscalasResumo,
@@ -38,36 +129,36 @@ test('leader with assigned store sees its released schedule without section gran
     sunday: previousSundayService.getPriorSunday
   };
   const calls = [];
-  accessService.getSecoesPermitidasUsuario = async () => null;
+  accessService.getSecoesPermitidasUsuario = async () => [20];
   escalaService.listEscalasResumo = async (options) => {
     calls.push(['summary', options]);
     return [{ LOJA: 10, MES_REF: '2026-11-01' }];
   };
   escalaService.getEscalaMensal = async (options) => {
     calls.push(['monthly', options]);
-    return { secoes: [{ ESCSECAO_ID: 20 }, { ESCSECAO_ID: 21 }], funcionarios: [], dias: [] };
+    return { secoes: [{ ESCSECAO_ID: 20 }], funcionarios: [], dias: [] };
   };
   officializationService.getProgress = async (options) => {
     calls.push(['progress', options]);
     return { secoes: [] };
   };
   previousSundayService.getPriorSunday = async () => null;
-  const user = { perfil: 'LIDER', login: 'CPD', lojas: [10], sub: 1 };
+  const user = { perfil: 'LIDER', login: 'LIDER.FRENTE10', lojas: [10], sub: 1 };
   try {
     const list = response();
     await route('/resumo')({ user, query: {} }, list, (error) => { throw error; });
     assert.equal(list.code, 200);
     assert.equal(list.body.escalas.length, 1);
-    assert.equal(calls[0][1].escopoPorLoja, undefined);
-    assert.equal(calls[0][1].secoesPermitidas, null);
+    assert.equal(calls[0][1].escopoPorLoja, true);
+    assert.deepEqual(calls[0][1].secoesPermitidas, [20]);
     assert.deepEqual(calls[0][1].lojasPermitidas, [10]);
 
     const month = response();
     await route('/mensal')({ user, query: { lojaId: '10', mesRef: '2026-11-01' } }, month,
       (error) => { throw error; });
     assert.equal(month.code, 200);
-    assert.equal(calls.find(([kind]) => kind === 'monthly')[1].secoesPermitidas, null);
-    assert.equal(calls.find(([kind]) => kind === 'progress')[1].secoesPermitidas, null);
+    assert.deepEqual(calls.find(([kind]) => kind === 'monthly')[1].secoesPermitidas, [20]);
+    assert.deepEqual(calls.find(([kind]) => kind === 'progress')[1].secoesPermitidas, [20]);
 
     previousSundayService.getPriorSunday = async () => ({ data: '2026-11-29', dias: [] });
     const december = response();
@@ -94,7 +185,7 @@ test('RH without a store in the login sees schedules from assigned stores', asyn
   escalaService.listEscalasResumo = async (options) => {
     assert.deepEqual(options.lojasPermitidas, [301, 302]);
     assert.equal(options.secoesPermitidas, null);
-    assert.equal(options.escopoPorLoja, undefined);
+    assert.equal(options.escopoPorLoja, false);
     return [{ LOJA: 301, MES_REF: '2026-12-01' }];
   };
   escalaService.getEscalaMensal = async (options) => {
@@ -174,6 +265,8 @@ test('store summary checks assigned active sections without requiring programs i
   assert.match(calls[0].sql, /s_permitida\.escsecao_id in \(:secaoPermitida0\)/);
   assert.match(calls[0].sql, /nvl\(min\(case when p\.escsecao_id in \(:secaoPermitida0\) then nvl\(p\.oficializada, 0\) end\), 0\) as oficializada/);
   assert.match(calls[0].sql, /count\(distinct case when p\.escsecao_id in \(:secaoPermitida0\) then p\.escfunc_id end\) as funcionarios/);
+  assert.match(calls[0].sql, /max\(case when p\.escsecao_id in \(:secaoPermitida0\) then p\.revisao end\) as revisao/);
+  assert.match(calls[0].sql, /max\(case when p\.escsecao_id in \(:secaoPermitida0\) then p\.dt_hr_incl end\) as modificada_em/);
   assert.doesNotMatch(calls[0].sql, /where p\.escsecao_id in \(:secaoPermitida0\)/);
   assert.equal(calls[0].binds.secaoPermitida0, 20);
 

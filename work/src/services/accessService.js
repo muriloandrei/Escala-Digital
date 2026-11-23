@@ -240,7 +240,38 @@ function normalizeUsuarioRows(rows = []) {
 async function getSecoesPermitidasUsuario(requestUser, lojaId = null) {
   if (isGlobalStoreAccessUser(requestUser)) return null;
   if (lojaId) assertLojaAcesso(requestUser, lojaId);
-  return null;
+  if (normalizePerfilName(requestUser) !== 'LIDER') return null;
+
+  const usuarioId = Number(requestUser?.sub || requestUser?.id || requestUser?.usuarioId || requestUser?.USUARIO_ID || 0);
+  const lojas = [...new Set((requestUser?.lojas || []).map(Number).filter(Boolean))];
+  if (!usuarioId || !lojas.length) return [];
+
+  return withConnection(async (connection) => {
+    const columns = await getUsuarioSecaoColumns(connection);
+    if (!columns) return [];
+
+    const lojaColumn = await getSecaoLojaColumn(connection);
+    const binds = { usuarioId };
+    const filters = ['us.usuario_id = :usuarioId'];
+    if (columns.has('STATUS')) filters.push("nvl(us.status, 'A') = 'A'");
+    if (lojaId) {
+      binds.lojaId = Number(lojaId);
+      filters.push(`s.${lojaColumn.toLowerCase()} = :lojaId`);
+    } else {
+      filters.push(buildInClause(`s.${lojaColumn.toLowerCase()}`, lojas, binds, 'lojaPermitida'));
+    }
+
+    const result = await connection.execute(
+      `select us.escsecao_id
+         from sgn_esc_usuario_secao us
+         join sgn_esc_secao s on s.escsecao_id = us.escsecao_id
+        where ${filters.join(' and ')}`,
+      binds,
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return result.rows.map((row) => Number(pick(row, 'ESCSECAO_ID', 'escsecao_id'))).filter(Boolean);
+  });
 }
 
 async function assertSecoesPermitidas(requestUser, lojaId, secaoIds = []) {

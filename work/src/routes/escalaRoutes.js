@@ -476,7 +476,8 @@ router.get('/resumo', requirePermission('escalas', 'visualizar'), resolveLojaReq
     const mesRef = req.query.mesRef || null;
     const lojasPermitidas = getLojasPermitidasParaConsulta(req);
     const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
-    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas });
+    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas,
+      escopoPorLoja: Array.isArray(secoesPermitidas) });
     return res.json({ escalas });
   } catch (error) {
     return next(error);
@@ -967,7 +968,8 @@ router.get('/', requirePermission('escalas', 'visualizar'), resolveLojaRequest, 
     if (!lojaId || !mesRef) {
       const lojasPermitidas = getLojasPermitidasParaConsulta(req);
       const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
-      const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas });
+      const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas,
+        escopoPorLoja: Array.isArray(secoesPermitidas) });
       return res.json({ escalas });
     }
 

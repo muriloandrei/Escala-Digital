@@ -1123,13 +1123,19 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesP
     const funcionariosSql = agregacaoSecaoSql
       ? `count(distinct case when ${agregacaoSecaoSql} then p.escfunc_id end)`
       : 'count(distinct p.escfunc_id)';
+    const dataInicioSql = agregacaoSecaoSql
+      ? `min(case when ${agregacaoSecaoSql} then p.dt_hr_incl end)` : 'min(p.dt_hr_incl)';
+    const modificadaEmSql = agregacaoSecaoSql
+      ? `max(case when ${agregacaoSecaoSql} then p.dt_hr_incl end)` : 'max(p.dt_hr_incl)';
+    const revisaoSql = agregacaoSecaoSql
+      ? `max(case when ${agregacaoSecaoSql} then p.revisao end)` : 'max(p.revisao)';
     const result = await connection.execute(
       `select
           p.mes_ref,
           p.loja,
-          min(p.dt_hr_incl) as data_inicio,
-          max(p.dt_hr_incl) as modificada_em,
-          max(p.revisao) as revisao,
+          ${dataInicioSql} as data_inicio,
+          ${modificadaEmSql} as modificada_em,
+          ${revisaoSql} as revisao,
           ${oficializadaSql} as oficializada,
           ${oficializadaAlgumaSql} as oficializada_alguma,
           ${secoesSql} as secoes,
@@ -1137,7 +1143,7 @@ async function listEscalasResumo({ lojaId, mesRef, lojasPermitidas = [], secoesP
           case
             when ${MES_FINALIZADO_SQL} then 'FINALIZADA'
             when trunc(p.mes_ref, 'MM') > trunc(sysdate, 'MM') then 'AGENDADA'
-            when max(p.revisao) > 0 then 'MODIFICADA'
+            when ${revisaoSql} > 0 then 'MODIFICADA'
             else 'ATIVA'
           end as status
        from sgn_esc_prog p

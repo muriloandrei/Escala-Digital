@@ -725,7 +725,9 @@ router.get('/lojas/:lojaId/ausencias', resolveLojaParam, requireLojaAccess, asyn
       return res.status(400).json({ error: 'Parametros inicio e fim sao obrigatorios.' });
     }
 
-    const ausencias = await catalogService.listAusenciasByLojaMes(Number(req.params.lojaId), inicio, fim);
+    const secoesPermitidas = await getSecoesPermitidas(req, Number(req.params.lojaId));
+    const ausencias = await catalogService.listAusenciasByLojaMes(Number(req.params.lojaId), inicio, fim,
+      { secoesPermitidas });
     return res.json({ ausencias });
   } catch (error) {
     return next(error);
