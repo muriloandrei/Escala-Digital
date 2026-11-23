@@ -32,6 +32,14 @@ function formatDate(value) {
   return String(value || '').slice(0, 10);
 }
 
+function diasNoPeriodo(dias, periodo) {
+  if (!periodo) return dias || [];
+  return (dias || []).filter((dia) => {
+    const data = formatDate(dia.data || dia.DT);
+    return data >= periodo.inicio && data <= periodo.fim;
+  });
+}
+
 function minutesToTime(value) {
   const safeValue = Math.max(0, Number(value) || 0);
   const hours = Math.floor(safeValue / 60);
@@ -360,13 +368,15 @@ function getCriticasCoberturaMinima(funcionarios = [], percentualMinimo = 60, ho
 }
 
 function validarCriticasEscopo({ lojaId, mesRef, funcionarios, domingo6h = false, domingo1x1 = true,
-  domingoAnteriorPorFuncionario = null, apenasBloqueantes = false, hojeIso = null, allowedProfiles = null }) {
-  const incompletos = funcionarios.filter((funcionario) => !funcionario.dias?.length)
+  domingoAnteriorPorFuncionario = null, apenasBloqueantes = false, hojeIso = null, allowedProfiles = null, periodo = null }) {
+  const funcionariosDoPeriodo = funcionarios.map((funcionario) => ({ ...funcionario,
+    dias: diasNoPeriodo(funcionario.dias, periodo) }));
+  const incompletos = funcionariosDoPeriodo.filter((funcionario) => !funcionario.dias.length)
     .map((funcionario) => `${funcionario.nome || funcionario.chapa || funcionario.escfuncId}: escala sem dias gerados.`);
   if (apenasBloqueantes) {
     const limite = hojeIso || new Date().toISOString().slice(0, 10);
     const bloqueantes = [...incompletos];
-    for (const funcionario of funcionarios.filter((item) => item.dias?.length)) {
+    for (const funcionario of funcionariosDoPeriodo.filter((item) => item.dias.length)) {
       validarRegrasFuncionario(funcionario, ({ mensagem, datas }) => {
         if (!datas?.length || datas.some((data) => data >= limite)) bloqueantes.push(mensagem);
       }, { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, lojaId });
@@ -375,16 +385,16 @@ function validarCriticasEscopo({ lojaId, mesRef, funcionarios, domingo6h = false
   }
   return [
     ...incompletos,
-    ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionarios.filter((funcionario) => funcionario.dias?.length) },
+    ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosDoPeriodo.filter((funcionario) => funcionario.dias.length) },
       { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, lojaId })
   ];
 }
 
 function agruparCriticasPorSubsecao({ escala, lojaId = null, domingo6h = false, domingo1x1 = true,
-  domingoAnteriorPorFuncionario = null, allowedProfiles = null }) {
+  domingoAnteriorPorFuncionario = null, allowedProfiles = null, periodo = null }) {
   const secoes = new Map((escala.secoes || []).map((secao) => [Number(secao.ESCSECAO_ID), secao]));
   const diasPorFuncionario = new Map();
-  for (const dia of escala.dias || []) {
+  for (const dia of diasNoPeriodo(escala.dias, periodo)) {
     const id = Number(dia.ESCFUNC_ID);
     if (!diasPorFuncionario.has(id)) diasPorFuncionario.set(id, []);
     diasPorFuncionario.get(id).push(dia);

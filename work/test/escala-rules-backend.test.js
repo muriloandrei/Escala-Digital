@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateEscalaPayload, validarCriticasEscopo, agruparCriticasPorSubsecao, getCriticasCoberturaMinima } = require('../src/rules/escalaRules');
+const { getOperationalPeriodIso } = require('../src/domain/operationalPeriod');
 
 function buildPayload(dias, funcionarioOverrides = {}) {
   return {
@@ -38,6 +39,38 @@ function descanso(data, programacao = 'F') {
     programacao
   };
 }
+
+test('novembro ignora dias legados de dezembro; dezembro considera a folga de 30/11', () => {
+  const novembro = { inicio: '2026-11-01', fim: '2026-11-29' };
+  const dezembro = getOperationalPeriodIso('2026-12-01');
+  const diasLegados = [trabalho('2026-11-28'), trabalho('2026-11-29'),
+    ...[1, 2, 3, 4, 5, 6].map((dia) => trabalho(`2026-12-0${dia}`))];
+  const funcionario = { escfuncId: 10, nome: 'Ana Paula', dias: diasLegados };
+  assert.ok(validarCriticasEscopo({ lojaId: 304, mesRef: '2026-11-01', funcionarios: [funcionario] })
+    .some((critica) => critica.includes('dias consecutivos')));
+  for (const apenasBloqueantes of [false, true]) {
+    const criticas = validarCriticasEscopo({ lojaId: 304, mesRef: '2026-11-01',
+      funcionarios: [funcionario], periodo: novembro, apenasBloqueantes, hojeIso: '2026-11-19' });
+    assert.equal(criticas.some((critica) => critica.includes('2026-12-')), false);
+    assert.equal(criticas.some((critica) => critica.includes('dias consecutivos')), false);
+  }
+
+  const escala = { secoes: [{ ESCSECAO_ID: 1, DESCR: 'Frente de Caixa' }],
+    funcionarios: [{ ESCFUNC_ID: 10, NOME: 'Ana Paula', ESCSECAO_ID: 1 }],
+    dias: diasLegados.map((dia) => ({ ...dia, ESCFUNC_ID: 10 })) };
+  assert.equal(agruparCriticasPorSubsecao({ escala, lojaId: 304, periodo: novembro })
+    .flatMap((grupo) => grupo.criticas).some((critica) => critica.includes('dias consecutivos')), false);
+
+  const diasDezembro = [descanso('2026-11-30'), ...[1, 2, 3, 4, 5]
+    .map((dia) => trabalho(`2026-12-0${dia}`)), descanso('2026-12-06')];
+  assert.equal(validarCriticasEscopo({ lojaId: 304, mesRef: '2026-12-01',
+    funcionarios: [{ ...funcionario, dias: [trabalho('2026-11-29'), ...diasDezembro] }],
+    periodo: dezembro }).some((critica) => critica.includes('dias consecutivos')), false);
+  diasDezembro[0] = trabalho('2026-11-30');
+  assert.equal(validarCriticasEscopo({ lojaId: 304, mesRef: '2026-12-01',
+    funcionarios: [{ ...funcionario, dias: diasDezembro }], periodo: dezembro })
+    .some((critica) => critica.includes('dias consecutivos')), true);
+});
 
 test('oficializacao bloqueia critica individual mas nao alerta de cobertura', () => {
   const funcionarios = [{ escfuncId: 10, nome: 'Teste', dias: [

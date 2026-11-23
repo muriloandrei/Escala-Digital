@@ -37,12 +37,60 @@ test('section progress requires every employee day and individual critiques to b
   const partial = buildProgress({ ...input, escala: { dias: week().slice(0, 6) } }).secoes[0];
   assert.equal(partial.completa, false);
   assert.equal(partial.podeOficializar, false);
+  assert.deepEqual(partial.diasPendentes.map((item) => [item.chapa, item.data, item.motivo]),
+    [['42', '2026-11-08', 'SEM_PROGRAMACAO']]);
   const complete = buildProgress({ ...input, escala: { dias: week() } }).secoes[0];
   assert.equal(complete.preenchidos, 7);
   assert.equal(complete.podeOficializar, true);
   const approved = buildProgress({ ...input, escala: { dias: week().map((day) => ({ ...day, OFICIALIZADA: 1 })) } });
   assert.equal(approved.secoes[0].oficializada, true);
   assert.equal(approved.oficializada, true);
+});
+
+test('progresso de novembro nao bloqueia por dias de dezembro em revisao antiga', () => {
+  const days = [
+    { ...week()[0], DT: '2026-11-28', PROGRAMACAO: 'F', HR_ENT1: null, HR_SAI1: null, HR_ENT2: null, HR_SAI2: null },
+    { ...week()[0], DT: '2026-11-29' },
+    ...Array.from({ length: 6 }, (_, index) => ({ ...week()[0], DT: `2026-12-0${index + 1}` }))
+  ];
+  const result = buildProgress({ escala: { dias: days }, secoes: [section], pessoas: [person],
+    periodo: { inicio: '2026-11-28', fim: '2026-11-29' }, lojaId: 10, mesRef: '2026-11-01',
+    todayIso: '2026-11-19' }).secoes[0];
+  assert.equal(result.preenchidos, 2);
+  assert.equal(result.criticas, 0);
+  assert.equal(result.criticasBloqueantes, 0);
+  assert.equal(result.podeOficializar, true);
+});
+
+test('dias anteriores a admissao nao entram na contagem da oficializacao', () => {
+  const result = buildProgress({ escala: { dias: week().slice(2) }, secoes: [section],
+    pessoas: [{ ...person, DT_ADMISS: '2026-11-04' }], periodo: period,
+    lojaId: 10, mesRef: '2026-11-01' }).secoes[0];
+  assert.equal(result.previstos, 5);
+  assert.equal(result.preenchidos, 5);
+  assert.deepEqual(result.diasPendentes, []);
+  assert.equal(result.podeOficializar, true);
+});
+
+test('ausencia projetada sem dia gravado aparece como pendencia identificada', () => {
+  const projected = { ...week()[0], AUSENCIA_PROJETADA: 1, PROGRAMACAO: 'FER' };
+  const result = buildProgress({ escala: { dias: [projected, ...week().slice(1)] },
+    secoes: [section], pessoas: [person], periodo: period,
+    lojaId: 10, mesRef: '2026-11-01' }).secoes[0];
+  assert.equal(result.preenchidos, 6);
+  assert.deepEqual(result.diasPendentes.map((item) => [item.data, item.motivo]),
+    [['2026-11-02', 'AUSENCIA_NAO_GRAVADA']]);
+});
+
+test('fixo visivel sem dia na revisao ativa continua pendente para o RM', () => {
+  const result = buildProgress({ escala: { dias: week().slice(0, 6), fixos: [
+    { ESCFUNC_ID: 42, DT: '2026-11-08', PROGRAMACAO: 'FXF' }
+  ] }, secoes: [section], pessoas: [person], periodo: period,
+  lojaId: 10, mesRef: '2026-11-01' }).secoes[0];
+  assert.equal(result.preenchidos, 6);
+  assert.deepEqual(result.diasPendentes.map((item) => [item.data, item.motivo]),
+    [['2026-11-08', 'FIXO_NAO_MATERIALIZADO']]);
+  assert.equal(result.podeOficializar, false);
 });
 
 test('past-only critiques remain visible but do not block officialization', () => {
@@ -180,7 +228,8 @@ test('RM-projected absence is visible without counting as a persisted officializ
 
 test('progress groups old Estacionamento under Frente de Caixa but keeps Transportes independent', () => {
   const front = { escsecaoId: 1, codigo: '035.02.002', secao: 'Frente de Caixa', funcionarios: 2,
-    previstos: 70, preenchidos: 70, criticas: 0, completa: true, oficializada: true };
+    previstos: 70, preenchidos: 70, criticas: 0, completa: true, oficializada: true,
+    diasPendentes: [{ escfuncId: 42, data: '2026-12-01' }] };
   const transport = { escsecaoId: 2, codigo: '035.02.004', secao: 'Transportes', funcionarios: 1,
     previstos: 35, preenchidos: 35, criticas: 0, completa: true, oficializada: true };
   const portaria = { escsecaoId: 3, codigo: '035.02.012', secao: 'Estacionamento', funcionarios: 1,
@@ -194,6 +243,7 @@ test('progress groups old Estacionamento under Frente de Caixa but keeps Transpo
   assert.equal(groups[1].preenchidos, 70);
   assert.equal(groups[1].percentual, 67);
   assert.equal(groups[1].criticas, 2);
+  assert.deepEqual(groups[1].diasPendentes, front.diasPendentes);
   assert.equal(groups[1].oficializada, false);
   assert.deepEqual(groups[1].partes.map((part) => part.secao), ['Frente de Caixa', 'Porteiro']);
   assert.deepEqual(groups[1].partes.map((part) => part.escsecaoId), [1, 3]);

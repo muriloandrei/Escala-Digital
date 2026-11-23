@@ -49,6 +49,8 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
     if (!absencesByEmployee.has(id)) absencesByEmployee.set(id, []);
     absencesByEmployee.get(id).push({ start: dateKey(absence.DT_INIC), end: dateKey(absence.DT_FIM || absence.DT_INIC) });
   }
+  const fixosPorFuncionarioDia = new Set((escala.fixos || [])
+    .map((fixo) => `${Number(fixo.ESCFUNC_ID)}|${dateKey(fixo.DT)}`));
   const diasPorFuncionario = new Map();
   const secaoPorId = new Map(secoes.map((secao) => [Number(secao.ESCSECAO_ID), secao]));
   const secaoDaEscala = new Map();
@@ -82,6 +84,7 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
     const escsecaoId = Number(secao.ESCSECAO_ID);
     const people = pessoas.filter((person) =>
       secaoDaPessoa(person) === escsecaoId && permiteEscala(person.STATUS)
+      && !(person.DT_ADMISS && dateKey(person.DT_ADMISS) > periodo.fim)
       && !(person.DT_DEMISS && dateKey(person.DT_DEMISS) <= todayIso
         && dateKey(person.DT_DEMISS) <= periodo.fim)
       && !dates.every((date) => isSuspended(person, date)
@@ -90,15 +93,20 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
     let expected = 0;
     let filled = 0;
     let official = 0;
+    const diasPendentes = [];
     for (const person of people) {
       const days = diasPorFuncionario.get(Number(person.ESCFUNC_ID)) || new Map();
       for (const date of dates) {
-        if ((person.DT_DEMISS && date > dateKey(person.DT_DEMISS)) || isSuspended(person, date)) continue;
+        if ((person.DT_ADMISS && date < dateKey(person.DT_ADMISS))
+          || (person.DT_DEMISS && date > dateKey(person.DT_DEMISS)) || isSuspended(person, date)) continue;
         const day = days.get(`${escsecaoId}|${date}`);
         const persisted = Boolean(day && !day.AUSENCIA_PROJETADA);
         if (!isRequiredOfficializationDate({ mesRef, date, todayIso, hasPersistedDay: persisted })) continue;
         expected += 1;
         if (persisted) filled += 1;
+        else diasPendentes.push({ escfuncId: Number(person.ESCFUNC_ID), chapa: person.CHAPA,
+          nome: person.NOME, data: date, motivo: day?.AUSENCIA_PROJETADA ? 'AUSENCIA_NAO_GRAVADA'
+            : fixosPorFuncionarioDia.has(`${Number(person.ESCFUNC_ID)}|${date}`) ? 'FIXO_NAO_MATERIALIZADO' : 'SEM_PROGRAMACAO' });
         if (Number(day?.OFICIALIZADA) === 1) official += 1;
       }
     }
@@ -111,15 +119,16 @@ function buildProgress({ escala, secoes, pessoas = escala.funcionarios || [], su
           && !isIgnoredOfficializationDate(mesRef, dateKey(day.DT)))
     }));
     const criticas = includeCritiques && people.length ? validarCriticasEscopo({ lojaId, mesRef, funcionarios,
-      domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario }) : [];
+      domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario, periodo }) : [];
     const criticasBloqueantes = includeCritiques && people.length ? validarCriticasEscopo({ lojaId, mesRef, funcionarios,
-      domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario, apenasBloqueantes: true, hojeIso: todayIso }) : [];
+      domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario, periodo, apenasBloqueantes: true, hojeIso: todayIso }) : [];
     const completa = expected > 0 && filled === expected;
     return {
       escsecaoId, secao: secao.DESCR, codigo: secao.COD_SECAO,
       escfuncIds: funcionarios.filter((person) => person.dias.some((day) => !day.AUSENCIA_PROJETADA))
         .map((person) => person.escfuncId),
       funcionarios: people.length, previstos: expected, preenchidos: filled,
+      diasPendentes,
       percentual: expected ? Math.round(filled / expected * 100) : 0,
       criticas: criticas.length, criticasBloqueantes: criticasBloqueantes.length, completa,
       oficializada: completa && official === expected,
@@ -149,6 +158,7 @@ function groupProgressSections(secoes, { lojaId, finalized = false } = {}) {
       funcionarios: parts.reduce((sum, part) => sum + part.funcionarios, 0),
       previstos,
       preenchidos,
+      diasPendentes: parts.flatMap((part) => part.diasPendentes || []),
       percentual: previstos ? Math.round(preenchidos / previstos * 100) : 0,
       criticas: parts.reduce((sum, part) => sum + part.criticas, 0),
       criticasBloqueantes: parts.reduce((sum, part) => sum + (part.criticasBloqueantes || 0), 0),

@@ -47,6 +47,7 @@ require('./retroactive-admin.test');
 require('./rascunho-datas.test');
 require('./completar-domingo-novembro.test');
 require('./materializar-fixos-dia-01-novembro.test');
+require('./materializar-folgas-fixas-pendentes.test');
 require('./app-version.test');
 require('./eventos-page.test');
 require('./shift-validation.test');

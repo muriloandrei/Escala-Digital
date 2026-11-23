@@ -379,7 +379,7 @@ test('lote de INCERTO por timeout anterior apenas verifica, sem novo POST', asyn
   assert.equal(updates[1].binds.status, 'INCERTO');
 });
 
-function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], dismissalDate = null,
+function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90], admissionDate = null, dismissalDate = null,
   missingDay = null, periodStart = '2026-10-05', periodEnd = '2026-11-01' } = {}) {
   const operations = [];
   const statements = [];
@@ -404,7 +404,7 @@ function loadEscalaService({ failQueue = false, criticas = [], selectedIds = [90
         return { rows: Array.from({ length: 28 }, (_, index) => {
           const date = new Date(`${periodStart}T00:00:00Z`);
           date.setUTCDate(date.getUTCDate() + index);
-          return { ESCFUNC_ID: 90, CHAPA: '000090', NOME: 'Teste', DT_DEMISS: dismissalDate,
+          return { ESCFUNC_ID: 90, CHAPA: '000090', NOME: 'Teste', DT_ADMISS: admissionDate, DT_DEMISS: dismissalDate,
             FUNCAO_DESCR: 'OPERADOR DE CAIXA', DT: date.toISOString().slice(0, 10),
             PROGRAMACAO: 'TRB', HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };
         }).filter((row) => row.DT !== missingDay) };
@@ -488,6 +488,13 @@ test('oficializacao da secao recusa um dia ausente na transacao', async () => {
     (error) => error.statusCode === 422 && /dias sem programacao/.test(error.message)
   );
   assert.deepEqual(operations, ['rollback']);
+});
+
+test('oficializacao nao exige dia anterior a admissao do funcionario', async () => {
+  const { service, operations } = loadEscalaService({ admissionDate: '2026-10-06', missingDay: '2026-10-05' });
+  const result = await service.oficializarEscala({ lojaId: 35, mesRef: '2026-10-01', escsecaoId: 2003 });
+  assert.equal(result.affectedRows, 1);
+  assert.deepEqual(operations, ['approve', 'queue', 'event', 'commit']);
 });
 
 test('oficializacao com IDs recusa dia futuro ausente', async () => {

@@ -716,9 +716,10 @@ router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaR
     const domingoAnterior = await previousSundayService.getPriorSunday({ lojaId: query.lojaId, mesRef: query.mesRef,
       employeeIds: funcionarios.map((person) => person.escfuncId) });
     const domingoAnteriorPorFuncionario = previousSundayService.priorSundayByEmployee(domingoAnterior);
+    const periodo = getOperationalPeriodIso(query.mesRef);
     const criticas = validarCriticasEscopo({ lojaId: query.lojaId, mesRef: query.mesRef, funcionarios,
-      domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario });
-    const grupos = agruparCriticasPorSubsecao({ escala, lojaId: query.lojaId, domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario })
+      domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario, periodo });
+    const grupos = agruparCriticasPorSubsecao({ escala, lojaId: query.lojaId, domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario, periodo })
       .filter((grupo) => Number(grupo.escsecaoId) === query.escsecaoId);
     return res.json({ criticas, grupos });
   } catch (error) {

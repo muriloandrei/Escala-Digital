@@ -7,6 +7,8 @@ import { getJson } from '../api';
 type Section = {
   escsecaoId: number; secao: string; codigo: string; funcionarios: number;
   previstos: number; preenchidos: number; percentual: number; criticas: number;
+  diasPendentes: { escfuncId: number; chapa: string; nome: string; data: string;
+    motivo: 'SEM_PROGRAMACAO' | 'AUSENCIA_NAO_GRAVADA' | 'FIXO_NAO_MATERIALIZADO' }[];
   completa: boolean; oficializada: boolean;
 };
 type Group = Section & { partes: Section[] };
@@ -62,6 +64,14 @@ export function ProgressoEscalaModal({ lojaId, mesRef, onClose }: {
               <span>{part.oficializada ? 'Oficializada' : `${part.percentual}% · ${part.preenchidos}/${part.previstos} dias`}</span>
               <Link onClick={onClose} to={`/escalas/${lojaId}/${mesRef}?secao=${part.escsecaoId}`}>Abrir seção</Link>
             </div>)}</div>}
+            {section.diasPendentes?.length > 0 && <div className="progress-missing" aria-label="Dias pendentes">
+              <strong>{section.diasPendentes.length} dia(s) pendente(s)</strong>
+              <ul>{section.diasPendentes.map((item) => <li key={`${item.escfuncId}-${item.data}`}>
+                {item.chapa} · {item.nome} · {item.data.slice(8, 10)}/{item.data.slice(5, 7)}/{item.data.slice(0, 4)}
+                {item.motivo === 'AUSENCIA_NAO_GRAVADA' ? ' · ausência ainda não gravada'
+                  : item.motivo === 'FIXO_NAO_MATERIALIZADO' ? ' · fixo fora da revisão ativa' : ' · sem programação'}
+              </li>)}</ul>
+            </div>}
           </div>)}</div>}
     </div>
   </div>, document.body);

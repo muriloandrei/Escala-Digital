@@ -228,6 +228,9 @@ a {
 .progress-part { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 16px; padding: 10px 0 10px 16px; color: #53657b; font-size: 12px; }
 .progress-part span:first-child { color: #173453; font-weight: 600; }
 .progress-part a { color: #174fba; font-weight: 650; }
+.progress-missing { border-top: 1px solid #e1e7ee; padding: 12px 0 0 16px; color: #8b3030; font-size: 12px; }
+.progress-missing ul { margin: 7px 0 0; padding-left: 18px; max-height: 160px; overflow: auto; }
+.progress-missing li { padding: 2px 0; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .progress-part { grid-template-columns: minmax(0, 1fr) auto; } .progress-part a { grid-column: 1 / -1; } }
 .progress-critique { color: #a62c35; }
 .store-toggle { display: inline-flex; align-items: center; gap: 8px; }

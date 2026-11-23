@@ -1334,7 +1334,8 @@ function diasSemFixo(diasAtuais, data, fixo) {
   return dias;
 }
 
-async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, actor }) {
+async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, actor,
+  expectedRevision = null, expectedFixo = null }) {
   return withConnection(async (connection) => {
     try {
       if (isMesFinalizado(mesRef) && !podeRetificarRetroativamente(actor, 'EDITAR_DIA_FIXO')) {
@@ -1350,6 +1351,11 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
       const demissoes = await lockFuncionariosEscala(connection, lojaId, [{ escfuncId }]);
       const funcionarioDb = await getFuncionarioEscala(connection, escfuncId);
       const escalaAntes = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
+      if (expectedRevision !== null && Number(escalaAntes?.revisao) !== Number(expectedRevision)) {
+        const error = new Error('A revisao ativa mudou desde a previa. Consulte novamente antes de materializar o fixo.');
+        error.statusCode = 409;
+        throw error;
+      }
       if (!funcionarioDb || Number(funcionarioDb.LOJA) !== Number(lojaId)
         || Number(pick(escalaAntes?.header, 'ESCSECAO_ID', 'escsecao_id')
           || funcionarioDb.ESCSECAO_ID) !== Number(escsecaoId)) {
@@ -1379,7 +1385,8 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
       };
 
       const anterior = await connection.execute(
-        `select programacao, hr_ent1, hr_sai1, hr_ent2, hr_sai2, jornada_minutos, intervalo_minutos, justificativa, status
+        `select escfixo_id, programacao, hr_ent1, hr_sai1, hr_ent2, hr_sai2,
+                jornada_minutos, intervalo_minutos, justificativa, status, dt_hr_incl
            from sgn_esc_fixo_escala
           where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
             and escfunc_id = :escfuncId and dt = to_date(:dt, 'YYYY-MM-DD')
@@ -1387,6 +1394,18 @@ async function saveFixoEscala({ lojaId, mesRef, escfuncId, escsecaoId, data, act
         { lojaId: binds.lojaId, mesRef, escfuncId: binds.escfuncId, dt: binds.dt },
         { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
+      if (expectedFixo) {
+        const atual = anterior.rows[0];
+        const mesmoRegistro = atual && Number(atual.ESCFIXO_ID) === Number(expectedFixo.ESCFIXO_ID)
+          && new Date(atual.DT_HR_INCL).getTime() === new Date(expectedFixo.DT_HR_INCL).getTime()
+          && String(atual.PROGRAMACAO) === String(expectedFixo.PROGRAMACAO)
+          && String(atual.JUSTIFICATIVA || '') === String(expectedFixo.JUSTIFICATIVA || '');
+        if (!mesmoRegistro || anterior.rows.length !== 1) {
+          const error = new Error('A folga fixa mudou desde a previa. Consulte novamente antes de materializar.');
+          error.statusCode = 409;
+          throw error;
+        }
+      }
 
       await connection.execute(
         `merge into sgn_esc_fixo_escala t
@@ -3414,7 +3433,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
       const progBinds = Object.fromEntries(escopo.map((row, index) =>
         [`prog${index}`, Number(pick(row, 'ESCPROG_ID', 'escprog_id'))]));
       const diasEscopo = await connection.execute(
-        `select p.escfunc_id, p.chapa, f.nome, f.dt_demiss, fn.descr as funcao_descr,
+        `select p.escfunc_id, p.chapa, f.nome, f.dt_admiss, f.dt_demiss, fn.descr as funcao_descr,
                 d.dt, d.hr_ent1, d.hr_sai1, d.hr_ent2, d.hr_sai2, d.programacao, d.jornada_minutos, d.intervalo_minutos
            from sgn_esc_prog p
            left join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
@@ -3424,8 +3443,13 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
           order by p.escfunc_id, d.dt`,
         progBinds, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );
+      const periodoOficializacao = getOperationalPeriodIso(mesRef);
       const diasAposDemissao = listarDiasAposDemissao((diasEscopo.rows || [])
-        .filter((row) => !isIgnoredOfficializationDate(mesRef, formatDateValue(pick(row, 'DT', 'dt')))));
+        .filter((row) => {
+          const data = formatDateValue(pick(row, 'DT', 'dt'));
+          return data >= periodoOficializacao.inicio && data <= periodoOficializacao.fim
+            && !isIgnoredOfficializationDate(mesRef, data);
+        }));
       if (diasAposDemissao.length) {
         const error = new Error('Ha dias programados apos a demissao registrada no RM. Reavalie a escala antes de oficializar.');
         error.statusCode = 422;
@@ -3465,14 +3489,16 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
         const rowsByEmployee = new Map();
         for (const row of diasEscopo.rows || []) {
           const id = Number(pick(row, 'ESCFUNC_ID', 'escfunc_id'));
-          if (!rowsByEmployee.has(id)) rowsByEmployee.set(id, { dates: new Set(), dismissal: pick(row, 'DT_DEMISS', 'dt_demiss') });
+          if (!rowsByEmployee.has(id)) rowsByEmployee.set(id, { dates: new Set(),
+            admission: pick(row, 'DT_ADMISS', 'dt_admiss'), dismissal: pick(row, 'DT_DEMISS', 'dt_demiss') });
           if (pick(row, 'DT', 'dt')) rowsByEmployee.get(id).dates.add(formatDateValue(pick(row, 'DT', 'dt')));
         }
         for (const [id, item] of rowsByEmployee) {
+          const admission = item.admission ? formatDateValue(item.admission) : null;
           const dismissal = item.dismissal ? formatDateValue(item.dismissal) : null;
           if (periodDates.some((date) => isRequiredOfficializationDate({
             mesRef, date, todayIso: hojeIso, hasPersistedDay: item.dates.has(date)
-          }) && (!dismissal || date <= dismissal)
+          }) && (!admission || date >= admission) && (!dismissal || date <= dismissal)
             && !(suspendedByEmployee.get(id) || []).some((period) => period.inicio <= date && period.fim >= date)
             && !item.dates.has(date))) incomplete.push(id);
         }
@@ -3521,7 +3547,8 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
             { lojaId, employeeIds: [...funcionarios.keys()] }));
       }
       const criticas = validarCriticasEscopo({ lojaId, mesRef, funcionarios: [...funcionarios.values()],
-        domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario, apenasBloqueantes: true, hojeIso: getHojeIso() });
+        domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario,
+        periodo: periodoOficializacao, apenasBloqueantes: true, hojeIso: getHojeIso() });
       if (criticas.length) {
         const error = new Error('Resolva as criticas da secao/subsecao antes de oficializar.');
         error.statusCode = 422;
