@@ -136,6 +136,19 @@ test('selected 08h48 with 01h40 interval is valid only for posts', () => {
   assert.match(validarCriticasEscopo({ lojaId: 35, mesRef: '2026-09-01', funcionarios: [employee] }).join(' '), /jornada selecionada invalida/);
 });
 
+test('overnight 18:24 entry accepts the standard minimum interval when profile is saved', () => {
+  const day = trabalho('2026-12-07', { hrEnt1: '18:24', hrSai1: '22:24',
+    hrEnt2: '00:04', hrSai2: '04:52', jornadaMinutos: 528, intervaloMinutos: 70 });
+  const employee = { escfuncId: 10, nome: 'Noturno', dias: [day] };
+  assert.deepEqual(validarCriticasEscopo({ lojaId: 35, mesRef: '2026-12-01',
+    funcionarios: [employee], allowedProfiles: new Set(['528:70']) }), []);
+  day.intervaloMinutos = 100;
+  day.hrEnt2 = '23:34';
+  day.hrSai2 = '04:22';
+  assert.match(validarCriticasEscopo({ lojaId: 35, mesRef: '2026-12-01',
+    funcionarios: [employee], allowedProfiles: new Set(['528:100']) }).join(' '), /intervalo deve ser exatamente 01:40/);
+});
+
 test('FDO pode coexistir com duas folgas semanais sem contar como terceira folga', () => {
   const dias = [
     descanso('2026-09-07', 'FDO'), trabalho('2026-09-08'), descanso('2026-09-09'),

@@ -57,6 +57,7 @@ require('./escala-sync-rm.test');
 require('./escala-eventos.test');
 require('./rh-retifications.test');
 require('./subsection-transfer.test');
+require('./transfer-immediate-route.test');
 require('./catalog-subsecao-conflict.test');
 require('./catalog-horarios-duracoes.test');
 require('./training-progress.test');

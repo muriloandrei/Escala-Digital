@@ -156,8 +156,7 @@ function validarTurnoDia(funcionarioLabel, dia, { domingo6h = false, lojaId = nu
     errors.push(`${funcionarioLabel}: jornada total deve ser ${minutesToTime(jornadaSelecionada)} em ${data}. Atual: ${minutesToTime(jornada)}.`);
   }
   const intervaloEsperado = intervaloSelecionado;
-  const intervaloExato = Boolean(dia.jornadaMinutos ?? dia.JORNADA_MINUTOS)
-    || intervaloSelecionado !== 70 || jornadaSelecionada === 300 || jornadaSelecionada === 360 || domingoObrigatorio;
+  const intervaloExato = intervaloSelecionado !== 70 || jornadaSelecionada !== 528 || domingoObrigatorio;
   if (intervalo < intervaloEsperado || (intervaloExato && intervalo !== intervaloEsperado)) {
     errors.push(`${funcionarioLabel}: intervalo deve ser ${intervaloExato ? 'exatamente' : 'no minimo'} ${minutesToTime(intervaloEsperado)} em ${data}. Atual: ${minutesToTime(intervalo)}.`);
   }

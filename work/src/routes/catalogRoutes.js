@@ -72,7 +72,7 @@ const funcionarioSubsecaoSchema = z.object({
   ESCSECAO_ID: z.number().int().positive().optional(),
   ESCSUBSECAO_ID: z.number().int().positive().nullable(),
   MES_REF: dataIsoSchema.optional(),
-  VIGENCIA: z.enum(['IMEDIATO', 'PROXIMA_SEMANA', 'PROXIMO_MES']).optional()
+  VIGENCIA: z.literal('IMEDIATO').optional()
 }).strict();
 
 const turnoSecaoSchema = secaoTurnoSchema.extend({
@@ -541,14 +541,6 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId/subsecao', resolveLojaParam
       return res.status(422).json({ error: 'Subsecao deve pertencer a secao atual do funcionario.' });
     }
     await accessService.assertSecoesPermitidas(req.user, lojaId, [escsecaoId]);
-
-    if (data.VIGENCIA && data.VIGENCIA !== 'IMEDIATO') {
-      const agendamento = await subsectionTransferService.agendar({
-        lojaId, escfuncId, escsecaoId, destinoId: data.ESCSUBSECAO_ID,
-        vigencia: data.VIGENCIA, actor: req.user
-      });
-      return res.status(202).json({ agendamento });
-    }
 
     const unresolved = await subsectionTransferService.listar({ lojaId, escfuncId });
     if (unresolved.some((item) => ['P', 'E', 'F'].includes(item.STATUS))) {

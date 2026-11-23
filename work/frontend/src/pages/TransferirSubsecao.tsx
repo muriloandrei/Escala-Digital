@@ -44,7 +44,6 @@ export function TransferirSubsecao({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [warning, setWarning] = useState<TransferResult | null>(null);
-  const [vigencia, setVigencia] = useState('IMEDIATO');
   const [scheduled, setScheduled] = useState<ScheduledTransfer[]>([]);
 
   async function retryTransfer(transfId: number) {
@@ -107,22 +106,17 @@ export function TransferirSubsecao({
     setBusy(true);
     setError('');
     try {
-      const response = await patchJson<{ agendamento?: { vigencia: string }; transferencia?: { revisaoPendente: boolean } }>(
+      const response = await patchJson<{ transferencia?: { revisaoPendente: boolean } }>(
         `/api/catalog/lojas/${encodeURIComponent(lojaId)}/funcionarios/${employee.ESCFUNC_ID}/subsecao`,
         {
           ESCSECAO_ID: Number(currentEmployee.ESCSECAO_ID),
           ESCSUBSECAO_ID: Number(destination),
           ...(mesRef ? { MES_REF: mesRef } : {}),
-          VIGENCIA: vigencia,
+          VIGENCIA: 'IMEDIATO',
         },
       );
       const result: TransferResult = { destination, sectionId: Number(currentEmployee.ESCSECAO_ID),
         reapprovalRequired: response.transferencia?.revisaoPendente === true };
-      if (response.agendamento) {
-        result.scheduled = response.agendamento.vigencia;
-        onTransferred(result);
-        return;
-      }
       try {
         const refreshed = await getJson<{ funcionarios: Funcionario[] }>(
           `/api/catalog/lojas/${encodeURIComponent(lojaId)}/funcionarios`,
@@ -173,24 +167,15 @@ export function TransferirSubsecao({
           </>
         ) : (
           <>
-            <p>{vigencia === 'IMEDIATO'
-              ? hasOfficializedDays
-                ? 'A vinculação muda imediatamente. Os dias aprovados serão preservados em uma nova revisão, que precisará de oficialização.'
-                : `A vinculação muda imediatamente. ${mesRef ? 'A escala deste funcionário será recalculada somente de hoje em diante.' : 'Escalas existentes não serão recalculadas nesta tela.'}`
-              : 'A vinculação permanece como está até a data de vigência. Depois, o sistema regerará somente os dias futuros deste funcionário.'}</p>
+            <p>{hasOfficializedDays
+              ? 'A vinculação muda imediatamente. Os dias aprovados serão preservados em uma nova revisão, que precisará de oficialização.'
+              : `A vinculação muda imediatamente. ${mesRef ? 'A escala deste funcionário será recalculada somente de hoje em diante.' : 'Escalas existentes não serão recalculadas nesta tela.'}`}</p>
             {currentSection && Number(currentSection.ESCSECAO_ID) !== Number(sourceSectionId) &&
               <div className="notice warning">Cadastro atual: {currentSection.DESCR}. As subseções abaixo pertencem a esta seção.</div>}
             <label className="transfer-field">Nova subseção
               <select required value={destination} onChange={(event) => setDestination(event.target.value)} disabled={busy || loadingEmployee || !currentEmployee}>
                 {loadingEmployee ? <option value="">Carregando subseções...</option> : !destinations.length && <option value="">Nenhuma subseção disponível</option>}
                 {destinations.map((item) => <option key={item.ESCSUBSECAO_ID} value={item.ESCSUBSECAO_ID}>{item.DESCR}</option>)}
-              </select>
-            </label>
-            <label className="transfer-field">A partir de quando?
-              <select value={vigencia} onChange={(event) => setVigencia(event.target.value)} disabled={busy || hasOfficializedDays || scheduled.some((item) => ['P', 'E', 'F'].includes(item.STATUS))}>
-                <option value="IMEDIATO">Imediatamente</option>
-                {!hasOfficializedDays && <option value="PROXIMA_SEMANA">Próxima semana completa</option>}
-                {!hasOfficializedDays && <option value="PROXIMO_MES">Próximo mês operacional</option>}
               </select>
             </label>
             {scheduled.filter((item) => ['P', 'E', 'F'].includes(item.STATUS)).map((item) => (
@@ -203,7 +188,7 @@ export function TransferirSubsecao({
             {error && <div className="notice error" role="alert">{error}</div>}
             <div className="confirm-actions">
               <button className="button secondary" type="button" disabled={busy} onClick={onClose}>Cancelar</button>
-              <button className="button primary" type="submit" disabled={busy || loadingEmployee || !currentEmployee || !destination || scheduled.some((item) => ['P', 'E', 'F'].includes(item.STATUS))}>{busy ? 'Aguarde...' : vigencia === 'IMEDIATO' ? 'Confirmar transferência' : 'Agendar transferência'}</button>
+              <button className="button primary" type="submit" disabled={busy || loadingEmployee || !currentEmployee || !destination || scheduled.some((item) => ['P', 'E', 'F'].includes(item.STATUS))}>{busy ? 'Aguarde...' : 'Confirmar transferência'}</button>
             </div>
           </>
         )}
