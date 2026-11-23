@@ -201,7 +201,7 @@ function App() {
           )}
           {user.perfil === 'ADMIN' && <NavLink to="/oficializacao-lojas"><ShieldCheck size={18} /> Oficialização por loja</NavLink>}
           {user.perfil === 'ADMIN' && <NavLink to="/reenvio-rm"><Send size={18} /> Reenvio ao RM</NavLink>}
-          {canView(user, 'liberacao-secoes') && !['LIDER', 'OPERADOR'].includes(user.perfil) && (
+          {canView(user, 'liberacao-secoes') && (
             <NavLink to="/liberacao-secoes">
               <LayoutGrid size={18} /> Liberação de seções
             </NavLink>
@@ -244,7 +244,7 @@ function App() {
           {user.perfil === 'ADMIN' && <Route path="/perfis" element={<PerfisAcesso />} />}
           {user.perfil === 'ADMIN' && <Route path="/oficializacao-lojas" element={<OficializacaoLojas />} />}
           {user.perfil === 'ADMIN' && <Route path="/reenvio-rm" element={<ReenvioRm user={user} />} />}
-          {canView(user, 'liberacao-secoes') && !['LIDER', 'OPERADOR'].includes(user.perfil) && <Route path="/liberacao-secoes" element={<LiberacaoSecoes user={user} />} />}
+          {canView(user, 'liberacao-secoes') && <Route path="/liberacao-secoes" element={<LiberacaoSecoes user={user} />} />}
           {canSeeSecoes && (
             <Route path="/secoes/:lojaId/:secaoId/subsecoes" element={<Subsecoes user={user} />} />
           )}

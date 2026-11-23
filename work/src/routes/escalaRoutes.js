@@ -249,9 +249,6 @@ router.get('/regras', requirePermission('regras', 'visualizar'), async (req, res
 
 router.post('/liberar-mensal', requirePermission('escalas', 'criar'), async (req, res, next) => {
   try {
-    if (!accessService.canCreateEscala(req.user)) {
-      return res.status(403).json({ error: 'Perfil Lider nao pode liberar novas escalas.' });
-    }
     const payload = z.object({
       mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       lojas: z.array(z.number().int().positive()).optional()
@@ -479,8 +476,7 @@ router.get('/resumo', requirePermission('escalas', 'visualizar'), resolveLojaReq
     const mesRef = req.query.mesRef || null;
     const lojasPermitidas = getLojasPermitidasParaConsulta(req);
     const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
-    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas,
-      escopoPorLoja: accessService.isLeaderUser(req.user) });
+    const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas });
     return res.json({ escalas });
   } catch (error) {
     return next(error);
@@ -971,8 +967,7 @@ router.get('/', requirePermission('escalas', 'visualizar'), resolveLojaRequest, 
     if (!lojaId || !mesRef) {
       const lojasPermitidas = getLojasPermitidasParaConsulta(req);
       const secoesPermitidas = await getSecoesPermitidas(req, lojaId);
-      const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas,
-        escopoPorLoja: accessService.isLeaderUser(req.user) });
+      const escalas = await escalaService.listEscalasResumo({ lojaId, mesRef, lojasPermitidas, secoesPermitidas });
       return res.json({ escalas });
     }
 
@@ -1371,9 +1366,6 @@ router.patch('/:escprogId/dias/:escprogdiaId', requirePermission('escalas', 'edi
 router.post('/', requirePermission('escalas', 'criar'), resolveLojaRequest, requireLojaAccess, async (req, res, next) => {
   try {
     const payload = saveSchema.parse(req.body);
-    if (!accessService.canCreateEscala(req.user)) {
-      return res.status(403).json({ error: 'Perfil Lider nao pode criar novas escalas.' });
-    }
     await assertPayloadDentroDoEscopo(req, payload);
     const ruleErrors = validateEscalaPayload(payload, await getRuleOptions(payload.lojaId));
     if (ruleErrors.length > 0) {

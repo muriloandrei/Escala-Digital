@@ -7,6 +7,7 @@ const vm = require('node:vm');
 const router = require('../src/routes/escalaRoutes');
 const accessService = require('../src/services/accessService');
 const escalaService = require('../src/services/escalaService');
+const catalogService = require('../src/services/catalogService');
 const officializationService = require('../src/services/officializationService');
 const previousSundayService = require('../src/services/previousSundayService');
 const rmIntegrationService = require('../src/services/rmIntegrationService');
@@ -28,7 +29,7 @@ function route(pathname) {
     layer.route.methods.get).route.stack.at(-1).handle;
 }
 
-test('leader sees released store in summary while monthly data remains section-scoped', async () => {
+test('leader with assigned store sees its released schedule without section grants', async () => {
   const originals = {
     sections: accessService.getSecoesPermitidasUsuario,
     summary: escalaService.listEscalasResumo,
@@ -37,7 +38,7 @@ test('leader sees released store in summary while monthly data remains section-s
     sunday: previousSundayService.getPriorSunday
   };
   const calls = [];
-  accessService.getSecoesPermitidasUsuario = async () => [20, 21];
+  accessService.getSecoesPermitidasUsuario = async () => null;
   escalaService.listEscalasResumo = async (options) => {
     calls.push(['summary', options]);
     return [{ LOJA: 10, MES_REF: '2026-11-01' }];
@@ -51,22 +52,22 @@ test('leader sees released store in summary while monthly data remains section-s
     return { secoes: [] };
   };
   previousSundayService.getPriorSunday = async () => null;
-  const user = { perfil: 'LIDER', lojas: [10], sub: 1 };
+  const user = { perfil: 'LIDER', login: 'CPD', lojas: [10], sub: 1 };
   try {
     const list = response();
     await route('/resumo')({ user, query: {} }, list, (error) => { throw error; });
     assert.equal(list.code, 200);
     assert.equal(list.body.escalas.length, 1);
-    assert.equal(calls[0][1].escopoPorLoja, true);
-    assert.deepEqual(calls[0][1].secoesPermitidas, [20, 21]);
+    assert.equal(calls[0][1].escopoPorLoja, undefined);
+    assert.equal(calls[0][1].secoesPermitidas, null);
     assert.deepEqual(calls[0][1].lojasPermitidas, [10]);
 
     const month = response();
     await route('/mensal')({ user, query: { lojaId: '10', mesRef: '2026-11-01' } }, month,
       (error) => { throw error; });
     assert.equal(month.code, 200);
-    assert.deepEqual(calls.find(([kind]) => kind === 'monthly')[1].secoesPermitidas, [20, 21]);
-    assert.deepEqual(calls.find(([kind]) => kind === 'progress')[1].secoesPermitidas, [20, 21]);
+    assert.equal(calls.find(([kind]) => kind === 'monthly')[1].secoesPermitidas, null);
+    assert.equal(calls.find(([kind]) => kind === 'progress')[1].secoesPermitidas, null);
 
     previousSundayService.getPriorSunday = async () => ({ data: '2026-11-29', dias: [] });
     const december = response();
@@ -93,7 +94,7 @@ test('RH without a store in the login sees schedules from assigned stores', asyn
   escalaService.listEscalasResumo = async (options) => {
     assert.deepEqual(options.lojasPermitidas, [301, 302]);
     assert.equal(options.secoesPermitidas, null);
-    assert.equal(options.escopoPorLoja, false);
+    assert.equal(options.escopoPorLoja, undefined);
     return [{ LOJA: 301, MES_REF: '2026-12-01' }];
   };
   escalaService.getEscalaMensal = async (options) => {
@@ -127,7 +128,9 @@ test('RH without a store in the login sees schedules from assigned stores', asyn
 test('critiques response includes only the selected section', async () => {
   const originalSections = accessService.getSecoesPermitidasUsuario;
   const originalMonthly = escalaService.getEscalaMensal;
+  const originalProfiles = catalogService.getAllowedProfileKeys;
   accessService.getSecoesPermitidasUsuario = async () => [20, 21];
+  catalogService.getAllowedProfileKeys = async () => [];
   escalaService.getEscalaMensal = async () => ({
     secoes: [{ ESCSECAO_ID: 20, DESCR: 'Deposito' }, { ESCSECAO_ID: 21, DESCR: 'Frios' }],
     funcionarios: [
@@ -148,6 +151,7 @@ test('critiques response includes only the selected section', async () => {
   } finally {
     accessService.getSecoesPermitidasUsuario = originalSections;
     escalaService.getEscalaMensal = originalMonthly;
+    catalogService.getAllowedProfileKeys = originalProfiles;
   }
 });
 

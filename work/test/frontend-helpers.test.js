@@ -56,6 +56,31 @@ test('a disconnected schedule write warns that the commit status is unknown', as
   }
 });
 
+test('officialization shows RM preflight error when details is an object', async () => {
+  const previousFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: false,
+    status: 422,
+    json: async () => ({
+      error: 'Existem pendencias antes de oficializar a escala no RM.',
+      errors: ['CPF nao cadastrado para o funcionario 311.0001.'],
+      details: { enabled: true, revisao: 12, errors: ['CPF nao cadastrado para o funcionario 311.0001.'] }
+    })
+  });
+  try {
+    const { postJson, ApiError } = await loadFrontendHelper('api.ts');
+    await assert.rejects(postJson('/api/escalas/oficializar', {}), (error) => {
+      assert.ok(error instanceof ApiError);
+      assert.equal(error.status, 422);
+      assert.match(error.message, /CPF nao cadastrado para o funcionario 311\.0001/);
+      assert.doesNotMatch(error.message, /not iterable/);
+      return true;
+    });
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test('editing any shift time keeps 08:48 work and 01:10 break', async () => {
   const { autofillStandardHours } = await loadFrontendHelper('shiftAutofill.ts');
   const base = { HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };

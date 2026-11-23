@@ -188,6 +188,41 @@ test('leader can officialize only a whole enabled complete section', async () =>
   }
 });
 
+test('RM preflight failure returns actionable errors without officializing', async () => {
+  const handle = router.stack.find((layer) => layer.route?.path === '/oficializar').route.stack.at(-1).handle;
+  const originals = {
+    sections: accessService.getSecoesPermitidasUsuario,
+    assertSections: accessService.assertSecoesPermitidas,
+    progress: officializationService.getProgress,
+    prerequisites: rmIntegrationService.validarPreRequisitosRm,
+    officialize: escalaService.oficializarEscala
+  };
+  let writes = 0;
+  accessService.getSecoesPermitidasUsuario = async () => null;
+  accessService.assertSecoesPermitidas = async () => {};
+  officializationService.getProgress = async () => ({ habilitada: true, secoes: [
+    { escsecaoId: 12, escfuncIds: [42], completa: true, criticasBloqueantes: 0 }
+  ] });
+  rmIntegrationService.validarPreRequisitosRm = async () => ({ enabled: true, revisao: 5,
+    errors: ['CPF nao cadastrado para o funcionario 311.0001.'] });
+  escalaService.oficializarEscala = async () => { writes += 1; };
+  try {
+    const res = response();
+    await handle({ user: { perfil: 'GERENTE', lojas: [311] },
+      body: { lojaId: 311, mesRef: '2026-11-01', escsecaoId: 12 } }, res,
+    (error) => { throw error; });
+    assert.equal(res.code, 422);
+    assert.deepEqual(res.body.errors, ['CPF nao cadastrado para o funcionario 311.0001.']);
+    assert.equal(writes, 0);
+  } finally {
+    accessService.getSecoesPermitidasUsuario = originals.sections;
+    accessService.assertSecoesPermitidas = originals.assertSections;
+    officializationService.getProgress = originals.progress;
+    rmIntegrationService.validarPreRequisitosRm = originals.prerequisites;
+    escalaService.oficializarEscala = originals.officialize;
+  }
+});
+
 test('officializing Transportes also approves ready linked sections without approving blocked or unrelated ones', async () => {
   const handle = router.stack.find((layer) => layer.route?.path === '/oficializar').route.stack.at(-1).handle;
   const originals = {

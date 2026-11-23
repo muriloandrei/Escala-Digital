@@ -154,7 +154,7 @@ export function EscalasLiberadas({ user }: { user: User }) {
           <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}>
             <RefreshCw size={16} /> Atualizar
           </button>
-          {canCreate(user, 'escalas') && user.perfil !== 'LIDER' && <button className="button primary" type="button" onClick={() => {
+          {canCreate(user, 'escalas') && <button className="button primary" type="button" onClick={() => {
             setReleaseStore(String(user.lojaPrincipal || lojas[0]?.LOJA || ''));
             setActionError('');
             setReleaseOpen(true);
@@ -230,7 +230,7 @@ export function EscalasLiberadas({ user }: { user: User }) {
           <div className="empty-state">
             {escalas.length
               ? 'Nenhuma escala corresponde aos filtros.'
-              : 'Nenhuma escala liberada para as secoes do seu perfil.'}
+              : 'Nenhuma escala liberada para as lojas do seu acesso.'}
           </div>
         )}
         {!error && !loading && !!visible.length && (

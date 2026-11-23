@@ -225,10 +225,14 @@ export async function postJson<T>(path: string, payload: unknown): Promise<T> {
 function responseError(data: {
   resultado?: { motivo?: string };
   error?: string;
-  errors?: unknown[];
-  details?: unknown[];
+  errors?: unknown;
+  details?: unknown;
 }) {
-  const issue = [...(data.errors || []), ...(data.details || [])][0];
+  const issues = Array.isArray(data.errors) ? data.errors
+    : Array.isArray(data.details) ? data.details
+      : data.details && typeof data.details === 'object' && 'errors' in data.details
+        && Array.isArray(data.details.errors) ? data.details.errors : [];
+  const issue = issues[0];
   const detail =
     typeof issue === 'string'
       ? issue

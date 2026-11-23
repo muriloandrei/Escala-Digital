@@ -13,8 +13,7 @@ const columns: { key: PermissionKey; label: string }[] = [
   { key: 'PODE_REPROCESSAR', label: 'Reprocessar' }, { key: 'PODE_ADMINISTRAR', label: 'Administrar' },
 ];
 function restrictedByServer(profile: string, page: string) {
-  if (profile !== 'ADMIN' && page === 'historico') return true;
-  return ['LIDER', 'OPERADOR'].includes(profile) && ['acessos', 'roles', 'liberacao-secoes'].includes(page);
+  return profile !== 'ADMIN' && page === 'historico';
 }
 
 export function PerfisAcesso() {

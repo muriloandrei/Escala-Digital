@@ -18,16 +18,15 @@ test('auth falls back to an allowed store when main store is stale', () => {
   assert.equal(_private.resolveLojaPrincipal({ LOJA_PRINCIPAL: 24 }, []), null);
 });
 
-test('auth prefers store inferred from operational user login when it is allowed', () => {
-  assert.equal(_private.inferLojaPrincipalUsuario({ PERFIL: 'LIDER', LOGIN: 'lider.frente35' }), 35);
-  assert.equal(_private.resolveLojaPrincipal({ PERFIL: 'LIDER', LOGIN: 'lider.frente35', LOJA_PRINCIPAL: 24 }, [24, 35]), 35);
-  assert.deepEqual(_private.resolveLojasSessao({ PERFIL: 'LIDER', LOGIN: 'lider.frente35', LOJA_PRINCIPAL: 24 }, [24, 35], 35), [35]);
-  assert.equal(_private.resolveLojaPrincipal({ PERFIL: 'GERENTE', LOGIN: 'gerente35', LOJA_PRINCIPAL: 24 }, [24, 35]), 35);
-  assert.deepEqual(_private.resolveLojasSessao({ PERFIL: 'GERENTE', LOGIN: 'gerente35', LOJA_PRINCIPAL: 24 }, [24, 35], 35), [35]);
-  assert.equal(_private.resolveLojaPrincipal({ PERFIL: 'GERENTE', LOGIN: 'gerente35', LOJA_PRINCIPAL: 24 }, [24]), 24);
+test('auth uses assigned stores and never infers scope from login or name', () => {
+  const leader = { PERFIL: 'LIDER', LOGIN: 'lider.frente35', NOME: 'Lider Loja 35', LOJA_PRINCIPAL: 24 };
+  assert.equal(_private.resolveLojaPrincipal(leader, [24, 35]), 24);
+  assert.deepEqual(_private.resolveLojasSessao(leader, [24, 35, 24], 24), [24, 35]);
+  assert.deepEqual(_private.resolveLojasSessao(leader, [24], 24), [24]);
+  assert.equal(_private.resolveLojaPrincipal({ ...leader, LOJA_PRINCIPAL: 99 }, [24, 35]), 24);
+  assert.deepEqual(_private.resolveLojasSessao({ PERFIL: 'LIDER', LOGIN: 'corporativo' }, [], null), []);
 });
 
 test('auth keeps all stores in session for controladoria', () => {
-  assert.equal(_private.inferLojaPrincipalUsuario({ PERFIL: 'CONTROLADORIA', LOGIN: 'controladoria35' }), null);
   assert.deepEqual(_private.resolveLojasSessao({ PERFIL: 'CONTROLADORIA', LOGIN: 'controladoria35', LOJA_PRINCIPAL: 24 }, [2, 24, 35], 2), [2, 24, 35]);
 });

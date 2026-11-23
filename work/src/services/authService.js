@@ -149,21 +149,13 @@ async function findAllStores() {
 
 function resolveLojaPrincipal(user, lojas) {
   const permitidas = (lojas || []).map(Number).filter(Boolean);
-  const inferida = inferLojaPrincipalUsuario(user);
-  if (inferida && permitidas.includes(inferida)) return inferida;
   const atual = Number(pick(user, 'LOJA_PRINCIPAL', 'loja_principal') || 0);
   if (atual && permitidas.includes(atual)) return atual;
   return permitidas[0] || null;
 }
 
-function resolveLojasSessao(user, lojas, lojaPrincipal) {
-  if (normalizeText(pick(user, 'PERFIL', 'perfil')) === 'CONTROLADORIA') {
-    return [...new Set((lojas || []).map(Number).filter(Boolean))];
-  }
-  const permitidas = [...new Set((lojas || []).map(Number).filter(Boolean))];
-  const inferida = inferLojaPrincipalUsuario(user);
-  if (inferida && permitidas.includes(inferida)) return [inferida];
-  return permitidas;
+function resolveLojasSessao(_user, lojas) {
+  return [...new Set((lojas || []).map(Number).filter(Boolean))];
 }
 
 function normalizeText(value) {
@@ -172,37 +164,6 @@ function normalizeText(value) {
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toUpperCase();
-}
-
-function inferLojaPrincipalUsuario(user) {
-  const perfil = normalizeText(pick(user, 'PERFIL', 'perfil'));
-  if (!['GERENTE', 'LIDER', 'RH', 'OPERADOR'].includes(perfil)) return null;
-
-  const textos = [
-    pick(user, 'LOGIN', 'login'),
-    pick(user, 'NOME', 'nome')
-  ].map(normalizeText);
-
-  const explicitPatterns = [
-    /\b(?:GERENTE|LIDER|RH|OPERADOR|LOJA)\s*0*(\d{1,4})\b/,
-    /\bLOJA\s*0*(\d{1,4})\b/
-  ];
-
-  for (const texto of textos) {
-    for (const pattern of explicitPatterns) {
-      const match = texto.match(pattern);
-      if (match) return Number(match[1]);
-    }
-  }
-
-  if (perfil === 'LIDER') {
-    for (const texto of textos) {
-      const match = texto.match(/0*(\d{1,4})$/);
-      if (match) return Number(match[1]);
-    }
-  }
-
-  return null;
 }
 
 async function syncLojaPrincipal(usuarioId, lojaPrincipalAtual, lojaPrincipalResolvida) {
@@ -328,7 +289,6 @@ module.exports = {
     verifyPasswordHash,
     getTableColumns,
     upgradeLegacyMd5Password,
-    inferLojaPrincipalUsuario,
     findAllStores,
     resolveLojasSessao,
     resolveLojaPrincipal
