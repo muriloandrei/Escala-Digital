@@ -110,7 +110,8 @@ function validateApprenticeShift(data, profileKeys = null) {
 }
 
 function isAbsentSecondPeriod(entry, exit) {
-  return ((!entry && !exit) || (entry === '00:00' && exit === '00:00'));
+  return (!entry && !exit)
+    || (entry === exit && ['00:00', 'F', 'FXF', 'FDO', 'FER', 'AFA', 'FOLGA', 'FOLGA_FIXA'].includes(entry));
 }
 
 function validate12x36Shift(data) {

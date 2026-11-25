@@ -340,6 +340,11 @@ test('monthly release treats Oracle second-period placeholders as absent for app
   assert.equal(trabalho.hrSai2, null);
   assert.equal(trabalho.jornadaMinutos, 300);
   assert.equal(trabalho.intervaloMinutos, 15);
+  const legado = buildFuncionarioRascunho({ ...funcionario, HR_ENT2: 'F', HR_SAI2: 'F' },
+    null, '2026-12-01', '2026-11-30', 0, null, { apprenticeProfiles: new Set(['300:15']) });
+  const diaLegado = legado.dias.find((dia) => dia.programacao === 'TRB');
+  assert.equal(diaLegado.hrEnt2, null);
+  assert.equal(diaLegado.jornadaMinutos, 300);
 });
 
 test('monthly release automatic patterns do not create consecutive rests', () => {

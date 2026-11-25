@@ -8,7 +8,8 @@ export function usesImplicitApprenticeBreak(workMinutes: number, intervalMinutes
 }
 
 function isAbsentSecondPeriod(entry: string | null | undefined, exit: string | null | undefined) {
-  return (!entry && !exit) || (entry === '00:00' && exit === '00:00');
+  return (!entry && !exit)
+    || (entry === exit && ['00:00', 'F', 'FXF', 'FDO', 'FER', 'AFA', 'FOLGA', 'FOLGA_FIXA'].includes(entry || ''));
 }
 
 export function normalizeApprenticeHours(hours: Partial<Record<keyof StandardHours, string | null>>): StandardHours {

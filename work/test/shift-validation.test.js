@@ -51,6 +51,10 @@ test('apprentice 05:00 with implicit 00:15 interval accepts legacy two-clock shi
   assert.deepEqual(validateApprenticeShift(shift, new Set(['300:15'])), []);
   assert.deepEqual(validateApprenticeShift({ ...shift, HR_ENT2: '00:00', HR_SAI2: '00:00' },
     new Set(['300:15'])), []);
+  assert.deepEqual(validateApprenticeShift({ ...shift, HR_ENT2: 'F', HR_SAI2: 'F' },
+    new Set(['300:15'])), []);
+  assert.match(validateApprenticeShift({ ...shift, HR_ENT2: 'F', HR_SAI2: '19:00' },
+    new Set(['300:15'])).join(' '), /invalido/);
   assert.match(validateApprenticeShift(shift, new Set(['240:0'])).join(' '), /nao liberada/);
 });
 

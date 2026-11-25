@@ -142,6 +142,11 @@ test('apprentice editor adjusts both times while preserving 05:15', async () => 
   assert.deepEqual(apprenticeProfileFromHours(persisted), { work: 300, interval: 15 });
   assert.deepEqual(normalizeApprenticeHours(persisted), shifted);
   assert.equal(validateApprenticeHours(persisted), '');
+  const restMarkers = { ...shifted, HR_ENT2: 'F', HR_SAI2: 'F' };
+  assert.deepEqual(apprenticeProfileFromHours(restMarkers), { work: 300, interval: 15 });
+  assert.deepEqual(normalizeApprenticeHours(restMarkers), shifted);
+  assert.equal(validateApprenticeHours(restMarkers), '');
+  assert.match(validateApprenticeHours({ ...shifted, HR_ENT2: 'F', HR_SAI2: '19:00' }), /segundo período/);
   assert.match(validateApprenticeHours({ ...shifted, HR_SAI1: '14:30' }), /horário selecionado/);
   assert.deepEqual(apprenticeHoursFromStart('08:00', 240, 0),
     { HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '', HR_SAI2: '' });
