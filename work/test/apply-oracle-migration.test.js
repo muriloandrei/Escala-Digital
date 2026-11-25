@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
 test('executor accepts only the approved mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 32);
+  assert.equal(migrationNames.length, 33);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
@@ -12,8 +12,14 @@ test('executor accepts only the approved mirrored single-block migrations', () =
   }
 });
 
-test('apprentice journey migration is executable and schema preflight requires its column', () => {
-  const { sql } = readMigration('20261125_jornadas_aprendiz_livres.sql');
+test('apprentice journey repair preserves the recorded migration and requires its column', () => {
+  const crypto = require('node:crypto');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const previous = fs.readFileSync(path.join(__dirname, '../db/migrations/20261125_jornadas_aprendiz_livres.sql'));
+  assert.equal(crypto.createHash('sha256').update(previous).digest('hex'),
+    '50f4f8d5a99b3f13986bc9d46d6d88ca658320c30ff2dd8ea705d2530ac5756c');
+  const { sql } = readMigration('20261125_reparar_jornadas_aprendiz.sql');
   assert.match(sql, /add \(liberar_horario_aprendiz number\(1\) default 0 not null\)/i);
   assert.match(sql, /execute immediate q'\[\s*merge into sgn_esc_horario_padrao/i);
   assert.match(sql, /execute immediate q'\[\s*update sgn_esc_horario_padrao\s+set liberar_horario_aprendiz/i);
@@ -149,4 +155,35 @@ test('executor refuses a wrong schema or missing migration ledger', async () => 
     ...(sql.includes('schema_user') ? { SCHEMA_USER: 'ESCALA' } : { TOTAL: sql.includes('SGN_ESC_MIGRACAO') ? 0 : 2 })
   }] });
   await assert.rejects(checkPrerequisites(connection, readMigration(migrationNames[1]), 'ESCALA'), /Aplique primeiro/);
+});
+
+test('apprentice repair accepts confirmed original despite unrelated legacy ledger gaps', async () => {
+  const originalName = '20261125_jornadas_aprendiz_livres.sql';
+  const repair = readMigration('20261125_reparar_jornadas_aprendiz.sql');
+  const required = {
+    SGN_ESC_HORARIO_PADRAO: ['ESCHORPAD_ID', 'DESCR', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2',
+      'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS', 'DT_HR_INCL'],
+    SGN_ESC_HORPAD_LOJA: ['ESCHORPAD_ID', 'LOJA'],
+    SGN_ESC_LOJA: ['LOJA']
+  };
+  const columns = Object.entries(required).flatMap(([TABLE_NAME, fields]) => fields
+    .map((COLUMN_NAME) => ({ TABLE_NAME, COLUMN_NAME })));
+  let recordedChecksum = readMigration(originalName).checksum;
+  let availableColumns = columns;
+  const connection = { execute: async (sql) => {
+    if (sql.includes('schema_user')) return { rows: [{ SCHEMA_USER: 'ESCALAINT' }] };
+    if (sql.includes("table_name in ('SGN_ESC_PROG'")) return { rows: [{ TOTAL: 2 }] };
+    if (sql.includes("table_name = 'SGN_ESC_MIGRACAO'")) return { rows: [{ TOTAL: 1 }] };
+    if (sql.includes('from sgn_esc_migracao')) return { rows: [{ ARQUIVO: originalName, CHECKSUM_SHA256: recordedChecksum }] };
+    if (sql.includes('from user_tab_columns')) return { rows: availableColumns };
+    if (sql.includes('from user_sequences')) return { rows: [{ SEQUENCE_NAME: 'SGN_ESC_HORARIO_PADRAO_SEQ' }] };
+    throw new Error(`SQL inesperado: ${sql}`);
+  } };
+  assert.deepEqual(await checkPrerequisites(connection, repair, 'ESCALAINT'),
+    { schemaUser: 'ESCALAINT', alreadyApplied: false });
+  recordedChecksum = 'outro-checksum';
+  await assert.rejects(checkPrerequisites(connection, repair, 'ESCALAINT'), /Migration anterior sem registro confirmado/);
+  recordedChecksum = readMigration(originalName).checksum;
+  availableColumns = columns.filter((row) => row.COLUMN_NAME !== 'JORNADA_MINUTOS');
+  await assert.rejects(checkPrerequisites(connection, repair, 'ESCALAINT'), /Dependencias da reparacao ausentes/);
 });

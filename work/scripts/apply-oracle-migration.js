@@ -36,8 +36,11 @@ const migrationNames = [
   '20261118_horario_base_mensal.sql',
   '20261118_horarios_padrao_por_loja.sql',
   '20261123_oficializacao_por_perfil.sql',
-  '20261125_jornadas_aprendiz_livres.sql'
+  '20261125_jornadas_aprendiz_livres.sql',
+  '20261125_reparar_jornadas_aprendiz.sql'
 ];
+const apprenticeRepairName = '20261125_reparar_jornadas_aprendiz.sql';
+const apprenticeOriginalName = '20261125_jornadas_aprendiz_livres.sql';
 
 function parseSinglePlsqlBlock(source) {
   const lines = String(source).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim().split('\n');
@@ -105,10 +108,37 @@ async function checkPrerequisites(connection, migration, expectedOracleUser) {
   const current = applied.get(migration.name);
   if (current && current !== migration.checksum) throw new Error('Migration registrada com checksum diferente; investigue antes de prosseguir.');
   if (!current) {
-    const index = migrationNames.indexOf(migration.name);
-    for (const previousName of migrationNames.slice(0, index)) {
-      if (applied.get(previousName) !== readMigration(previousName).checksum) {
-        throw new Error(`Migration anterior sem registro confirmado: ${previousName}.`);
+    if (migration.name === apprenticeRepairName) {
+      if (applied.get(apprenticeOriginalName) !== readMigration(apprenticeOriginalName).checksum) {
+        throw new Error(`Migration anterior sem registro confirmado: ${apprenticeOriginalName}.`);
+      }
+      const required = {
+        SGN_ESC_HORARIO_PADRAO: ['ESCHORPAD_ID', 'DESCR', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2',
+          'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS', 'DT_HR_INCL'],
+        SGN_ESC_HORPAD_LOJA: ['ESCHORPAD_ID', 'LOJA'],
+        SGN_ESC_LOJA: ['LOJA']
+      };
+      const columnsResult = await connection.execute(
+        `select table_name, column_name from user_tab_columns
+          where table_name in ('SGN_ESC_HORARIO_PADRAO', 'SGN_ESC_HORPAD_LOJA', 'SGN_ESC_LOJA')`,
+        {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const columns = new Set((columnsResult.rows || [])
+        .map((row) => `${row.TABLE_NAME}.${row.COLUMN_NAME}`));
+      const missing = Object.entries(required).flatMap(([table, fields]) => fields
+        .filter((field) => !columns.has(`${table}.${field}`)).map((field) => `${table}.${field}`));
+      const sequenceResult = await connection.execute(
+        "select sequence_name from user_sequences where sequence_name = 'SGN_ESC_HORARIO_PADRAO_SEQ'",
+        {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      if (!sequenceResult.rows?.length) missing.push('SGN_ESC_HORARIO_PADRAO_SEQ');
+      if (missing.length) throw new Error(`Dependencias da reparacao ausentes: ${missing.join(', ')}.`);
+    } else {
+      const index = migrationNames.indexOf(migration.name);
+      for (const previousName of migrationNames.slice(0, index)) {
+        if (applied.get(previousName) !== readMigration(previousName).checksum) {
+          throw new Error(`Migration anterior sem registro confirmado: ${previousName}.`);
+        }
       }
     }
   }
