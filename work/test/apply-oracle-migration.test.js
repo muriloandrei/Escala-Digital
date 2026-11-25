@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
 test('executor accepts only the approved mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 34);
+  assert.equal(migrationNames.length, 35);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
@@ -219,4 +219,17 @@ test('apprentice standard requires the confirmed repair and its column', async (
   ledger = [{ ARQUIVO: repair.name, CHECKSUM_SHA256: repair.checksum }];
   assert.deepEqual(await checkPrerequisites(connection, standard, 'ESCALAINT'),
     { schemaUser: 'ESCALAINT', alreadyApplied: false });
+  ledger = [{ ARQUIVO: '20261125_reparar_jornadas_aprendiz_v2.sql',
+    CHECKSUM_SHA256: readMigration('20261125_reparar_jornadas_aprendiz_v2.sql').checksum }];
+  assert.deepEqual(await checkPrerequisites(connection, standard, 'ESCALAINT'),
+    { schemaUser: 'ESCALAINT', alreadyApplied: false });
+});
+
+test('replacement apprentice repair skips already nullable columns and supersedes the failed repair', async () => {
+  const replacement = readMigration('20261125_reparar_jornadas_aprendiz_v2.sql');
+  assert.match(replacement.sql, /nullable = 'N'/i);
+  assert.match(replacement.sql, /for i in 1 \.\. v_colunas\.count loop/i);
+  const publish = require('node:fs').readFileSync(require('node:path')
+    .join(__dirname, '../scripts/publicar-oracle-linux.sh'), 'utf8');
+  assert.match(publish, /reparar_jornadas_aprendiz\.sql.*reparar_jornadas_aprendiz_v2\.sql/s);
 });

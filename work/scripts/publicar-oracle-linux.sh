@@ -90,6 +90,11 @@ if [[ -n "$new_migrations" ]]; then
   while IFS= read -r migration; do
     name=${migration##*/}
     if ! awk -v name="$name" '$1 == "CONFIRMADA" && $2 == name { found = 1 } END { exit !found }' <<< "$migration_status"; then
+      if [[ "$name" == '20261125_reparar_jornadas_aprendiz.sql' ]] &&
+         awk '$1 == "CONFIRMADA" && $2 == "20261125_reparar_jornadas_aprendiz_v2.sql" { found = 1 } END { exit !found }' <<< "$migration_status"; then
+        printf 'Migration %s substituida pela v2 confirmada.\n' "$name"
+        continue
+      fi
       printf 'Migration do release ainda nao confirmada no Oracle: %s\n' "$name" >&2
       printf 'Revise, aplique e registre a migration antes de repetir a publicacao.\n' >&2
       exit 1

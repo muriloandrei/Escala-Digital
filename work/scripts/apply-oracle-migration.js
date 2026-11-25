@@ -38,9 +38,11 @@ const migrationNames = [
   '20261123_oficializacao_por_perfil.sql',
   '20261125_jornadas_aprendiz_livres.sql',
   '20261125_reparar_jornadas_aprendiz.sql',
+  '20261125_reparar_jornadas_aprendiz_v2.sql',
   '20261125_aprendiz_5h_15min_intervalo.sql'
 ];
 const apprenticeRepairName = '20261125_reparar_jornadas_aprendiz.sql';
+const apprenticeRepairV2Name = '20261125_reparar_jornadas_aprendiz_v2.sql';
 const apprenticeOriginalName = '20261125_jornadas_aprendiz_livres.sql';
 const apprenticeStandardName = '20261125_aprendiz_5h_15min_intervalo.sql';
 
@@ -110,10 +112,11 @@ async function checkPrerequisites(connection, migration, expectedOracleUser) {
   const current = applied.get(migration.name);
   if (current && current !== migration.checksum) throw new Error('Migration registrada com checksum diferente; investigue antes de prosseguir.');
   if (!current) {
-    if (migration.name === apprenticeRepairName || migration.name === apprenticeStandardName) {
-      const predecessor = migration.name === apprenticeRepairName ? apprenticeOriginalName : apprenticeRepairName;
-      if (applied.get(predecessor) !== readMigration(predecessor).checksum) {
-        throw new Error(`Migration anterior sem registro confirmado: ${predecessor}.`);
+    if ([apprenticeRepairName, apprenticeRepairV2Name, apprenticeStandardName].includes(migration.name)) {
+      const predecessors = migration.name === apprenticeStandardName
+        ? [apprenticeRepairName, apprenticeRepairV2Name] : [apprenticeOriginalName];
+      if (!predecessors.some((name) => applied.get(name) === readMigration(name).checksum)) {
+        throw new Error(`Migration anterior sem registro confirmado: ${predecessors.join(' ou ')}.`);
       }
       const required = {
         SGN_ESC_HORARIO_PADRAO: ['ESCHORPAD_ID', 'DESCR', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2',
