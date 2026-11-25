@@ -40,6 +40,25 @@ test('catalog uses latest monthly base at or before the requested month', async 
   assert.doesNotMatch(monthlyQueries[0].sql, /hbm\.mes_ref >=/);
 });
 
+test('catalog restricts Gerencia 01.001 to apprentices in eligible stores', async () => {
+  const queries = [];
+  const connection = { execute: async (sql) => {
+    queries.push(sql);
+    return { rows: [] };
+  } };
+  const { service, context } = loadService('catalogService.js', connection);
+  vm.runInContext(`
+    resolveLojaCodigo = async (value) => value;
+    getLojaCodcoligada = async () => null;
+    getTableColumns = async () => new Set(['ESCSUBSECAO_ID', 'STATUS']);
+  `, context);
+  await service.listFuncionariosByLoja(703);
+  const sql = queries.find((query) => query.includes('from sgn_esc_funcionario f'));
+  assert.match(sql, /regexp_like\(upper\(nvl\(fu\.descr, ' '\)\), 'APRENDIZ'\)/);
+  assert.match(sql, /:lojaId between 400 and 499 or :lojaId between 700 and 799/);
+  assert.match(sql, /aprendiz\.escsecao_id = s\.escsecao_id/);
+});
+
 test('editing monthly base persists only the selected month without updating employee global hours', async () => {
   const queries = [];
   const connection = {

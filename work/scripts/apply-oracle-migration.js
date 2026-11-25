@@ -35,7 +35,8 @@ const migrationNames = [
   '20261118_domingo_1x1_por_loja.sql',
   '20261118_horario_base_mensal.sql',
   '20261118_horarios_padrao_por_loja.sql',
-  '20261123_oficializacao_por_perfil.sql'
+  '20261123_oficializacao_por_perfil.sql',
+  '20261125_jornadas_aprendiz_livres.sql'
 ];
 
 function parseSinglePlsqlBlock(source) {
@@ -45,7 +46,7 @@ function parseSinglePlsqlBlock(source) {
   if (lines.pop()?.trim() !== '/') throw new Error('Migration deve terminar com uma unica linha / do SQL*Plus.');
   const sql = lines.join('\n').trim();
   if (!/^(declare|begin)\b/i.test(sql) || !/\bend;\s*$/i.test(sql)
-      || lines.some((line) => /^\s*(?:\/\s*$|@|set\s|prompt\s|spool\s|connect\s|whenever\s)/i.test(line))) {
+      || lines.some((line) => /^\s*(?:\/\s*$|@|set\s+(?![a-z_][\w.]*\s*=)|prompt\s|spool\s|connect\s|whenever\s)/i.test(line))) {
     throw new Error('Formato nao suportado: esperado um unico bloco PL/SQL sem outros comandos SQL*Plus.');
   }
   return sql;

@@ -5,6 +5,26 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
 
+test('missing apprentice profile column does not break schedule reads but fails closed', async () => {
+  const servicePath = path.join(__dirname, '../src/services/catalogService.js');
+  const serviceRequire = createRequire(servicePath);
+  const mod = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(servicePath, 'utf8'), {
+    module: mod,
+    require: (name) => name === '../db/oracle'
+      ? { withConnection: async (work) => work({}), oracledb: { OUT_FORMAT_OBJECT: 1 } }
+      : name === './escalaEventService' ? {} : serviceRequire(name)
+  });
+  const missingColumn = Object.assign(new Error('ORA-00904: "H"."LIBERAR_HORARIO_APRENDIZ": invalid identifier'),
+    { errorNum: 904, code: 'ORA-00904' });
+  const connection = { execute: async () => { throw missingColumn; } };
+  const profiles = await mod.exports.getAllowedProfileKeys(24, connection, { apprentice: true });
+  assert.equal(profiles.size, 0);
+  await assert.rejects(mod.exports.getAllowedProfileKeys(24, connection), /LIBERAR_HORARIO_APRENDIZ/);
+  const otherError = { execute: async () => { throw Object.assign(new Error('ORA-00904: OUTRO'), { errorNum: 904 }); } };
+  await assert.rejects(mod.exports.getAllowedProfileKeys(24, otherError, { apprentice: true }), /OUTRO/);
+});
+
 test('duration-only profile insert does not require fixed start or end times', async () => {
   const servicePath = path.join(__dirname, '../src/services/catalogService.js');
   const serviceRequire = createRequire(servicePath);

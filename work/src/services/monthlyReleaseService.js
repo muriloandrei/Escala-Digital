@@ -9,6 +9,7 @@ const { isPortariaSection } = require('../domain/portariaSection');
 const { permiteEscala } = require('../domain/employeeStatus');
 const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('../domain/workRegime');
 const { validateApprenticeShift } = require('../domain/shiftValidation');
+const { isApprenticeManagementSection } = require('../domain/sectionRollout');
 
 function formatDateValue(value) {
   if (value instanceof Date) {
@@ -1290,7 +1291,9 @@ async function listSecoesEscopoOperacionalIds(lojaId) {
   const secoes = await catalogService.listSecoesByLoja(lojaId);
   const incluirFiscalRemoto = Number(lojaId) === 999;
   return secoes
-    .filter((secao) => isSecaoEscopoOperacional(secao) || (incluirFiscalRemoto && isSecaoFiscalRemoto(secao)))
+    .filter((secao) => isSecaoEscopoOperacional(secao)
+      || isApprenticeManagementSection(secao, lojaId)
+      || (incluirFiscalRemoto && isSecaoFiscalRemoto(secao)))
     .map((secao) => Number(pick(secao, 'ESCSECAO_ID', 'escsecao_id', 'escsecaoId')))
     .filter(Boolean);
 }
@@ -1324,7 +1327,12 @@ async function liberarEscalaLojaMes({
   }
 
   const escalaExiste = await escalaMensalJaExiste(lojaId, mesRef, secoesLiberacao);
-  if (escalaExiste && !escopoAmpliado) {
+  const gerenciaAprendizIds = escalaExiste && !escopoAmpliado
+    ? new Set((await catalogService.listSecoesByLoja(lojaId))
+      .filter((secao) => isApprenticeManagementSection(secao, lojaId))
+      .map((secao) => Number(secao.ESCSECAO_ID)))
+    : new Set();
+  if (escalaExiste && !escopoAmpliado && !gerenciaAprendizIds.size) {
     return { lojaId, mesRef, criada: false, motivo: 'Escala mensal ja existente.' };
   }
   const escfuncIdsExistentes = escalaExiste
@@ -1347,6 +1355,7 @@ async function liberarEscalaLojaMes({
 
   const indiceAusencias = criarIndiceAusencias(ausencias);
   const elegiveis = funcionarios.filter((funcionario) => !escfuncIdsExistentes.has(Number(funcionario.ESCFUNC_ID))
+    && (!escalaExiste || escopoAmpliado || gerenciaAprendizIds.has(Number(funcionario.ESCSECAO_ID)))
     && temDiasElegiveis(funcionario, mesRef, hojeIso, suspensoes, indiceAusencias));
   const funcionariosPayload = buildFuncionariosLiberacao(elegiveis, turnos, mesRef, hojeIso, { indiceAusencias, fixos, suspensoes })
     .filter((funcionario) => funcionario.escfuncId && funcionario.chapa);
@@ -1644,5 +1653,6 @@ module.exports = {
   gerarEscalaSecao,
   resetarEscalaSecao,
   startMonthlyReleaseScheduler,
-  _private: { temDiasElegiveis, motivoGeracaoFuncionario, criarIndiceAusencias }
+  _private: { temDiasElegiveis, motivoGeracaoFuncionario, criarIndiceAusencias,
+    listSecoesEscopoOperacionalIds }
 };

@@ -13,6 +13,97 @@ pendenciaFuncionarioService.listarIntervalosSuspensos = async () => new Map();
 sundayShiftService.getStoreEnabled = async () => false;
 sundayAlternationService.getStoreEnabled = async () => true;
 
+test('liberacao mensal inclui Gerencia 01.001 de praticos e postos quando listada no catalogo', async () => {
+  const original = catalogService.listSecoesByLoja;
+  catalogService.listSecoesByLoja = async (loja) => [
+    { ESCSECAO_ID: 1, COD_SECAO: `${loja}.01.001`, DESCR: 'Gerencia' },
+    { ESCSECAO_ID: 2, COD_SECAO: `${loja}.02.002`, DESCR: 'Frente de Caixa' }
+  ];
+  try {
+    for (const loja of [400, 499, 700, 703, 799]) {
+      assert.deepEqual(await monthlyReleaseService._private.listSecoesEscopoOperacionalIds(loja), [1, 2]);
+    }
+    for (const loja of [399, 500, 699, 800]) {
+      assert.deepEqual(await monthlyReleaseService._private.listSecoesEscopoOperacionalIds(loja), [2]);
+    }
+  } finally {
+    catalogService.listSecoesByLoja = original;
+  }
+});
+
+test('escala aberta mostra apenas aprendizes da Gerencia em postos e praticos', () => {
+  const rows = [
+    { ESCFUNC_ID: 1, CADASTRO_COD_SECAO: '703.01.001', CADASTRO_FUNCAO_DESCR: 'JOVEM APRENDIZ' },
+    { ESCFUNC_ID: 2, CADASTRO_COD_SECAO: '703.01.001', CADASTRO_FUNCAO_DESCR: 'GERENTE' },
+    { ESCFUNC_ID: 3, CADASTRO_COD_SECAO: '703.02.002', CADASTRO_SECAO_DESCR: 'Frente de Caixa', CADASTRO_FUNCAO_DESCR: 'FRENTISTA' }
+  ];
+  assert.deepEqual(_private.filtrarLinhasForaDoEscopoAtual(rows, '2099-12-01', 703, true)
+    .map((row) => row.ESCFUNC_ID), [1, 3]);
+  assert.deepEqual(_private.filtrarLinhasForaDoEscopoAtual(rows, '2099-12-01', 703, false)
+    .map((row) => row.ESCFUNC_ID), [1, 3]);
+  assert.deepEqual(_private.filtrarLinhasForaDoEscopoAtual(rows, '2099-12-01', 35, true)
+    .map((row) => row.ESCFUNC_ID), [3]);
+  assert.equal(_private.filtrarLinhasForaDoEscopoAtual(rows, '2020-01-01', 703).length, 3);
+});
+
+test('catalogo da escala existente inclui aprendiz da Gerencia sem dias gerados', () => {
+  const rows = [{ ESCFUNC_ID: 10, ESCSECAO_ID: 20 }];
+  const catalogo = [
+    { ESCFUNC_ID: 10, ESCSECAO_ID: 20, LOJA: 703, COD_SECAO: '703.02.002' },
+    { ESCFUNC_ID: 11, ESCSECAO_ID: 21, LOJA: 703, COD_SECAO: '703.01.001' },
+    { ESCFUNC_ID: 12, ESCSECAO_ID: 22, LOJA: 703, COD_SECAO: '703.02.004' }
+  ];
+  assert.deepEqual(_private.filtrarFuncionariosCatalogoPorSecoesEscala(catalogo, rows)
+    .map((employee) => employee.ESCFUNC_ID), [10, 11]);
+});
+
+test('liberacao acrescenta aprendiz da Gerencia sem recriar escala existente do posto', async () => {
+  const originals = {
+    listSecoesByLoja: catalogService.listSecoesByLoja,
+    listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
+    listTurnosByLoja: catalogService.listTurnosByLoja,
+    listAusenciasByLojaMes: catalogService.listAusenciasByLojaMes,
+    listEscalasResumo: escalaService.listEscalasResumo,
+    listEscalas: escalaService.listEscalas,
+    listFixosEscala: escalaService.listFixosEscala
+  };
+  catalogService.listSecoesByLoja = async () => [
+    { ESCSECAO_ID: 10, COD_SECAO: '703.01.001', DESCR: 'Gerencia' },
+    { ESCSECAO_ID: 20, COD_SECAO: '703.02.002', DESCR: 'Frente de Caixa' }
+  ];
+  catalogService.listFuncionariosByLoja = async () => [
+    { ESCFUNC_ID: 11, LOJA: 703, CHAPA: '703.0011', NOME: 'Aprendiz',
+      ESCSECAO_ID: 10, ESCFUNCAO_ID: 2, FUNCAO_DESCR: 'JOVEM APRENDIZ',
+      HR_ENT1: '08:00', HR_SAI1: '12:00' },
+    { ESCFUNC_ID: 12, LOJA: 703, CHAPA: '703.0012', NOME: 'Frentista',
+      ESCSECAO_ID: 20, ESCFUNCAO_ID: 3, FUNCAO_DESCR: 'FRENTISTA',
+      HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' }
+  ];
+  catalogService.listTurnosByLoja = async () => [];
+  catalogService.listAusenciasByLojaMes = async () => [];
+  escalaService.listEscalasResumo = async () => [{ LOJA: 703 }];
+  escalaService.listEscalas = async () => [];
+  escalaService.listFixosEscala = async () => [];
+  try {
+    const preview = await monthlyReleaseService.liberarEscalaLojaMes({ lojaId: 703,
+      mesRef: '2026-12-01', hojeIso: '2026-11-25', dryRun: true });
+    assert.equal(preview.prevista, true);
+    assert.equal(preview.funcionarios, 1);
+  } finally {
+    Object.assign(catalogService, {
+      listSecoesByLoja: originals.listSecoesByLoja,
+      listFuncionariosByLoja: originals.listFuncionariosByLoja,
+      listTurnosByLoja: originals.listTurnosByLoja,
+      listAusenciasByLojaMes: originals.listAusenciasByLojaMes
+    });
+    Object.assign(escalaService, {
+      listEscalasResumo: originals.listEscalasResumo,
+      listEscalas: originals.listEscalas,
+      listFixosEscala: originals.listFixosEscala
+    });
+  }
+});
+
 test('domingo 1x1 parametrizado amplia os padroes de folga sem liberar mais de duas folgas semanais', () => {
   const enforced = getPadroesFolgaValidos(true);
   const relaxed = getPadroesFolgaValidos(false);

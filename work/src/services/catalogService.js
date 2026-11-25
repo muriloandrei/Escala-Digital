@@ -1,7 +1,7 @@
 const { withConnection, oracledb } = require('../db/oracle');
 const escalaEventService = require('./escalaEventService');
 const { permiteEscala } = require('../domain/employeeStatus');
-const { activeSectionSql } = require('../domain/sectionRollout');
+const { activeSectionSql, eligibleManagementEmployeeSql } = require('../domain/sectionRollout');
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -361,6 +361,8 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
     const escalaAtivaInnerSql = progColumns.has('ATIVA') ? 'and nvl(px.ativa, 1) = 1' : '';
     const secaoAtivaWhere = options.includeInactiveSecoes || !secaoColumns.has('STATUS') ? ''
       : `and ${activeSectionSql('s', ':lojaId')}`;
+    const gerenciaAprendizWhere = options.includeInactiveSecoes ? ''
+      : `and ${eligibleManagementEmployeeSql('s', 'fu', ':lojaId')}`;
     const cpfSelect = funcionarioColumns.has('CPF')
       ? 'f.cpf'
       : funcionarioColumns.has('CPF_FUNCIONARIO')
@@ -455,6 +457,7 @@ async function listFuncionariosByLoja(lojaId, options = {}) {
          ${funcionarioSecaoWhere}
          ${ativoWhere}
          ${secaoAtivaWhere}
+         ${gerenciaAprendizWhere}
        order by f.nome`;
 
     if (options.mesRef) {
@@ -1064,16 +1067,22 @@ async function listHorariosPadrao({ includeInactive = false, lojaId = null } = {
 
 async function getAllowedProfileKeys(lojaId, connection = null, { apprentice = false } = {}) {
   const run = async (db) => {
-    const result = await db.execute(
-      `select distinct h.jornada_minutos, h.intervalo_minutos
-         from sgn_esc_horario_padrao h
-         join sgn_esc_horpad_loja hl on hl.eschorpad_id = h.eschorpad_id
-        where hl.loja = :lojaId and h.status = 'A'
-          ${apprentice ? 'and h.liberar_horario_aprendiz = 1' : ''}`,
-      { lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    return new Set((result.rows || []).map((row) =>
-      `${pick(row, 'JORNADA_MINUTOS', 'jornada_minutos')}:${pick(row, 'INTERVALO_MINUTOS', 'intervalo_minutos')}`));
+    try {
+      const result = await db.execute(
+        `select distinct h.jornada_minutos, h.intervalo_minutos
+           from sgn_esc_horario_padrao h
+           join sgn_esc_horpad_loja hl on hl.eschorpad_id = h.eschorpad_id
+          where hl.loja = :lojaId and h.status = 'A'
+            ${apprentice ? 'and h.liberar_horario_aprendiz = 1' : ''}`,
+        { lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      return new Set((result.rows || []).map((row) =>
+        `${pick(row, 'JORNADA_MINUTOS', 'jornada_minutos')}:${pick(row, 'INTERVALO_MINUTOS', 'intervalo_minutos')}`));
+    } catch (error) {
+      if (apprentice && isInvalidIdentifierError(error)
+        && /LIBERAR_HORARIO_APRENDIZ/i.test(String(error.message || ''))) return new Set();
+      throw error;
+    }
   };
   return connection ? run(connection) : withConnection(run);
 }

@@ -4,7 +4,7 @@ const escalaEventService = require('./escalaEventService');
 const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { isPortariaSection } = require('../domain/portariaSection');
 const { permiteEscala } = require('../domain/employeeStatus');
-const { activeSectionSql } = require('../domain/sectionRollout');
+const { activeSectionSql, isApprenticeManagementSection } = require('../domain/sectionRollout');
 const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
 const { validateApprenticeShift } = require('../domain/shiftValidation');
 const { validarCriticasEscopo } = require('../rules/escalaRules');
@@ -793,6 +793,12 @@ async function getSecaoAtivaProgSql(connection, alias = 'p', mesRef = null) {
     from sgn_esc_secao s_status
     where s_status.escsecao_id = ${mesRef ? secaoEscopoSql(mesRef, alias) : `${alias}.escsecao_id`}
       and ${activeSectionSql('s_status', `${alias}.loja`)}
+      and (not regexp_like(trim(nvl(s_status.cod_secao, ' ')), '(^|[.])01[.]001$')
+        or exists (select 1 from sgn_esc_funcionario f_aprendiz
+                    join sgn_esc_funcao fu_aprendiz
+                      on fu_aprendiz.escfuncao_id = f_aprendiz.escfuncao_id
+                   where f_aprendiz.escfunc_id = ${alias}.escfunc_id
+                     and regexp_like(upper(fu_aprendiz.descr), 'APRENDIZ')))
   )`;
 }
 
@@ -914,12 +920,18 @@ function projetarPortariaNaFrente(rows = [], catalogo = [], mesRef) {
 }
 
 function filtrarLinhasForaDoEscopoAtual(rows = [], mesRef, lojaId, todasSecoesHabilitadas = false) {
-  if (isMesFinalizado(mesRef) || todasSecoesHabilitadas) return rows;
+  if (isMesFinalizado(mesRef)) return rows;
   return rows.filter((row) => {
     const cadastro = {
       COD_SECAO: pick(row, 'CADASTRO_COD_SECAO', 'cadastro_cod_secao'),
       DESCR: pick(row, 'CADASTRO_SECAO_DESCR', 'cadastro_secao_descr')
     };
+    if (/(^|\.)01\.001$/.test(String(cadastro.COD_SECAO || '').trim())) {
+      return isApprenticeManagementSection(cadastro, lojaId)
+        && /APRENDIZ/i.test(String(pick(row, 'CADASTRO_FUNCAO_DESCR', 'cadastro_funcao_descr',
+          'FUNCAO_DESCR', 'funcao_descr') || ''));
+    }
+    if (todasSecoesHabilitadas) return true;
     if (!cadastro.COD_SECAO && !cadastro.DESCR) return true;
     if (isPortariaSection(cadastro)) return true;
     const descricao = String(cadastro.DESCR || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
@@ -942,6 +954,7 @@ function filtrarFuncionariosCatalogoPorSecoesEscala(funcionariosCatalogo = [], r
   return (funcionariosCatalogo || [])
     .filter((funcionario) => secoesDaEscala.has(Number(pick(funcionario, 'ESCSECAO_ID', 'escsecao_id')))
       || funcionariosDaEscala.has(Number(pick(funcionario, 'ESCFUNC_ID', 'escfunc_id')))
+      || isApprenticeManagementSection(funcionario, pick(funcionario, 'LOJA', 'loja'))
       || isPortariaSection(funcionario)
       || migradosDaPortaria.has(Number(pick(funcionario, 'ESCFUNC_ID', 'escfunc_id'))));
 }
@@ -1676,6 +1689,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
           f.nome,
           ${dtDemissSelect},
           f.status as funcionario_status,
+          fn_atual.descr as cadastro_funcao_descr,
           ${subsecaoSelect},
           ${subsecaoDescrSelect},
           s.cod_secao,
@@ -1700,6 +1714,7 @@ async function getEscalaMensal({ lojaId, mesRef, secoesPermitidas = null }) {
        ${subsecaoJoinSql}
        left join sgn_esc_secao s on s.escsecao_id = p.escsecao_id
        left join sgn_esc_funcao fn on fn.escfuncao_id = p.escfuncao_id
+       left join sgn_esc_funcao fn_atual on fn_atual.escfuncao_id = f.escfuncao_id
        left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
        where p.loja = :lojaId
          and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')

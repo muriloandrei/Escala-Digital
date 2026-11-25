@@ -3,13 +3,22 @@ const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
 test('executor accepts only the approved mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 31);
+  assert.equal(migrationNames.length, 32);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
     assert.match(migration.sql, /\bend;$/i);
     assert.equal(migration.checksum.length, 64);
   }
+});
+
+test('apprentice journey migration is executable and schema preflight requires its column', () => {
+  const { sql } = readMigration('20261125_jornadas_aprendiz_livres.sql');
+  assert.match(sql, /add \(liberar_horario_aprendiz number\(1\) default 0 not null\)/i);
+  assert.match(sql, /execute immediate q'\[\s*merge into sgn_esc_horario_padrao/i);
+  assert.match(sql, /execute immediate q'\[\s*update sgn_esc_horario_padrao\s+set liberar_horario_aprendiz/i);
+  const schemaCheck = require('node:fs').readFileSync(require('node:path').join(__dirname, '../scripts/check-schema.js'), 'utf8');
+  assert.match(schemaCheck, /SGN_ESC_HORARIO_PADRAO: \[[^\]]*'LIBERAR_HORARIO_APRENDIZ'/);
 });
 
 test('officialization migration preserves operational profiles without granting custom profiles', () => {
@@ -116,6 +125,8 @@ test('Portaria migration preserves officialized history and checks conflicting a
 test('executor rejects extra SQLPlus commands and multiple blocks', () => {
   assert.throws(() => parseSinglePlsqlBlock('begin null; end;\n/\nbegin null; end;\n/'), /Formato nao suportado/);
   assert.throws(() => parseSinglePlsqlBlock('prompt test\nbegin null; end;\n/'), /Formato nao suportado/);
+  assert.throws(() => parseSinglePlsqlBlock('begin\n  set serveroutput on\nend;\n/'), /Formato nao suportado/);
+  assert.match(parseSinglePlsqlBlock('begin\n  update tabela\n     set coluna = 1;\nend;\n/'), /set coluna = 1/);
   assert.throws(() => parseSinglePlsqlBlock('begin null; end;'), /terminar/);
 });
 
