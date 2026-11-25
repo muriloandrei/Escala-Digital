@@ -48,7 +48,7 @@ test('transferencia imediata preserva escala oficializada em nova revisao penden
   const source = fs.readFileSync(path.join(__dirname, '../src/services/escalaService.js'), 'utf8');
   const dependencies = {
     '../db/oracle': { withConnection: async (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1, NUMBER: 2, BIND_OUT: 3 } },
-    './catalogService': {},
+    './catalogService': { getAllowedProfileKeys: async () => new Set(['528:70']) },
     './escalaEventService': { createOperationId: () => 'transfer-test', appendEvent: async (_connection, event) => events.push(event) }
   };
   vm.runInNewContext(source, {

@@ -46,6 +46,7 @@ function loadService(candidates = [], { scheduleRows = [], fetchImpl = null } = 
 }
 
 const candidate = { ESCFUNC_ID: 90, CHAPA: '306.0090', NOME: 'FUNCIONARIO', ESCSECAO_ID: 300,
+  ESCSECAO_NOME: 'Frente de Caixa',
   REVISAO: 12, OFICIALIZADA: 0, CABECALHOS: 1, DIAS: 29, FOLGAS: 8,
   DIAS_APOS_DEMISSAO: 0, TEM_CPF: 1 };
 
@@ -55,6 +56,7 @@ test('preview da loja 306 consulta ultima revisao ativa e apenas 01 a 29 de nove
   assert.equal(result.length, 1);
   assert.equal(result[0].BLOQUEIO, null);
   assert.equal(result[0].OFICIALIZADA, 0);
+  assert.equal(result[0].ESCSECAO_NOME, 'Frente de Caixa');
   const query = statements.find(({ sql }) => /group by p\.escfunc_id/i.test(sql));
   assert.equal(query.binds.inicio, '2026-11-01');
   assert.equal(query.binds.fim, '2026-11-29');
@@ -62,6 +64,7 @@ test('preview da loja 306 consulta ultima revisao ativa e apenas 01 a 29 de nove
   assert.match(query.sql, /p\.revisao = nvl\(/i);
   assert.match(query.sql, /px_d\.escprog_id = px\.escprog_id/i);
   assert.match(query.sql, /nvl\(px\.ativa, 1\) = 1/i);
+  assert.match(query.sql, /join sgn_esc_secao s on s\.escsecao_id = p\.escsecao_id/i);
   assert.doesNotMatch(query.sql, /p\.oficializada\s*=\s*1/i);
 });
 

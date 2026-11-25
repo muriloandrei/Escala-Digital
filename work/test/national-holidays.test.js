@@ -22,19 +22,19 @@ test('December operational period includes Christmas and New Year', () => {
     ]);
 });
 
-test('automatic generation adds FDO on a holiday without replacing two weekly rests', () => {
+test('automatic generation does not assign FDO on a holiday', () => {
   const draft = buildFuncionarioRascunho(funcionario, turno, '2026-10-01', '2026-10-05');
-  assert.equal(draft.dias.find((day) => day.data === '2026-10-12')?.programacao, 'FDO');
+  assert.notEqual(draft.dias.find((day) => day.data === '2026-10-12')?.programacao, 'FDO');
   assert.ok(draft.dias.filter((day) => day.data >= '2026-10-12' && day.data <= '2026-10-18' && day.programacao === 'F').length >= 2);
   const balanced = buildFuncionariosRascunhoBalanceado([funcionario], [turno], '2026-10-01', '2026-10-05');
-  assert.equal(balanced[0].dias.find((day) => day.data === '2026-10-12')?.programacao, 'FDO');
+  assert.notEqual(balanced[0].dias.find((day) => day.data === '2026-10-12')?.programacao, 'FDO');
   assert.ok(balanced[0].dias.filter((day) => day.data >= '2026-10-12' && day.data <= '2026-10-18' && day.programacao === 'F').length >= 2);
 });
 
-test('December generation marks Christmas and New Year as FDO', () => {
+test('December generation leaves Christmas and New Year on the ordinary work/rest pattern', () => {
   const draft = buildFuncionarioRascunho(funcionario, turno, '2026-12-01', '2026-11-30');
   for (const date of ['2026-12-25', '2027-01-01']) {
-    assert.equal(draft.dias.find((day) => day.data === date)?.programacao, 'FDO');
+    assert.notEqual(draft.dias.find((day) => day.data === date)?.programacao, 'FDO');
   }
 });
 

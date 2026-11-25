@@ -136,7 +136,9 @@ test('apprentice editor adjusts both times while preserving 05:15', async () => 
   assert.deepEqual(apprenticeHoursFromStart('09:00'), shifted);
   assert.deepEqual(autofillApprenticeHours('HR_SAI1', '14:15'), shifted);
   assert.equal(validateApprenticeHours(shifted), '');
-  assert.match(validateApprenticeHours({ ...shifted, HR_SAI1: '14:30' }), /05:15/);
+  assert.match(validateApprenticeHours({ ...shifted, HR_SAI1: '14:30' }), /horário selecionado/);
+  assert.deepEqual(apprenticeHoursFromStart('08:00', 240, 0),
+    { HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '', HR_SAI2: '' });
   assert.equal(autofillApprenticeHours('HR_ENT1', '20:00'), null);
 });
 

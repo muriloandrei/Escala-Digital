@@ -16,12 +16,19 @@ function clock(value: number) {
 export function autofillStandardHours(current: StandardHours, field: Field, value: string, workMinutes = 528, intervalMinutes = 70): StandardHours | null {
   const edited = minutes(value);
   if (edited === null) return null;
+  if (intervalMinutes === 0) {
+    if (workMinutes <= 0 || workMinutes > 360 || !['HR_ENT1', 'HR_SAI1'].includes(field)) return null;
+    const entry = field === 'HR_ENT1' ? edited : edited - workMinutes;
+    if (entry < 0 || entry + workMinutes >= 1440) return null;
+    return { HR_ENT1: clock(entry), HR_SAI1: clock(entry + workMinutes), HR_ENT2: '', HR_SAI2: '' };
+  }
   const entry = minutes(current.HR_ENT1);
   const breakStart = minutes(current.HR_SAI1);
-  const minFirst = workMinutes <= 360 ? 60 : 168;
+  const minFirst = Math.max(1, workMinutes - 360);
   const maxFirst = Math.min(360, workMinutes - 1);
   const morning = entry !== null && breakStart !== null
-    ? Math.min(maxFirst, Math.max(minFirst, (breakStart - entry + 1440) % 1440)) : workMinutes <= 360 ? 180 : 240;
+    ? Math.min(maxFirst, Math.max(minFirst, (breakStart - entry + 1440) % 1440))
+    : Math.min(maxFirst, Math.max(minFirst, Math.floor(workMinutes / 2)));
   let first: number;
   let firstPeriod: number;
   if (field === 'HR_ENT1') {

@@ -108,10 +108,10 @@ function getSemanasExcecaoPosFerias(dias = []) {
   return semanas;
 }
 
-function getHorarioDia(dia, apprentice = false) {
+function getHorarioDia(dia) {
   const values = [dia.hrEnt1 ?? dia.HR_ENT1, dia.hrSai1 ?? dia.HR_SAI1,
     dia.hrEnt2 ?? dia.HR_ENT2, dia.hrSai2 ?? dia.HR_SAI2];
-  if (apprentice || (!values[2] && !values[3])) {
+  if (!values[2] && !values[3]) {
     return { entrada: timeToMinutes(values[0]), saidaIntervalo: timeToMinutes(values[1]),
       retornoIntervalo: null, saida: null };
   }
@@ -126,8 +126,19 @@ function validarTurnoDia(funcionarioLabel, dia, { domingo6h = false, lojaId = nu
   const horario = getHorarioDia(dia);
   const errors = [];
 
-  if ([horario.entrada, horario.saidaIntervalo, horario.retornoIntervalo, horario.saida].some((value) => value === null)) {
+  if ([horario.entrada, horario.saidaIntervalo].some((value) => value === null)
+    || ((horario.retornoIntervalo === null) !== (horario.saida === null))) {
     errors.push(`${funcionarioLabel}: horario incompleto ou turno superior a 24h em ${data}.`);
+    return errors;
+  }
+  const single = horario.retornoIntervalo === null;
+  if (single) {
+    const jornada = (horario.saidaIntervalo - horario.entrada + 1440) % 1440;
+    const selected = Number(dia.jornadaMinutos ?? dia.JORNADA_MINUTOS) || jornada;
+    const allowed = allowedProfiles instanceof Set ? allowedProfiles : new Set();
+    if (jornada <= 0 || jornada > 360 || selected !== jornada || !allowed.has(`${selected}:0`)) {
+      errors.push(`${funcionarioLabel}: jornada sem intervalo invalida em ${data}.`);
+    }
     return errors;
   }
   if (!(horario.entrada < horario.saidaIntervalo && horario.saidaIntervalo < horario.retornoIntervalo && horario.retornoIntervalo < horario.saida)) {
@@ -144,7 +155,7 @@ function validarTurnoDia(funcionarioLabel, dia, { domingo6h = false, lojaId = nu
   const domingoObrigatorio = domingo6h && isSunday(data);
   const posto = Number(lojaId) >= 700 && Number(lojaId) <= 799;
   const jornadaSelecionada = Number(dia.jornadaMinutos ?? dia.JORNADA_MINUTOS) || (domingoObrigatorio ? 360 : 528);
-  const intervaloSelecionado = Number(dia.intervaloMinutos ?? dia.INTERVALO_MINUTOS) || 70;
+  const intervaloSelecionado = Number(dia.intervaloMinutos ?? dia.INTERVALO_MINUTOS ?? 70);
   const perfisPermitidos = allowedProfiles || new Set(posto
     ? ['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
     : ['528:70', '360:70', '300:15']);
@@ -171,24 +182,34 @@ function isFuncionarioAprendiz(funcionario = {}) {
   return /aprendiz/i.test(funcao) || funcionario.aprendiz === true || funcionario.APRENDIZ === true;
 }
 
-function validarTurnoAprendiz(funcionarioLabel, dia) {
+function validarTurnoAprendiz(funcionarioLabel, dia, { apprenticeProfiles = null } = {}) {
   if (isDescanso(dia)) return [];
   const data = formatDate(dia.data || dia.DT);
-  const horario = getHorarioDia(dia, true);
+  if (Boolean(dia.hrEnt2 ?? dia.HR_ENT2) !== Boolean(dia.hrSai2 ?? dia.HR_SAI2)) {
+    return [`${funcionarioLabel}: horario de aprendiz incompleto em ${data}.`];
+  }
+  const horario = getHorarioDia(dia);
   const errors = [];
   if (horario.entrada === null || horario.saidaIntervalo === null) {
     errors.push(`${funcionarioLabel}: horario de aprendiz incompleto em ${data}.`);
     return errors;
   }
-  if (!(horario.entrada < horario.saidaIntervalo)) {
+  const single = horario.retornoIntervalo === null && horario.saida === null;
+  if ((!single && (horario.retornoIntervalo === null || horario.saida === null))
+    || horario.entrada === horario.saidaIntervalo) {
     errors.push(`${funcionarioLabel}: horarios de aprendiz fora de ordem em ${data}.`);
     return errors;
   }
-  const jornada = horario.saidaIntervalo - horario.entrada;
-  if (jornada !== 315) {
-    errors.push(`${funcionarioLabel}: jornada de aprendiz deve ser 05:15 em ${data}. Atual: ${minutesToTime(jornada)}.`);
+  const first = single ? (horario.saidaIntervalo - horario.entrada + 1440) % 1440
+    : horario.saidaIntervalo - horario.entrada;
+  const second = single ? 0 : horario.saida - horario.retornoIntervalo;
+  const interval = single ? 0 : horario.retornoIntervalo - horario.saidaIntervalo;
+  const jornada = first + second;
+  if (first <= 0 || second < 0 || interval < 0 || (!single && (second === 0 || interval === 0))
+    || (apprenticeProfiles instanceof Set && !apprenticeProfiles.has(`${jornada}:${interval}`))) {
+    errors.push(`${funcionarioLabel}: jornada nao liberada para aprendizes em ${data}. Atual: ${minutesToTime(jornada)}.`);
   }
-  if (jornada > 360) {
+  if (first > 360 || second > 360) {
     errors.push(`${funcionarioLabel}: jornada continua maior que 06:00 em ${data}.`);
   }
   return errors;
@@ -264,7 +285,7 @@ function validarRegrasFuncionario(funcionario, onCritica, options = {}) {
     if (descanso && String(dia.programacao || dia.PROGRAMACAO || '').toUpperCase() !== 'FDO') {
       descansosPorSemana.set(weekKey, (descansosPorSemana.get(weekKey) || 0) + 1);
     }
-    (isFuncionarioAprendiz(funcionario) ? validarTurnoAprendiz(label, dia) : validarTurnoDia(label, dia, options))
+    (isFuncionarioAprendiz(funcionario) ? validarTurnoAprendiz(label, dia, options) : validarTurnoDia(label, dia, options))
       .forEach((mensagem) => addCritica(mensagem, [dataIso]));
 
     if (isFolgaSemanal(dia)) {
@@ -367,7 +388,7 @@ function getCriticasCoberturaMinima(funcionarios = [], percentualMinimo = 60, ho
 }
 
 function validarCriticasEscopo({ lojaId, mesRef, funcionarios, domingo6h = false, domingo1x1 = true,
-  domingoAnteriorPorFuncionario = null, apenasBloqueantes = false, hojeIso = null, allowedProfiles = null, periodo = null }) {
+  domingoAnteriorPorFuncionario = null, apenasBloqueantes = false, hojeIso = null, allowedProfiles = null, apprenticeProfiles = null, periodo = null }) {
   const funcionariosDoPeriodo = funcionarios.map((funcionario) => ({ ...funcionario,
     dias: diasNoPeriodo(funcionario.dias, periodo) }));
   const incompletos = funcionariosDoPeriodo.filter((funcionario) => !funcionario.dias.length)
@@ -378,19 +399,19 @@ function validarCriticasEscopo({ lojaId, mesRef, funcionarios, domingo6h = false
     for (const funcionario of funcionariosDoPeriodo.filter((item) => item.dias.length)) {
       validarRegrasFuncionario(funcionario, ({ mensagem, datas }) => {
         if (!datas?.length || datas.some((data) => data >= limite)) bloqueantes.push(mensagem);
-      }, { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, lojaId });
+      }, { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, apprenticeProfiles, lojaId });
     }
     return bloqueantes;
   }
   return [
     ...incompletos,
     ...validateEscalaPayload({ lojaId, mesRef, funcionarios: funcionariosDoPeriodo.filter((funcionario) => funcionario.dias.length) },
-      { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, lojaId })
+      { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, apprenticeProfiles, lojaId })
   ];
 }
 
 function agruparCriticasPorSubsecao({ escala, lojaId = null, domingo6h = false, domingo1x1 = true,
-  domingoAnteriorPorFuncionario = null, allowedProfiles = null, periodo = null }) {
+  domingoAnteriorPorFuncionario = null, allowedProfiles = null, apprenticeProfiles = null, periodo = null }) {
   const secoes = new Map((escala.secoes || []).map((secao) => [Number(secao.ESCSECAO_ID), secao]));
   const diasPorFuncionario = new Map();
   for (const dia of diasNoPeriodo(escala.dias, periodo)) {
@@ -432,7 +453,7 @@ function agruparCriticasPorSubsecao({ escala, lojaId = null, domingo6h = false, 
       }
       criticas.push(...validarRegrasFuncionario(funcionario, ({ mensagem, datas }) => {
         marcadores.push({ escfuncId: funcionario.escfuncId, datas, mensagem });
-      }, { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, lojaId }));
+      }, { domingo6h, domingo1x1, domingoAnteriorPorFuncionario, allowedProfiles, apprenticeProfiles, lojaId }));
     }
     return { ...grupo, criticas, marcadores };
   }).filter((grupo) => grupo.criticas.length > 0);

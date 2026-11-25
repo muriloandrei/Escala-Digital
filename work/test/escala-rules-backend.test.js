@@ -448,15 +448,18 @@ test('backend accepts 5h with 15m interval and rejects a wrong interval', () => 
   assert.equal(validateEscalaPayload(buildPayload([invalid])).some((error) => error.includes('intervalo')), true);
 });
 
-test('backend validates apprentice with fixed 05:15 first period only', () => {
+test('backend validates apprentice against configured profiles', () => {
   const errors = validateEscalaPayload(buildPayload([
-    trabalho('2026-09-01', { hrSai1: '13:15', hrEnt2: '00:00', hrSai2: '00:00' })
-  ], { funcao: 'JOVEM APRENDIZ', aprendiz: true }));
+    trabalho('2026-09-01', { hrSai1: '12:00', hrEnt2: null, hrSai2: null, jornadaMinutos: 240, intervaloMinutos: 0 })
+  ], { funcao: 'JOVEM APRENDIZ', aprendiz: true }), { apprenticeProfiles: new Set(['240:0']) });
 
   assert.deepEqual(errors, []);
   assert.deepEqual(validateEscalaPayload(buildPayload([
-    trabalho('2026-09-01', { hrEnt1: '09:00', hrSai1: '14:15', hrEnt2: null, hrSai2: null })
-  ], { funcao: 'JOVEM APRENDIZ', aprendiz: true })), []);
+    trabalho('2026-09-01', { hrEnt1: '09:00', hrSai1: '13:00', hrEnt2: null, hrSai2: null, jornadaMinutos: 240, intervaloMinutos: 0 })
+  ], { funcao: 'JOVEM APRENDIZ', aprendiz: true }), { apprenticeProfiles: new Set(['240:0']) }), []);
+  assert.ok(validateEscalaPayload(buildPayload([
+    trabalho('2026-09-01', { hrEnt1: '09:00', hrSai1: '13:00', hrEnt2: null, hrSai2: null })
+  ], { funcao: 'JOVEM APRENDIZ', aprendiz: true }), { apprenticeProfiles: new Set(['315:0']) }).length);
 });
 
 test('backend rejects continuous period greater than 06:00', () => {

@@ -119,6 +119,7 @@ function normalizeHorarioPadrao(row) {
     HR_SAI2: pick(row, 'HR_SAI2', 'hr_sai2'),
     JORNADA_MINUTOS: pick(row, 'JORNADA_MINUTOS', 'jornada_minutos'),
     INTERVALO_MINUTOS: pick(row, 'INTERVALO_MINUTOS', 'intervalo_minutos'),
+    LIBERAR_HORARIO_APRENDIZ: Number(pick(row, 'LIBERAR_HORARIO_APRENDIZ', 'liberar_horario_aprendiz') || 0) === 1,
     STATUS: pick(row, 'STATUS', 'status'),
     DT_HR_INCL: pick(row, 'DT_HR_INCL', 'dt_hr_incl')
   };
@@ -1034,7 +1035,7 @@ async function listHorariosPadrao({ includeInactive = false, lojaId = null } = {
     try {
       const whereSql = includeInactive ? '' : "where status = 'A'";
       const result = await connection.execute(
-        `select eschorpad_id, descr, hr_ent1, hr_sai1, hr_ent2, hr_sai2, jornada_minutos, intervalo_minutos, status, dt_hr_incl
+        `select eschorpad_id, descr, hr_ent1, hr_sai1, hr_ent2, hr_sai2, jornada_minutos, intervalo_minutos, liberar_horario_aprendiz, status, dt_hr_incl
          from sgn_esc_horario_padrao
          ${whereSql}
          order by status, descr`,
@@ -1061,13 +1062,14 @@ async function listHorariosPadrao({ includeInactive = false, lojaId = null } = {
   });
 }
 
-async function getAllowedProfileKeys(lojaId, connection = null) {
+async function getAllowedProfileKeys(lojaId, connection = null, { apprentice = false } = {}) {
   const run = async (db) => {
     const result = await db.execute(
       `select distinct h.jornada_minutos, h.intervalo_minutos
          from sgn_esc_horario_padrao h
          join sgn_esc_horpad_loja hl on hl.eschorpad_id = h.eschorpad_id
-        where hl.loja = :lojaId and h.status = 'A'`,
+        where hl.loja = :lojaId and h.status = 'A'
+          ${apprentice ? 'and h.liberar_horario_aprendiz = 1' : ''}`,
       { lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return new Set((result.rows || []).map((row) =>
@@ -1091,15 +1093,16 @@ async function createHorarioPadrao(data) {
     try {
       const result = await connection.execute(
       `insert into sgn_esc_horario_padrao (
-         eschorpad_id, descr, jornada_minutos, intervalo_minutos, status, dt_hr_incl
+         eschorpad_id, descr, jornada_minutos, intervalo_minutos, liberar_horario_aprendiz, status, dt_hr_incl
        ) values (
-         sgn_esc_horario_padrao_seq.nextval, :descr, :jornadaMinutos, :intervaloMinutos, :status, sysdate
+         sgn_esc_horario_padrao_seq.nextval, :descr, :jornadaMinutos, :intervaloMinutos, :apprentice, :status, sysdate
        )
        returning eschorpad_id into :id`,
       {
         descr: data.DESCR,
         jornadaMinutos: data.JORNADA_MINUTOS,
         intervaloMinutos: data.INTERVALO_MINUTOS,
+        apprentice: data.LIBERAR_HORARIO_APRENDIZ ? 1 : 0,
         status: data.STATUS || 'A',
         id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
       },
@@ -1115,7 +1118,7 @@ async function createHorarioPadrao(data) {
 
 async function updateHorarioPadrao(id, data) {
   return withConnection(async (connection) => {
-    const allowed = ['DESCR', 'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS'];
+    const allowed = ['DESCR', 'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS', 'LIBERAR_HORARIO_APRENDIZ'];
     const updates = Object.fromEntries(Object.entries(data || {}).filter(([field]) => allowed.includes(field)));
     if (!Object.keys(updates).length && !Array.isArray(data.LOJAS)) return null;
     try {
@@ -1128,7 +1131,8 @@ async function updateHorarioPadrao(id, data) {
         const assignments = Object.keys(updates).map((field) => `${field.toLowerCase()} = :${field}`).join(', ');
         await connection.execute(
           `update sgn_esc_horario_padrao set ${assignments} where eschorpad_id = :id`,
-          { ...updates, id }, { autoCommit: false }
+          { ...updates, ...(Object.hasOwn(updates, 'LIBERAR_HORARIO_APRENDIZ')
+            ? { LIBERAR_HORARIO_APRENDIZ: updates.LIBERAR_HORARIO_APRENDIZ ? 1 : 0 } : {}), id }, { autoCommit: false }
         );
       }
       if (Array.isArray(data.LOJAS)) await replaceHorarioLojas(connection, id, data.LOJAS);

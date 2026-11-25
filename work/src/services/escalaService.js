@@ -2767,6 +2767,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
     { lojaId, ...lockBinds }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
   const funcoes = new Map((funcoesResult.rows || []).map((row) => [Number(pick(row, 'ESCFUNC_ID', 'escfunc_id')), pick(row, 'FUNCAO_DESCR', 'funcao_descr')]));
+  const apprenticeProfiles = await catalogService.getAllowedProfileKeys(lojaId, connection, { apprentice: true });
   const saved = [];
   for (const funcionario of funcionarios) {
     const escfuncId = Number(funcionario.escfuncId || funcionario.ESCFUNC_ID);
@@ -2784,7 +2785,7 @@ async function saveEscalasFuncionariosRevisionComConnection(connection, {
         const errors = validateApprenticeShift({
           HR_ENT1: alteracao.novo.hrEnt1, HR_SAI1: alteracao.novo.hrSai1,
           HR_ENT2: alteracao.novo.hrEnt2, HR_SAI2: alteracao.novo.hrSai2
-        });
+        }, apprenticeProfiles);
         if (errors.length) {
           const error = new Error(`${alteracao.data}: ${errors[0]}`);
           error.statusCode = 422;
@@ -3556,6 +3557,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
       const domingo6h = Number(domingoConfig.rows?.[0]?.DOMINGO_6H_HABILITADO) === 1;
       const domingo1x1 = Number(domingoConfig.rows?.[0]?.DOMINGO_1X1_HABILITADO) === 1;
       const allowedProfiles = await catalogService.getAllowedProfileKeys(lojaId, connection);
+      const apprenticeProfiles = await catalogService.getAllowedProfileKeys(lojaId, connection, { apprentice: true });
       const regimes = Number(lojaId) >= 700 && Number(lojaId) <= 799
         ? await require('./workRegimeService').listEffective(connection, { lojaId, mesRef }) : new Map();
       for (const funcionario of funcionarios.values()) {
@@ -3571,7 +3573,7 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
             { lojaId, employeeIds: [...funcionarios.keys()] }));
       }
       const criticas = validarCriticasEscopo({ lojaId, mesRef, funcionarios: [...funcionarios.values()],
-        domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario,
+        domingo6h, domingo1x1, allowedProfiles, apprenticeProfiles, domingoAnteriorPorFuncionario,
         periodo: periodoOficializacao, apenasBloqueantes: true, hojeIso: getHojeIso() });
       if (criticas.length) {
         const error = new Error('Resolva as criticas da secao/subsecao antes de oficializar.');

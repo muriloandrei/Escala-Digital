@@ -30,7 +30,7 @@ function loadService() {
         createOperationId: () => 'retroactive-test',
         appendEvent: async () => { operations.push('event'); }
       };
-      if (name === './catalogService') return {};
+      if (name === './catalogService') return { getAllowedProfileKeys: async () => new Set(['528:70']) };
       if (name === '../domain/operationalPeriod') return require('../src/domain/operationalPeriod');
       if (name === '../domain/officializationDates') return require('../src/domain/officializationDates');
       if (name === '../domain/fixedCarry') return require('../src/domain/fixedCarry');

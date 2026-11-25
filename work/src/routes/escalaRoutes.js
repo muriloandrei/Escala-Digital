@@ -28,11 +28,11 @@ const { isEditableMonth } = require('../domain/editableMonth');
 const router = express.Router();
 
 async function getRuleOptions(lojaId) {
-  const [domingo6h, domingo1x1, allowedProfiles] = await Promise.all([
+  const [domingo6h, domingo1x1, allowedProfiles, apprenticeProfiles] = await Promise.all([
     sundayShiftService.getStoreEnabled(lojaId), sundayAlternationService.getStoreEnabled(lojaId),
-    catalogService.getAllowedProfileKeys(lojaId)
+    catalogService.getAllowedProfileKeys(lojaId), catalogService.getAllowedProfileKeys(lojaId, null, { apprentice: true })
   ]);
-  return { domingo6h, domingo1x1, allowedProfiles };
+  return { domingo6h, domingo1x1, allowedProfiles, apprenticeProfiles };
 }
 
 function requireRhReview(req, res, next) {
@@ -66,7 +66,7 @@ const saveSchema = z.object({
     dias: z.array(z.object({
       data: z.string().min(10).max(10),
       jornadaMinutos: z.number().int().positive().nullable().optional(),
-      intervaloMinutos: z.number().int().positive().nullable().optional(),
+      intervaloMinutos: z.number().int().min(0).nullable().optional(),
       hrEnt1: z.string().max(5).nullable().optional(),
       hrSai1: z.string().max(5).nullable().optional(),
       hrEnt2: z.string().max(5).nullable().optional(),
@@ -97,20 +97,20 @@ const horarioFuncionarioSchema = z.object({
   escfuncId: z.number().int().positive(),
   aplicarNaEscala: z.boolean().optional().default(true),
   jornadaMinutos: z.number().int().positive().nullable().optional(),
-  intervaloMinutos: z.number().int().positive().nullable().optional(),
+  intervaloMinutos: z.number().int().min(0).nullable().optional(),
   HR_ENT1: z.string().regex(/^\d{2}:\d{2}$/),
   HR_SAI1: z.string().regex(/^\d{2}:\d{2}$/),
   HR_ENT2: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
   HR_SAI2: z.string().regex(/^\d{2}:\d{2}$/).nullable()
 }).strict();
-function validarHorarioBaseSelecionado(payload, funcionario, { domingo6h = false, allowedProfiles = null } = {}) {
-  if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) return validateApprenticeShift(payload);
+function validarHorarioBaseSelecionado(payload, funcionario, { domingo6h = false, allowedProfiles = null, apprenticeProfiles = null } = {}) {
+  if (/APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''))) return validateApprenticeShift(payload, apprenticeProfiles);
   const workMinutes = Number(payload.jornadaMinutos) || (domingo6h ? 360 : 528);
-  const intervalMinutes = Number(payload.intervaloMinutos) || 70;
+  const intervalMinutes = payload.intervaloMinutos == null ? 70 : Number(payload.intervaloMinutos);
   if (domingo6h && workMinutes !== 360) return ['Jornada de domingo deve ser 06:00 nesta loja.'];
   if (allowedProfiles && !allowedProfiles.has(`${workMinutes}:${intervalMinutes}`)) return ['Jornada nao atribuida a esta loja.'];
   return validateStandardShift(payload, { workMinutes, intervalMinutes,
-    exactInterval: domingo6h || Boolean(payload.jornadaMinutos), allowProfiles: false });
+    exactInterval: domingo6h || Boolean(payload.jornadaMinutos), allowProfiles: false, profileKeys: allowedProfiles });
 }
 const fixoEscalaSchema = z.object({
   lojaId: z.number().int().positive(),
@@ -120,7 +120,7 @@ const fixoEscalaSchema = z.object({
   DT: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   PROGRAMACAO: z.string().max(3).optional().default('TRB'),
   jornadaMinutos: z.number().int().positive().nullable().optional(),
-  intervaloMinutos: z.number().int().positive().nullable().optional(),
+  intervaloMinutos: z.number().int().min(0).nullable().optional(),
   HR_ENT1: z.string().max(5).nullable().optional(),
   HR_SAI1: z.string().max(5).nullable().optional(),
   HR_ENT2: z.string().max(5).nullable().optional(),
@@ -247,7 +247,7 @@ router.get('/regras', requirePermission('regras', 'visualizar'), async (req, res
   res.json({ regras: REGRAS_VIGENTES });
 });
 
-router.post('/liberar-mensal', requirePermission('escalas', 'criar'), async (req, res, next) => {
+router.post('/liberar-mensal', requireAdmin, requirePermission('escalas', 'criar'), async (req, res, next) => {
   try {
     const payload = z.object({
       mesRef: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -336,13 +336,13 @@ router.post('/fixos', requirePermission('escalas', 'editar'), resolveLojaRequest
     }
     if (String(payload.PROGRAMACAO).toUpperCase() === 'TRB') {
       const aprendiz = /APRENDIZ/i.test(String(funcionario.FUNCAO_DESCR || ''));
-      const { domingo6h, allowedProfiles } = await getRuleOptions(payload.lojaId);
+      const { domingo6h, allowedProfiles, apprenticeProfiles } = await getRuleOptions(payload.lojaId);
       const sunday = new Date(`${payload.DT}T12:00:00`).getDay() === 0;
       if (is12x36 && !isDutyDay(funcionario.DT_ANCORA_12X36, payload.DT)) {
         return res.status(422).json({ error: 'Descanso 12x36 obrigatorio neste dia.' });
       }
       const errors = is12x36 ? validate12x36Shift(payload) : validarHorarioBaseSelecionado(payload, funcionario,
-        { domingo6h: !aprendiz && domingo6h && sunday, allowedProfiles });
+        { domingo6h: !aprendiz && domingo6h && sunday, allowedProfiles, apprenticeProfiles });
       if (errors.length) return res.status(422).json({ error: 'Horario fixo invalido.', details: errors });
     }
     const fixo = await escalaService.saveFixoEscala({
@@ -711,14 +711,14 @@ router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaR
         regimeEscala: funcionario.REGIME_ESCALA, dtAncora12x36: funcionario.DT_ANCORA_12X36,
         dias: (escala.dias || []).filter((dia) => Number(dia.ESCFUNC_ID) === Number(funcionario.ESCFUNC_ID))
       }));
-    const { domingo6h, domingo1x1, allowedProfiles } = await getRuleOptions(query.lojaId);
+    const { domingo6h, domingo1x1, allowedProfiles, apprenticeProfiles } = await getRuleOptions(query.lojaId);
     const domingoAnterior = await previousSundayService.getPriorSunday({ lojaId: query.lojaId, mesRef: query.mesRef,
       employeeIds: funcionarios.map((person) => person.escfuncId) });
     const domingoAnteriorPorFuncionario = previousSundayService.priorSundayByEmployee(domingoAnterior);
     const periodo = getOperationalPeriodIso(query.mesRef);
     const criticas = validarCriticasEscopo({ lojaId: query.lojaId, mesRef: query.mesRef, funcionarios,
-      domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario, periodo });
-    const grupos = agruparCriticasPorSubsecao({ escala, lojaId: query.lojaId, domingo6h, domingo1x1, allowedProfiles, domingoAnteriorPorFuncionario, periodo })
+      domingo6h, domingo1x1, allowedProfiles, apprenticeProfiles, domingoAnteriorPorFuncionario, periodo });
+    const grupos = agruparCriticasPorSubsecao({ escala, lojaId: query.lojaId, domingo6h, domingo1x1, allowedProfiles, apprenticeProfiles, domingoAnteriorPorFuncionario, periodo })
       .filter((grupo) => Number(grupo.escsecaoId) === query.escsecaoId);
     return res.json({ criticas, grupos });
   } catch (error) {
@@ -1024,7 +1024,9 @@ router.post('/funcionarios/revisao', requirePermission('escalas-funcionarios', '
       }
       const quickError = validateQuickRestWorkEdit(payload.funcionarios[0], anteriores[0].dias,
         { allowShiftChange: payload.edicaoPontual === true, domingo6h: await sundayShiftService.getStoreEnabled(payload.lojaId),
-          lojaId: payload.lojaId });
+          lojaId: payload.lojaId,
+          apprenticeProfiles: await catalogService.getAllowedProfileKeys(payload.lojaId, null, { apprentice: true }),
+          allowedProfiles: await catalogService.getAllowedProfileKeys(payload.lojaId) });
       if (quickError) return res.status(422).json({ error: quickError });
       const alteracao = buildDiaAlteracoes(anteriores[0].dias, payload.funcionarios[0].dias)[0];
       const fixos = await escalaService.listFixosEscala({ lojaId: payload.lojaId, mesRef: payload.mesRef,

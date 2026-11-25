@@ -38,10 +38,20 @@ test('perfis registrados aceitam 6h/1h10 e 5h/15m sem liberar outras jornadas', 
   assert.match(validateStandardShift({ ...six, HR_SAI2: '16:10' }, { allowProfiles: true }).join(' '), /Jornada total/);
 });
 
-test('apprentice shift can move while keeping exactly 05:15 without a second period', () => {
-  assert.deepEqual(validateApprenticeShift({ HR_ENT1: '09:00', HR_SAI1: '14:15', HR_ENT2: null, HR_SAI2: null }), []);
-  assert.match(validateApprenticeShift({ HR_ENT1: '09:00', HR_SAI1: '14:16', HR_ENT2: null, HR_SAI2: null }).join(' '), /05:15/);
-  assert.match(validateApprenticeShift({ HR_ENT1: '09:00', HR_SAI1: '14:15', HR_ENT2: '15:00', HR_SAI2: null }).join(' '), /segundo periodo/);
+test('apprentice shift accepts only enabled store profiles', () => {
+  const allowed = new Set(['240:0', '440:70']);
+  assert.deepEqual(validateApprenticeShift({ HR_ENT1: '09:00', HR_SAI1: '13:00', HR_ENT2: null, HR_SAI2: null }, allowed), []);
+  assert.match(validateApprenticeShift({ HR_ENT1: '09:00', HR_SAI1: '13:01', HR_ENT2: null, HR_SAI2: null }, allowed).join(' '), /nao liberada/);
+  assert.match(validateApprenticeShift({ HR_ENT1: '09:00', HR_SAI1: '13:00', HR_ENT2: '15:00', HR_SAI2: null }, allowed).join(' '), /incompleto/);
+  assert.deepEqual(validateApprenticeShift({ HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '16:30' }, allowed), []);
+});
+
+test('parameterized single-period profiles accept zero interval', () => {
+  const fourHours = { HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: null, HR_SAI2: null };
+  assert.deepEqual(validateStandardShift(fourHours, { workMinutes: 240, intervalMinutes: 0,
+    profileKeys: new Set(['240:0']) }), []);
+  assert.match(validateStandardShift(fourHours, { workMinutes: 240, intervalMinutes: 0,
+    profileKeys: new Set(['180:0']) }).join(' '), /nao cadastrada/);
 });
 
 test('12x36 shift spans twelve hours with an internal break, including overnight', () => {

@@ -804,7 +804,7 @@ async function listarCandidatosReenvioRm({ lojaId, mesRef, escfuncId = null }) {
     const filtroFuncionario = escfuncId ? 'and p.escfunc_id = :escfuncId' : '';
     const result = await connection.execute(
       `select p.escfunc_id, max(f.chapa) chapa, max(f.nome) nome,
-              max(p.escsecao_id) escsecao_id, max(p.revisao) revisao,
+              max(p.escsecao_id) escsecao_id, max(s.descr) escsecao_nome, max(p.revisao) revisao,
               max(nvl(p.oficializada, 0)) oficializada,
               count(distinct p.escprog_id) cabecalhos,
               count(distinct d.escprogdia_id) dias,
@@ -813,6 +813,7 @@ async function listarCandidatosReenvioRm({ lojaId, mesRef, escfuncId = null }) {
               max(case when ${cpf} is not null then 1 else 0 end) tem_cpf
          from sgn_esc_prog p
          join sgn_esc_funcionario f on f.escfunc_id = p.escfunc_id
+         join sgn_esc_secao s on s.escsecao_id = p.escsecao_id
          left join sgn_esc_prog_dia d on d.escprog_id = p.escprog_id
            and d.dt >= to_date(:inicio, 'YYYY-MM-DD') and d.dt < to_date(:fim, 'YYYY-MM-DD') + 1
         where p.loja = :lojaId and p.mes_ref = to_date(:mesRef, 'YYYY-MM-DD')

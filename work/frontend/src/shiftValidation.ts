@@ -19,6 +19,13 @@ export function unfoldShiftMinutes(values: string[]): number[] | null {
 }
 
 export function validateStandardHours(hours: StandardHours, workMinutes = 528, intervalMinutes = 70) {
+  if (intervalMinutes === 0) {
+    const entry = minutes(hours.HR_ENT1);
+    const exit = minutes(hours.HR_SAI1);
+    if (entry < 0 || exit < 0 || hours.HR_ENT2 || hours.HR_SAI2) return 'Informe apenas entrada e saída para jornada sem intervalo.';
+    if ((exit - entry + 1440) % 1440 !== workMinutes || workMinutes > 360) return 'A jornada sem intervalo não corresponde ao horário selecionado.';
+    return '';
+  }
   const values = [hours.HR_ENT1, hours.HR_SAI1, hours.HR_ENT2, hours.HR_SAI2];
   if (values.some((value) => minutes(value) < 0)) return 'Informe os quatro horários no formato HH:MM.';
   const timeline = unfoldShiftMinutes(values);

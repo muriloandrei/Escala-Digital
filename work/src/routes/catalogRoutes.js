@@ -88,13 +88,17 @@ const tipoDescansoSchema = z.object({
 
 const horarioPadraoSchema = z.object({
   DESCR: z.string().trim().min(1).max(100),
-  JORNADA_MINUTOS: z.number().int().positive().max(1440),
-  INTERVALO_MINUTOS: z.number().int().positive().max(480),
+  JORNADA_MINUTOS: z.number().int().positive().max(720),
+  INTERVALO_MINUTOS: z.number().int().min(0).max(480),
+  LIBERAR_HORARIO_APRENDIZ: z.boolean().optional(),
   LOJAS: z.array(z.number().int().positive()).max(1000).refine((lojas) => new Set(lojas).size === lojas.length).optional(),
   STATUS: z.enum(['A', 'I']).optional()
 }).strict();
 
-const jornadasPermitidas = new Set(['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']);
+function jornadaValida(data) {
+  return data.JORNADA_MINUTOS + data.INTERVALO_MINUTOS < 1440
+    && (data.INTERVALO_MINUTOS !== 0 || data.JORNADA_MINUTOS <= 360);
+}
 
 async function assertHorarioLojasValidas(lojas) {
   if (!lojas) return;
@@ -204,7 +208,7 @@ router.get('/horarios-padrao', async (req, res, next) => {
 router.post('/horarios-padrao', requirePermission('horarios-padrao', 'criar'), async (req, res, next) => {
   try {
     const data = horarioPadraoSchema.parse(req.body);
-    if (!jornadasPermitidas.has(`${data.JORNADA_MINUTOS}:${data.INTERVALO_MINUTOS}`)) {
+    if (!jornadaValida(data)) {
       return res.status(422).json({ error: 'Duracao de jornada ou intervalo invalida.' });
     }
     await assertHorarioLojasValidas(data.LOJAS);
@@ -227,7 +231,7 @@ router.patch('/horarios-padrao/:horarioId', requirePermission('horarios-padrao',
         .find((item) => Number(item.ESCHORPAD_ID) === Number(req.params.horarioId));
       if (!current) return res.status(404).json({ error: 'Horario padrao nao encontrado.' });
       const merged = { ...current, ...data };
-      if (!jornadasPermitidas.has(`${merged.JORNADA_MINUTOS}:${merged.INTERVALO_MINUTOS}`)) {
+      if (!jornadaValida(merged)) {
         return res.status(422).json({ error: 'Duracao de jornada ou intervalo invalida.' });
       }
     }

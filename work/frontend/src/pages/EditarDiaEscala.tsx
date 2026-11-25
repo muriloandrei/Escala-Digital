@@ -5,7 +5,7 @@ import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { validate12x36Hours, validateStandardHours } from '../shiftValidation';
 import { isDutyDay12x36 } from '../workRegime';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
-import { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
+import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
 import { toPayloadDay, type PayloadDay } from '../scheduleReadback';
 
 export { toPayloadDay } from '../scheduleReadback';
@@ -55,13 +55,19 @@ export function EditarDiaEscala({
   const reference = days.find((item) => !isRest(item) && item.HR_ENT1) || day;
   const [mode, setMode] = useState<'TRB' | 'F' | 'FDO'>(String(day.PROGRAMACAO).toUpperCase() === 'FDO' ? 'FDO' : isRest(day) ? 'F' : 'TRB');
   const domingo6h = !plantao12x36 && domingo6hHabilitado && new Date(`${dateOnly(day.DT)}T12:00:00`).getDay() === 0 && !apprentice;
-  const [profile, setProfile] = useState({ work: Number(day.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
-    interval: Number(day.INTERVALO_MINUTOS) || (plantao12x36 ? 60 : 70) });
+  const apprenticeProfile = apprentice ? apprenticeProfileFromHours(isRest(day) ? reference : day) : null;
+  const [profile, setProfile] = useState({ work: Number(day.JORNADA_MINUTOS || reference.JORNADA_MINUTOS) || apprenticeProfile?.work || (apprentice ? 315 : plantao12x36 ? 660 : domingo6h ? 360 : 528),
+    interval: Number(day.INTERVALO_MINUTOS ?? reference.INTERVALO_MINUTOS ?? apprenticeProfile?.interval ?? (apprentice ? 0 : plantao12x36 ? 60 : 70)) });
   const [shift, setShift] = useState<Shift>(() => {
     if (apprentice) {
-      const hours = apprenticeHoursFromStart((isRest(day) ? reference.HR_ENT1 : day.HR_ENT1) || employee.HR_ENT1 || '08:00')
-        || apprenticeHoursFromStart('08:00')!;
-      return { hrEnt1: hours.HR_ENT1, hrSai1: hours.HR_SAI1, hrEnt2: '', hrSai2: '' };
+      const source = isRest(day) ? reference : day;
+      if (source.HR_ENT1 && source.HR_SAI1 && source.PROGRAMACAO === 'TRB') {
+        return { hrEnt1: source.HR_ENT1, hrSai1: source.HR_SAI1,
+          hrEnt2: source.HR_ENT2 || '', hrSai2: source.HR_SAI2 || '' };
+      }
+      const hours = apprenticeHoursFromStart(employee.HR_ENT1 || '08:00', profile.work, profile.interval)
+        || apprenticeHoursFromStart('08:00', profile.work, profile.interval)!;
+      return { hrEnt1: hours.HR_ENT1, hrSai1: hours.HR_SAI1, hrEnt2: hours.HR_ENT2, hrSai2: hours.HR_SAI2 };
     }
     const base = {
       hrEnt1: (isRest(day) ? employee.HR_ENT1 || reference.HR_ENT1 : day.HR_ENT1) || (plantao12x36 ? '07:00' : '08:00'),
@@ -90,10 +96,11 @@ export function EditarDiaEscala({
 
   function setHour(key: keyof Shift, value: string) {
     const field = ({ hrEnt1: 'HR_ENT1', hrSai1: 'HR_SAI1', hrEnt2: 'HR_ENT2', hrSai2: 'HR_SAI2' } as const)[key];
-    const next = apprentice ? autofillApprenticeHours(field as 'HR_ENT1' | 'HR_SAI1', value)
+    const current = { HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1, HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 };
+    const next = apprentice ? autofillApprenticeHours(field, value, profile.work, profile.interval, current)
       : autofillStandardHours({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
         HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, field, value, profile.work, profile.interval);
-    if (!next) { setError(apprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível manter a jornada e o intervalo selecionados.'); return; }
+    if (!next) { setError('Não foi possível manter a jornada e o intervalo selecionados.'); return; }
     setShift({ hrEnt1: next.HR_ENT1, hrSai1: next.HR_SAI1, hrEnt2: next.HR_ENT2, hrSai2: next.HR_SAI2 });
     setError('');
   }
@@ -103,7 +110,7 @@ export function EditarDiaEscala({
     if (!editable || busy || uncertain) return;
     if (mode === 'TRB') {
       const hours = { HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1, HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 };
-      const invalid = apprentice ? validateApprenticeHours(hours) : plantao12x36
+      const invalid = apprentice ? validateApprenticeHours(hours, profile.work, profile.interval) : plantao12x36
         ? validate12x36Hours(hours) : validateStandardHours(hours, profile.work, profile.interval);
       if (invalid) { setError(invalid); return; }
     }
@@ -111,12 +118,12 @@ export function EditarDiaEscala({
     const submitted = (key: keyof Shift) => (apprentice ? shift[key] : String(form.get(key) || ''));
     const changed: PayloadDay = {
       data: date,
-      jornadaMinutos: mode === 'TRB' && !apprentice && !plantao12x36 ? profile.work : null,
-      intervaloMinutos: mode === 'TRB' && !apprentice && !plantao12x36 ? profile.interval : null,
+      jornadaMinutos: mode === 'TRB' && !plantao12x36 ? profile.work : null,
+      intervaloMinutos: mode === 'TRB' && !plantao12x36 ? profile.interval : null,
       hrEnt1: mode !== 'TRB' ? null : submitted('hrEnt1') || null,
       hrSai1: mode !== 'TRB' ? null : submitted('hrSai1') || null,
-      hrEnt2: mode !== 'TRB' || apprentice ? null : submitted('hrEnt2') || null,
-      hrSai2: mode !== 'TRB' || apprentice ? null : submitted('hrSai2') || null,
+      hrEnt2: mode !== 'TRB' ? null : submitted('hrEnt2') || null,
+      hrSai2: mode !== 'TRB' ? null : submitted('hrSai2') || null,
       programacao: mode,
       justificativa: String(form.get('justificativa') || '').trim() || null,
     };
@@ -258,7 +265,7 @@ export function EditarDiaEscala({
             </div>
             {mode === 'TRB' && (
               <><div className="day-editor-times">
-              {!apprentice && !plantao12x36 && <ShiftProfileSelect value={profile} sundayOnly={domingo6h} lojaId={lojaId} onSelect={(item) => {
+              {!plantao12x36 && <ShiftProfileSelect value={profile} sundayOnly={domingo6h} apprentice={apprentice} lojaId={lojaId} onSelect={(item) => {
                   const next = applyShiftProfile({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
                     HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
                   if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
@@ -267,7 +274,7 @@ export function EditarDiaEscala({
                   setError('');
                 }} />}
                 {(
-                  (apprentice ? [
+                  (apprentice && profile.interval === 0 ? [
                     ['hrEnt1', 'Entrada'],
                     ['hrSai1', 'Saída'],
                   ] : [

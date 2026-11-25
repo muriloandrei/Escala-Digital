@@ -5,16 +5,18 @@ export type ShiftProfile = {
   DESCR: string;
   JORNADA_MINUTOS: number;
   INTERVALO_MINUTOS: number;
+  LIBERAR_HORARIO_APRENDIZ?: boolean;
 };
 
 function duration(minutes: number) {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
-export function ShiftProfileSelect({ onSelect, disabled = false, sundayOnly = false, lojaId, value }: {
+export function ShiftProfileSelect({ onSelect, disabled = false, sundayOnly = false, apprentice = false, lojaId, value }: {
   onSelect: (profile: ShiftProfile) => void;
   disabled?: boolean;
   sundayOnly?: boolean;
+  apprentice?: boolean;
   lojaId: string | number;
   value?: { work: number; interval: number };
 }) {
@@ -30,7 +32,7 @@ export function ShiftProfileSelect({ onSelect, disabled = false, sundayOnly = fa
     return () => controller.abort();
   }, [lojaId]);
 
-  const available = profiles.filter((item, index, all) =>
+  const available = profiles.filter((item) => !apprentice || item.LIBERAR_HORARIO_APRENDIZ).filter((item, index, all) =>
     all.findIndex((other) => other.JORNADA_MINUTOS === item.JORNADA_MINUTOS && other.INTERVALO_MINUTOS === item.INTERVALO_MINUTOS) === index)
     .filter((item) => !sundayOnly || item.JORNADA_MINUTOS === 360);
   const active = value ? `${value.work}:${value.interval}` : selected;

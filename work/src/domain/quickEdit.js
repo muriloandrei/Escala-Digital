@@ -2,7 +2,7 @@ const { buildDiaAlteracoes } = require('../utils/scheduleDiff');
 const { validateStandardShift, validateApprenticeShift, validate12x36Shift } = require('./shiftValidation');
 const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('./workRegime');
 
-function validateQuickRestWorkEdit(funcionario, diasAnteriores = [], { allowShiftChange = false, domingo6h = false, lojaId = null } = {}) {
+function validateQuickRestWorkEdit(funcionario, diasAnteriores = [], { allowShiftChange = false, domingo6h = false, lojaId = null, apprenticeProfiles = null, allowedProfiles = null } = {}) {
   const alteracoes = buildDiaAlteracoes(diasAnteriores, funcionario.dias || []);
   if (alteracoes.length !== 1 || !alteracoes[0].anterior) {
     return 'A edicao rapida deve alterar exatamente um dia existente.';
@@ -30,13 +30,14 @@ function validateQuickRestWorkEdit(funcionario, diasAnteriores = [], { allowShif
   }
   if (/APRENDIZ/i.test(String(funcionario.funcao || funcionario.FUNCAO_DESCR || '')) || funcionario.aprendiz) {
     return validateApprenticeShift({ HR_ENT1: novo.hrEnt1, HR_SAI1: novo.hrSai1,
-      HR_ENT2: novo.hrEnt2, HR_SAI2: novo.hrSai2 })[0] || '';
+      HR_ENT2: novo.hrEnt2, HR_SAI2: novo.hrSai2 }, apprenticeProfiles)[0] || '';
   }
   const sunday = new Date(`${alteracoes[0].data}T12:00:00`).getDay() === 0;
   const errors = validateStandardShift({ HR_ENT1: novo.hrEnt1, HR_SAI1: novo.hrSai1,
     HR_ENT2: novo.hrEnt2, HR_SAI2: novo.hrSai2 }, { workMinutes: Number(novo.jornadaMinutos) || (domingo6h && sunday ? 360 : 528),
-    intervalMinutes: Number(novo.intervaloMinutos) || 70,
-    exactInterval: Boolean(novo.intervaloMinutos) || (domingo6h && sunday), allowProfiles: false });
+    intervalMinutes: novo.intervaloMinutos == null ? 70 : Number(novo.intervaloMinutos),
+    exactInterval: novo.intervaloMinutos != null || (domingo6h && sunday), allowProfiles: false,
+    profileKeys: allowedProfiles });
   return errors[0] || '';
 }
 

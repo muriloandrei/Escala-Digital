@@ -5,7 +5,12 @@ import { autofillStandardHours } from './shiftAutofill';
 export function quickShift(employee: Funcionario, reference?: DiaEscala, domingo6h = false) {
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
   if (apprentice) {
-    const start = employee.HR_ENT1 || reference?.HR_ENT1 || '08:00';
+    const source = reference?.PROGRAMACAO === 'TRB' ? reference : employee;
+    if (source.HR_ENT1 && source.HR_SAI1) {
+      return { HR_ENT1: source.HR_ENT1, HR_SAI1: source.HR_SAI1,
+        HR_ENT2: source.HR_ENT2 || null, HR_SAI2: source.HR_SAI2 || null };
+    }
+    const start = employee.HR_ENT1 || '08:00';
     const match = /^(\d{2}):(\d{2})$/.exec(start);
     const entry = match && Number(match[1]) < 24 && Number(match[2]) < 60
       ? Number(match[1]) * 60 + Number(match[2]) : 480;

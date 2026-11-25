@@ -189,7 +189,7 @@ test('monthly release distributes 5x2 rests without consecutive Sunday work', ()
   assert.equal(rascunho.dias.filter((dia) => dia.programacao === 'F').length >= 8, true);
 });
 
-test('monthly release fixes apprentice work schedule to 05:15', () => {
+test('monthly release uses the configured apprentice profile', () => {
   const funcionario = {
     ESCFUNC_ID: 15,
     CHAPA: '000015',
@@ -203,7 +203,8 @@ test('monthly release fixes apprentice work schedule to 05:15', () => {
     HR_SAI2: '17:58'
   };
 
-  const rascunho = buildFuncionarioRascunho(funcionario, null, '2026-09-01', '2026-09-01', 0);
+  const rascunho = buildFuncionarioRascunho(funcionario, null, '2026-09-01', '2026-09-01', 0, null,
+    { apprenticeProfiles: new Set(['440:70']) });
   const trabalho = rascunho.dias.find((dia) => dia.programacao === 'TRB');
   const errors = validateEscalaPayload({
     lojaId: 10,
@@ -213,9 +214,9 @@ test('monthly release fixes apprentice work schedule to 05:15', () => {
 
   assert.equal(rascunho.aprendiz, true);
   assert.equal(trabalho.hrEnt1, '08:00');
-  assert.equal(trabalho.hrSai1, '13:15');
-  assert.equal(trabalho.hrEnt2, null);
-  assert.equal(trabalho.hrSai2, null);
+  assert.equal(trabalho.hrSai1, '11:40');
+  assert.equal(trabalho.hrEnt2, '12:50');
+  assert.equal(trabalho.hrSai2, '16:30');
   assert.deepEqual(errors, []);
 });
 
@@ -835,7 +836,7 @@ test('monthly release balances Sundays within each subsection', () => {
       assert.ok(trabalhando >= 2 && trabalhando <= 3, `${data}: subseção ${subsecaoId} com ${trabalhando}/5 trabalhando`);
     }
   }
-  assert.ok(rascunhos.every((rascunho) => rascunho.dias.find((dia) => dia.data === '2026-11-15')?.programacao === 'FDO'));
+  assert.ok(rascunhos.every((rascunho) => rascunho.dias.find((dia) => dia.data === '2026-11-15')?.programacao !== 'FDO'));
 });
 
 test('section generation saves draft even when automatic validation returns critiques', async () => {
@@ -894,7 +895,7 @@ test('section generation saves draft even when automatic validation returns crit
   }
 });
 
-test('Gerar Escala persists December FDO without consuming the two weekly rests', async () => {
+test('Gerar Escala does not create December FDO and preserves two weekly rests', async () => {
   const originals = {
     listFuncionariosByLoja: catalogService.listFuncionariosByLoja,
     listTurnosByLoja: catalogService.listTurnosByLoja,
@@ -921,7 +922,7 @@ test('Gerar Escala persists December FDO without consuming the two weekly rests'
       escsecaoId: 20, hojeIso: '2026-11-30' });
     const days = savedPayload.funcionarios[0].dias;
     for (const holiday of ['2026-12-25', '2027-01-01']) {
-      assert.equal(days.find((day) => day.data === holiday)?.programacao, 'FDO');
+      assert.notEqual(days.find((day) => day.data === holiday)?.programacao, 'FDO');
       const weekStart = holiday === '2026-12-25' ? '2026-12-21' : '2026-12-28';
       const weekEnd = holiday === '2026-12-25' ? '2026-12-27' : '2027-01-03';
       assert.equal(days.filter((day) => day.data >= weekStart && day.data <= weekEnd && day.programacao === 'F').length, 2);

@@ -154,7 +154,7 @@ export function EscalasLiberadas({ user }: { user: User }) {
           <button className="button secondary" type="button" onClick={() => setReload((value) => value + 1)}>
             <RefreshCw size={16} /> Atualizar
           </button>
-          {canCreate(user, 'escalas') && <button className="button primary" type="button" onClick={() => {
+          {user.perfil === 'ADMIN' && canCreate(user, 'escalas') && <button className="button primary" type="button" onClick={() => {
             setReleaseStore(String(user.lojaPrincipal || lojas[0]?.LOJA || ''));
             setActionError('');
             setReleaseOpen(true);

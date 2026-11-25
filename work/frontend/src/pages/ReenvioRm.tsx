@@ -3,7 +3,7 @@ import { RefreshCw, Send } from 'lucide-react';
 import { ApiError, getJson, postJson, preferredStore, type Loja, type User } from '../api';
 
 type Candidate = {
-  ESCFUNC_ID: number; CHAPA: string; NOME: string; ESCSECAO_ID: number;
+  ESCFUNC_ID: number; CHAPA: string; NOME: string; ESCSECAO_ID: number; ESCSECAO_NOME: string;
   REVISAO: number; OFICIALIZADA: number; DIAS: number; FOLGAS: number; BLOQUEIO: string | null;
 };
 type Result = { status: string; error?: string; enviados?: number };
@@ -13,6 +13,7 @@ export function ReenvioRm({ user }: { user: User }) {
   const [store, setStore] = useState('');
   const [month, setMonth] = useState(() => new Date().toLocaleDateString('sv-SE').slice(0, 7));
   const [search, setSearch] = useState('');
+  const [sectionIds, setSectionIds] = useState<Set<number>>(new Set());
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [period, setPeriod] = useState<{ inicio: string; fim: string } | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -36,6 +37,7 @@ export function ReenvioRm({ user }: { user: User }) {
   useEffect(() => {
     const controller = new AbortController();
     setSelected(new Set());
+    setSectionIds(new Set());
     setResults({});
     setCandidates([]);
     setPeriod(null);
@@ -54,12 +56,16 @@ export function ReenvioRm({ user }: { user: User }) {
     return () => controller.abort();
   }, [store, month, reload]);
 
+  const sections = useMemo(() => [...new Map(candidates.map((item) => [Number(item.ESCSECAO_ID),
+    item.ESCSECAO_NOME || `Seção ${item.ESCSECAO_ID}`])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')), [candidates]);
   const visible = useMemo(() => candidates.filter((item) =>
-    `${item.CHAPA} ${item.NOME}`.toLocaleLowerCase('pt-BR').includes(search.trim().toLocaleLowerCase('pt-BR'))
-  ), [candidates, search]);
+    (!sectionIds.size || sectionIds.has(Number(item.ESCSECAO_ID)))
+    && `${item.CHAPA} ${item.NOME}`.toLocaleLowerCase('pt-BR').includes(search.trim().toLocaleLowerCase('pt-BR'))
+  ), [candidates, search, sectionIds]);
   const eligibleVisible = visible.filter((item) => !item.BLOQUEIO);
   const allVisibleSelected = eligibleVisible.length > 0 && eligibleVisible.every((item) => selected.has(item.ESCFUNC_ID));
-  const selection = candidates.filter((item) => selected.has(item.ESCFUNC_ID) && !item.BLOQUEIO);
+  const selection = visible.filter((item) => selected.has(item.ESCFUNC_ID) && !item.BLOQUEIO);
   const unofficialized = selection.filter((item) => Number(item.OFICIALIZADA) !== 1).length;
 
   function toggleOne(id: number) {
@@ -124,10 +130,16 @@ export function ReenvioRm({ user }: { user: User }) {
           <option value="">Selecione</option>{stores.map((item) => <option key={item.LOJA} value={item.LOJA}>Loja {item.LOJA}{item.NOME ? ` · ${item.NOME}` : ''}</option>)}
         </select></label>
         <label>Competência<input type="month" value={month} disabled={busy} onChange={(event) => setMonth(event.target.value)} /></label>
+        <details className="rm-section-filter"><summary>Seção: {sectionIds.size ? `${sectionIds.size} selecionada(s)` : 'Todas'}</summary>
+          <div className="rm-section-options"><label><input type="checkbox" checked={sectionIds.size === 0} disabled={busy}
+            onChange={() => { setSectionIds(new Set()); setSelected(new Set()); }} /> Todas</label>
+            {sections.map(([id, name]) => <label key={id}><input type="checkbox" checked={sectionIds.has(id)} disabled={busy}
+              onChange={() => { setSectionIds((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }); setSelected(new Set()); }} /> {name}</label>)}
+          </div></details>
         <label className="search-field">Funcionário<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome ou chapa" /></label>
       </div>
       <div className="rm-resend-toolbar">
-        <span>{period ? `${period.inicio} a ${period.fim} · ` : ''}{candidates.length} funcionário(s) · {candidates.filter((item) => !item.BLOQUEIO).length} apto(s) · {selected.size} selecionado(s)</span>
+        <span>{period ? `${period.inicio} a ${period.fim} · ` : ''}{visible.length} funcionário(s) · {eligibleVisible.length} apto(s) · {selection.length} selecionado(s)</span>
         <button className="button primary" type="button" disabled={busy || loading || !selection.length} onClick={() => setConfirming(true)}><Send size={16} /> Reenviar selecionados</button>
       </div>
       {busy && <div className="list-meta" role="status">Processando {done} de {total} funcionário(s)...</div>}
@@ -139,12 +151,12 @@ export function ReenvioRm({ user }: { user: User }) {
           </tr></thead><tbody>{visible.map((item) => <tr key={item.ESCFUNC_ID}>
             <td><input type="checkbox" aria-label={`Selecionar ${item.NOME}`} checked={selected.has(item.ESCFUNC_ID)} disabled={busy || Boolean(item.BLOQUEIO)} onChange={() => toggleOne(item.ESCFUNC_ID)} /></td>
             <td><strong>{item.NOME}</strong><small>{item.CHAPA}</small></td>
-            <td>{item.ESCSECAO_ID}</td><td>{item.REVISAO}</td>
+            <td>{item.ESCSECAO_NOME || `Seção ${item.ESCSECAO_ID}`}</td><td>{item.REVISAO}</td>
             <td>{Number(item.OFICIALIZADA) === 1 ? 'Oficializada' : 'Não oficializada'}</td>
             <td>{item.DIAS}</td><td>{item.FOLGAS}</td>
             <td className={results[item.ESCFUNC_ID]?.status === 'ENVIADO' ? 'rm-resend-success'
               : results[item.ESCFUNC_ID] || item.BLOQUEIO ? 'rm-resend-problem' : ''}>
-              {results[item.ESCFUNC_ID] ? `${results[item.ESCFUNC_ID].status}${results[item.ESCFUNC_ID].error ? ` · ${results[item.ESCFUNC_ID].error}` : ''}` : item.BLOQUEIO || 'Apto'}
+              {results[item.ESCFUNC_ID] ? `${['ENVIADO', 'INCERTO'].includes(results[item.ESCFUNC_ID].status) ? 'Enviado ao RM' : results[item.ESCFUNC_ID].status}${results[item.ESCFUNC_ID].error ? ` · ${results[item.ESCFUNC_ID].error}` : ''}` : item.BLOQUEIO || 'Apto'}
             </td>
           </tr>)}</tbody></table></div>}
     </section>

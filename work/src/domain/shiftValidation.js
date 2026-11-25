@@ -39,6 +39,17 @@ const POST_SHIFT_PROFILES = [
 
 function validateStandardShift(data, { exactInterval = false, workMinutes = 528,
   intervalMinutes = 70, allowProfiles = false, allowPostProfiles = false, profileKeys = null } = {}) {
+  if (!data.HR_ENT2 && !data.HR_SAI2) {
+    const entry = timeToMinutes(data.HR_ENT1);
+    const exit = timeToMinutes(data.HR_SAI1);
+    const duration = entry === null || exit === null ? null : (exit - entry + 1440) % 1440;
+    if (duration === null || duration === 0) return ['Informe entrada e saida no formato HH:MM.'];
+    const permitted = profileKeys instanceof Set ? profileKeys : new Set([`${workMinutes}:${intervalMinutes}`]);
+    if (!permitted.has(`${duration}:0`) || (workMinutes !== duration && !allowProfiles)) {
+      return ['Jornada sem intervalo nao cadastrada para esta loja.'];
+    }
+    return duration <= 360 ? [] : ['Jornada continua maior que 06:00.'];
+  }
   const values = [data.HR_ENT1, data.HR_SAI1, data.HR_ENT2, data.HR_SAI2];
   if (values.some((value) => timeToMinutes(value) === null)) {
     return ['Informe todos os horarios no formato HH:MM.'];
@@ -76,12 +87,23 @@ function validateStandardShift(data, { exactInterval = false, workMinutes = 528,
   return errors;
 }
 
-function validateApprenticeShift(data) {
+function validateApprenticeShift(data, profileKeys = null) {
   const entrada = timeToMinutes(data.HR_ENT1);
   const saida = timeToMinutes(data.HR_SAI1);
   if (entrada === null || saida === null) return ['Informe entrada e saida no formato HH:MM.'];
-  if (data.HR_ENT2 || data.HR_SAI2) return ['O aprendiz nao pode ter segundo periodo.'];
-  if (saida - entrada !== 315) return ['A jornada do aprendiz deve ser exatamente 05:15.'];
+  const single = !data.HR_ENT2 && !data.HR_SAI2;
+  if (!single && (!data.HR_ENT2 || !data.HR_SAI2)) return ['Horario de aprendiz incompleto.'];
+  const timeline = single ? null : unfoldShiftMinutes([data.HR_ENT1, data.HR_SAI1, data.HR_ENT2, data.HR_SAI2]);
+  if (!single && !timeline) return ['Horario de aprendiz invalido.'];
+  const first = single ? (saida - entrada + 1440) % 1440 : timeline[1] - timeline[0];
+  const second = single ? 0 : timeline[3] - timeline[2];
+  const interval = single ? 0 : timeline[2] - timeline[1];
+  if (first <= 0 || first > 360 || second < 0 || second > 360 || (!single && (second === 0 || interval <= 0))) {
+    return ['Periodos de aprendiz invalidos.'];
+  }
+  if (profileKeys instanceof Set && !profileKeys.has(`${first + second}:${interval}`)) {
+    return ['Jornada nao liberada para aprendizes nesta loja.'];
+  }
   return [];
 }
 

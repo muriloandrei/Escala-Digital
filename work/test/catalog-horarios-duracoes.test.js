@@ -25,12 +25,14 @@ test('duration-only profile insert does not require fixed start or end times', a
       : name === './escalaEventService' ? {} : serviceRequire(name)
   });
   const result = await mod.exports.createHorarioPadrao({
-    DESCR: 'Postos 08:24 com 01:40 de intervalo', JORNADA_MINUTOS: 504, INTERVALO_MINUTOS: 100
+    DESCR: 'Postos 08:24 com 01:40 de intervalo', JORNADA_MINUTOS: 504, INTERVALO_MINUTOS: 100,
+    LIBERAR_HORARIO_APRENDIZ: true
   });
   assert.equal(result.ESCHORPAD_ID, 42);
   assert.match(statements[0].sql, /insert into sgn_esc_horario_padrao/i);
   assert.doesNotMatch(statements[0].sql, /hr_ent1|hr_sai1|hr_ent2|hr_sai2/i);
   assert.deepEqual(Object.keys(statements[0].binds).sort(),
-    ['descr', 'id', 'intervaloMinutos', 'jornadaMinutos', 'status'].sort());
+    ['apprentice', 'descr', 'id', 'intervaloMinutos', 'jornadaMinutos', 'status'].sort());
+  assert.equal(statements[0].binds.apprentice, 1);
   assert.match(statements[1].sql, /delete from sgn_esc_horpad_loja/i);
 });

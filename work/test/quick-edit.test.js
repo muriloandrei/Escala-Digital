@@ -18,15 +18,16 @@ test('quick edit rejects protected codes, multiple changes and invalid work hour
   assert.match(validateQuickRestWorkEdit({ dias: [work, { ...work, data: '2026-10-13' }] }, [rest]), /exatamente um dia/);
 });
 
-test('quick edit keeps apprentice shift at 05:15', () => {
+test('quick edit respects the enabled apprentice profile', () => {
   const rest = { DT: '2026-10-12', PROGRAMACAO: 'F' };
   const employee = { funcao: 'JOVEM APRENDIZ', dias: [{ data: '2026-10-12', programacao: 'TRB', hrEnt1: '08:00', hrSai1: '13:15', hrEnt2: null, hrSai2: null }] };
-  assert.equal(validateQuickRestWorkEdit(employee, [rest]), '');
+  const options = { apprenticeProfiles: new Set(['315:0']) };
+  assert.equal(validateQuickRestWorkEdit(employee, [rest], options), '');
   employee.dias[0].hrEnt1 = '09:00';
   employee.dias[0].hrSai1 = '14:15';
-  assert.equal(validateQuickRestWorkEdit(employee, [rest]), '');
+  assert.equal(validateQuickRestWorkEdit(employee, [rest], options), '');
   employee.dias[0].hrSai1 = '14:00';
-  assert.match(validateQuickRestWorkEdit(employee, [rest]), /05:15/);
+  assert.match(validateQuickRestWorkEdit(employee, [rest], options), /nao liberada/);
 });
 
 test('single-day edit accepts a corrected shift while another day remains in critique', () => {

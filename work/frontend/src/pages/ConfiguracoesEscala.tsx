@@ -5,15 +5,19 @@ import { ApiError, canCreate, canEdit, getJson, patchJson, postJson, type User }
 type Regra = { codigo: string; titulo: string; descricao: string };
 type Horario = {
   ESCHORPAD_ID: number; DESCR: string; HR_ENT1: string; HR_SAI1: string; HR_ENT2: string; HR_SAI2: string;
-  JORNADA_MINUTOS: number; INTERVALO_MINUTOS: number; STATUS: 'A' | 'I'; LOJAS: number[];
+  JORNADA_MINUTOS: number; INTERVALO_MINUTOS: number; LIBERAR_HORARIO_APRENDIZ: boolean; STATUS: 'A' | 'I'; LOJAS: number[];
 };
-type Form = Pick<Horario, 'DESCR' | 'JORNADA_MINUTOS' | 'INTERVALO_MINUTOS' | 'STATUS' | 'LOJAS'>;
-const emptyForm: Form = { DESCR: '', JORNADA_MINUTOS: 528, INTERVALO_MINUTOS: 70, STATUS: 'A', LOJAS: [] };
-const profiles = new Set(['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']);
-const workOptions = [528, 504, 360, 300];
+type Form = Pick<Horario, 'DESCR' | 'JORNADA_MINUTOS' | 'INTERVALO_MINUTOS' | 'LIBERAR_HORARIO_APRENDIZ' | 'STATUS' | 'LOJAS'>;
+const emptyForm: Form = { DESCR: '', JORNADA_MINUTOS: 528, INTERVALO_MINUTOS: 70, LIBERAR_HORARIO_APRENDIZ: false, STATUS: 'A', LOJAS: [] };
 
 function formatMinutes(value: number) {
   return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+}
+
+function parseMinutes(value: string) {
+  if (!/^\d{2}:\d{2}$/.test(value)) return NaN;
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours * 60 + minutes;
 }
 
 export function RegrasEscala() {
@@ -59,7 +63,11 @@ export function HorariosPadrao({ user }: { user: User }) {
   const [actionError, setActionError] = useState('');
   const [message, setMessage] = useState('');
   const [reload, setReload] = useState(0);
-  const validProfile = useMemo(() => profiles.has(`${form.JORNADA_MINUTOS}:${form.INTERVALO_MINUTOS}`), [form]);
+  const validProfile = useMemo(() => Number.isInteger(form.JORNADA_MINUTOS) && form.JORNADA_MINUTOS > 0
+    && form.JORNADA_MINUTOS <= 720 && Number.isInteger(form.INTERVALO_MINUTOS)
+    && form.INTERVALO_MINUTOS >= 0 && form.INTERVALO_MINUTOS <= 480
+    && form.JORNADA_MINUTOS + form.INTERVALO_MINUTOS < 1440
+    && (form.INTERVALO_MINUTOS !== 0 || form.JORNADA_MINUTOS <= 360), [form]);
   const filtered = rows.filter((row) => (status === 'all' || row.STATUS === status)
     && `${row.DESCR} ${formatMinutes(row.JORNADA_MINUTOS)} ${formatMinutes(row.INTERVALO_MINUTOS)}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')));
 
@@ -84,7 +92,8 @@ export function HorariosPadrao({ user }: { user: User }) {
   function openEditor(row: Horario | 'new') {
     setEditing(row);
     setForm(row === 'new' ? { ...emptyForm, LOJAS: [] } : { DESCR: row.DESCR, JORNADA_MINUTOS: row.JORNADA_MINUTOS,
-      INTERVALO_MINUTOS: row.INTERVALO_MINUTOS, STATUS: row.STATUS, LOJAS: row.LOJAS || [] });
+      INTERVALO_MINUTOS: row.INTERVALO_MINUTOS, LIBERAR_HORARIO_APRENDIZ: row.LIBERAR_HORARIO_APRENDIZ,
+      STATUS: row.STATUS, LOJAS: row.LOJAS || [] });
     setLojaSearch('');
     setActionError('');
     setUncertain(false);
@@ -95,7 +104,7 @@ export function HorariosPadrao({ user }: { user: User }) {
     if (!editing || busy || uncertain) return;
     const descr = form.DESCR.trim();
     if (!descr || descr.length > 100 || !validProfile) {
-      setActionError('Use um perfil 08:48, 08:24, 06:00 ou 05:00 com o intervalo correspondente.'); return;
+      setActionError('Informe uma jornada entre 00:01 e 12:00 e um intervalo entre 00:00 e 08:00.'); return;
     }
     setBusy(true);
     setActionError('');
@@ -139,21 +148,20 @@ export function HorariosPadrao({ user }: { user: User }) {
     <section className="list-surface" aria-label="Jornadas padrão"><div className="filters"><label className="search-field"><Search size={17} /><span className="sr-only">Buscar jornadas</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Descrição ou duração" /></label>
       <label className="catalog-status-filter">Status<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">Todos</option><option value="A">Ativos</option><option value="I">Inativos</option></select></label></div>
       {loading ? <div className="empty-state" role="status">Carregando horários...</div> : !filtered.length ? <div className="empty-state">Nenhum horário encontrado.</div>
-        : <div className="table-scroll"><table><thead><tr><th>Descrição</th><th>Jornada</th><th>Intervalo</th><th>Lojas</th><th>Status</th><th>Ações</th></tr></thead>
-          <tbody>{filtered.map((row) => <tr key={row.ESCHORPAD_ID}><td><strong>{row.DESCR}</strong></td><td>{formatMinutes(Number(row.JORNADA_MINUTOS || 0))}</td><td>{formatMinutes(Number(row.INTERVALO_MINUTOS || 0))}</td><td title={(row.LOJAS || []).join(', ')}>{(row.LOJAS || []).length}</td><td>{row.STATUS === 'A' ? 'Ativo' : 'Inativo'}</td>
+        : <div className="table-scroll"><table><thead><tr><th>Descrição</th><th>Jornada</th><th>Intervalo</th><th>Aprendiz</th><th>Lojas</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody>{filtered.map((row) => <tr key={row.ESCHORPAD_ID}><td><strong>{row.DESCR}</strong></td><td>{formatMinutes(Number(row.JORNADA_MINUTOS || 0))}</td><td>{formatMinutes(Number(row.INTERVALO_MINUTOS || 0))}</td><td>{row.LIBERAR_HORARIO_APRENDIZ ? 'Sim' : 'Não'}</td><td title={(row.LOJAS || []).join(', ')}>{(row.LOJAS || []).length}</td><td>{row.STATUS === 'A' ? 'Ativo' : 'Inativo'}</td>
             <td className="catalog-actions">{canEdit(user, 'horarios-padrao') && <><button className="icon-action" type="button" title={`Editar ${row.DESCR}`} aria-label={`Editar ${row.DESCR}`} onClick={() => openEditor(row)}><Pencil size={16} /></button>
               <button className="button secondary" type="button" onClick={() => { setActionError(''); setUncertain(false); setConfirmStatus(row); }}>{row.STATUS === 'A' ? 'Inativar' : 'Reativar'}</button></>}</td></tr>)}</tbody></table></div>}
     </section>
     {editing && <div className="confirm-backdrop" role="presentation"><form className="confirm-dialog shift-dialog" role="dialog" aria-modal="true" aria-labelledby="horario-editor-title" onSubmit={save}>
       <h2 id="horario-editor-title">{editing === 'new' ? 'Nova jornada padrão' : `Editar ${editing.DESCR}`}</h2>
       <div className="shift-fields"><label className="catalog-full-field">Descrição<input required maxLength={100} value={form.DESCR} disabled={busy || uncertain} onChange={(event) => setForm({ ...form, DESCR: event.target.value })} /></label>
-        <label>Jornada<select value={form.JORNADA_MINUTOS} disabled={busy || uncertain} onChange={(event) => {
-          const work = Number(event.target.value);
-          const interval = profiles.has(`${work}:${form.INTERVALO_MINUTOS}`) ? form.INTERVALO_MINUTOS : work === 300 ? 15 : 70;
-          setForm({ ...form, JORNADA_MINUTOS: work, INTERVALO_MINUTOS: interval });
-        }}>{workOptions.map((value) => <option key={value} value={value}>{formatMinutes(value)}</option>)}</select></label>
-        <label>Intervalo<select value={form.INTERVALO_MINUTOS} disabled={busy || uncertain} onChange={(event) => setForm({ ...form, INTERVALO_MINUTOS: Number(event.target.value) })}>
-          {[15, 70, 100].filter((value) => profiles.has(`${form.JORNADA_MINUTOS}:${value}`)).map((value) => <option key={value} value={value}>{formatMinutes(value)}</option>)}</select></label></div>
+        <label>Jornada<input type="time" step={60} min="00:01" max="12:00" value={Number.isFinite(form.JORNADA_MINUTOS) ? formatMinutes(form.JORNADA_MINUTOS) : ''} disabled={busy || uncertain}
+          onChange={(event) => setForm({ ...form, JORNADA_MINUTOS: parseMinutes(event.target.value) })} /></label>
+        <label>Intervalo<input type="time" step={60} min="00:00" max="08:00" value={Number.isFinite(form.INTERVALO_MINUTOS) ? formatMinutes(form.INTERVALO_MINUTOS) : ''} disabled={busy || uncertain}
+          onChange={(event) => setForm({ ...form, INTERVALO_MINUTOS: parseMinutes(event.target.value) })} /></label></div>
+      <label className="catalog-checkbox"><input type="checkbox" checked={form.LIBERAR_HORARIO_APRENDIZ} disabled={busy || uncertain}
+        onChange={(event) => setForm({ ...form, LIBERAR_HORARIO_APRENDIZ: event.target.checked })} /> Liberar horário aprendiz</label>
       <fieldset className="shift-store-fieldset" disabled={busy || uncertain}>
         <legend>Lojas ({form.LOJAS.length})</legend>
         <div className="shift-store-toolbar"><input aria-label="Buscar loja" placeholder="Buscar loja" value={lojaSearch} onChange={(event) => setLojaSearch(event.target.value)} />

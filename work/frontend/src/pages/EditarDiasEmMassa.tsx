@@ -4,7 +4,7 @@ import { createOperationId } from '../operationId';
 import { validateStandardHours, type StandardHours } from '../shiftValidation';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
-import { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
+import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
 import { toPayloadDay, type PayloadDay } from './EditarDiaEscala';
 import { quickShift } from '../quickShift';
 
@@ -26,7 +26,7 @@ function workingShift(person: Funcionario, days: DiaEscala[]) {
   const values = [person.HR_ENT1 || reference?.HR_ENT1, person.HR_SAI1 || reference?.HR_SAI1,
     person.HR_ENT2 || reference?.HR_ENT2, person.HR_SAI2 || reference?.HR_SAI2];
   if (!values[0] || !values[1] || (!apprentice && (!values[2] || !values[3]))) return null;
-  return { hrEnt1: values[0], hrSai1: values[1], hrEnt2: apprentice ? null : values[2], hrSai2: apprentice ? null : values[3] };
+  return { hrEnt1: values[0], hrSai1: values[1], hrEnt2: values[2] || null, hrSai2: values[3] || null };
 }
 
 function issueText(issue: unknown) {
@@ -100,8 +100,8 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
 
   function toggleDate(date: string) {
     if (busy || uncertain) return;
-    if (!selectedDates.includes(date) && selectedDates.length >= (mode === 'TROCA' ? 2 : 7)) {
-      setError(mode === 'TROCA' ? 'Escolha apenas os dois dias da troca.' : 'Selecione no máximo 7 dias por operação.');
+    if (!selectedDates.includes(date) && mode === 'TROCA' && selectedDates.length >= 2) {
+      setError('Escolha apenas os dois dias da troca.');
       return;
     }
     const nextDates = selectedDates.includes(date) ? selectedDates.filter((item) => item !== date) : [...selectedDates, date].sort();
@@ -123,7 +123,7 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
   async function save() {
     if (busy || uncertain || !selectedDates.length || !selected) return;
     if (mode === 'HORARIO') {
-      const invalid = selectedApprentice ? validateApprenticeHours(hours) : validateStandardHours(hours, sunday6hSelection ? 360 : profile.work, sunday6hSelection ? 70 : profile.interval);
+      const invalid = selectedApprentice ? validateApprenticeHours(hours, profile.work, profile.interval) : validateStandardHours(hours, sunday6hSelection ? 360 : profile.work, sunday6hSelection ? 70 : profile.interval);
       if (invalid) { setError(invalid); return; }
     }
     const note = justification.trim();
@@ -140,8 +140,8 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
       const swapWork = mode === 'TROCA' ? targetDays.find((day) => String(day?.PROGRAMACAO || '').toUpperCase() === 'TRB') : null;
       for (const day of targetDays) {
         if (mode === 'HORARIO' ? sameHours(day, hours)
-          && Number(day?.JORNADA_MINUTOS || 528) === (sunday6hSelection ? 360 : profile.work)
-          && Number(day?.INTERVALO_MINUTOS || 70) === (sunday6hSelection ? 70 : profile.interval)
+          && Number(day?.JORNADA_MINUTOS || (selectedApprentice ? profile.work : 528)) === (sunday6hSelection ? 360 : profile.work)
+          && Number(day?.INTERVALO_MINUTOS ?? (selectedApprentice ? profile.interval : 70)) === (sunday6hSelection ? 70 : profile.interval)
           : mode !== 'TROCA' && String(day!.PROGRAMACAO || '').toUpperCase() === mode) continue;
         const date = onlyDate(day!.DT);
         const nextMode = mode === 'TROCA' ? String(day!.PROGRAMACAO || '').toUpperCase() === 'TRB' ? 'F' : 'TRB' : mode === 'HORARIO' ? 'TRB' : mode;
@@ -150,8 +150,9 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
           domingo6hHabilitado && new Date(`${date}T12:00:00`).getDay() === 0);
         changed.set(date, { data: date, programacao: nextMode,
           jornadaMinutos: rest ? null : mode === 'HORARIO' ? (sunday6hSelection ? 360 : profile.work)
-            : domingo6hHabilitado && new Date(`${date}T12:00:00`).getDay() === 0 ? 360 : 528,
-          intervaloMinutos: rest ? null : mode === 'HORARIO' ? (sunday6hSelection ? 70 : profile.interval) : 70,
+            : Number(swapWork?.JORNADA_MINUTOS || day?.JORNADA_MINUTOS) || (selectedApprentice ? profile.work : domingo6hHabilitado && new Date(`${date}T12:00:00`).getDay() === 0 ? 360 : 528),
+          intervaloMinutos: rest ? null : mode === 'HORARIO' ? (sunday6hSelection ? 70 : profile.interval)
+            : Number(swapWork?.INTERVALO_MINUTOS ?? day?.INTERVALO_MINUTOS ?? (selectedApprentice ? profile.interval : 70)),
           hrEnt1: rest ? null : workHours.HR_ENT1,
           hrSai1: rest ? null : workHours.HR_SAI1,
           hrEnt2: rest ? null : workHours.HR_ENT2 || null,
@@ -208,8 +209,15 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
     <div className="bulk-people-list">{visible.map(({ person, days }) => <label key={person.ESCFUNC_ID}><input type="radio" name="bulk-employee" checked={selectedId === Number(person.ESCFUNC_ID)} disabled={busy || uncertain} onChange={() => {
       setSelectedId(Number(person.ESCFUNC_ID)); setSelectedDates([]); setIssues([]); setError('');
       const apprentice = /APRENDIZ/i.test(person.FUNCAO_DESCR || '');
+      const workDay = days.find((day) => day.PROGRAMACAO === 'TRB');
+      const apprenticeProfile = apprentice ? apprenticeProfileFromHours(workDay || person) : null;
+      const work = Number(workDay?.JORNADA_MINUTOS) || apprenticeProfile?.work || (apprentice ? 315 : 528);
+      const interval = Number(workDay?.INTERVALO_MINUTOS ?? apprenticeProfile?.interval ?? (apprentice ? 0 : 70));
+      setProfile({ work, interval });
       setHours(apprentice
-        ? apprenticeHoursFromStart(person.HR_ENT1 || days.find((day) => day.PROGRAMACAO === 'TRB')?.HR_ENT1 || '08:00') || apprenticeHoursFromStart('08:00')!
+        ? workDay?.HR_ENT1 && workDay.HR_SAI1
+          ? { HR_ENT1: workDay.HR_ENT1, HR_SAI1: workDay.HR_SAI1, HR_ENT2: workDay.HR_ENT2 || '', HR_SAI2: workDay.HR_SAI2 || '' }
+          : apprenticeHoursFromStart(person.HR_ENT1 || '08:00', work, interval) || apprenticeHoursFromStart('08:00', work, interval)!
         : { HR_ENT1: '08:00', HR_SAI1: '12:30', HR_ENT2: '13:40', HR_SAI2: '17:58' });
     }} /><span><strong>{person.CHAPA} · {person.NOME}</strong></span></label>)}</div>
     <div className="bulk-editor-controls"><div className="segmented" role="group" aria-label="Programação"><button className={mode === 'F' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('F'); setSelectedDates([]); setIssues([]); }}>Folga</button>
@@ -218,24 +226,24 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
         <button className={mode === 'HORARIO' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('HORARIO'); setSelectedDates([]); setIssues([]); }}>Horário</button>
         <button className={mode === 'TROCA' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('TROCA'); setSelectedDates([]); setIssues([]); }}>Trocar folga</button></div></div>
     {mode === 'HORARIO' && <div className="bulk-hours">
-      {!selectedApprentice && <ShiftProfileSelect value={profile} sundayOnly={sunday6hSelection} lojaId={lojaId} onSelect={(item) => {
+      <ShiftProfileSelect value={profile} sundayOnly={sunday6hSelection} apprentice={selectedApprentice} lojaId={lojaId} onSelect={(item) => {
         const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
         if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
         setHours(next);
         setError(''); setIssues([]);
-      }} />}
-      {(selectedApprentice ? [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída']] as const
+      }} />
+      {(selectedApprentice && profile.interval === 0 ? [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída']] as const
         : [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída intervalo'], ['HR_ENT2', 'Retorno'], ['HR_SAI2', 'Saída']] as const)
         .map(([key, label]) => <label key={key}>{label}<input type="time" value={hours[key]} disabled={busy || uncertain} onChange={(event) => { const next = selectedApprentice
-          ? autofillApprenticeHours(key as 'HR_ENT1' | 'HR_SAI1', event.target.value)
+          ? autofillApprenticeHours(key, event.target.value, profile.work, profile.interval, hours)
           : autofillStandardHours(hours, key, event.target.value, sunday6hSelection ? 360 : profile.work, sunday6hSelection ? 70 : profile.interval);
           if (next) { setHours(next); setError(''); setIssues([]); }
-          else setError(selectedApprentice ? 'Não foi possível ajustar o horário mantendo 05:15 de trabalho.' : 'Não foi possível manter a jornada e o intervalo selecionados.'); }} /></label>)}
-      <span>Jornada do dia: {selectedApprentice ? '05:15' : sunday6hSelection ? '06:00' : `${String(Math.floor(profile.work / 60)).padStart(2, '0')}:${String(profile.work % 60).padStart(2, '0')}`}. O horário-base do funcionário não muda.</span>
+          else setError('Não foi possível manter a jornada e o intervalo selecionados.'); }} /></label>)}
+      <span>Jornada do dia: {sunday6hSelection ? '06:00' : `${String(Math.floor(profile.work / 60)).padStart(2, '0')}:${String(profile.work % 60).padStart(2, '0')}`}. O horário-base do funcionário não muda.</span>
     </div>}
     {!editableDates.length && <div className="notice error">Não há dias editáveis neste período.</div>}
-    <fieldset className="bulk-dates" disabled={busy || uncertain || !selectedId}><legend>Dias ({selectedDates.length}/{mode === 'TROCA' ? 2 : 7})</legend><div className="bulk-calendar">
+    <fieldset className="bulk-dates" disabled={busy || uncertain || !selectedId}><legend>Dias ({selectedDates.length}{mode === 'TROCA' ? '/2' : ''})</legend><div className="bulk-calendar">
       {dates.map((item) => { const day = selectedDays.find((entry) => onlyDate(entry.DT) === item); const code = String(day?.PROGRAMACAO || '').toUpperCase(); const protectedDay = day && isProtected(day); return <button key={item} type="button" className={`${selectedDates.includes(item) ? 'selected' : ''} ${code === 'TRB' ? 'work' : code ? 'rest' : ''}`} disabled={(!allowRetroactive && item < today()) || !day || Boolean(protectedDay)} aria-pressed={selectedDates.includes(item)} title={`${item}${holidays[item] ? ` · ${holidays[item]}` : ''}${protectedDay ? ' · protegido' : ''}`} onClick={() => toggleDate(item)}><small>{new Date(`${item}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC', weekday: 'short' })}</small><strong>{item.slice(8)}/{item.slice(5, 7)}</strong><span>{code === 'TRB' ? day?.HR_ENT1 || 'TRB' : code || '–'}</span></button>; })}
     </div></fieldset>
     {selectedId && !selected && selectedDates.length > 0 && <div className="notice warning">{candidates.find((item) => Number(item.person.ESCFUNC_ID) === selectedId)?.reason}</div>}

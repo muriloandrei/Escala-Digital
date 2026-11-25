@@ -432,9 +432,10 @@ export function EscalaMensal({ user }: { user: User }) {
         const oficializadas = adicionais.filter((item) => item.status === 'OFICIALIZADA');
         const pendentes = adicionais.filter((item) => item.status === 'IGNORADA');
         setActionMessage([
-          `${section?.DESCR || 'Seção'} oficializada · ${response.affectedRows} funcionário(s). Envio RM: ${response.rm?.status || 'a verificar'}.`,
-          oficializadas.length ? `Também oficializadas: ${oficializadas.map((item) => `${item.secao} (RM: ${item.rm?.status || 'a verificar'})`).join(', ')}.` : '',
+          `${section?.DESCR || 'Seção'} oficializada · ${response.affectedRows} funcionário(s). ${response.rm?.status === 'FALHA' ? 'Falha no envio ao RM.' : response.rm?.status === 'PENDENTE' ? 'Envio ao RM pendente.' : 'Enviado ao RM.'}`,
+          oficializadas.length ? `Também oficializadas: ${oficializadas.map((item) => item.secao).join(', ')}.` : '',
         ].filter(Boolean).join(' '));
+        if (response.rm?.status === 'INCERTO') setActionError('O RM não confirmou o processamento. Confira a integração antes de repetir o envio.');
         if (pendentes.length) setActionError(`Não oficializadas: ${pendentes.map((item) =>
           `${item.secao} (${item.motivo || 'verifique o progresso'})`).join(', ')}.`);
       } else {

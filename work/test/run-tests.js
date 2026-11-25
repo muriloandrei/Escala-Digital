@@ -60,6 +60,8 @@ require('./subsection-transfer.test');
 require('./transfer-immediate-route.test');
 require('./catalog-subsecao-conflict.test');
 require('./catalog-horarios-duracoes.test');
+require('./catalog-horarios-livres.test');
+require('./liberar-escala-admin.test');
 require('./training-progress.test');
 require('./editable-month.test');
 require('./auth-training-access.test');
