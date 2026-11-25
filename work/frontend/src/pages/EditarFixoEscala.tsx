@@ -5,7 +5,7 @@ import { validate12x36Hours } from '../shiftValidation';
 import { isDutyDay12x36 } from '../workRegime';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
-import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
+import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, normalizeApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
 
 export function EditarFixoEscala({
   lojaId, mesRef, employee, date, existing, generatedDay, reference, holidayName, domingo6hHabilitado = false, onClose, onSaved,
@@ -37,7 +37,7 @@ export function EditarFixoEscala({
     if (apprentice) {
       const source = existing?.PROGRAMACAO === 'TRB' ? existing : workDay;
       return source?.HR_ENT1 && source.HR_SAI1
-        ? { HR_ENT1: source.HR_ENT1, HR_SAI1: source.HR_SAI1, HR_ENT2: source.HR_ENT2 || '', HR_SAI2: source.HR_SAI2 || '' }
+        ? normalizeApprenticeHours(source)
         : apprenticeHoursFromStart(source?.HR_ENT1 || employee.HR_ENT1 || '08:00', profile.work, profile.interval)
           || apprenticeHoursFromStart('08:00', profile.work, profile.interval)!;
     }

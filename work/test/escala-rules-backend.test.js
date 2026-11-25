@@ -468,6 +468,9 @@ test('backend treats the 05:15 elapsed apprentice shift as 05:00 work plus 00:15
   const errors = validateEscalaPayload(buildPayload([day],
     { funcao: 'JOVEM APRENDIZ', aprendiz: true }), { apprenticeProfiles: new Set(['300:15']) });
   assert.deepEqual(errors, []);
+  const savedWithPlaceholders = { ...day, hrEnt2: '00:00', hrSai2: '00:00' };
+  assert.deepEqual(validateEscalaPayload(buildPayload([savedWithPlaceholders],
+    { funcao: 'JOVEM APRENDIZ', aprendiz: true }), { apprenticeProfiles: new Set(['300:15']) }), []);
 });
 
 test('backend rejects continuous period greater than 06:00', () => {

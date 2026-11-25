@@ -5,7 +5,7 @@ import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { validate12x36Hours, validateStandardHours } from '../shiftValidation';
 import { isDutyDay12x36 } from '../workRegime';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
-import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
+import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, normalizeApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
 import { toPayloadDay, type PayloadDay } from '../scheduleReadback';
 
 export { toPayloadDay } from '../scheduleReadback';
@@ -64,8 +64,9 @@ export function EditarDiaEscala({
     if (apprentice) {
       const source = isRest(day) ? reference : day;
       if (source.HR_ENT1 && source.HR_SAI1 && source.PROGRAMACAO === 'TRB') {
-        return { hrEnt1: source.HR_ENT1, hrSai1: source.HR_SAI1,
-          hrEnt2: source.HR_ENT2 || '', hrSai2: source.HR_SAI2 || '' };
+        const normalized = normalizeApprenticeHours(source);
+        return { hrEnt1: normalized.HR_ENT1, hrSai1: normalized.HR_SAI1,
+          hrEnt2: normalized.HR_ENT2, hrSai2: normalized.HR_SAI2 };
       }
       const hours = apprenticeHoursFromStart(source.HR_ENT1 || employee.HR_ENT1 || '08:00', profile.work, profile.interval)
         || apprenticeHoursFromStart('08:00', profile.work, profile.interval)!;

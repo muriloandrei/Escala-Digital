@@ -3,7 +3,7 @@ import { patchJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { validateStandardHours } from '../shiftValidation';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
-import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
+import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, normalizeApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
 
 type Impact = { diasAlterados: number; diasManuais: number; possuiEscala: boolean; mesesImpactados: string[]; mesesParaReoficializar: string[] };
 
@@ -31,8 +31,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
       : Number(currentDay?.INTERVALO_MINUTOS ?? 70) });
   const [hours, setHours] = useState(() => apprentice
     ? (employee.HR_ENT1 && employee.HR_SAI1
-      ? { HR_ENT1: employee.HR_ENT1, HR_SAI1: employee.HR_SAI1,
-        HR_ENT2: employee.HR_ENT2 || '', HR_SAI2: employee.HR_SAI2 || '' }
+      ? normalizeApprenticeHours(employee)
       : apprenticeHoursFromStart(currentDay?.HR_ENT1 || '08:00', profile.work, profile.interval)
         || apprenticeHoursFromStart('08:00', profile.work, profile.interval)!)
     : {

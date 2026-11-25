@@ -1,4 +1,4 @@
-const { unfoldShiftMinutes, validate12x36Shift } = require('../domain/shiftValidation');
+const { unfoldShiftMinutes, validate12x36Shift, isAbsentSecondPeriod } = require('../domain/shiftValidation');
 const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('../domain/workRegime');
 
 const REGRAS_VIGENTES = [
@@ -108,9 +108,13 @@ function getSemanasExcecaoPosFerias(dias = []) {
   return semanas;
 }
 
-function getHorarioDia(dia) {
+function getHorarioDia(dia, apprentice = false) {
   const values = [dia.hrEnt1 ?? dia.HR_ENT1, dia.hrSai1 ?? dia.HR_SAI1,
     dia.hrEnt2 ?? dia.HR_ENT2, dia.hrSai2 ?? dia.HR_SAI2];
+  if (apprentice && isAbsentSecondPeriod(values[2], values[3])) {
+    values[2] = null;
+    values[3] = null;
+  }
   if (!values[2] && !values[3]) {
     return { entrada: timeToMinutes(values[0]), saidaIntervalo: timeToMinutes(values[1]),
       retornoIntervalo: null, saida: null };
@@ -185,10 +189,12 @@ function isFuncionarioAprendiz(funcionario = {}) {
 function validarTurnoAprendiz(funcionarioLabel, dia, { apprenticeProfiles = null } = {}) {
   if (isDescanso(dia)) return [];
   const data = formatDate(dia.data || dia.DT);
-  if (Boolean(dia.hrEnt2 ?? dia.HR_ENT2) !== Boolean(dia.hrSai2 ?? dia.HR_SAI2)) {
+  const secondEntry = dia.hrEnt2 ?? dia.HR_ENT2;
+  const secondExit = dia.hrSai2 ?? dia.HR_SAI2;
+  if (!isAbsentSecondPeriod(secondEntry, secondExit) && Boolean(secondEntry) !== Boolean(secondExit)) {
     return [`${funcionarioLabel}: horario de aprendiz incompleto em ${data}.`];
   }
-  const horario = getHorarioDia(dia);
+  const horario = getHorarioDia(dia, true);
   const errors = [];
   if (horario.entrada === null || horario.saidaIntervalo === null) {
     errors.push(`${funcionarioLabel}: horario de aprendiz incompleto em ${data}.`);

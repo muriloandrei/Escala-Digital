@@ -91,7 +91,7 @@ function validateApprenticeShift(data, profileKeys = null) {
   const entrada = timeToMinutes(data.HR_ENT1);
   const saida = timeToMinutes(data.HR_SAI1);
   if (entrada === null || saida === null) return ['Informe entrada e saida no formato HH:MM.'];
-  const single = !data.HR_ENT2 && !data.HR_SAI2;
+  const single = isAbsentSecondPeriod(data.HR_ENT2, data.HR_SAI2);
   if (!single && (!data.HR_ENT2 || !data.HR_SAI2)) return ['Horario de aprendiz incompleto.'];
   const timeline = single ? null : unfoldShiftMinutes([data.HR_ENT1, data.HR_SAI1, data.HR_ENT2, data.HR_SAI2]);
   if (!single && !timeline) return ['Horario de aprendiz invalido.'];
@@ -109,6 +109,10 @@ function validateApprenticeShift(data, profileKeys = null) {
   return [];
 }
 
+function isAbsentSecondPeriod(entry, exit) {
+  return ((!entry && !exit) || (entry === '00:00' && exit === '00:00'));
+}
+
 function validate12x36Shift(data) {
   const timeline = unfoldShiftMinutes([data.HR_ENT1, data.HR_SAI1, data.HR_ENT2, data.HR_SAI2]);
   if (!timeline) return ['Informe quatro horarios validos para o plantao 12x36.'];
@@ -123,5 +127,5 @@ function validate12x36Shift(data) {
   return errors;
 }
 
-module.exports = { validateStandardShift, validateApprenticeShift, validate12x36Shift,
+module.exports = { validateStandardShift, validateApprenticeShift, validate12x36Shift, isAbsentSecondPeriod,
   unfoldShiftMinutes, SHIFT_PROFILES, POST_SHIFT_PROFILES };

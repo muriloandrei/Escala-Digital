@@ -4,7 +4,7 @@ import { createOperationId } from '../operationId';
 import { validateStandardHours, type StandardHours } from '../shiftValidation';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
-import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
+import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, normalizeApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
 import { toPayloadDay, type PayloadDay } from './EditarDiaEscala';
 import { quickShift } from '../quickShift';
 
@@ -216,7 +216,7 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
       setProfile({ work, interval });
       setHours(apprentice
         ? workDay?.HR_ENT1 && workDay.HR_SAI1
-          ? { HR_ENT1: workDay.HR_ENT1, HR_SAI1: workDay.HR_SAI1, HR_ENT2: workDay.HR_ENT2 || '', HR_SAI2: workDay.HR_SAI2 || '' }
+          ? normalizeApprenticeHours(workDay)
           : apprenticeHoursFromStart(workDay?.HR_ENT1 || person.HR_ENT1 || '08:00', work, interval) || apprenticeHoursFromStart('08:00', work, interval)!
         : { HR_ENT1: '08:00', HR_SAI1: '12:30', HR_ENT2: '13:40', HR_SAI2: '17:58' });
     }} /><span><strong>{person.CHAPA} · {person.NOME}</strong></span></label>)}</div>

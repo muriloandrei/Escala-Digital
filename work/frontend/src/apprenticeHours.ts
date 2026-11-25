@@ -7,6 +7,16 @@ export function usesImplicitApprenticeBreak(workMinutes: number, intervalMinutes
   return workMinutes === WORK_MINUTES && intervalMinutes === BREAK_MINUTES;
 }
 
+function isAbsentSecondPeriod(entry: string | null | undefined, exit: string | null | undefined) {
+  return (!entry && !exit) || (entry === '00:00' && exit === '00:00');
+}
+
+export function normalizeApprenticeHours(hours: Partial<Record<keyof StandardHours, string | null>>): StandardHours {
+  const noSecond = isAbsentSecondPeriod(hours.HR_ENT2, hours.HR_SAI2);
+  return { HR_ENT1: hours.HR_ENT1 || '', HR_SAI1: hours.HR_SAI1 || '',
+    HR_ENT2: noSecond ? '' : hours.HR_ENT2 || '', HR_SAI2: noSecond ? '' : hours.HR_SAI2 || '' };
+}
+
 function minutes(value: string | null | undefined): number | null {
   const match = /^(\d{2}):(\d{2})$/.exec(value || '');
   if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return null;
@@ -22,7 +32,7 @@ export function apprenticeProfileFromHours(hours: Partial<Record<keyof StandardH
   const firstExit = minutes(hours.HR_SAI1);
   if (entry === null || firstExit === null) return null;
   const first = (firstExit - entry + 1440) % 1440;
-  if (!hours.HR_ENT2 && !hours.HR_SAI2) return first
+  if (isAbsentSecondPeriod(hours.HR_ENT2, hours.HR_SAI2)) return first
     ? first === WORK_MINUTES + BREAK_MINUTES
       ? { work: WORK_MINUTES, interval: BREAK_MINUTES } : { work: first, interval: 0 }
     : null;
@@ -80,7 +90,7 @@ export function validateApprenticeHours(hours: StandardHours, workMinutes = WORK
   const entry = minutes(hours.HR_ENT1);
   const exit = minutes(hours.HR_SAI1);
   if (entry === null || exit === null) return 'Informe entrada e saída no formato HH:MM.';
-  if (hours.HR_ENT2 || hours.HR_SAI2) return 'Aprendiz não pode ter segundo período.';
+  if (!isAbsentSecondPeriod(hours.HR_ENT2, hours.HR_SAI2)) return 'Aprendiz não pode ter segundo período.';
   if (exit - entry !== workMinutes + intervalMinutes) return 'A jornada do aprendiz deve corresponder ao horário selecionado.';
   return '';
 }

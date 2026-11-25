@@ -327,6 +327,21 @@ test('monthly release restores missing apprentice exit with the 05:00/00:15 stan
   assert.equal(trabalho.intervaloMinutos, 15);
 });
 
+test('monthly release treats Oracle second-period placeholders as absent for apprentices', () => {
+  const funcionario = {
+    ESCFUNC_ID: 17, CHAPA: '000017', NOME: 'Aprendiz', FUNCAO_DESCR: 'JOVEM APRENDIZ',
+    ESCSECAO_ID: 20, ESCFUNCAO_ID: 30, HR_ENT1: '14:00', HR_SAI1: '19:15',
+    HR_ENT2: '00:00', HR_SAI2: '00:00'
+  };
+  const rascunho = buildFuncionarioRascunho(funcionario, null, '2026-12-01', '2026-11-30', 0, null,
+    { apprenticeProfiles: new Set(['300:15']) });
+  const trabalho = rascunho.dias.find((dia) => dia.programacao === 'TRB');
+  assert.equal(trabalho.hrEnt2, null);
+  assert.equal(trabalho.hrSai2, null);
+  assert.equal(trabalho.jornadaMinutos, 300);
+  assert.equal(trabalho.intervaloMinutos, 15);
+});
+
 test('monthly release automatic patterns do not create consecutive rests', () => {
   const patterns = getPadroesFolgaValidos();
   assert.ok(patterns.length > 0);

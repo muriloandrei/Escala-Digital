@@ -49,6 +49,8 @@ test('apprentice shift accepts only enabled store profiles', () => {
 test('apprentice 05:00 with implicit 00:15 interval accepts legacy two-clock shift', () => {
   const shift = { HR_ENT1: '12:45', HR_SAI1: '18:00', HR_ENT2: null, HR_SAI2: null };
   assert.deepEqual(validateApprenticeShift(shift, new Set(['300:15'])), []);
+  assert.deepEqual(validateApprenticeShift({ ...shift, HR_ENT2: '00:00', HR_SAI2: '00:00' },
+    new Set(['300:15'])), []);
   assert.match(validateApprenticeShift(shift, new Set(['240:0'])).join(' '), /nao liberada/);
 });
 

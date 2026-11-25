@@ -26,7 +26,10 @@ begin
     )
     select d.escprogdia_id, u.loja, u.revisao, f.chapa, d.dt,
            d.hr_ent1, d.hr_sai1,
-           case when d.hr_sai1 is null then 'COMPLETAR_SAIDA'
+           case when d.hr_sai1 is null or
+                     (d.hr_sai1 = '00:00' and d.hr_sai1 <> to_char(
+                       to_date('2000-01-01 ' || d.hr_ent1, 'YYYY-MM-DD HH24:MI')
+                       + 315 / 1440, 'HH24:MI')) then 'COMPLETAR_SAIDA'
                 else 'PADRONIZAR_PERFIL' end acao,
            to_char(to_date('2000-01-01 ' || d.hr_ent1, 'YYYY-MM-DD HH24:MI')
                    + 315 / 1440, 'HH24:MI') saida_padrao
@@ -39,9 +42,14 @@ begin
        and d.programacao = 'TRB'
        and d.dt >= to_date('2026-11-30', 'YYYY-MM-DD')
        and d.dt < to_date('2027-01-04', 'YYYY-MM-DD')
-       and d.hr_ent2 is null and d.hr_sai2 is null
+       and ((d.hr_ent2 is null and d.hr_sai2 is null)
+         or (d.hr_ent2 = '00:00' and d.hr_sai2 = '00:00'))
        and regexp_like(d.hr_ent1, '^([01][0-9]|2[0-3]):[0-5][0-9]$')
+       and d.hr_ent1 <> '00:00'
        and (d.hr_sai1 is null
+         or (d.hr_sai1 = '00:00' and d.hr_sai1 <> to_char(
+             to_date('2000-01-01 ' || d.hr_ent1, 'YYYY-MM-DD HH24:MI')
+             + 315 / 1440, 'HH24:MI'))
          or (d.hr_sai1 = to_char(to_date('2000-01-01 ' || d.hr_ent1, 'YYYY-MM-DD HH24:MI')
                                 + 315 / 1440, 'HH24:MI')
              and (nvl(d.jornada_minutos, 0) <> 300 or nvl(d.intervalo_minutos, 0) <> 15)))

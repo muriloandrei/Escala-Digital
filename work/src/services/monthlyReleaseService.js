@@ -8,7 +8,7 @@ const { getOperationalPeriodIso } = require('../domain/operationalPeriod');
 const { isPortariaSection } = require('../domain/portariaSection');
 const { permiteEscala } = require('../domain/employeeStatus');
 const { effectiveRegime, isDutyDay, TWELVE_THIRTY_SIX } = require('../domain/workRegime');
-const { validateApprenticeShift } = require('../domain/shiftValidation');
+const { validateApprenticeShift, isAbsentSecondPeriod } = require('../domain/shiftValidation');
 const { isApprenticeManagementSection } = require('../domain/sectionRollout');
 
 function formatDateValue(value) {
@@ -311,11 +311,12 @@ function getHorarioBaseFuncionario(funcionario, turno, apprenticeProfiles = null
   if (isFuncionarioAprendiz(funcionario)) {
     const hrEnt1 = normalizeTime(funcionario.HR_ENT1 || turno?.HR_ENT1, '08:00');
     const inicio = timeToMinutes(hrEnt1) ?? 480;
+    const semSegundoPeriodo = isAbsentSecondPeriod(funcionario.HR_ENT2, funcionario.HR_SAI2);
     const candidate = {
       HR_ENT1: hrEnt1,
       HR_SAI1: funcionario.HR_SAI1 || null,
-      HR_ENT2: funcionario.HR_ENT2 || null,
-      HR_SAI2: funcionario.HR_SAI2 || null
+      HR_ENT2: semSegundoPeriodo ? null : funcionario.HR_ENT2 || null,
+      HR_SAI2: semSegundoPeriodo ? null : funcionario.HR_SAI2 || null
     };
     if (!validateApprenticeShift(candidate, apprenticeProfiles).length) {
       return { hrEnt1, hrSai1: candidate.HR_SAI1, hrEnt2: candidate.HR_ENT2, hrSai2: candidate.HR_SAI2 };
