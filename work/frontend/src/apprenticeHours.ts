@@ -1,6 +1,11 @@
 import type { StandardHours } from './shiftValidation';
 
-const WORK_MINUTES = 315;
+const WORK_MINUTES = 300;
+const BREAK_MINUTES = 15;
+
+export function usesImplicitApprenticeBreak(workMinutes: number, intervalMinutes: number) {
+  return workMinutes === WORK_MINUTES && intervalMinutes === BREAK_MINUTES;
+}
 
 function minutes(value: string | null | undefined): number | null {
   const match = /^(\d{2}):(\d{2})$/.exec(value || '');
@@ -17,7 +22,10 @@ export function apprenticeProfileFromHours(hours: Partial<Record<keyof StandardH
   const firstExit = minutes(hours.HR_SAI1);
   if (entry === null || firstExit === null) return null;
   const first = (firstExit - entry + 1440) % 1440;
-  if (!hours.HR_ENT2 && !hours.HR_SAI2) return first ? { work: first, interval: 0 } : null;
+  if (!hours.HR_ENT2 && !hours.HR_SAI2) return first
+    ? first === WORK_MINUTES + BREAK_MINUTES
+      ? { work: WORK_MINUTES, interval: BREAK_MINUTES } : { work: first, interval: 0 }
+    : null;
   const secondEntry = minutes(hours.HR_ENT2);
   const exit = minutes(hours.HR_SAI2);
   if (secondEntry === null || exit === null) return null;
@@ -26,21 +34,22 @@ export function apprenticeProfileFromHours(hours: Partial<Record<keyof StandardH
   return first && second && interval ? { work: first + second, interval } : null;
 }
 
-export function apprenticeHoursFromStart(start: string, workMinutes = WORK_MINUTES, intervalMinutes = 0): StandardHours | null {
+export function apprenticeHoursFromStart(start: string, workMinutes = WORK_MINUTES, intervalMinutes = BREAK_MINUTES): StandardHours | null {
   const entry = minutes(start);
   if (entry === null || entry + workMinutes + intervalMinutes >= 1440) return null;
-  if (intervalMinutes === 0) return workMinutes <= 360
-    ? { HR_ENT1: start, HR_SAI1: clock(entry + workMinutes), HR_ENT2: '', HR_SAI2: '' } : null;
+  if (intervalMinutes === 0 || usesImplicitApprenticeBreak(workMinutes, intervalMinutes)) return workMinutes <= 360
+    ? { HR_ENT1: start, HR_SAI1: clock(entry + workMinutes + intervalMinutes), HR_ENT2: '', HR_SAI2: '' } : null;
   const first = Math.min(360, Math.max(workMinutes - 360, Math.ceil(workMinutes / 2)));
   if (first <= 0 || first >= workMinutes) return null;
   return { HR_ENT1: start, HR_SAI1: clock(entry + first),
     HR_ENT2: clock(entry + first + intervalMinutes), HR_SAI2: clock(entry + workMinutes + intervalMinutes) };
 }
 
-export function autofillApprenticeHours(field: keyof StandardHours, value: string, workMinutes = WORK_MINUTES, intervalMinutes = 0, current?: StandardHours): StandardHours | null {
+export function autofillApprenticeHours(field: keyof StandardHours, value: string, workMinutes = WORK_MINUTES, intervalMinutes = BREAK_MINUTES, current?: StandardHours): StandardHours | null {
   const edited = minutes(value);
-  if (edited === null || (field === 'HR_SAI1' && edited < workMinutes && intervalMinutes === 0)) return null;
-  if (intervalMinutes > 0) {
+  const single = intervalMinutes === 0 || usesImplicitApprenticeBreak(workMinutes, intervalMinutes);
+  if (edited === null || (field === 'HR_SAI1' && edited < workMinutes + intervalMinutes && single)) return null;
+  if (!single) {
     const entry = minutes(current?.HR_ENT1) ?? (field === 'HR_ENT1' ? edited : null);
     if (entry === null) return null;
     const first = field === 'HR_SAI1' ? edited - entry
@@ -53,11 +62,11 @@ export function autofillApprenticeHours(field: keyof StandardHours, value: strin
     return { HR_ENT1: clock(start), HR_SAI1: clock(start + duration),
       HR_ENT2: clock(start + duration + intervalMinutes), HR_SAI2: clock(start + workMinutes + intervalMinutes) };
   }
-  return apprenticeHoursFromStart(clock(field === 'HR_ENT1' ? edited : edited - workMinutes), workMinutes, intervalMinutes);
+  return apprenticeHoursFromStart(clock(field === 'HR_ENT1' ? edited : edited - workMinutes - intervalMinutes), workMinutes, intervalMinutes);
 }
 
-export function validateApprenticeHours(hours: StandardHours, workMinutes = WORK_MINUTES, intervalMinutes = 0): string {
-  if (intervalMinutes > 0) {
+export function validateApprenticeHours(hours: StandardHours, workMinutes = WORK_MINUTES, intervalMinutes = BREAK_MINUTES): string {
+  if (intervalMinutes > 0 && !usesImplicitApprenticeBreak(workMinutes, intervalMinutes)) {
     const [entry, firstExit, secondEntry, exit] = [hours.HR_ENT1, hours.HR_SAI1, hours.HR_ENT2, hours.HR_SAI2].map(minutes);
     if ([entry, firstExit, secondEntry, exit].some((part) => part === null)) return 'Informe os quatro horários no formato HH:MM.';
     const first = firstExit! - entry!;
@@ -72,6 +81,6 @@ export function validateApprenticeHours(hours: StandardHours, workMinutes = WORK
   const exit = minutes(hours.HR_SAI1);
   if (entry === null || exit === null) return 'Informe entrada e saída no formato HH:MM.';
   if (hours.HR_ENT2 || hours.HR_SAI2) return 'Aprendiz não pode ter segundo período.';
-  if (exit - entry !== workMinutes) return 'A jornada do aprendiz deve corresponder ao horário selecionado.';
+  if (exit - entry !== workMinutes + intervalMinutes) return 'A jornada do aprendiz deve corresponder ao horário selecionado.';
   return '';
 }

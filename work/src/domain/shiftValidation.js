@@ -97,11 +97,13 @@ function validateApprenticeShift(data, profileKeys = null) {
   if (!single && !timeline) return ['Horario de aprendiz invalido.'];
   const first = single ? (saida - entrada + 1440) % 1440 : timeline[1] - timeline[0];
   const second = single ? 0 : timeline[3] - timeline[2];
-  const interval = single ? 0 : timeline[2] - timeline[1];
+  const interval = single && first === 315 && profileKeys?.has('300:15') ? 15
+    : single ? 0 : timeline[2] - timeline[1];
+  const work = single && interval === 15 ? first - interval : first + second;
   if (first <= 0 || first > 360 || second < 0 || second > 360 || (!single && (second === 0 || interval <= 0))) {
     return ['Periodos de aprendiz invalidos.'];
   }
-  if (profileKeys instanceof Set && !profileKeys.has(`${first + second}:${interval}`)) {
+  if (profileKeys instanceof Set && !profileKeys.has(`${work}:${interval}`)) {
     return ['Jornada nao liberada para aprendizes nesta loja.'];
   }
   return [];

@@ -131,11 +131,12 @@ test('registered duration preserves employee entry, including overnight shifts',
 });
 
 test('apprentice editor adjusts both times while preserving 05:15', async () => {
-  const { apprenticeHoursFromStart, autofillApprenticeHours, validateApprenticeHours } = await loadFrontendHelper('apprenticeHours.ts');
+  const { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, validateApprenticeHours } = await loadFrontendHelper('apprenticeHours.ts');
   const shifted = { HR_ENT1: '09:00', HR_SAI1: '14:15', HR_ENT2: '', HR_SAI2: '' };
   assert.deepEqual(apprenticeHoursFromStart('09:00'), shifted);
   assert.deepEqual(autofillApprenticeHours('HR_SAI1', '14:15'), shifted);
   assert.equal(validateApprenticeHours(shifted), '');
+  assert.deepEqual(apprenticeProfileFromHours(shifted), { work: 300, interval: 15 });
   assert.match(validateApprenticeHours({ ...shifted, HR_SAI1: '14:30' }), /horário selecionado/);
   assert.deepEqual(apprenticeHoursFromStart('08:00', 240, 0),
     { HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '', HR_SAI2: '' });

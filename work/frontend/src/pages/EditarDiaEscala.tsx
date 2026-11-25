@@ -5,7 +5,7 @@ import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { validate12x36Hours, validateStandardHours } from '../shiftValidation';
 import { isDutyDay12x36 } from '../workRegime';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
-import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
+import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
 import { toPayloadDay, type PayloadDay } from '../scheduleReadback';
 
 export { toPayloadDay } from '../scheduleReadback';
@@ -56,8 +56,10 @@ export function EditarDiaEscala({
   const [mode, setMode] = useState<'TRB' | 'F' | 'FDO'>(String(day.PROGRAMACAO).toUpperCase() === 'FDO' ? 'FDO' : isRest(day) ? 'F' : 'TRB');
   const domingo6h = !plantao12x36 && domingo6hHabilitado && new Date(`${dateOnly(day.DT)}T12:00:00`).getDay() === 0 && !apprentice;
   const apprenticeProfile = apprentice ? apprenticeProfileFromHours(isRest(day) ? reference : day) : null;
-  const [profile, setProfile] = useState({ work: Number(day.JORNADA_MINUTOS || reference.JORNADA_MINUTOS) || apprenticeProfile?.work || (apprentice ? 315 : plantao12x36 ? 660 : domingo6h ? 360 : 528),
-    interval: Number(day.INTERVALO_MINUTOS ?? reference.INTERVALO_MINUTOS ?? apprenticeProfile?.interval ?? (apprentice ? 0 : plantao12x36 ? 60 : 70)) });
+  const [profile, setProfile] = useState({ work: apprentice ? apprenticeProfile?.work || 300
+    : Number(day.JORNADA_MINUTOS || reference.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
+    interval: apprentice ? apprenticeProfile?.interval ?? 15
+      : Number(day.INTERVALO_MINUTOS ?? reference.INTERVALO_MINUTOS ?? (plantao12x36 ? 60 : 70)) });
   const [shift, setShift] = useState<Shift>(() => {
     if (apprentice) {
       const source = isRest(day) ? reference : day;
@@ -65,7 +67,7 @@ export function EditarDiaEscala({
         return { hrEnt1: source.HR_ENT1, hrSai1: source.HR_SAI1,
           hrEnt2: source.HR_ENT2 || '', hrSai2: source.HR_SAI2 || '' };
       }
-      const hours = apprenticeHoursFromStart(employee.HR_ENT1 || '08:00', profile.work, profile.interval)
+      const hours = apprenticeHoursFromStart(source.HR_ENT1 || employee.HR_ENT1 || '08:00', profile.work, profile.interval)
         || apprenticeHoursFromStart('08:00', profile.work, profile.interval)!;
       return { hrEnt1: hours.HR_ENT1, hrSai1: hours.HR_SAI1, hrEnt2: hours.HR_ENT2, hrSai2: hours.HR_SAI2 };
     }
@@ -266,15 +268,17 @@ export function EditarDiaEscala({
             {mode === 'TRB' && (
               <><div className="day-editor-times">
               {!plantao12x36 && <ShiftProfileSelect value={profile} sundayOnly={domingo6h} apprentice={apprentice} lojaId={lojaId} onSelect={(item) => {
-                  const next = applyShiftProfile({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
-                    HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
+                  const next = apprentice
+                    ? apprenticeHoursFromStart(shift.hrEnt1, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS)
+                    : applyShiftProfile({ HR_ENT1: shift.hrEnt1, HR_SAI1: shift.hrSai1,
+                      HR_ENT2: shift.hrEnt2, HR_SAI2: shift.hrSai2 }, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
                   if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
                   setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
                   setShift({ hrEnt1: next.HR_ENT1, hrSai1: next.HR_SAI1, hrEnt2: next.HR_ENT2, hrSai2: next.HR_SAI2 });
                   setError('');
                 }} />}
                 {(
-                  (apprentice && profile.interval === 0 ? [
+                  (apprentice && (profile.interval === 0 || usesImplicitApprenticeBreak(profile.work, profile.interval)) ? [
                     ['hrEnt1', 'Entrada'],
                     ['hrSai1', 'Saída'],
                   ] : [

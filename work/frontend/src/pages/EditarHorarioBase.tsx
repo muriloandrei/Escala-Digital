@@ -3,7 +3,7 @@ import { patchJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { validateStandardHours } from '../shiftValidation';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
-import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
+import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
 
 type Impact = { diasAlterados: number; diasManuais: number; possuiEscala: boolean; mesesImpactados: string[]; mesesParaReoficializar: string[] };
 
@@ -25,8 +25,10 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
   const [month, setMonth] = useState(initialMonth < minimumMonth && !allowRetroactive ? minimumMonth : initialMonth);
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
   const apprenticeProfile = apprentice ? apprenticeProfileFromHours(employee) : null;
-  const [profile, setProfile] = useState({ work: Number(currentDay?.JORNADA_MINUTOS) || apprenticeProfile?.work || (apprentice ? 315 : 528),
-    interval: Number(currentDay?.INTERVALO_MINUTOS ?? apprenticeProfile?.interval ?? (apprentice ? 0 : 70)) });
+  const [profile, setProfile] = useState({ work: apprentice ? apprenticeProfile?.work || 300
+    : Number(currentDay?.JORNADA_MINUTOS) || 528,
+    interval: apprentice ? apprenticeProfile?.interval ?? 15
+      : Number(currentDay?.INTERVALO_MINUTOS ?? 70) });
   const [hours, setHours] = useState(() => apprentice
     ? (employee.HR_ENT1 && employee.HR_SAI1
       ? { HR_ENT1: employee.HR_ENT1, HR_SAI1: employee.HR_SAI1,
@@ -75,14 +77,15 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
       <p>{employee.CHAPA} · {employee.FUNCAO_DESCR || 'Cargo não informado'}</p>
       {currentDay && <p>Na escala: {[currentDay.HR_ENT1, currentDay.HR_SAI1, currentDay.HR_ENT2, currentDay.HR_SAI2].filter(Boolean).join(' · ')}</p>}
       <ShiftProfileSelect value={profile} apprentice={apprentice} lojaId={lojaId} onSelect={(item) => {
-        const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
+        const next = apprentice ? apprenticeHoursFromStart(hours.HR_ENT1, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS)
+          : applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
         if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
         setHours(next);
         setImpact(null); setError('');
       }} />
-      <div className="shift-fields">{(apprentice && profile.interval === 0 ? ['HR_ENT1', 'HR_SAI1'] as const : ['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'] as const).map((field, index) =>
-        <label key={field}>{apprentice && profile.interval === 0 ? ['Entrada', 'Saída'][index] : ['Entrada', 'Saída intervalo', 'Retorno', 'Última saída'][index]}
+      <div className="shift-fields">{(apprentice && (profile.interval === 0 || usesImplicitApprenticeBreak(profile.work, profile.interval)) ? ['HR_ENT1', 'HR_SAI1'] as const : ['HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2'] as const).map((field, index) =>
+        <label key={field}>{apprentice && (profile.interval === 0 || usesImplicitApprenticeBreak(profile.work, profile.interval)) ? ['Entrada', 'Saída'][index] : ['Entrada', 'Saída intervalo', 'Retorno', 'Última saída'][index]}
           <input type="time" value={hours[field]} onChange={(event) => {
             const next = apprentice ? autofillApprenticeHours(field, event.target.value, profile.work, profile.interval, hours)
               : autofillStandardHours(hours, field, event.target.value, profile.work, profile.interval);

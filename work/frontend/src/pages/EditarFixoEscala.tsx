@@ -5,7 +5,7 @@ import { validate12x36Hours } from '../shiftValidation';
 import { isDutyDay12x36 } from '../workRegime';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
-import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
+import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
 
 export function EditarFixoEscala({
   lojaId, mesRef, employee, date, existing, generatedDay, reference, holidayName, domingo6hHabilitado = false, onClose, onSaved,
@@ -28,15 +28,17 @@ export function EditarFixoEscala({
   const diaPlantao = plantao12x36 && isDutyDay12x36(employee.DT_ANCORA_12X36 || '', date);
   const domingo6h = !plantao12x36 && domingo6hHabilitado && new Date(`${date}T12:00:00`).getDay() === 0 && !apprentice;
   const apprenticeProfile = apprentice ? apprenticeProfileFromHours(existing?.PROGRAMACAO === 'TRB' ? existing : workDay || employee) : null;
-  const [profile, setProfile] = useState({ work: Number(existing?.JORNADA_MINUTOS || generatedDay?.JORNADA_MINUTOS) || apprenticeProfile?.work || (apprentice ? 315 : plantao12x36 ? 660 : domingo6h ? 360 : 528),
-    interval: Number(existing?.INTERVALO_MINUTOS ?? generatedDay?.INTERVALO_MINUTOS ?? apprenticeProfile?.interval ?? (apprentice ? 0 : plantao12x36 ? 60 : 70)) });
+  const [profile, setProfile] = useState({ work: apprentice ? apprenticeProfile?.work || 300
+    : Number(existing?.JORNADA_MINUTOS || generatedDay?.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
+    interval: apprentice ? apprenticeProfile?.interval ?? 15
+      : Number(existing?.INTERVALO_MINUTOS ?? generatedDay?.INTERVALO_MINUTOS ?? (plantao12x36 ? 60 : 70)) });
   const [mode, setMode] = useState<'FXF' | 'TRB'>(existing?.PROGRAMACAO === 'TRB' || plantao12x36 && diaPlantao ? 'TRB' : 'FXF');
   const [hours, setHours] = useState<StandardHours>(() => {
     if (apprentice) {
       const source = existing?.PROGRAMACAO === 'TRB' ? existing : workDay;
       return source?.HR_ENT1 && source.HR_SAI1
         ? { HR_ENT1: source.HR_ENT1, HR_SAI1: source.HR_SAI1, HR_ENT2: source.HR_ENT2 || '', HR_SAI2: source.HR_SAI2 || '' }
-        : apprenticeHoursFromStart(employee.HR_ENT1 || '08:00', profile.work, profile.interval)
+        : apprenticeHoursFromStart(source?.HR_ENT1 || employee.HR_ENT1 || '08:00', profile.work, profile.interval)
           || apprenticeHoursFromStart('08:00', profile.work, profile.interval)!;
     }
     const base = {
@@ -146,13 +148,14 @@ export function EditarFixoEscala({
     </div>
     {mode === 'TRB' && <div className="day-editor-times">
       {!plantao12x36 && <ShiftProfileSelect value={profile} sundayOnly={domingo6h} apprentice={apprentice} lojaId={lojaId} onSelect={(item) => {
-        const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
+        const next = apprentice ? apprenticeHoursFromStart(hours.HR_ENT1, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS)
+          : applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
         if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
         setHours(next);
         setError('');
       }} />}
-      {(apprentice && profile.interval === 0 ? [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída']] as const
+      {(apprentice && (profile.interval === 0 || usesImplicitApprenticeBreak(profile.work, profile.interval)) ? [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída']] as const
         : [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída intervalo'], ['HR_ENT2', 'Retorno'], ['HR_SAI2', 'Saída']] as const)
         .map(([key, label]) => <label key={key}>{label}<input type="time" required value={hours[key]} onChange={(event) => { const next = apprentice
           ? autofillApprenticeHours(key, event.target.value, profile.work, profile.interval, hours)

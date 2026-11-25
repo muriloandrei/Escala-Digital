@@ -322,14 +322,16 @@ function getHorarioBaseFuncionario(funcionario, turno, apprenticeProfiles = null
     }
     const atual = timeToMinutes(candidate.HR_SAI1) == null ? 0
       : (timeToMinutes(candidate.HR_SAI1) - inicio + 1440) % 1440;
-    const [work, interval] = String([...(apprenticeProfiles || [])]
+    const preferred = apprenticeProfiles?.has('300:15') ? '300:15' : null;
+    const [work, interval] = String(preferred || [...(apprenticeProfiles || [])]
       .sort((left, right) => Math.abs(Number(left.split(':')[0]) - atual)
         - Math.abs(Number(right.split(':')[0]) - atual) || Number(left.split(':')[0]) - Number(right.split(':')[0]))[0] || '').split(':').map(Number);
     if (!work || !Number.isFinite(interval)) return { hrEnt1, hrSai1: null, hrEnt2: null, hrSai2: null };
-    const first = interval ? Math.min(360, Math.max(work - 360, Math.floor(work / 2))) : work;
+    const implicitBreak = work === 300 && interval === 15;
+    const first = interval && !implicitBreak ? Math.min(360, Math.max(work - 360, Math.floor(work / 2))) : work + interval;
     return { hrEnt1, hrSai1: minutesToTime((inicio + first) % 1440),
-      hrEnt2: interval ? minutesToTime((inicio + first + interval) % 1440) : null,
-      hrSai2: interval ? minutesToTime((inicio + work + interval) % 1440) : null };
+      hrEnt2: interval && !implicitBreak ? minutesToTime((inicio + first + interval) % 1440) : null,
+      hrSai2: interval && !implicitBreak ? minutesToTime((inicio + work + interval) % 1440) : null };
   }
   const hrEnt1 = normalizeTime(funcionario.HR_ENT1 || turno?.HR_ENT1, '08:00');
   const hrSai1 = normalizeTime(funcionario.HR_SAI1 || turno?.HR_SAI1, '12:00');
@@ -373,10 +375,13 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
   const aprendiz = isFuncionarioAprendiz(funcionario);
   const elapsed = (start, end) => (timeToMinutes(end) - timeToMinutes(start) + 1440) % 1440;
   const intervaloAprendiz = aprendiz && horario.hrEnt2 && horario.hrSai2
-    ? elapsed(horario.hrSai1, horario.hrEnt2) : 0;
+    ? elapsed(horario.hrSai1, horario.hrEnt2)
+    : aprendiz && horario.hrSai1 && elapsed(horario.hrEnt1, horario.hrSai1) === 315
+      && opcoes.apprenticeProfiles?.has('300:15') ? 15 : 0;
   const jornadaAprendiz = aprendiz && horario.hrSai1
     ? elapsed(horario.hrEnt1, horario.hrSai1)
-      + (intervaloAprendiz ? elapsed(horario.hrEnt2, horario.hrSai2) : 0) : null;
+      + (horario.hrEnt2 && horario.hrSai2 ? elapsed(horario.hrEnt2, horario.hrSai2) : 0)
+      - (!horario.hrEnt2 ? intervaloAprendiz : 0) : null;
   const folgas = new Set((folgasDatas || []).map(formatDateValue).filter(Boolean));
   const indiceAusencias = opcoes.indiceAusencias || criarIndiceAusencias(opcoes.ausencias || []);
   if (temAfastamentoIntegral(funcionario, mesRef, indiceAusencias)) {

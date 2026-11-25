@@ -37,10 +37,12 @@ const migrationNames = [
   '20261118_horarios_padrao_por_loja.sql',
   '20261123_oficializacao_por_perfil.sql',
   '20261125_jornadas_aprendiz_livres.sql',
-  '20261125_reparar_jornadas_aprendiz.sql'
+  '20261125_reparar_jornadas_aprendiz.sql',
+  '20261125_aprendiz_5h_15min_intervalo.sql'
 ];
 const apprenticeRepairName = '20261125_reparar_jornadas_aprendiz.sql';
 const apprenticeOriginalName = '20261125_jornadas_aprendiz_livres.sql';
+const apprenticeStandardName = '20261125_aprendiz_5h_15min_intervalo.sql';
 
 function parseSinglePlsqlBlock(source) {
   const lines = String(source).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim().split('\n');
@@ -108,13 +110,15 @@ async function checkPrerequisites(connection, migration, expectedOracleUser) {
   const current = applied.get(migration.name);
   if (current && current !== migration.checksum) throw new Error('Migration registrada com checksum diferente; investigue antes de prosseguir.');
   if (!current) {
-    if (migration.name === apprenticeRepairName) {
-      if (applied.get(apprenticeOriginalName) !== readMigration(apprenticeOriginalName).checksum) {
-        throw new Error(`Migration anterior sem registro confirmado: ${apprenticeOriginalName}.`);
+    if (migration.name === apprenticeRepairName || migration.name === apprenticeStandardName) {
+      const predecessor = migration.name === apprenticeRepairName ? apprenticeOriginalName : apprenticeRepairName;
+      if (applied.get(predecessor) !== readMigration(predecessor).checksum) {
+        throw new Error(`Migration anterior sem registro confirmado: ${predecessor}.`);
       }
       const required = {
         SGN_ESC_HORARIO_PADRAO: ['ESCHORPAD_ID', 'DESCR', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2',
-          'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS', 'DT_HR_INCL'],
+          'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS', 'DT_HR_INCL',
+          ...(migration.name === apprenticeStandardName ? ['LIBERAR_HORARIO_APRENDIZ'] : [])],
         SGN_ESC_HORPAD_LOJA: ['ESCHORPAD_ID', 'LOJA'],
         SGN_ESC_LOJA: ['LOJA']
       };

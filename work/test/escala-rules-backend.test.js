@@ -462,6 +462,14 @@ test('backend validates apprentice against configured profiles', () => {
   ], { funcao: 'JOVEM APRENDIZ', aprendiz: true }), { apprenticeProfiles: new Set(['315:0']) }).length);
 });
 
+test('backend treats the 05:15 elapsed apprentice shift as 05:00 work plus 00:15 break', () => {
+  const day = trabalho('2026-12-01', { hrEnt1: '12:45', hrSai1: '18:00',
+    hrEnt2: null, hrSai2: null, jornadaMinutos: 300, intervaloMinutos: 15 });
+  const errors = validateEscalaPayload(buildPayload([day],
+    { funcao: 'JOVEM APRENDIZ', aprendiz: true }), { apprenticeProfiles: new Set(['300:15']) });
+  assert.deepEqual(errors, []);
+});
+
 test('backend rejects continuous period greater than 06:00', () => {
   const errors = validateEscalaPayload(buildPayload([
     trabalho('2026-09-01', { hrEnt1: '06:00', hrSai1: '12:30', hrEnt2: '13:40', hrSai2: '16:58' })

@@ -203,8 +203,9 @@ function validarTurnoAprendiz(funcionarioLabel, dia, { apprenticeProfiles = null
   const first = single ? (horario.saidaIntervalo - horario.entrada + 1440) % 1440
     : horario.saidaIntervalo - horario.entrada;
   const second = single ? 0 : horario.saida - horario.retornoIntervalo;
-  const interval = single ? 0 : horario.retornoIntervalo - horario.saidaIntervalo;
-  const jornada = first + second;
+  const interval = single && first === 315 && apprenticeProfiles?.has('300:15') ? 15
+    : single ? 0 : horario.retornoIntervalo - horario.saidaIntervalo;
+  const jornada = first + second - (single ? interval : 0);
   if (first <= 0 || second < 0 || interval < 0 || (!single && (second === 0 || interval === 0))
     || (apprenticeProfiles instanceof Set && !apprenticeProfiles.has(`${jornada}:${interval}`))) {
     errors.push(`${funcionarioLabel}: jornada nao liberada para aprendizes em ${data}. Atual: ${minutesToTime(jornada)}.`);

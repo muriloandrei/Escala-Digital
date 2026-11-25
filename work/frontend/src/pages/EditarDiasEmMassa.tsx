@@ -4,7 +4,7 @@ import { createOperationId } from '../operationId';
 import { validateStandardHours, type StandardHours } from '../shiftValidation';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
-import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, validateApprenticeHours } from '../apprenticeHours';
+import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
 import { toPayloadDay, type PayloadDay } from './EditarDiaEscala';
 import { quickShift } from '../quickShift';
 
@@ -211,13 +211,13 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
       const apprentice = /APRENDIZ/i.test(person.FUNCAO_DESCR || '');
       const workDay = days.find((day) => day.PROGRAMACAO === 'TRB');
       const apprenticeProfile = apprentice ? apprenticeProfileFromHours(workDay || person) : null;
-      const work = Number(workDay?.JORNADA_MINUTOS) || apprenticeProfile?.work || (apprentice ? 315 : 528);
-      const interval = Number(workDay?.INTERVALO_MINUTOS ?? apprenticeProfile?.interval ?? (apprentice ? 0 : 70));
+      const work = apprentice ? apprenticeProfile?.work || 300 : Number(workDay?.JORNADA_MINUTOS) || 528;
+      const interval = apprentice ? apprenticeProfile?.interval ?? 15 : Number(workDay?.INTERVALO_MINUTOS ?? 70);
       setProfile({ work, interval });
       setHours(apprentice
         ? workDay?.HR_ENT1 && workDay.HR_SAI1
           ? { HR_ENT1: workDay.HR_ENT1, HR_SAI1: workDay.HR_SAI1, HR_ENT2: workDay.HR_ENT2 || '', HR_SAI2: workDay.HR_SAI2 || '' }
-          : apprenticeHoursFromStart(person.HR_ENT1 || '08:00', work, interval) || apprenticeHoursFromStart('08:00', work, interval)!
+          : apprenticeHoursFromStart(workDay?.HR_ENT1 || person.HR_ENT1 || '08:00', work, interval) || apprenticeHoursFromStart('08:00', work, interval)!
         : { HR_ENT1: '08:00', HR_SAI1: '12:30', HR_ENT2: '13:40', HR_SAI2: '17:58' });
     }} /><span><strong>{person.CHAPA} · {person.NOME}</strong></span></label>)}</div>
     <div className="bulk-editor-controls"><div className="segmented" role="group" aria-label="Programação"><button className={mode === 'F' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('F'); setSelectedDates([]); setIssues([]); }}>Folga</button>
@@ -227,13 +227,14 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
         <button className={mode === 'TROCA' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('TROCA'); setSelectedDates([]); setIssues([]); }}>Trocar folga</button></div></div>
     {mode === 'HORARIO' && <div className="bulk-hours">
       <ShiftProfileSelect value={profile} sundayOnly={sunday6hSelection} apprentice={selectedApprentice} lojaId={lojaId} onSelect={(item) => {
-        const next = applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
+        const next = selectedApprentice ? apprenticeHoursFromStart(hours.HR_ENT1, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS)
+          : applyShiftProfile(hours, item.JORNADA_MINUTOS, item.INTERVALO_MINUTOS);
         if (!next) { setError('Não foi possível aplicar esta jornada à entrada atual.'); return; }
         setProfile({ work: item.JORNADA_MINUTOS, interval: item.INTERVALO_MINUTOS });
         setHours(next);
         setError(''); setIssues([]);
       }} />
-      {(selectedApprentice && profile.interval === 0 ? [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída']] as const
+      {(selectedApprentice && (profile.interval === 0 || usesImplicitApprenticeBreak(profile.work, profile.interval)) ? [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída']] as const
         : [['HR_ENT1', 'Entrada'], ['HR_SAI1', 'Saída intervalo'], ['HR_ENT2', 'Retorno'], ['HR_SAI2', 'Saída']] as const)
         .map(([key, label]) => <label key={key}>{label}<input type="time" value={hours[key]} disabled={busy || uncertain} onChange={(event) => { const next = selectedApprentice
           ? autofillApprenticeHours(key, event.target.value, profile.work, profile.interval, hours)
