@@ -22,6 +22,7 @@ function normalizeUser(usuario, lojas) {
 
 const PERFIL_PAGES = [
   { key: 'escalas', label: 'Escalas Geradas' },
+  { key: 'adesao-escalas', label: 'Adesao de Escalas' },
   { key: 'escalas-funcionarios', label: 'Escalas por Funcionario' },
   { key: 'funcionarios', label: 'Funcionarios' },
   { key: 'secoes', label: 'Secoes' },

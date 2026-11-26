@@ -75,4 +75,5 @@ require('./converter-jornada-8h24-cli.test');
 require('./officialization-progress.test');
 require('./officialization-routes.test');
 require('./section-rollout.test');
+require('./adesao-escalas.test');
 require('./diagnosticar-acesso-lider.test');

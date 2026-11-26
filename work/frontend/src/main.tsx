@@ -41,6 +41,7 @@ import './schedule.css';
 import './directory.css';
 import './print.css';
 import './retificacoes.css';
+import './adesao.css';
 
 const LAST_TRAINING_STAGE = 16;
 

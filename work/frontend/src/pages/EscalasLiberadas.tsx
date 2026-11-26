@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, Search, Archive } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { canCreate, getJson, postJson, type Loja, type ResumoEscala, type User } from '../api';
+import { canCreate, canView, getJson, postJson, type Loja, type ResumoEscala, type User } from '../api';
 import { ProgressoEscalaModal } from './ProgressoEscala';
+import { AdesaoEscalas } from './AdesaoEscalas';
 
 const months = [
   'Janeiro',
@@ -35,6 +36,14 @@ function displayDate(value: string | undefined) {
 }
 
 export function EscalasLiberadas({ user }: { user: User }) {
+  const [tab, setTab] = useState<'escalas' | 'adesao'>('escalas');
+  return <main className="content"><div className="escalas-view-tabs" role="tablist" aria-label="Visão das escalas">
+    <button type="button" role="tab" aria-selected={tab === 'escalas'} onClick={() => setTab('escalas')}>Escalas liberadas</button>
+    {canView(user, 'adesao-escalas') && <button type="button" role="tab" aria-selected={tab === 'adesao'} onClick={() => setTab('adesao')}>Adesão</button>}
+  </div>{tab === 'adesao' ? <AdesaoEscalas /> : <ListaEscalasLiberadas user={user} />}</main>;
+}
+
+function ListaEscalasLiberadas({ user }: { user: User }) {
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [escalas, setEscalas] = useState<ResumoEscala[]>([]);
   const [loja, setLoja] = useState('all');
@@ -144,7 +153,7 @@ export function EscalasLiberadas({ user }: { user: User }) {
   }
 
   return (
-    <main className="content">
+    <div className="escalas-list-body">
       <div className="page-heading">
         <div>
           <h1>Escalas liberadas</h1>
@@ -316,6 +325,6 @@ export function EscalasLiberadas({ user }: { user: User }) {
         <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setInactiveTarget(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={inactivateSchedule}>{busy ? 'Inativando...' : 'Confirmar inativação'}</button></div>
       </div></div>}
       {progressTarget && <ProgressoEscalaModal lojaId={progressTarget.lojaId} mesRef={progressTarget.mesRef} onClose={() => setProgressTarget(null)} />}
-    </main>
+    </div>
   );
 }

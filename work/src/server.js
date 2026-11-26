@@ -17,6 +17,7 @@ const escalaRoutes = require('./routes/escalaRoutes');
 const stateRoutes = require('./routes/stateRoutes');
 const accessRoutes = require('./routes/accessRoutes');
 const diagnosticsRoutes = require('./routes/diagnosticsRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 const monthlyReleaseService = require('./services/monthlyReleaseService');
 const trainingProgressService = require('./services/trainingProgressService');
 const { LAST_STAGE } = require('./config/trainingStages');
@@ -179,6 +180,7 @@ app.use('/api/escalas', escalaRoutes);
 app.use('/api/state', stateRoutes);
 app.use('/api/acessos', accessRoutes);
 app.use('/api/diagnostics', diagnosticsRoutes);
+app.use('/api/relatorios', reportRoutes);
 app.use('/api', notFound);
 
 app.get('*', (req, res) => {
