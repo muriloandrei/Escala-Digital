@@ -15,6 +15,7 @@ declare
   type t_totais is table of number index by varchar2(30);
   v_dias_por_loja_mes t_totais;
   v_chave varchar2(30);
+  v_saida_824 varchar2(5);
 
   function minutos(p_hora varchar2) return number is
     v_hora number;
@@ -71,21 +72,22 @@ begin
      where f.dt_demiss is null or f.dt_demiss >= v_inicio
   ) loop
     if eh_8h48(r.hr_ent1, r.hr_sai1, r.hr_ent2, r.hr_sai2) then
+      v_saida_824 := nova_saida(r.hr_sai2);
       v_bases := v_bases + 1;
       if v_bases <= 10 then
         dbms_output.put_line('BASE loja=' || r.loja || ' chapa=' || r.chapa
-          || ' saida=' || r.hr_sai2 || '->' || nova_saida(r.hr_sai2));
+          || ' saida=' || r.hr_sai2 || '->' || v_saida_824);
       end if;
       if v_aplicar = 1 then
         merge into sgn_esc_horario_base_mes dest
         using (select r.escfunc_id as escfunc_id, r.loja as loja, v_inicio as mes_ref from dual) src
            on (dest.escfunc_id = src.escfunc_id and dest.mes_ref = src.mes_ref)
         when matched then update set dest.hr_ent1 = r.hr_ent1, dest.hr_sai1 = r.hr_sai1,
-          dest.hr_ent2 = r.hr_ent2, dest.hr_sai2 = nova_saida(r.hr_sai2), dest.dt_hr_alter = sysdate
+          dest.hr_ent2 = r.hr_ent2, dest.hr_sai2 = v_saida_824, dest.dt_hr_alter = sysdate
         when not matched then insert
           (escfunc_id, loja, mes_ref, hr_ent1, hr_sai1, hr_ent2, hr_sai2)
           values (src.escfunc_id, src.loja, src.mes_ref, r.hr_ent1, r.hr_sai1,
-                  r.hr_ent2, nova_saida(r.hr_sai2));
+                  r.hr_ent2, v_saida_824);
       end if;
     end if;
   end loop;
@@ -93,10 +95,11 @@ begin
   for r in (select escfunc_id, mes_ref, hr_ent1, hr_sai1, hr_ent2, hr_sai2
               from sgn_esc_horario_base_mes where mes_ref > v_inicio) loop
     if eh_8h48(r.hr_ent1, r.hr_sai1, r.hr_ent2, r.hr_sai2) then
+      v_saida_824 := nova_saida(r.hr_sai2);
       v_bases_futuras := v_bases_futuras + 1;
       if v_aplicar = 1 then
         update sgn_esc_horario_base_mes
-           set hr_sai2 = nova_saida(r.hr_sai2), dt_hr_alter = sysdate
+           set hr_sai2 = v_saida_824, dt_hr_alter = sysdate
          where escfunc_id = r.escfunc_id and mes_ref = r.mes_ref and hr_sai2 = r.hr_sai2;
         if sql%rowcount <> 1 then raise_application_error(-20002, 'Base futura alterada durante a conversao.'); end if;
       end if;
@@ -108,10 +111,11 @@ begin
              where mes_ref >= v_inicio and dt >= date '2026-11-30'
                and status = 'A' and programacao = 'TRB') loop
     if eh_8h48(r.hr_ent1, r.hr_sai1, r.hr_ent2, r.hr_sai2) then
+      v_saida_824 := nova_saida(r.hr_sai2);
       v_fixos := v_fixos + 1;
       if v_aplicar = 1 then
         update sgn_esc_fixo_escala
-           set hr_sai2 = nova_saida(r.hr_sai2), jornada_minutos = 504
+           set hr_sai2 = v_saida_824, jornada_minutos = 504
          where escfixo_id = r.escfixo_id and hr_sai2 = r.hr_sai2;
         if sql%rowcount <> 1 then raise_application_error(-20003, 'Fixo alterado durante a conversao.'); end if;
       end if;
@@ -131,6 +135,7 @@ begin
                            and p2.escfunc_id = p.escfunc_id and nvl(p2.ativa, 1) = 1)
   ) loop
     if eh_8h48(r.hr_ent1, r.hr_sai1, r.hr_ent2, r.hr_sai2) then
+      v_saida_824 := nova_saida(r.hr_sai2);
       v_dias := v_dias + 1;
       v_chave := lpad(r.loja, 4, '0') || '|' || to_char(r.mes_ref, 'YYYY-MM');
       if not v_dias_por_loja_mes.exists(v_chave) then v_dias_por_loja_mes(v_chave) := 0; end if;
@@ -138,11 +143,11 @@ begin
       if v_dias <= 10 then
         dbms_output.put_line('DIA loja=' || r.loja || ' chapa=' || r.chapa
           || ' mes=' || to_char(r.mes_ref, 'YYYY-MM') || ' data=' || to_char(r.dt, 'YYYY-MM-DD')
-          || ' saida=' || r.hr_sai2 || '->' || nova_saida(r.hr_sai2));
+          || ' saida=' || r.hr_sai2 || '->' || v_saida_824);
       end if;
       if v_aplicar = 1 then
         update sgn_esc_prog_dia
-           set hr_sai2 = nova_saida(r.hr_sai2), jornada_minutos = 504
+           set hr_sai2 = v_saida_824, jornada_minutos = 504
          where escprogdia_id = r.escprogdia_id and hr_sai2 = r.hr_sai2;
         if sql%rowcount <> 1 then raise_application_error(-20004, 'Dia alterado durante a conversao.'); end if;
       end if;
@@ -160,10 +165,11 @@ begin
   ) loop
     if eh_8h48(r.hr_oficial_ent1, r.hr_oficial_sai1,
                 r.hr_oficial_ent2, r.hr_oficial_sai2) then
+      v_saida_824 := nova_saida(r.hr_oficial_sai2);
       v_cabecalhos := v_cabecalhos + 1;
       if v_aplicar = 1 then
         update sgn_esc_prog
-           set hr_oficial_sai2 = nova_saida(r.hr_oficial_sai2)
+           set hr_oficial_sai2 = v_saida_824
          where escprog_id = r.escprog_id and hr_oficial_sai2 = r.hr_oficial_sai2;
         if sql%rowcount <> 1 then raise_application_error(-20005, 'Cabecalho alterado durante a conversao.'); end if;
       end if;

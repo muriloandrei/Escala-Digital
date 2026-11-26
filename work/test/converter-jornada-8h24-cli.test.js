@@ -13,6 +13,14 @@ test('conversao 08:24 exige operador no apply e usa previa por padrao', () => {
   assert.doesNotMatch(loadBlock(true), /\n\/\s*$/);
 });
 
+test('conversao calcula nova saida fora dos comandos SQL Oracle', () => {
+  const block = loadBlock(true);
+  const dml = block.match(/(?:merge into|update sgn_esc_)[\s\S]*?;/gi) || [];
+  assert.equal(dml.length >= 5, true);
+  for (const statement of dml) assert.doesNotMatch(statement, /\bnova_saida\s*\(/i);
+  assert.equal((block.match(/v_saida_824 := nova_saida\(/g) || []).length, 5);
+});
+
 test('conversao 08:24 exige schema correto e migration confirmada', async () => {
   const checksum = readMigration('20261126_jornada_8h24_todas_lojas.sql').checksum;
   let recorded = checksum;
