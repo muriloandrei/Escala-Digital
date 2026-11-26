@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { patchJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
-import { validateStandardHours } from '../shiftValidation';
+import { inferStandardProfile, validateStandardHours } from '../shiftValidation';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
 import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, normalizeApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
 
@@ -25,19 +25,23 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
   const [month, setMonth] = useState(initialMonth < minimumMonth && !allowRetroactive ? minimumMonth : initialMonth);
   const apprentice = /APRENDIZ/i.test(employee.FUNCAO_DESCR || '');
   const apprenticeProfile = apprentice ? apprenticeProfileFromHours(employee) : null;
-  const [profile, setProfile] = useState({ work: apprentice ? apprenticeProfile?.work || 300
-    : Number(currentDay?.JORNADA_MINUTOS) || 528,
+  const standardHours = {
+    HR_ENT1: employee.HR_ENT1 || currentDay?.HR_ENT1 || '', HR_SAI1: employee.HR_SAI1 || currentDay?.HR_SAI1 || '',
+    HR_ENT2: employee.HR_ENT2 || currentDay?.HR_ENT2 || '', HR_SAI2: employee.HR_SAI2 || currentDay?.HR_SAI2 || '',
+  };
+  const [profile, setProfile] = useState(() => {
+    const fallback = { work: apprentice ? apprenticeProfile?.work || 300
+      : Number(currentDay?.JORNADA_MINUTOS) || 528,
     interval: apprentice ? apprenticeProfile?.interval ?? 15
-      : Number(currentDay?.INTERVALO_MINUTOS ?? 70) });
+      : Number(currentDay?.INTERVALO_MINUTOS ?? 70) };
+    return apprentice ? fallback : inferStandardProfile(standardHours, fallback);
+  });
   const [hours, setHours] = useState(() => apprentice
     ? (employee.HR_ENT1 && employee.HR_SAI1
       ? normalizeApprenticeHours(employee)
       : apprenticeHoursFromStart(currentDay?.HR_ENT1 || '08:00', profile.work, profile.interval)
         || apprenticeHoursFromStart('08:00', profile.work, profile.interval)!)
-    : {
-      HR_ENT1: employee.HR_ENT1 || currentDay?.HR_ENT1 || '', HR_SAI1: employee.HR_SAI1 || currentDay?.HR_SAI1 || '',
-      HR_ENT2: employee.HR_ENT2 || currentDay?.HR_ENT2 || '', HR_SAI2: employee.HR_SAI2 || currentDay?.HR_SAI2 || '',
-    });
+    : standardHours);
   const [impact, setImpact] = useState<Impact | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

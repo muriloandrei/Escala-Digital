@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { createOperationId } from '../operationId';
-import { validateStandardHours, type StandardHours } from '../shiftValidation';
+import { inferStandardProfile, validateStandardHours, type StandardHours } from '../shiftValidation';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
 import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, normalizeApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
@@ -211,14 +211,23 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
       const apprentice = /APRENDIZ/i.test(person.FUNCAO_DESCR || '');
       const workDay = days.find((day) => day.PROGRAMACAO === 'TRB');
       const apprenticeProfile = apprentice ? apprenticeProfileFromHours(workDay || person) : null;
-      const work = apprentice ? apprenticeProfile?.work || 300 : Number(workDay?.JORNADA_MINUTOS) || 528;
-      const interval = apprentice ? apprenticeProfile?.interval ?? 15 : Number(workDay?.INTERVALO_MINUTOS ?? 70);
-      setProfile({ work, interval });
+      const standardHours = {
+        HR_ENT1: workDay?.HR_ENT1 || person.HR_ENT1 || '08:00',
+        HR_SAI1: workDay?.HR_SAI1 || person.HR_SAI1 || '12:30',
+        HR_ENT2: workDay?.HR_ENT2 || person.HR_ENT2 || '13:40',
+        HR_SAI2: workDay?.HR_SAI2 || person.HR_SAI2 || (mesRef >= '2026-12-01' ? '17:34' : '17:58'),
+      };
+      const fallback = { work: apprentice ? apprenticeProfile?.work || 300
+        : Number(workDay?.JORNADA_MINUTOS) || (mesRef >= '2026-12-01' ? 504 : 528),
+      interval: apprentice ? apprenticeProfile?.interval ?? 15 : Number(workDay?.INTERVALO_MINUTOS ?? 70) };
+      const selectedProfile = apprentice ? fallback : inferStandardProfile(standardHours, fallback);
+      const { work, interval } = selectedProfile;
+      setProfile(selectedProfile);
       setHours(apprentice
         ? workDay?.HR_ENT1 && workDay.HR_SAI1
           ? normalizeApprenticeHours(workDay)
           : apprenticeHoursFromStart(workDay?.HR_ENT1 || person.HR_ENT1 || '08:00', work, interval) || apprenticeHoursFromStart('08:00', work, interval)!
-        : { HR_ENT1: '08:00', HR_SAI1: '12:30', HR_ENT2: '13:40', HR_SAI2: '17:58' });
+        : standardHours);
     }} /><span><strong>{person.CHAPA} · {person.NOME}</strong></span></label>)}</div>
     <div className="bulk-editor-controls"><div className="segmented" role="group" aria-label="Programação"><button className={mode === 'F' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('F'); setSelectedDates([]); setIssues([]); }}>Folga</button>
         <button className={mode === 'FDO' ? 'selected' : ''} type="button" disabled={busy || uncertain} onClick={() => { setMode('FDO'); setSelectedDates([]); setIssues([]); }}>Folga de feriado</button>

@@ -18,6 +18,20 @@ export function unfoldShiftMinutes(values: string[]): number[] | null {
   return timeline[3] - timeline[0] < 1440 ? timeline : null;
 }
 
+export function inferStandardProfile(hours: StandardHours, fallback: { work: number; interval: number }) {
+  const timeline = unfoldShiftMinutes([
+    hours.HR_ENT1, hours.HR_SAI1, hours.HR_ENT2, hours.HR_SAI2,
+  ]);
+  if (!timeline) return fallback;
+  const [entry, breakStart, breakEnd, exit] = timeline;
+  const work = breakStart - entry + exit - breakEnd;
+  const interval = breakEnd - breakStart;
+  if (work <= 0 || interval <= 0) return fallback;
+  if (work === fallback.work && interval === fallback.interval) return fallback;
+  if (work === fallback.work && [504, 528].includes(work) && fallback.interval === 70 && interval >= 70) return fallback;
+  return { work, interval };
+}
+
 export function validateStandardHours(hours: StandardHours, workMinutes = 528, intervalMinutes = 70) {
   if (intervalMinutes === 0) {
     const entry = minutes(hours.HR_ENT1);

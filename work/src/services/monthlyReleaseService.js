@@ -307,7 +307,22 @@ function isFolgaAutomatica(date, funcionarioIndex = 0) {
   return pattern.includes(getCycleIndex(date));
 }
 
-function getHorarioBaseFuncionario(funcionario, turno, apprenticeProfiles = null) {
+function jornadaMinutosHorario(horario) {
+  const inicio1 = timeToMinutes(horario.hrEnt1);
+  const fim1 = timeToMinutes(horario.hrSai1);
+  const inicio2 = timeToMinutes(horario.hrEnt2);
+  const fim2 = timeToMinutes(horario.hrSai2);
+  if ([inicio1, fim1, inicio2, fim2].some((value) => value === null)) return null;
+  return (fim1 - inicio1 + 1440) % 1440 + (fim2 - inicio2 + 1440) % 1440;
+}
+
+function converterJornada824(horario, mesRef) {
+  if (String(mesRef || '').slice(0, 7) < '2026-12' || jornadaMinutosHorario(horario) !== 528) return horario;
+  const fim2 = timeToMinutes(horario.hrSai2);
+  return { ...horario, hrSai2: minutesToTime((fim2 - 24 + 1440) % 1440) };
+}
+
+function getHorarioBaseFuncionario(funcionario, turno, apprenticeProfiles = null, mesRef = null) {
   if (isFuncionarioAprendiz(funcionario)) {
     const hrEnt1 = normalizeTime(funcionario.HR_ENT1 || turno?.HR_ENT1, '08:00');
     const inicio = timeToMinutes(hrEnt1) ?? 480;
@@ -338,7 +353,7 @@ function getHorarioBaseFuncionario(funcionario, turno, apprenticeProfiles = null
   const hrSai1 = normalizeTime(funcionario.HR_SAI1 || turno?.HR_SAI1, '12:00');
   const hrEnt2 = normalizeTime(funcionario.HR_ENT2 || turno?.HR_ENT2, '13:10');
   const hrSai2 = normalizeTime(funcionario.HR_SAI2 || turno?.HR_SAI2, '17:58');
-  return { hrEnt1, hrSai1, hrEnt2, hrSai2 };
+  return converterJornada824({ hrEnt1, hrSai1, hrEnt2, hrSai2 }, mesRef);
 }
 
 function horarioDomingo6h(horario) {
@@ -372,7 +387,7 @@ function montarFuncionarioRascunho(funcionario, turno, dias, horario) {
 }
 
 function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso = formatDateValue(new Date()), folgasDatas = [], opcoes = {}) {
-  const horario = getHorarioBaseFuncionario(funcionario, turno, opcoes.apprenticeProfiles);
+  const horario = getHorarioBaseFuncionario(funcionario, turno, opcoes.apprenticeProfiles, mesRef);
   const aprendiz = isFuncionarioAprendiz(funcionario);
   const elapsed = (start, end) => (timeToMinutes(end) - timeToMinutes(start) + 1440) % 1440;
   const intervaloAprendiz = aprendiz && horario.hrEnt2 && horario.hrSai2
@@ -414,13 +429,20 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
       if (fixo) {
         const programacaoFixa = String(fixo.programacao || fixo.PROGRAMACAO || 'TRB').toUpperCase();
         const descansoFixo = programacaoFixa !== 'TRB';
+        const horarioFixo = !aprendiz && !descansoFixo ? converterJornada824({
+          hrEnt1: normalizeTime(fixo.hrEnt1 || fixo.HR_ENT1, horario.hrEnt1),
+          hrSai1: normalizeTime(fixo.hrSai1 || fixo.HR_SAI1, horario.hrSai1),
+          hrEnt2: normalizeTime(fixo.hrEnt2 || fixo.HR_ENT2, horario.hrEnt2),
+          hrSai2: normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2)
+        }, mesRef) : null;
         return {
           data,
-          hrEnt1: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrEnt1 || fixo.HR_ENT1, horario.hrEnt1),
-          hrSai1: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai1 || fixo.HR_SAI1, horario.hrSai1),
-          hrEnt2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrEnt2 || fixo.HR_ENT2, horario.hrEnt2),
-          hrSai2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2),
-          jornadaMinutos: descansoFixo ? null : fixo.jornadaMinutos ?? fixo.JORNADA_MINUTOS ?? jornadaAprendiz,
+          hrEnt1: descansoFixo ? programacaoFixa : horarioFixo?.hrEnt1 || normalizeTime(fixo.hrEnt1 || fixo.HR_ENT1, horario.hrEnt1),
+          hrSai1: descansoFixo ? programacaoFixa : horarioFixo?.hrSai1 || normalizeTime(fixo.hrSai1 || fixo.HR_SAI1, horario.hrSai1),
+          hrEnt2: descansoFixo ? programacaoFixa : horarioFixo?.hrEnt2 || normalizeTime(fixo.hrEnt2 || fixo.HR_ENT2, horario.hrEnt2),
+          hrSai2: descansoFixo ? programacaoFixa : horarioFixo?.hrSai2 || normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2),
+          jornadaMinutos: descansoFixo ? null : !aprendiz && jornadaMinutosHorario(horarioFixo) === 504
+            ? 504 : fixo.jornadaMinutos ?? fixo.JORNADA_MINUTOS ?? jornadaAprendiz,
           intervaloMinutos: descansoFixo ? null : fixo.intervaloMinutos ?? fixo.INTERVALO_MINUTOS ?? (aprendiz ? intervaloAprendiz : null),
           programacao: programacaoFixa,
           justificativa: fixo.justificativa || fixo.JUSTIFICATIVA || 'Horario/folga fixa'
@@ -437,7 +459,8 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
         hrSai1: folga ? 'F' : horarioDia.hrSai1,
         hrEnt2: folga ? 'F' : horarioDia.hrEnt2,
         hrSai2: folga ? 'F' : horarioDia.hrSai2,
-        jornadaMinutos: folga ? null : jornadaAprendiz,
+        jornadaMinutos: folga ? null : (aprendiz ? jornadaAprendiz
+          : !plantao12x36 && jornadaMinutosHorario(horarioDia) === 504 ? 504 : null),
         intervaloMinutos: folga ? null : (aprendiz ? intervaloAprendiz : null),
         programacao: folga ? 'F' : 'TRB',
         justificativa: folga ? (plantao12x36 ? 'Descanso 12x36 automatico' : 'Folga 5x2 automatica')
@@ -1240,7 +1263,7 @@ function montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, op
 function buildFuncionariosLiberacao(funcionarios, turnos, mesRef = null, hojeIso = formatDateValue(new Date()), opcoes = {}) {
   return (funcionarios || []).map((funcionario) => {
     const turno = findTurnoParaFuncionario(funcionario, turnos);
-    const horario = getHorarioBaseFuncionario(funcionario, turno, opcoes.apprenticeProfiles);
+    const horario = getHorarioBaseFuncionario(funcionario, turno, opcoes.apprenticeProfiles, mesRef);
     const dias = permiteEscala(funcionario.STATUS)
       ? montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, opcoes)
       : [];

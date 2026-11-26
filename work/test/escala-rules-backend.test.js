@@ -84,6 +84,22 @@ test('oficializacao bloqueia critica individual mas nao alerta de cobertura', ()
     .some((critica) => critica.includes('dias consecutivos')));
 });
 
+test('5x2 permite seis dias ao cruzar a semana, mas exige folga no setimo', () => {
+  const dias = [descanso('2026-12-25'), ...[26, 27, 28, 29, 30, 31]
+    .map((dia) => trabalho(`2026-12-${dia}`)), descanso('2027-01-01')];
+  const funcionario = { escfuncId: 10, nome: 'Teste', dias };
+  const options = { lojaId: 1, mesRef: '2026-12-01', funcionarios: [funcionario], domingo1x1: false };
+  assert.equal(validarCriticasEscopo(options).some((critica) => critica.includes('dias consecutivos')), false);
+  dias[7] = trabalho('2027-01-01');
+  assert.ok(validarCriticasEscopo(options).some((critica) => critica.includes('7 dias consecutivos')));
+  funcionario.dias = [descanso('2026-12-27'), ...[28, 29, 30, 31].map((dia) => trabalho(`2026-12-${dia}`)),
+    trabalho('2027-01-01'), trabalho('2027-01-02')];
+  assert.ok(validarCriticasEscopo(options).some((critica) => critica.includes('6 dias consecutivos')));
+  funcionario.dias = [trabalho('2026-12-26'), trabalho('2026-12-27'), trabalho('2026-12-29'),
+    trabalho('2026-12-30'), trabalho('2026-12-31'), trabalho('2027-01-01')];
+  assert.equal(validarCriticasEscopo(options).some((critica) => critica.includes('dias consecutivos')), false);
+});
+
 test('oficializacao identifica funcionario sem dias gerados', () => {
   const criticas = validarCriticasEscopo({ lojaId: 1, mesRef: '2026-09-01',
     funcionarios: [{ escfuncId: 10, nome: 'Teste', dias: [] }] });
@@ -124,8 +140,19 @@ test('08h24 post shift is rejected outside post stores', () => {
   assert.deepEqual(validarCriticasEscopo({ lojaId: 700, mesRef: '2026-09-01', funcionarios: [employee] }), []);
   assert.match(validarCriticasEscopo({ lojaId: 35, mesRef: '2026-09-01', funcionarios: [employee] }).join(' '), /jornada selecionada invalida/);
   const unchanged = { ...day, jornadaMinutos: null, intervaloMinutos: null };
-  assert.match(validarCriticasEscopo({ lojaId: 700, mesRef: '2026-09-01',
-    funcionarios: [{ ...employee, dias: [unchanged] }] }).join(' '), /jornada total deve ser 08:48/);
+  assert.deepEqual(validarCriticasEscopo({ lojaId: 700, mesRef: '2026-09-01',
+    funcionarios: [{ ...employee, dias: [unchanged] }] }), []);
+});
+
+test('jornada cadastrada efetiva prevalece sobre metadado antigo de 08:48', () => {
+  const day = trabalho('2026-12-01', { hrEnt1: '08:00', hrSai1: '12:00',
+    hrEnt2: '13:10', hrSai2: '16:30', jornadaMinutos: 528, intervaloMinutos: 70 });
+  const employee = { escfuncId: 10, nome: 'Adriana', dias: [day] };
+  const options = { lojaId: 1, mesRef: '2026-12-01', funcionarios: [employee],
+    allowedProfiles: new Set(['528:70', '440:70']) };
+  assert.deepEqual(validarCriticasEscopo(options), []);
+  options.allowedProfiles.delete('440:70');
+  assert.match(validarCriticasEscopo(options).join(' '), /jornada total deve ser 08:48/);
 });
 
 test('selected 08h48 with 01h40 interval is valid only for posts', () => {
@@ -173,7 +200,7 @@ test('FDO nao substitui uma das duas folgas semanais', () => {
 test('regra parametrizada exige seis horas e intervalo de 1h10 no domingo', () => {
   const domingo = trabalho('2026-09-13', { hrEnt1: '08:00', hrSai1: '11:00', hrEnt2: '12:10', hrSai2: '15:10' });
   assert.equal(validateEscalaPayload(buildPayload([domingo]), { domingo6h: true }).some((item) => item.includes('jornada total')), false);
-  assert.equal(validateEscalaPayload(buildPayload([domingo]), { domingo6h: false }).some((item) => item.includes('jornada total')), true);
+  assert.equal(validateEscalaPayload(buildPayload([domingo]), { domingo6h: false }).some((item) => item.includes('jornada total')), false);
   const intervaloLongo = { ...domingo, hrEnt2: '12:20', hrSai2: '15:20' };
   assert.equal(validateEscalaPayload(buildPayload([intervaloLongo]), { domingo6h: true }).some((item) => item.includes('intervalo')), true);
 });

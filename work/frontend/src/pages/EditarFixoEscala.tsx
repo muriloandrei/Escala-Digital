@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getJson, postJson, type DiaEscala, type EscalaMensal, type FixoEscala, type Funcionario } from '../api';
-import { validateStandardHours, type StandardHours } from '../shiftValidation';
+import { inferStandardProfile, validateStandardHours, type StandardHours } from '../shiftValidation';
 import { validate12x36Hours } from '../shiftValidation';
 import { isDutyDay12x36 } from '../workRegime';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
@@ -28,10 +28,19 @@ export function EditarFixoEscala({
   const diaPlantao = plantao12x36 && isDutyDay12x36(employee.DT_ANCORA_12X36 || '', date);
   const domingo6h = !plantao12x36 && domingo6hHabilitado && new Date(`${date}T12:00:00`).getDay() === 0 && !apprentice;
   const apprenticeProfile = apprentice ? apprenticeProfileFromHours(existing?.PROGRAMACAO === 'TRB' ? existing : workDay || employee) : null;
-  const [profile, setProfile] = useState({ work: apprentice ? apprenticeProfile?.work || 300
-    : Number(existing?.JORNADA_MINUTOS || generatedDay?.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
+  const standardHours = {
+    HR_ENT1: existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT1 || '' : workDay?.HR_ENT1 || '',
+    HR_SAI1: existing?.PROGRAMACAO === 'TRB' ? existing.HR_SAI1 || '' : workDay?.HR_SAI1 || '',
+    HR_ENT2: existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT2 || '' : workDay?.HR_ENT2 || '',
+    HR_SAI2: existing?.PROGRAMACAO === 'TRB' ? existing.HR_SAI2 || '' : workDay?.HR_SAI2 || '',
+  };
+  const [profile, setProfile] = useState(() => {
+    const fallback = { work: apprentice ? apprenticeProfile?.work || 300
+      : Number(existing?.JORNADA_MINUTOS || generatedDay?.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
     interval: apprentice ? apprenticeProfile?.interval ?? 15
-      : Number(existing?.INTERVALO_MINUTOS ?? generatedDay?.INTERVALO_MINUTOS ?? (plantao12x36 ? 60 : 70)) });
+      : Number(existing?.INTERVALO_MINUTOS ?? generatedDay?.INTERVALO_MINUTOS ?? (plantao12x36 ? 60 : 70)) };
+    return apprentice || plantao12x36 || domingo6h ? fallback : inferStandardProfile(standardHours, fallback);
+  });
   const [mode, setMode] = useState<'FXF' | 'TRB'>(existing?.PROGRAMACAO === 'TRB' || plantao12x36 && diaPlantao ? 'TRB' : 'FXF');
   const [hours, setHours] = useState<StandardHours>(() => {
     if (apprentice) {
@@ -41,13 +50,7 @@ export function EditarFixoEscala({
         : apprenticeHoursFromStart(source?.HR_ENT1 || employee.HR_ENT1 || '08:00', profile.work, profile.interval)
           || apprenticeHoursFromStart('08:00', profile.work, profile.interval)!;
     }
-    const base = {
-      HR_ENT1: existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT1 || '' : workDay?.HR_ENT1 || '',
-      HR_SAI1: existing?.PROGRAMACAO === 'TRB' ? existing.HR_SAI1 || '' : workDay?.HR_SAI1 || '',
-      HR_ENT2: existing?.PROGRAMACAO === 'TRB' ? existing.HR_ENT2 || '' : workDay?.HR_ENT2 || '',
-      HR_SAI2: existing?.PROGRAMACAO === 'TRB' ? existing.HR_SAI2 || '' : workDay?.HR_SAI2 || '',
-    };
-    return domingo6h ? autofillStandardHours(base, 'HR_ENT1', base.HR_ENT1 || '08:00', 360) || base : base;
+    return domingo6h ? autofillStandardHours(standardHours, 'HR_ENT1', standardHours.HR_ENT1 || '08:00', 360) || standardHours : standardHours;
   });
   const [justification, setJustification] = useState(existing?.JUSTIFICATIVA || '');
   const [busy, setBusy] = useState(false);

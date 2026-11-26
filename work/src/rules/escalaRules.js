@@ -5,7 +5,7 @@ const REGRAS_VIGENTES = [
   { codigo: 'DOMINGO_1X1', titulo: 'Domingo 1x1', descricao: 'O colaborador nao deve trabalhar dois domingos consecutivos.' },
   { codigo: 'INTERJORNADA_11H', titulo: 'Interjornada minima', descricao: 'Entre o fim de um dia trabalhado e o inicio do proximo deve haver ao menos 11 horas.' },
   { codigo: 'DESCANSO_POS_FOLGA_35H', titulo: 'Descanso apos folga', descricao: 'Ao retornar de uma ou mais folgas, o descanso minimo acumulado deve ser de 35 horas.' },
-  { codigo: 'MAX_5_DIAS_CONSECUTIVOS', titulo: 'Limite 5x2', descricao: 'No regime 5x2, o colaborador nao deve trabalhar mais que 5 dias consecutivos.' },
+  { codigo: 'MAX_5_DIAS_CONSECUTIVOS', titulo: 'Limite 5x2', descricao: 'No regime 5x2, seis dias consecutivos sao permitidos apenas quando a sequencia atravessa semanas.' },
   { codigo: 'MIN_2_FOLGAS_SEMANA', titulo: 'Minimo semanal de folgas', descricao: 'No regime 5x2, o colaborador deve ter ao menos 2 descansos em semanas completas, com ajuste proporcional em semanas parciais.' },
   { codigo: 'MAX_2_FOLGAS_SEMANA', titulo: 'Limite semanal de folgas', descricao: 'O colaborador nao deve ter mais que 2 folgas na mesma semana, contando domingo.' },
   { codigo: 'JORNADA_08H48', titulo: 'Jornada padrao', descricao: 'Dias trabalhados devem ter jornada total de 08:48.' },
@@ -158,11 +158,24 @@ function validarTurnoDia(funcionarioLabel, dia, { domingo6h = false, lojaId = nu
   }
   const domingoObrigatorio = domingo6h && isSunday(data);
   const posto = Number(lojaId) >= 700 && Number(lojaId) <= 799;
-  const jornadaSelecionada = Number(dia.jornadaMinutos ?? dia.JORNADA_MINUTOS) || (domingoObrigatorio ? 360 : 528);
-  const intervaloSelecionado = Number(dia.intervaloMinutos ?? dia.INTERVALO_MINUTOS ?? 70);
   const perfisPermitidos = allowedProfiles || new Set(posto
     ? ['528:70', '528:100', '504:70', '504:100', '360:70', '300:15']
     : ['528:70', '360:70', '300:15']);
+  const selectedWork = Number(dia.jornadaMinutos ?? dia.JORNADA_MINUTOS);
+  const selectedRest = Number(dia.intervaloMinutos ?? dia.INTERVALO_MINUTOS ?? 70);
+  const perfilSelecionado = Number.isFinite(selectedWork) && selectedWork > 0
+    ? `${selectedWork}:${selectedRest}` : null;
+  const perfilCalculado = [...perfisPermitidos].map((key) => {
+    const [work, rest] = key.split(':').map(Number);
+    return { work, rest, exact: ![504, 528].includes(work) || rest !== 70 || domingoObrigatorio };
+  }).filter((profile) => profile.work === jornada
+    && (profile.exact || (perfilSelecionado && !perfisPermitidos.has(perfilSelecionado))
+      ? profile.rest === intervalo : intervalo >= profile.rest))
+    .sort((left, right) => Number(right.rest === intervalo) - Number(left.rest === intervalo))[0];
+  const jornadaSelecionada = perfilCalculado?.work
+    ?? (selectedWork || (domingoObrigatorio ? 360 : 528));
+  const intervaloSelecionado = perfilCalculado?.rest
+    ?? selectedRest;
   if (!perfisPermitidos.has(`${jornadaSelecionada}:${intervaloSelecionado}`)
     || (domingoObrigatorio && jornadaSelecionada !== 360)) {
     errors.push(`${funcionarioLabel}: jornada selecionada invalida em ${data}.`);
@@ -171,7 +184,7 @@ function validarTurnoDia(funcionarioLabel, dia, { domingo6h = false, lojaId = nu
     errors.push(`${funcionarioLabel}: jornada total deve ser ${minutesToTime(jornadaSelecionada)} em ${data}. Atual: ${minutesToTime(jornada)}.`);
   }
   const intervaloEsperado = intervaloSelecionado;
-  const intervaloExato = intervaloSelecionado !== 70 || jornadaSelecionada !== 528 || domingoObrigatorio;
+  const intervaloExato = intervaloSelecionado !== 70 || ![504, 528].includes(jornadaSelecionada) || domingoObrigatorio;
   if (intervalo < intervaloEsperado || (intervaloExato && intervalo !== intervaloEsperado)) {
     errors.push(`${funcionarioLabel}: intervalo deve ser ${intervaloExato ? 'exatamente' : 'no minimo'} ${minutesToTime(intervaloEsperado)} em ${data}. Atual: ${minutesToTime(intervalo)}.`);
   }
@@ -276,6 +289,8 @@ function validarRegrasFuncionario(funcionario, onCritica, options = {}) {
   let ultimoDomingoTrabalhado = options.domingo1x1 !== false && domingoAnterior?.PROGRAMACAO === 'TRB'
     ? new Date(`${domingoAnterior.DT}T00:00:00Z`) : null;
   let diasTrabalhadosConsecutivos = 0;
+  let inicioSequencia = null;
+  let ultimoDiaSequencia = null;
   const maxDiasConsecutivos = Number(funcionario.maxDiasConsecutivos || 5);
   const folgasPorSemana = new Map();
   const descansosPorSemana = new Map();
@@ -306,12 +321,20 @@ function validarRegrasFuncionario(funcionario, onCritica, options = {}) {
 
     if (descanso) {
       diasTrabalhadosConsecutivos = 0;
+      inicioSequencia = null;
+      ultimoDiaSequencia = null;
       continue;
     }
 
+    if (ultimoDiaSequencia && addDaysIso(ultimoDiaSequencia, 1) !== dataIso) {
+      diasTrabalhadosConsecutivos = 0;
+    }
+    if (diasTrabalhadosConsecutivos === 0) inicioSequencia = dataIso;
     diasTrabalhadosConsecutivos += 1;
-    if (diasTrabalhadosConsecutivos > maxDiasConsecutivos) {
-      addCritica(`${label}: trabalhou ${diasTrabalhadosConsecutivos} dias consecutivos ate ${dataIso}; limite permitido no 5x2: ${maxDiasConsecutivos}.`, [dataIso]);
+    ultimoDiaSequencia = dataIso;
+    const limiteSequencia = maxDiasConsecutivos === 5 && getWeekKey(inicioSequencia) !== weekKey ? 6 : maxDiasConsecutivos;
+    if (diasTrabalhadosConsecutivos > limiteSequencia) {
+      addCritica(`${label}: trabalhou ${diasTrabalhadosConsecutivos} dias consecutivos ate ${dataIso}; limite permitido no 5x2: ${limiteSequencia}.`, [dataIso]);
     }
 
     const horario = getHorarioDia(dia, isFuncionarioAprendiz(funcionario));

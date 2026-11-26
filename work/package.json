@@ -39,6 +39,7 @@
     "escalas:liberar-novembro": "node scripts/liberar-escalas-novembro-2026.js",
     "escalas:liberar-dezembro": "node scripts/liberar-escalas-mensais.js --mes=2026-12",
     "escalas:transferir-dezembro": "node scripts/transferir-dias-dezembro-2026.js",
+    "escalas:converter-8h24-dezembro": "node scripts/converter-jornada-8h24-dezembro.js",
     "escalas:corrigir-fdo-dezembro": "node scripts/corrigir-fdo-dezembro-2026.js",
     "escalas:completar-domingo-novembro": "node scripts/completar-domingo-novembro-2026.js",
     "escalas:materializar-fixos-01-novembro": "node scripts/materializar-fixos-dia-01-novembro-2026.js",

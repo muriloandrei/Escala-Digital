@@ -71,6 +71,7 @@ require('./quick-edit.test');
 require('./quick-edit-routes.test');
 require('./editar-dia-readback.test');
 require('./apply-oracle-migration.test');
+require('./converter-jornada-8h24-cli.test');
 require('./officialization-progress.test');
 require('./officialization-routes.test');
 require('./section-rollout.test');

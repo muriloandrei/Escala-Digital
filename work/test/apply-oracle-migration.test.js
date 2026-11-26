@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
 test('executor accepts only the approved mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 35);
+  assert.equal(migrationNames.length, 36);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
@@ -55,6 +55,13 @@ test('journey assignments seed 08:24 for practical stores', () => {
   assert.match(sql, /execute immediate q'\[\s*insert into sgn_esc_horpad_loja/i);
   assert.match(sql, /l\.loja between 400 and 499 and h\.jornada_minutos = 504/i);
   assert.match(sql, /h\.intervalo_minutos in \(70, 100\)/i);
+});
+
+test('08:24 journey migration is approved and reaches every existing store', () => {
+  const sql = readMigration('20261126_jornada_8h24_todas_lojas.sql').sql;
+  assert.match(sql, /h\.jornada_minutos = 504 and h\.intervalo_minutos = 70/i);
+  assert.match(sql, /cross join sgn_esc_loja l/i);
+  assert.match(sql, /merge into sgn_esc_horpad_loja/i);
 });
 
 test('duration-only profiles can omit fixed clock times after migration', () => {
@@ -223,6 +230,30 @@ test('apprentice standard requires the confirmed repair and its column', async (
     CHECKSUM_SHA256: readMigration('20261125_reparar_jornadas_aprendiz_v2.sql').checksum }];
   assert.deepEqual(await checkPrerequisites(connection, standard, 'ESCALAINT'),
     { schemaUser: 'ESCALAINT', alreadyApplied: false });
+});
+
+test('08:24 migration checks schema without requiring unrelated historical ledger entries', async () => {
+  const migration = readMigration('20261126_jornada_8h24_todas_lojas.sql');
+  const required = {
+    SGN_ESC_HORARIO_PADRAO: ['ESCHORPAD_ID', 'DESCR', 'HR_ENT1', 'HR_SAI1', 'HR_ENT2', 'HR_SAI2',
+      'JORNADA_MINUTOS', 'INTERVALO_MINUTOS', 'STATUS', 'DT_HR_INCL'],
+    SGN_ESC_HORPAD_LOJA: ['ESCHORPAD_ID', 'LOJA'], SGN_ESC_LOJA: ['LOJA']
+  };
+  let columns = Object.entries(required).flatMap(([TABLE_NAME, fields]) => fields
+    .map((COLUMN_NAME) => ({ TABLE_NAME, COLUMN_NAME })));
+  const connection = { execute: async (sql) => {
+    if (sql.includes('schema_user')) return { rows: [{ SCHEMA_USER: 'ESCALAINT' }] };
+    if (sql.includes("table_name in ('SGN_ESC_PROG'")) return { rows: [{ TOTAL: 2 }] };
+    if (sql.includes("table_name = 'SGN_ESC_MIGRACAO'")) return { rows: [{ TOTAL: 1 }] };
+    if (sql.includes('from sgn_esc_migracao')) return { rows: [] };
+    if (sql.includes('from user_tab_columns')) return { rows: columns };
+    if (sql.includes('from user_sequences')) return { rows: [{ SEQUENCE_NAME: 'SGN_ESC_HORARIO_PADRAO_SEQ' }] };
+    throw new Error(`SQL inesperado: ${sql}`);
+  } };
+  assert.deepEqual(await checkPrerequisites(connection, migration, 'ESCALAINT'),
+    { schemaUser: 'ESCALAINT', alreadyApplied: false });
+  columns = columns.filter((row) => row.COLUMN_NAME !== 'LOJA');
+  await assert.rejects(checkPrerequisites(connection, migration, 'ESCALAINT'), /Dependencias da reparacao ausentes/);
 });
 
 test('replacement apprentice repair skips already nullable columns and supersedes the failed repair', async () => {

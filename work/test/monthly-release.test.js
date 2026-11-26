@@ -580,7 +580,7 @@ test('monthly release liberation creates monthly headers with protected absence 
   assert.equal(liberados[0].turnoOficial.hrEnt1, '08:00');
 });
 
-test('monthly release keeps legacy 07:20 schedule and flags it as critique', () => {
+test('monthly release keeps 07:20 and accepts it when assigned to the store', () => {
   const funcionario = {
     ESCFUNC_ID: 13,
     CHAPA: '000013',
@@ -599,13 +599,36 @@ test('monthly release keeps legacy 07:20 schedule and flags it as critique', () 
     lojaId: 10,
     mesRef: '2026-09-01',
     funcionarios: [rascunho]
-  });
+  }, { allowedProfiles: new Set(['528:70', '440:70']) });
 
   assert.equal(primeiroTrabalho.hrEnt1, '08:00');
   assert.equal(primeiroTrabalho.hrSai1, '12:00');
   assert.equal(primeiroTrabalho.hrEnt2, '13:10');
   assert.equal(primeiroTrabalho.hrSai2, '16:30');
-  assert.ok(errors.some((error) => error.includes('jornada total deve ser 08:48')));
+  assert.equal(errors.some((error) => error.includes('jornada total')), false);
+});
+
+test('December generation converts 08:48 base to 08:24 without changing November', () => {
+  const funcionario = { ESCFUNC_ID: 13, CHAPA: '000013', NOME: 'Teste', ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30, HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };
+  const novembro = buildFuncionarioRascunho(funcionario, null, '2026-11-01', '2026-11-01', 0);
+  const dezembro = buildFuncionarioRascunho(funcionario, null, '2026-12-01', '2026-11-30', 0);
+  assert.equal(novembro.dias.find((dia) => dia.programacao === 'TRB').hrSai2, '17:58');
+  assert.equal(dezembro.dias.find((dia) => dia.programacao === 'TRB').hrSai2, '17:34');
+  assert.equal(validateEscalaPayload({ lojaId: 10, mesRef: '2026-12-01', funcionarios: [dezembro] },
+    { allowedProfiles: new Set(['528:70', '504:70']) }).some((error) => error.includes('jornada total')), false);
+});
+
+test('December generation converts a fixed 08:48 work day and its profile', () => {
+  const funcionario = { ESCFUNC_ID: 13, CHAPA: '000013', NOME: 'Teste', ESCSECAO_ID: 20,
+    ESCFUNCAO_ID: 30, HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58' };
+  const fixo = { ESCFUNC_ID: 13, DT: '2026-12-01', PROGRAMACAO: 'TRB',
+    HR_ENT1: '08:00', HR_SAI1: '12:00', HR_ENT2: '13:10', HR_SAI2: '17:58', JORNADA_MINUTOS: 528 };
+  const rascunho = buildFuncionarioRascunho(funcionario, null, '2026-12-01', '2026-11-30', 0, null,
+    { fixos: [fixo] });
+  const dia = rascunho.dias.find((item) => item.data === '2026-12-01');
+  assert.equal(dia.hrSai2, '17:34');
+  assert.equal(dia.jornadaMinutos, 504);
 });
 
 test('monthly release balances rests between employees in the same section and shift', () => {

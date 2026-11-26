@@ -39,12 +39,14 @@ const migrationNames = [
   '20261125_jornadas_aprendiz_livres.sql',
   '20261125_reparar_jornadas_aprendiz.sql',
   '20261125_reparar_jornadas_aprendiz_v2.sql',
-  '20261125_aprendiz_5h_15min_intervalo.sql'
+  '20261125_aprendiz_5h_15min_intervalo.sql',
+  '20261126_jornada_8h24_todas_lojas.sql'
 ];
 const apprenticeRepairName = '20261125_reparar_jornadas_aprendiz.sql';
 const apprenticeRepairV2Name = '20261125_reparar_jornadas_aprendiz_v2.sql';
 const apprenticeOriginalName = '20261125_jornadas_aprendiz_livres.sql';
 const apprenticeStandardName = '20261125_aprendiz_5h_15min_intervalo.sql';
+const jornada824Name = '20261126_jornada_8h24_todas_lojas.sql';
 
 function parseSinglePlsqlBlock(source) {
   const lines = String(source).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim().split('\n');
@@ -112,10 +114,11 @@ async function checkPrerequisites(connection, migration, expectedOracleUser) {
   const current = applied.get(migration.name);
   if (current && current !== migration.checksum) throw new Error('Migration registrada com checksum diferente; investigue antes de prosseguir.');
   if (!current) {
-    if ([apprenticeRepairName, apprenticeRepairV2Name, apprenticeStandardName].includes(migration.name)) {
+    if ([apprenticeRepairName, apprenticeRepairV2Name, apprenticeStandardName, jornada824Name].includes(migration.name)) {
       const predecessors = migration.name === apprenticeStandardName
-        ? [apprenticeRepairName, apprenticeRepairV2Name] : [apprenticeOriginalName];
-      if (!predecessors.some((name) => applied.get(name) === readMigration(name).checksum)) {
+        ? [apprenticeRepairName, apprenticeRepairV2Name]
+        : migration.name === jornada824Name ? [] : [apprenticeOriginalName];
+      if (predecessors.length && !predecessors.some((name) => applied.get(name) === readMigration(name).checksum)) {
         throw new Error(`Migration anterior sem registro confirmado: ${predecessors.join(' ou ')}.`);
       }
       const required = {

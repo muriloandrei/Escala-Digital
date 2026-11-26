@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ApiError, getJson, postJson, type DiaEscala, type Funcionario } from '../api';
 import { createOperationId } from '../operationId';
 import { applyShiftProfile, autofillStandardHours } from '../shiftAutofill';
-import { validate12x36Hours, validateStandardHours } from '../shiftValidation';
+import { inferStandardProfile, validate12x36Hours, validateStandardHours } from '../shiftValidation';
 import { isDutyDay12x36 } from '../workRegime';
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
 import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, normalizeApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
@@ -56,10 +56,17 @@ export function EditarDiaEscala({
   const [mode, setMode] = useState<'TRB' | 'F' | 'FDO'>(String(day.PROGRAMACAO).toUpperCase() === 'FDO' ? 'FDO' : isRest(day) ? 'F' : 'TRB');
   const domingo6h = !plantao12x36 && domingo6hHabilitado && new Date(`${dateOnly(day.DT)}T12:00:00`).getDay() === 0 && !apprentice;
   const apprenticeProfile = apprentice ? apprenticeProfileFromHours(isRest(day) ? reference : day) : null;
-  const [profile, setProfile] = useState({ work: apprentice ? apprenticeProfile?.work || 300
-    : Number(day.JORNADA_MINUTOS || reference.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
+  const [profile, setProfile] = useState(() => {
+    const fallback = { work: apprentice ? apprenticeProfile?.work || 300
+      : Number(day.JORNADA_MINUTOS || reference.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
     interval: apprentice ? apprenticeProfile?.interval ?? 15
-      : Number(day.INTERVALO_MINUTOS ?? reference.INTERVALO_MINUTOS ?? (plantao12x36 ? 60 : 70)) });
+      : Number(day.INTERVALO_MINUTOS ?? reference.INTERVALO_MINUTOS ?? (plantao12x36 ? 60 : 70)) };
+    const source = isRest(day) ? reference : day;
+    return apprentice || plantao12x36 || domingo6h ? fallback : inferStandardProfile({
+      HR_ENT1: source.HR_ENT1 || '', HR_SAI1: source.HR_SAI1 || '',
+      HR_ENT2: source.HR_ENT2 || '', HR_SAI2: source.HR_SAI2 || '',
+    }, fallback);
+  });
   const [shift, setShift] = useState<Shift>(() => {
     if (apprentice) {
       const source = isRest(day) ? reference : day;
