@@ -71,7 +71,7 @@ test('editing monthly base persists only the selected month without updating emp
   const events = { createOperationId: () => 'test-operation', appendEvent: async () => {} };
   const { service, context } = loadService('escalaService.js', connection, { './escalaEventService': events });
   vm.runInContext(`calcularImpactoHorarioFuturo = async (_connection, input) => [{
-    mesRef: input.mesRef, atual: null, dias: [], diasAlterados: 0, diasManuais: 0
+    mesRef: input.mesRef, atual: null, dias: [], diasAlterados: 0, diasFixos: 0
   }];`, context);
   const horario = { HR_ENT1: '09:00', HR_SAI1: '13:00', HR_ENT2: '14:10', HR_SAI2: '18:58' };
   await service.updateHorarioFuncionarioEscala({ lojaId: 302, mesRef: '2026-12-01',

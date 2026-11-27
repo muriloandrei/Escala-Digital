@@ -1,5 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const { createRequire } = require('node:module');
 const { _private: { aplicarHorarioBaseNosDias,
   diasComFixoAtualizado, diasSemFixo } } = require('../src/services/escalaService');
 const escalaRouter = require('../src/routes/escalaRoutes');
@@ -35,14 +39,50 @@ test('horario identico nao cria alteracao artificial', () => {
   assert.equal(result.dias[0].justificativa, null);
 });
 
-test('edicao do horario-base preserva ajuste individual do dia', () => {
+test('edicao do horario-base atualiza tambem um dia editado manualmente', () => {
   const result = aplicarHorarioBaseNosDias(
-    [jornada('2026-10-05'), jornada('2026-10-06')],
-    horario, '2026-10-05', new Set(), new Set(['2026-10-06'])
+    [jornada('2026-10-05'), { ...jornada('2026-10-06'), HR_ENT1: '10:00' }],
+    horario, '2026-10-05'
+  );
+  assert.equal(result.diasAlterados, 2);
+  assert.equal(result.dias[0].hrEnt1, '09:00');
+  assert.equal(result.dias[1].hrEnt1, '09:00');
+  assert.equal(result.dias[1].hrSai2, '18:58');
+});
+
+test('edicao manual em horario fixo continua protegida', () => {
+  const result = aplicarHorarioBaseNosDias(
+    [jornada('2026-10-05'), { ...jornada('2026-10-06'), HR_ENT1: '10:00' }],
+    horario, '2026-10-05', new Set(['2026-10-06'])
   );
   assert.equal(result.diasAlterados, 1);
-  assert.equal(result.dias[0].hrEnt1, '09:00');
-  assert.equal(result.dias[1].hrEnt1, '08:00');
+  assert.equal(result.dias[1].hrEnt1, '10:00');
+});
+
+test('previa considera edicoes manuais e consulta apenas fixos como bloqueio', async () => {
+  const filename = path.join(__dirname, '../src/services/escalaService.js');
+  const serviceRequire = createRequire(filename);
+  const connection = { execute: async (sql) => {
+    assert.match(sql, /from sgn_esc_fixo_escala/);
+    return { rows: [{ DT: '2099-01-06' }] };
+  } };
+  const mod = { exports: {} };
+  const context = vm.createContext({ module: mod, console, require: (name) => name === '../db/oracle'
+    ? { withConnection: (work) => work(connection), oracledb: { OUT_FORMAT_OBJECT: 1 } }
+    : serviceRequire(name) });
+  vm.runInContext(fs.readFileSync(filename, 'utf8'), context);
+  vm.runInContext(`getEscalaFuncionarioAtualComConnection = async () => ({
+    header: { OFICIALIZADA: 0 }, revisao: 5,
+    dias: [
+      { DT: '2099-01-05', PROGRAMACAO: 'TRB', HR_ENT1: '10:00', HR_SAI1: '14:00', HR_ENT2: '15:10', HR_SAI2: '19:58' },
+      { DT: '2099-01-06', PROGRAMACAO: 'TRB', HR_ENT1: '10:00', HR_SAI1: '14:00', HR_ENT2: '15:10', HR_SAI2: '19:58' }
+    ]
+  });`, context);
+  const impact = await mod.exports.previewHorarioFuncionarioEscala({ lojaId: 35, mesRef: '2099-01-01',
+    escfuncId: 1, horario, actor: { perfil: 'ADMIN' } });
+  assert.equal(impact.diasAlterados, 1);
+  assert.equal(impact.diasFixos, 1);
+  assert.deepEqual(Array.from(impact.mesesImpactados), ['2099-01-01']);
 });
 
 test('edicao de horario fixo altera o dia gerado e preserva os demais', () => {

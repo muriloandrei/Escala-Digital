@@ -2964,7 +2964,7 @@ async function getCommittedDraftOperation({ lojaId, mesRef, operacaoId, usuarioI
   });
 }
 
-function aplicarHorarioBaseNosDias(diasAtuais, horario, hojeIso, datasFixas = new Set(), datasManuais = new Set()) {
+function aplicarHorarioBaseNosDias(diasAtuais, horario, hojeIso, datasFixas = new Set()) {
   let diasAlterados = 0;
   const campos = [
     ['HR_ENT1', 'hrEnt1'], ['HR_SAI1', 'hrSai1'],
@@ -2973,7 +2973,7 @@ function aplicarHorarioBaseNosDias(diasAtuais, horario, hojeIso, datasFixas = ne
   const dias = diasAtuais.map((dia) => {
     const data = formatDateValue(pick(dia, 'DT', 'dt'));
     const programacao = String(pick(dia, 'PROGRAMACAO', 'programacao') || 'TRB').trim().toUpperCase();
-    const editavel = data >= hojeIso && !datasFixas.has(data) && !datasManuais.has(data) && !isDescansoProgramacao(programacao);
+    const editavel = data >= hojeIso && !datasFixas.has(data) && !isDescansoProgramacao(programacao);
     const alterado = editavel && (campos.some(([campo]) => pick(dia, campo, campo.toLowerCase()) !== horario[campo])
       || Number(pick(dia, 'JORNADA_MINUTOS', 'jornada_minutos') || 0) !== Number(horario.jornadaMinutos || 0)
       || Number(pick(dia, 'INTERVALO_MINUTOS', 'intervalo_minutos') || 0) !== Number(horario.intervaloMinutos || 0));
@@ -2995,7 +2995,7 @@ function aplicarHorarioBaseNosDias(diasAtuais, horario, hojeIso, datasFixas = ne
 async function calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId, mesRef, escfuncId, horario,
   inicioEdicaoIso = formatDateValue(new Date()) }) {
   const atual = await getEscalaFuncionarioAtualComConnection(connection, { lojaId, mesRef, escfuncId });
-  if (!atual?.dias?.length) return { atual, dias: [], diasAlterados: 0, diasManuais: 0 };
+  if (!atual?.dias?.length) return { atual, dias: [], diasAlterados: 0, diasFixos: 0 };
   const fixos = await connection.execute(
     `select dt from sgn_esc_fixo_escala
       where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
@@ -3003,24 +3003,14 @@ async function calcularAlteracaoHorarioEscalaComConnection(connection, { lojaId,
     { lojaId, mesRef, escfuncId },
     { outFormat: oracledb.OUT_FORMAT_OBJECT }
   );
-  const manuais = await connection.execute(
-    `select detalhe from sgn_esc_evento
-      where loja = :lojaId and mes_ref = to_date(:mesRef, 'YYYY-MM-DD')
-        and escfunc_id = :escfuncId
-        and acao in ('EDITAR_DIA_ESCALA', 'EDITAR_ESCALA_FUNCIONARIO')
-        and revisao_nova <= :revisao`,
-    { lojaId, mesRef, escfuncId, revisao: atual.revisao },
-    { outFormat: oracledb.OUT_FORMAT_OBJECT, fetchInfo: { DETALHE: { type: oracledb.STRING } } }
-  );
   const datasFixas = new Set((fixos.rows || []).map((row) => formatDateValue(pick(row, 'DT', 'dt'))));
-  const datasManuais = new Set((manuais.rows || []).flatMap((row) => {
-    const detalhe = JSON.parse(pick(row, 'DETALHE', 'detalhe') || '{}');
-    return (detalhe.alteracoes || []).map((alteracao) => alteracao.data);
-  }));
   return {
     atual,
-    ...aplicarHorarioBaseNosDias(atual.dias, horario, inicioEdicaoIso, datasFixas, datasManuais),
-    diasManuais: datasManuais.size
+    ...aplicarHorarioBaseNosDias(atual.dias, horario, inicioEdicaoIso, datasFixas),
+    diasFixos: atual.dias.filter((dia) => {
+      const data = formatDateValue(pick(dia, 'DT', 'dt'));
+      return data >= inicioEdicaoIso && datasFixas.has(data);
+    }).length
   };
 }
 
@@ -3053,7 +3043,7 @@ async function previewHorarioFuncionarioEscala({ lojaId, mesRef, escfuncId, hora
     const alteracoes = await calcularImpactoHorarioFuturo(connection, { lojaId, escfuncId, horario, mesRef, actor });
     return {
       diasAlterados: alteracoes.reduce((total, item) => total + item.diasAlterados, 0),
-      diasManuais: alteracoes.reduce((total, item) => total + item.diasManuais, 0),
+      diasFixos: alteracoes.reduce((total, item) => total + item.diasFixos, 0),
       possuiEscala: alteracoes.some((item) => Boolean(item.atual)),
       mesesImpactados: alteracoes.filter((item) => item.diasAlterados).map((item) => item.mesRef),
       mesesParaReoficializar: alteracoes.filter((item) => item.diasAlterados && Number(pick(item.atual?.header, 'OFICIALIZADA', 'oficializada') || 0) === 1).map((item) => item.mesRef)

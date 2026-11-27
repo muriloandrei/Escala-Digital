@@ -8,8 +8,10 @@ confere o schema Oracle e so entao troca o servico `escala-app`. Ele preserva
 Na janela de publicacao, com backup do Oracle confirmado, execute no servidor:
 
 ```bash
-cd /opt/escala-app/work
-bash scripts/publicar-oracle-linux.sh --ref=main
+cd "$(systemctl show escala-app -p WorkingDirectory --value)"
+SCRIPT="$(git rev-parse --show-toplevel)/work/scripts/publicar-oracle-linux.sh"
+test -f "$SCRIPT"
+bash "$SCRIPT" --ref=main
 ```
 
 Confira o SHA e o resultado do preflight. O script informa o comando de
@@ -17,7 +19,7 @@ publicacao com `--sha` para impedir que a branch mude entre a validacao e a
 troca. Por exemplo:
 
 ```bash
-bash scripts/publicar-oracle-linux.sh --ref=main --sha=SHA_COMPLETO_APROVADO --apply --by=murilo.jesus
+bash "$SCRIPT" --ref=main --sha=SHA_COMPLETO_APROVADO --apply --by=murilo.jesus
 ```
 
 Para publicar uma versao de homologacao, substitua `main` por `homologacao`
@@ -43,4 +45,4 @@ da loja. Veja logs com `journalctl -u escala-app -n 100 --no-pager`.
 
 O script precisa estar no checkout do qual for invocado. Se a versao ativa
 ainda nao o contiver, crie um worktree da branch desejada ou use um release
-de homologacao existente e rode `bash scripts/publicar-oracle-linux.sh` nele.
+de homologacao existente e rode o script pelo caminho completo do checkout.

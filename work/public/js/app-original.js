@@ -3150,7 +3150,7 @@
                 body: JSON.stringify(payload)
             });
             const impacto = preview?.impacto || {};
-            const resumo = `${impacto.diasAlterados || 0} dia(s) de trabalho da escala serão atualizados. ${impacto.diasManuais || 0} dia(s) com edição individual serão preservados.`;
+            const resumo = `${impacto.diasAlterados || 0} dia(s) de trabalho da escala serão atualizados. ${impacto.diasFixos || 0} dia(s) fixo(s) serão preservados.`;
             const confirmou = await showInputModal({
                 title: 'Confirmar alteração de horário',
                 inputs: [{ type: 'message', text: resumo + ' O cadastro passará a usar este horário nas próximas gerações.' }],

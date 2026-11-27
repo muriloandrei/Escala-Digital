@@ -5,7 +5,7 @@ import { inferStandardProfile, validateStandardHours } from '../shiftValidation'
 import { ShiftProfileSelect } from '../ShiftProfileSelect';
 import { apprenticeHoursFromStart, apprenticeProfileFromHours, autofillApprenticeHours, normalizeApprenticeHours, usesImplicitApprenticeBreak, validateApprenticeHours } from '../apprenticeHours';
 
-type Impact = { diasAlterados: number; diasManuais: number; possuiEscala: boolean; mesesImpactados: string[]; mesesParaReoficializar: string[] };
+type Impact = { diasAlterados: number; diasFixos: number; possuiEscala: boolean; mesesImpactados: string[]; mesesParaReoficializar: string[] };
 
 function currentMonth() {
   const now = new Date();
@@ -99,7 +99,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
         </label>)}</div>
       <div className="shift-options"><label>Mês de referência<input type="month" min={allowRetroactive ? undefined : minimumMonth} value={month} onChange={(event) => { setMonth(event.target.value); setImpact(null); }} required /></label></div>
       {initialMonth < minimumMonth && !allowRetroactive && <p>A escala aberta é de um mês anterior. A alteração começará no mês vigente.</p>}
-      {impact && <div className="shift-impact"><strong>Prévia · {month}</strong><span>{impact.possuiEscala ? `${impact.diasAlterados} dia(s) ajustado(s) nesta escala.` : 'Horário-base salvo para este mês; será usado na geração.'}</span><span>{impact.diasManuais} dia(s) com ajuste manual preservado(s).</span>{impact.mesesParaReoficializar?.length > 0 && <span>Reoficialização necessária em {impact.mesesParaReoficializar.join(', ')}.</span>}</div>}
+      {impact && <div className="shift-impact"><strong>Prévia · {month}</strong><span>{impact.possuiEscala ? `${impact.diasAlterados} dia(s) ajustado(s) nesta escala.` : 'Horário-base salvo para este mês; será usado na geração.'}</span><span>{impact.diasFixos} dia(s) fixo(s) preservado(s).</span>{impact.mesesParaReoficializar?.length > 0 && <span>Reoficialização necessária em {impact.mesesParaReoficializar.join(', ')}.</span>}</div>}
       {error && <div className="notice error" role="alert">{error}</div>}
       <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={onClose}>Cancelar</button><button className="button primary" type="button" disabled={busy || !month} onClick={impact ? save : preview}>{busy ? 'Aguarde...' : impact ? 'Salvar horário' : 'Ver prévia'}</button></div>
     </div>
