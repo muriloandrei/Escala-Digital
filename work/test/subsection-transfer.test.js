@@ -81,6 +81,16 @@ test('transferencia imediata preserva escala oficializada em nova revisao penden
   assert.equal(events.at(-1).detalhe.agendamentosSubstituidos[0], 17);
   assert.equal(calls.at(-1).sql, 'COMMIT');
   calls.length = 0;
+  const removida = await loaded.exports.transferirSubsecaoFuncionario({
+    lojaId: 302, mesRef: '2099-11-01', escfuncId: 91, escsecaoId: 2002,
+    destinoId: null, actor: { sub: 1, perfil: 'LIDER', login: 'LIDER.FRENTE302' }
+  });
+  assert.equal(removida.agendamentosSubstituidos[0], 17);
+  assert.equal(calls.some(({ sql }) => /from sgn_esc_subsecao/i.test(sql)), false);
+  assert.equal(calls.find(({ sql }) => /update sgn_esc_funcionario set escsubsecao_id/i.test(sql)).binds.destinoId, null);
+  assert.equal(events.at(-1).detalhe.novo.escsubsecaoId, null);
+  assert.equal(calls.at(-1).sql, 'COMMIT');
+  calls.length = 0;
   failUpdate = true;
   await assert.rejects(loaded.exports.transferirSubsecaoFuncionario({
     lojaId: 302, mesRef: '2099-11-01', escfuncId: 91, escsecaoId: 2002,

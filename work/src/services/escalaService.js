@@ -2873,15 +2873,23 @@ async function transferirSubsecaoFuncionario({ lojaId, mesRef, escfuncId, escsec
         error.statusCode = 409;
         throw error;
       }
-      const destination = await connection.execute(
-        `select escsubsecao_id from sgn_esc_subsecao
-          where escsubsecao_id = :destinoId and escsecao_id = :escsecaoId and status = 'A'`,
-        { destinoId, escsecaoId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
-      );
-      if (!destination.rows.length || Number(current.ESCSUBSECAO_ID) === Number(destinoId)) {
-        const error = new Error('Subsecao de destino indisponivel para este funcionario.');
-        error.statusCode = 422;
-        throw error;
+      if (destinoId === null) {
+        if (current.ESCSUBSECAO_ID == null) {
+          const error = new Error('Funcionario ja esta sem subsecao. Atualize a lista.');
+          error.statusCode = 422;
+          throw error;
+        }
+      } else {
+        const destination = await connection.execute(
+          `select escsubsecao_id from sgn_esc_subsecao
+            where escsubsecao_id = :destinoId and escsecao_id = :escsecaoId and status = 'A'`,
+          { destinoId, escsecaoId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        if (!destination.rows.length || Number(current.ESCSUBSECAO_ID) === Number(destinoId)) {
+          const error = new Error('Subsecao de destino indisponivel para este funcionario.');
+          error.statusCode = 422;
+          throw error;
+        }
       }
       if (!permiteEscala(current.STATUS) || (current.DT_DEMISS && formatDateValue(current.DT_DEMISS) <= getHojeIso())) {
         const error = new Error('Funcionario inativo ou desligado nao pode ser transferido.');
@@ -2942,7 +2950,7 @@ async function transferirSubsecaoFuncionario({ lojaId, mesRef, escfuncId, escsec
       for (const transfId of substituidos) {
         const canceled = await connection.execute(
           `update sgn_esc_transfer_sub
-              set status = 'X', erro = 'Substituida por transferencia imediata'
+              set status = 'X', erro = 'Substituida por alteracao imediata de subsecao'
             where transf_id = :transfId and loja = :lojaId and escfunc_id = :escfuncId and status = 'P'`,
           { transfId, lojaId, escfuncId }, { autoCommit: false }
         );

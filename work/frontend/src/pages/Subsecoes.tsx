@@ -594,7 +594,7 @@ export function Subsecoes({ user }: { user: User }) {
       {unlinkTarget && <div className="confirm-backdrop" role="presentation" onKeyDown={(event) => {
         if (event.key === 'Escape' && !busy) setUnlinkTarget(null);
       }}><div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="unlink-title">
-        <h2 id="unlink-title">Remover {unlinkTarget.NOME} da subseção?</h2><p>O funcionário ficará em Sem subseção. Os dias de escala já gravados serão preservados.</p>
+        <h2 id="unlink-title">Remover {unlinkTarget.NOME} da subseção?</h2><p>O funcionário ficará em Sem subseção. Os dias de escala já gravados serão preservados. Agendamentos antigos ainda não processados serão cancelados.</p>
         {actionError && <div className="notice error" role="alert">{actionError}</div>}
         <div className="confirm-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setUnlinkTarget(null)}>Cancelar</button><button className="button primary" type="button" disabled={busy} onClick={confirmUnlink}>{busy ? 'Removendo...' : 'Confirmar remoção'}</button></div>
       </div></div>}
