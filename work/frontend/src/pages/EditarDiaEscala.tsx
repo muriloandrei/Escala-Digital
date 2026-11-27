@@ -58,7 +58,7 @@ export function EditarDiaEscala({
   const apprenticeProfile = apprentice ? apprenticeProfileFromHours(isRest(day) ? reference : day) : null;
   const [profile, setProfile] = useState(() => {
     const fallback = { work: apprentice ? apprenticeProfile?.work || 300
-      : Number(day.JORNADA_MINUTOS || reference.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
+      : Number(day.JORNADA_MINUTOS || reference.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : mesRef >= '2026-12-01' ? 504 : 528),
     interval: apprentice ? apprenticeProfile?.interval ?? 15
       : Number(day.INTERVALO_MINUTOS ?? reference.INTERVALO_MINUTOS ?? (plantao12x36 ? 60 : 70)) };
     const source = isRest(day) ? reference : day;
@@ -83,7 +83,7 @@ export function EditarDiaEscala({
       hrEnt1: (isRest(day) ? employee.HR_ENT1 || reference.HR_ENT1 : day.HR_ENT1) || (plantao12x36 ? '07:00' : '08:00'),
       hrSai1: (isRest(day) ? employee.HR_SAI1 || reference.HR_SAI1 : day.HR_SAI1) || (plantao12x36 ? '12:30' : '12:00'),
       hrEnt2: (isRest(day) ? employee.HR_ENT2 || reference.HR_ENT2 : day.HR_ENT2) || (plantao12x36 ? '13:30' : '13:10'),
-      hrSai2: (isRest(day) ? employee.HR_SAI2 || reference.HR_SAI2 : day.HR_SAI2) || (plantao12x36 ? '19:00' : '17:58'),
+      hrSai2: (isRest(day) ? employee.HR_SAI2 || reference.HR_SAI2 : day.HR_SAI2) || (plantao12x36 ? '19:00' : mesRef >= '2026-12-01' ? '17:34' : '17:58'),
     };
     if (!domingo6h) return base;
     const next = autofillStandardHours({ HR_ENT1: base.hrEnt1, HR_SAI1: base.hrSai1,

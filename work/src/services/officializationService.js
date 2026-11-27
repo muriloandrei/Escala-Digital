@@ -248,8 +248,8 @@ async function getProgress({ lojaId, mesRef, secoesPermitidas = null, escala = n
     sectionRolloutService.getStoreEnabled(lojaId),
     sundayShiftService.getStoreEnabled(lojaId),
     sundayAlternationService.getStoreEnabled(lojaId),
-    catalogService.getAllowedProfileKeys(lojaId),
-    catalogService.getAllowedProfileKeys(lojaId, null, { apprentice: true })
+    catalogService.getAllowedProfileKeys(lojaId, null, { includeInactive: true }),
+    catalogService.getAllowedProfileKeys(lojaId, null, { apprentice: true, includeInactive: true })
   ]);
   const operacionais = selectProgressSections(secoes, lojaId, todasSecoesEnabled);
   const domingoAnterior = includeCritiques

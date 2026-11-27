@@ -27,10 +27,11 @@ const { isEditableMonth } = require('../domain/editableMonth');
 
 const router = express.Router();
 
-async function getRuleOptions(lojaId) {
+async function getRuleOptions(lojaId, { includeInactive = false } = {}) {
   const [domingo6h, domingo1x1, allowedProfiles, apprenticeProfiles] = await Promise.all([
     sundayShiftService.getStoreEnabled(lojaId), sundayAlternationService.getStoreEnabled(lojaId),
-    catalogService.getAllowedProfileKeys(lojaId), catalogService.getAllowedProfileKeys(lojaId, null, { apprentice: true })
+    catalogService.getAllowedProfileKeys(lojaId, null, { includeInactive }),
+    catalogService.getAllowedProfileKeys(lojaId, null, { apprentice: true, includeInactive })
   ]);
   return { domingo6h, domingo1x1, allowedProfiles, apprenticeProfiles };
 }
@@ -711,7 +712,7 @@ router.get('/criticas', requirePermission('escalas', 'visualizar'), resolveLojaR
         regimeEscala: funcionario.REGIME_ESCALA, dtAncora12x36: funcionario.DT_ANCORA_12X36,
         dias: (escala.dias || []).filter((dia) => Number(dia.ESCFUNC_ID) === Number(funcionario.ESCFUNC_ID))
       }));
-    const { domingo6h, domingo1x1, allowedProfiles, apprenticeProfiles } = await getRuleOptions(query.lojaId);
+    const { domingo6h, domingo1x1, allowedProfiles, apprenticeProfiles } = await getRuleOptions(query.lojaId, { includeInactive: true });
     const domingoAnterior = await previousSundayService.getPriorSunday({ lojaId: query.lojaId, mesRef: query.mesRef,
       employeeIds: funcionarios.map((person) => person.escfuncId) });
     const domingoAnteriorPorFuncionario = previousSundayService.priorSundayByEmployee(domingoAnterior);

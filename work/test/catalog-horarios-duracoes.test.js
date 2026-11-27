@@ -25,6 +25,27 @@ test('missing apprentice profile column does not break schedule reads but fails 
   await assert.rejects(mod.exports.getAllowedProfileKeys(24, otherError, { apprentice: true }), /OUTRO/);
 });
 
+test('inactive profiles remain valid for existing schedules but unavailable for new selections', async () => {
+  const servicePath = path.join(__dirname, '../src/services/catalogService.js');
+  const serviceRequire = createRequire(servicePath);
+  const mod = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(servicePath, 'utf8'), {
+    module: mod,
+    require: (name) => name === '../db/oracle'
+      ? { withConnection: async (work) => work({}), oracledb: { OUT_FORMAT_OBJECT: 1 } }
+      : name === './escalaEventService' ? {} : serviceRequire(name)
+  });
+  const queries = [];
+  const connection = { execute: async (sql) => {
+    queries.push(sql);
+    return { rows: [{ JORNADA_MINUTOS: 528, INTERVALO_MINUTOS: 70 }] };
+  } };
+  assert.equal((await mod.exports.getAllowedProfileKeys(35, connection)).has('528:70'), true);
+  assert.match(queries[0], /h\.status = 'A'/);
+  assert.equal((await mod.exports.getAllowedProfileKeys(35, connection, { includeInactive: true })).has('528:70'), true);
+  assert.match(queries[1], /h\.status in \('A', 'I'\)/);
+});
+
 test('duration-only profile insert does not require fixed start or end times', async () => {
   const servicePath = path.join(__dirname, '../src/services/catalogService.js');
   const serviceRequire = createRequire(servicePath);

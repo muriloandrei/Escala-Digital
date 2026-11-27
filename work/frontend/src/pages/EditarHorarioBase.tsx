@@ -31,7 +31,7 @@ export function EditarHorarioBase({ employee, lojaId, initialMonth, currentDay, 
   };
   const [profile, setProfile] = useState(() => {
     const fallback = { work: apprentice ? apprenticeProfile?.work || 300
-      : Number(currentDay?.JORNADA_MINUTOS) || 528,
+      : Number(currentDay?.JORNADA_MINUTOS) || (initialMonth >= '2026-12' ? 504 : 528),
     interval: apprentice ? apprenticeProfile?.interval ?? 15
       : Number(currentDay?.INTERVALO_MINUTOS ?? 70) };
     return apprentice ? fallback : inferStandardProfile(standardHours, fallback);

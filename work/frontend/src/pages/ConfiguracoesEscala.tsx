@@ -8,7 +8,7 @@ type Horario = {
   JORNADA_MINUTOS: number; INTERVALO_MINUTOS: number; LIBERAR_HORARIO_APRENDIZ: boolean; STATUS: 'A' | 'I'; LOJAS: number[];
 };
 type Form = Pick<Horario, 'DESCR' | 'JORNADA_MINUTOS' | 'INTERVALO_MINUTOS' | 'LIBERAR_HORARIO_APRENDIZ' | 'STATUS' | 'LOJAS'>;
-const emptyForm: Form = { DESCR: '', JORNADA_MINUTOS: 528, INTERVALO_MINUTOS: 70, LIBERAR_HORARIO_APRENDIZ: false, STATUS: 'A', LOJAS: [] };
+const emptyForm: Form = { DESCR: '', JORNADA_MINUTOS: 504, INTERVALO_MINUTOS: 70, LIBERAR_HORARIO_APRENDIZ: false, STATUS: 'A', LOJAS: [] };
 
 function formatMinutes(value: number) {
   return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;

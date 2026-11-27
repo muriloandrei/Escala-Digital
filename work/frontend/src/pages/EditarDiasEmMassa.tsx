@@ -50,8 +50,8 @@ export function EditarDiasEmMassa({ lojaId, mesRef, dates, people, allDays, init
   const editableDates = dates.filter((date) => allowRetroactive || date >= today());
   const [selectedDates, setSelectedDates] = useState<string[]>([editableDates.includes(initialDate) ? initialDate : editableDates[0]].filter(Boolean));
   const [mode, setMode] = useState<'F' | 'FDO' | 'TRB' | 'HORARIO' | 'TROCA'>('F');
-  const [hours, setHours] = useState<StandardHours>({ HR_ENT1: '08:00', HR_SAI1: '12:30', HR_ENT2: '13:40', HR_SAI2: '17:58' });
-  const [profile, setProfile] = useState({ work: 528, interval: 70 });
+  const [hours, setHours] = useState<StandardHours>({ HR_ENT1: '08:00', HR_SAI1: '12:30', HR_ENT2: '13:40', HR_SAI2: mesRef >= '2026-12-01' ? '17:34' : '17:58' });
+  const [profile, setProfile] = useState({ work: mesRef >= '2026-12-01' ? 504 : 528, interval: 70 });
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [justification, setJustification] = useState('');

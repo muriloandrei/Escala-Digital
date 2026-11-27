@@ -3561,8 +3561,9 @@ async function oficializarEscala({ lojaId, mesRef, escsecaoId, escfuncIds = null
       );
       const domingo6h = Number(domingoConfig.rows?.[0]?.DOMINGO_6H_HABILITADO) === 1;
       const domingo1x1 = Number(domingoConfig.rows?.[0]?.DOMINGO_1X1_HABILITADO) === 1;
-      const allowedProfiles = await catalogService.getAllowedProfileKeys(lojaId, connection);
-      const apprenticeProfiles = await catalogService.getAllowedProfileKeys(lojaId, connection, { apprentice: true });
+      const allowedProfiles = await catalogService.getAllowedProfileKeys(lojaId, connection, { includeInactive: true });
+      const apprenticeProfiles = await catalogService.getAllowedProfileKeys(lojaId, connection,
+        { apprentice: true, includeInactive: true });
       const regimes = Number(lojaId) >= 700 && Number(lojaId) <= 799
         ? await require('./workRegimeService').listEffective(connection, { lojaId, mesRef }) : new Map();
       for (const funcionario of funcionarios.values()) {

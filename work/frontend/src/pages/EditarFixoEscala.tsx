@@ -36,7 +36,7 @@ export function EditarFixoEscala({
   };
   const [profile, setProfile] = useState(() => {
     const fallback = { work: apprentice ? apprenticeProfile?.work || 300
-      : Number(existing?.JORNADA_MINUTOS || generatedDay?.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : 528),
+      : Number(existing?.JORNADA_MINUTOS || generatedDay?.JORNADA_MINUTOS) || (plantao12x36 ? 660 : domingo6h ? 360 : mesRef >= '2026-12-01' ? 504 : 528),
     interval: apprentice ? apprenticeProfile?.interval ?? 15
       : Number(existing?.INTERVALO_MINUTOS ?? generatedDay?.INTERVALO_MINUTOS ?? (plantao12x36 ? 60 : 70)) };
     return apprentice || plantao12x36 || domingo6h ? fallback : inferStandardProfile(standardHours, fallback);

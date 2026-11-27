@@ -1065,14 +1065,14 @@ async function listHorariosPadrao({ includeInactive = false, lojaId = null } = {
   });
 }
 
-async function getAllowedProfileKeys(lojaId, connection = null, { apprentice = false } = {}) {
+async function getAllowedProfileKeys(lojaId, connection = null, { apprentice = false, includeInactive = false } = {}) {
   const run = async (db) => {
     try {
       const result = await db.execute(
         `select distinct h.jornada_minutos, h.intervalo_minutos
            from sgn_esc_horario_padrao h
            join sgn_esc_horpad_loja hl on hl.eschorpad_id = h.eschorpad_id
-          where hl.loja = :lojaId and h.status = 'A'
+          where hl.loja = :lojaId and h.status ${includeInactive ? "in ('A', 'I')" : "= 'A'"}
             ${apprentice ? 'and h.liberar_horario_aprendiz = 1' : ''}`,
         { lojaId }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
       );

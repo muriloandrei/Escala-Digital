@@ -318,8 +318,10 @@ function jornadaMinutosHorario(horario) {
 
 function converterJornada824(horario, mesRef) {
   if (String(mesRef || '').slice(0, 7) < '2026-12' || jornadaMinutosHorario(horario) !== 528) return horario;
-  const fim2 = timeToMinutes(horario.hrSai2);
-  return { ...horario, hrSai2: minutesToTime((fim2 - 24 + 1440) % 1440) };
+  const segundoPeriodo = (timeToMinutes(horario.hrSai2) - timeToMinutes(horario.hrEnt2) + 1440) % 1440;
+  const retorno = (timeToMinutes(horario.hrSai1) + 70) % 1440;
+  return { ...horario, hrEnt2: minutesToTime(retorno),
+    hrSai2: minutesToTime((retorno + segundoPeriodo - 24 + 1440) % 1440) };
 }
 
 function getHorarioBaseFuncionario(funcionario, turno, apprenticeProfiles = null, mesRef = null) {
@@ -429,12 +431,14 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
       if (fixo) {
         const programacaoFixa = String(fixo.programacao || fixo.PROGRAMACAO || 'TRB').toUpperCase();
         const descansoFixo = programacaoFixa !== 'TRB';
-        const horarioFixo = !aprendiz && !descansoFixo ? converterJornada824({
+        const horarioFixoOriginal = !aprendiz && !descansoFixo ? {
           hrEnt1: normalizeTime(fixo.hrEnt1 || fixo.HR_ENT1, horario.hrEnt1),
           hrSai1: normalizeTime(fixo.hrSai1 || fixo.HR_SAI1, horario.hrSai1),
           hrEnt2: normalizeTime(fixo.hrEnt2 || fixo.HR_ENT2, horario.hrEnt2),
           hrSai2: normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2)
-        }, mesRef) : null;
+        } : null;
+        const horarioFixo = horarioFixoOriginal ? converterJornada824(horarioFixoOriginal, mesRef) : null;
+        const fixoConvertido = horarioFixo !== horarioFixoOriginal;
         return {
           data,
           hrEnt1: descansoFixo ? programacaoFixa : horarioFixo?.hrEnt1 || normalizeTime(fixo.hrEnt1 || fixo.HR_ENT1, horario.hrEnt1),
@@ -443,7 +447,8 @@ function buildFuncionarioRascunhoComFolgas(funcionario, turno, mesRef, hojeIso =
           hrSai2: descansoFixo ? programacaoFixa : horarioFixo?.hrSai2 || normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2),
           jornadaMinutos: descansoFixo ? null : !aprendiz && jornadaMinutosHorario(horarioFixo) === 504
             ? 504 : fixo.jornadaMinutos ?? fixo.JORNADA_MINUTOS ?? jornadaAprendiz,
-          intervaloMinutos: descansoFixo ? null : fixo.intervaloMinutos ?? fixo.INTERVALO_MINUTOS ?? (aprendiz ? intervaloAprendiz : null),
+          intervaloMinutos: descansoFixo ? null : fixoConvertido ? 70
+            : fixo.intervaloMinutos ?? fixo.INTERVALO_MINUTOS ?? (aprendiz ? intervaloAprendiz : null),
           programacao: programacaoFixa,
           justificativa: fixo.justificativa || fixo.JUSTIFICATIVA || 'Horario/folga fixa'
         };
@@ -1245,14 +1250,23 @@ function montarDiasProtegidosLiberacao(funcionario, horario, mesRef, hojeIso, op
       if (!fixo) return null;
       const programacaoFixa = String(fixo.programacao || fixo.PROGRAMACAO || 'TRB').toUpperCase();
       const descansoFixo = programacaoFixa !== 'TRB';
+      const horarioFixoOriginal = descansoFixo ? null : {
+        hrEnt1: normalizeTime(fixo.hrEnt1 || fixo.HR_ENT1, horario.hrEnt1),
+        hrSai1: normalizeTime(fixo.hrSai1 || fixo.HR_SAI1, horario.hrSai1),
+        hrEnt2: normalizeTime(fixo.hrEnt2 || fixo.HR_ENT2, horario.hrEnt2),
+        hrSai2: normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2)
+      };
+      const horarioFixo = horarioFixoOriginal && !isFuncionarioAprendiz(funcionario)
+        ? converterJornada824(horarioFixoOriginal, mesRef) : horarioFixoOriginal;
+      const fixoConvertido = horarioFixo !== horarioFixoOriginal;
       return {
         data,
-        hrEnt1: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrEnt1 || fixo.HR_ENT1, horario.hrEnt1),
-        hrSai1: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai1 || fixo.HR_SAI1, horario.hrSai1),
-        hrEnt2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrEnt2 || fixo.HR_ENT2, horario.hrEnt2),
-        hrSai2: descansoFixo ? programacaoFixa : normalizeTime(fixo.hrSai2 || fixo.HR_SAI2, horario.hrSai2),
-        jornadaMinutos: descansoFixo ? null : fixo.jornadaMinutos ?? fixo.JORNADA_MINUTOS ?? null,
-        intervaloMinutos: descansoFixo ? null : fixo.intervaloMinutos ?? fixo.INTERVALO_MINUTOS ?? null,
+        hrEnt1: descansoFixo ? programacaoFixa : horarioFixo.hrEnt1,
+        hrSai1: descansoFixo ? programacaoFixa : horarioFixo.hrSai1,
+        hrEnt2: descansoFixo ? programacaoFixa : horarioFixo.hrEnt2,
+        hrSai2: descansoFixo ? programacaoFixa : horarioFixo.hrSai2,
+        jornadaMinutos: descansoFixo ? null : fixoConvertido ? 504 : fixo.jornadaMinutos ?? fixo.JORNADA_MINUTOS ?? null,
+        intervaloMinutos: descansoFixo ? null : fixoConvertido ? 70 : fixo.intervaloMinutos ?? fixo.INTERVALO_MINUTOS ?? null,
         programacao: programacaoFixa,
         justificativa: fixo.justificativa || fixo.JUSTIFICATIVA || 'Horario/folga fixa'
       };
