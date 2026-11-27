@@ -40,13 +40,15 @@ const migrationNames = [
   '20261125_reparar_jornadas_aprendiz.sql',
   '20261125_reparar_jornadas_aprendiz_v2.sql',
   '20261125_aprendiz_5h_15min_intervalo.sql',
-  '20261126_jornada_8h24_todas_lojas.sql'
+  '20261126_jornada_8h24_todas_lojas.sql',
+  '20261127_cancelar_transferencia_agendada.sql'
 ];
 const apprenticeRepairName = '20261125_reparar_jornadas_aprendiz.sql';
 const apprenticeRepairV2Name = '20261125_reparar_jornadas_aprendiz_v2.sql';
 const apprenticeOriginalName = '20261125_jornadas_aprendiz_livres.sql';
 const apprenticeStandardName = '20261125_aprendiz_5h_15min_intervalo.sql';
 const jornada824Name = '20261126_jornada_8h24_todas_lojas.sql';
+const cancelTransferName = '20261127_cancelar_transferencia_agendada.sql';
 
 function parseSinglePlsqlBlock(source) {
   const lines = String(source).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim().split('\n');
@@ -114,7 +116,16 @@ async function checkPrerequisites(connection, migration, expectedOracleUser) {
   const current = applied.get(migration.name);
   if (current && current !== migration.checksum) throw new Error('Migration registrada com checksum diferente; investigue antes de prosseguir.');
   if (!current) {
-    if ([apprenticeRepairName, apprenticeRepairV2Name, apprenticeStandardName, jornada824Name].includes(migration.name)) {
+    if (migration.name === cancelTransferName) {
+      const result = await connection.execute(
+        "select column_name from user_tab_columns where table_name = 'SGN_ESC_TRANSFER_SUB'",
+        {}, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      const columns = new Set((result.rows || []).map((row) => row.COLUMN_NAME));
+      const missing = ['TRANSF_ID', 'STATUS', 'TENTATIVAS', 'MESES_GERADOS']
+        .filter((column) => !columns.has(column));
+      if (missing.length) throw new Error(`Tabela de transferencias incompleta: ${missing.join(', ')}.`);
+    } else if ([apprenticeRepairName, apprenticeRepairV2Name, apprenticeStandardName, jornada824Name].includes(migration.name)) {
       const predecessors = migration.name === apprenticeStandardName
         ? [apprenticeRepairName, apprenticeRepairV2Name]
         : migration.name === jornada824Name ? [] : [apprenticeOriginalName];

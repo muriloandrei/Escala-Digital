@@ -6,9 +6,16 @@ type ScheduledTransfer = {
   TRANSF_ID: number;
   VIGENCIA: string;
   STATUS: string;
+  TENTATIVAS: number;
+  MESES_GERADOS: string[];
   DESTINO_NOME?: string;
   ERRO?: string;
 };
+
+function canReplaceScheduled(item: ScheduledTransfer) {
+  return item.STATUS === 'P' && Number(item.TENTATIVAS) === 0
+    && Array.isArray(item.MESES_GERADOS) && item.MESES_GERADOS.length === 0;
+}
 
 export function TransferirSubsecao({
   lojaId,
@@ -45,6 +52,7 @@ export function TransferirSubsecao({
   const [error, setError] = useState('');
   const [warning, setWarning] = useState<TransferResult | null>(null);
   const [scheduled, setScheduled] = useState<ScheduledTransfer[]>([]);
+  const blockedByLegacyTransfer = scheduled.some((item) => ['P', 'E', 'F'].includes(item.STATUS) && !canReplaceScheduled(item));
 
   async function retryTransfer(transfId: number) {
     setBusy(true);
@@ -180,7 +188,9 @@ export function TransferirSubsecao({
             </label>
             {scheduled.filter((item) => ['P', 'E', 'F'].includes(item.STATUS)).map((item) => (
               <div className={item.STATUS === 'F' ? 'notice error' : 'notice warning'} key={item.TRANSF_ID}>
-                {item.STATUS === 'F' ? 'Transferência não concluída' : 'Transferência agendada'} para {item.DESTINO_NOME || 'outra subseção'} em {item.VIGENCIA}.
+                {canReplaceScheduled(item)
+                  ? `Agendamento antigo para ${item.DESTINO_NOME || 'outra subseção'} em ${item.VIGENCIA}. Será cancelado ao confirmar a transferência imediata.`
+                  : `${item.STATUS === 'F' ? 'Transferência não concluída' : item.STATUS === 'E' ? 'Transferência em processamento' : 'Transferência pendente com processamento anterior'} para ${item.DESTINO_NOME || 'outra subseção'} em ${item.VIGENCIA}.`}
                 {item.ERRO && <small className="table-subline">{item.ERRO}</small>}
                 {item.STATUS === 'F' && canRetry && <button className="button secondary" type="button" disabled={busy} onClick={() => retryTransfer(item.TRANSF_ID)}>Retomar</button>}
               </div>
@@ -188,7 +198,7 @@ export function TransferirSubsecao({
             {error && <div className="notice error" role="alert">{error}</div>}
             <div className="confirm-actions">
               <button className="button secondary" type="button" disabled={busy} onClick={onClose}>Cancelar</button>
-              <button className="button primary" type="submit" disabled={busy || loadingEmployee || !currentEmployee || !destination || scheduled.some((item) => ['P', 'E', 'F'].includes(item.STATUS))}>{busy ? 'Aguarde...' : 'Confirmar transferência'}</button>
+              <button className="button primary" type="submit" disabled={busy || loadingEmployee || !currentEmployee || !destination || blockedByLegacyTransfer}>{busy ? 'Aguarde...' : 'Confirmar transferência'}</button>
             </div>
           </>
         )}

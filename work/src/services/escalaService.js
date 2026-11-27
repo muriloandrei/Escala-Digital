@@ -2889,6 +2889,27 @@ async function transferirSubsecaoFuncionario({ lojaId, mesRef, escfuncId, escsec
         throw error;
       }
 
+      const pending = await connection.execute(
+        `select transf_id, status, tentativas, meses_gerados
+           from sgn_esc_transfer_sub
+          where loja = :lojaId and escfunc_id = :escfuncId
+            and status in ('P', 'E', 'F')
+          for update wait 5`,
+        { lojaId, escfuncId },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT, fetchInfo: { MESES_GERADOS: { type: oracledb.STRING } } }
+      );
+      const substituidos = [];
+      for (const transfer of pending.rows || []) {
+        const nuncaProcessada = transfer.STATUS === 'P' && Number(transfer.TENTATIVAS) === 0
+          && ['', '[]'].includes(String(transfer.MESES_GERADOS || '').trim());
+        if (!nuncaProcessada) {
+          const error = new Error('Existe transferencia antiga em processamento ou com falha. Confira o historico antes de transferir novamente.');
+          error.statusCode = 409;
+          throw error;
+        }
+        substituidos.push(Number(transfer.TRANSF_ID));
+      }
+
       const operacaoId = escalaEventService.createOperationId();
       if (mesRef && isMesFinalizado(mesRef) && !podeEditarRetroativamente(actor)) {
         const error = new Error(`Escala ${mesRef} finalizada nao pode ser transferida retroativamente.`);
@@ -2918,6 +2939,20 @@ async function transferirSubsecaoFuncionario({ lojaId, mesRef, escfuncId, escsec
         revisoesPendentes.push({ mesRef: mes, revisao: nova.revisao });
       }
 
+      for (const transfId of substituidos) {
+        const canceled = await connection.execute(
+          `update sgn_esc_transfer_sub
+              set status = 'X', erro = 'Substituida por transferencia imediata'
+            where transf_id = :transfId and loja = :lojaId and escfunc_id = :escfuncId and status = 'P'`,
+          { transfId, lojaId, escfuncId }, { autoCommit: false }
+        );
+        if (canceled.rowsAffected !== 1) {
+          const error = new Error('Agendamento antigo mudou durante a transferencia. Atualize e tente novamente.');
+          error.statusCode = 409;
+          throw error;
+        }
+      }
+
       await connection.execute(
         `update sgn_esc_funcionario set escsubsecao_id = :destinoId
           where loja = :lojaId and escfunc_id = :escfuncId`,
@@ -2928,13 +2963,14 @@ async function transferirSubsecaoFuncionario({ lojaId, mesRef, escfuncId, escsec
         escfuncId, escsecaoId, actor, acao: 'TRANSFERIR_SUBSECAO',
         origem: 'USUARIO', situacao: revisoesPendentes.length ? 'RASCUNHO' : 'CADASTRO',
         detalhe: {
-          chapa: current.CHAPA, vigencia: 'IMEDIATO',
+          chapa: current.CHAPA, vigencia: 'IMEDIATO', agendamentosSubstituidos: substituidos,
           anterior: { escsecaoId, escsubsecaoId: current.ESCSUBSECAO_ID },
           novo: { escsecaoId, escsubsecaoId: destinoId }
         }
       });
       await connection.commit();
-      return { revisaoPendente: revisoesPendentes.some((item) => item.mesRef === mesRef), revisoesPendentes };
+      return { revisaoPendente: revisoesPendentes.some((item) => item.mesRef === mesRef), revisoesPendentes,
+        agendamentosSubstituidos: substituidos };
     } catch (error) {
       await connection.rollback();
       throw normalizeOracleSaveError(error);

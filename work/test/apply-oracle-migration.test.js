@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { migrationNames, parseSinglePlsqlBlock, parseArgs, readMigration, checkPrerequisites } = require('../scripts/apply-oracle-migration');
 
 test('executor accepts only the approved mirrored single-block migrations', () => {
-  assert.equal(migrationNames.length, 36);
+  assert.equal(migrationNames.length, 37);
   for (const name of migrationNames) {
     const migration = readMigration(name);
     assert.match(migration.sql, /^(declare|begin)\b/i);
@@ -62,6 +62,24 @@ test('08:24 journey migration is approved and reaches every existing store', () 
   assert.match(sql, /h\.jornada_minutos = 504 and h\.intervalo_minutos = 70/i);
   assert.match(sql, /cross join sgn_esc_loja l/i);
   assert.match(sql, /merge into sgn_esc_horpad_loja/i);
+});
+
+test('canceled legacy transfers have an auditable status without changing prior migrations', async () => {
+  const migration = readMigration('20261127_cancelar_transferencia_agendada.sql');
+  assert.match(migration.sql, /status in \(''P'', ''E'', ''C'', ''F'', ''X''\)/);
+  assert.match(migration.sql, /drop constraint sgn_esc_transfer_sub_status_ck/i);
+  let columns = ['TRANSF_ID', 'STATUS', 'TENTATIVAS', 'MESES_GERADOS'];
+  const connection = { execute: async (sql) => {
+    if (sql.includes('schema_user')) return { rows: [{ SCHEMA_USER: 'ESCALAINT' }] };
+    if (sql.includes("table_name in ('SGN_ESC_PROG'")) return { rows: [{ TOTAL: 2 }] };
+    if (sql.includes("table_name = 'SGN_ESC_MIGRACAO'")) return { rows: [{ TOTAL: 1 }] };
+    if (sql.includes('from sgn_esc_migracao')) return { rows: [] };
+    if (sql.includes("table_name = 'SGN_ESC_TRANSFER_SUB'")) return { rows: columns.map((COLUMN_NAME) => ({ COLUMN_NAME })) };
+    throw new Error(`SQL inesperado: ${sql}`);
+  } };
+  await assert.doesNotReject(checkPrerequisites(connection, migration, 'ESCALAINT'));
+  columns = ['TRANSF_ID', 'STATUS'];
+  await assert.rejects(checkPrerequisites(connection, migration, 'ESCALAINT'), /Tabela de transferencias incompleta/);
 });
 
 test('duration-only profiles can omit fixed clock times after migration', () => {

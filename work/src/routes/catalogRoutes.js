@@ -546,11 +546,6 @@ router.patch('/lojas/:lojaId/funcionarios/:escfuncId/subsecao', resolveLojaParam
     }
     await accessService.assertSecoesPermitidas(req.user, lojaId, [escsecaoId]);
 
-    const unresolved = await subsectionTransferService.listar({ lojaId, escfuncId });
-    if (unresolved.some((item) => ['P', 'E', 'F'].includes(item.STATUS))) {
-      return res.status(409).json({ error: 'Existe transferencia pendente ou em falha. Resolva-a antes de mudar a subsecao.' });
-    }
-
     const transferencia = await escalaService.transferirSubsecaoFuncionario({
       lojaId, escfuncId, escsecaoId, destinoId: data.ESCSUBSECAO_ID,
       mesRef: data.MES_REF, actor: req.user

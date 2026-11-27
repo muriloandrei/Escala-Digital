@@ -10,6 +10,7 @@ test('transferencia imediata preserva escala oficializada em nova revisao penden
   const calls = [];
   const events = [];
   let failUpdate = false;
+  let pendingRows = [];
   const connection = {
     async execute(sql, binds) {
       calls.push({ sql, binds });
@@ -19,6 +20,7 @@ test('transferencia imediata preserva escala oficializada em nova revisao penden
         ESCFUNCAO_ID: 40, CHAPA: '302.0479', STATUS: 'A', DT_DEMISS: null
       }] };
       if (/from sgn_esc_subsecao/i.test(sql)) return { rows: [{ ESCSUBSECAO_ID: 6 }] };
+      if (/from sgn_esc_transfer_sub/i.test(sql)) return { rows: pendingRows };
       if (/select distinct to_char\(p.mes_ref/i.test(sql)) return { rows: [{ MES_REF: '2099-11-01' }] };
       if (/from user_tab_columns/i.test(sql)) return { rows: [
         { COLUMN_NAME: 'ATIVA', DATA_TYPE: 'NUMBER' },
@@ -68,6 +70,17 @@ test('transferencia imediata preserva escala oficializada em nova revisao penden
   assert.equal(events[0].acao, 'TRANSFERIR_SUBSECAO');
   assert.equal(calls.at(-1).sql, 'COMMIT');
   calls.length = 0;
+  pendingRows = [{ TRANSF_ID: 17, STATUS: 'P', TENTATIVAS: 0, MESES_GERADOS: '[]' }];
+  const substituida = await loaded.exports.transferirSubsecaoFuncionario({
+    lojaId: 302, mesRef: '2099-11-01', escfuncId: 91, escsecaoId: 2002,
+    destinoId: 6, actor: { sub: 1, perfil: 'LIDER', login: 'LIDER.FRENTE302' }
+  });
+  assert.equal(substituida.agendamentosSubstituidos[0], 17);
+  assert.ok(calls.findIndex(({ sql }) => /set status = 'X'/.test(sql))
+    < calls.findIndex(({ sql }) => /update sgn_esc_funcionario set escsubsecao_id/i.test(sql)));
+  assert.equal(events.at(-1).detalhe.agendamentosSubstituidos[0], 17);
+  assert.equal(calls.at(-1).sql, 'COMMIT');
+  calls.length = 0;
   failUpdate = true;
   await assert.rejects(loaded.exports.transferirSubsecaoFuncionario({
     lojaId: 302, mesRef: '2099-11-01', escfuncId: 91, escsecaoId: 2002,
@@ -75,6 +88,23 @@ test('transferencia imediata preserva escala oficializada em nova revisao penden
   }), /Falha de gravacao/);
   assert.equal(calls.at(-1).sql, 'ROLLBACK');
   assert.equal(calls.some(({ sql }) => sql === 'COMMIT'), false);
+  calls.length = 0;
+  failUpdate = false;
+  pendingRows = [{ TRANSF_ID: 17, STATUS: 'F', TENTATIVAS: 1, MESES_GERADOS: '[]' }];
+  await assert.rejects(loaded.exports.transferirSubsecaoFuncionario({
+    lojaId: 302, mesRef: '2099-11-01', escfuncId: 91, escsecaoId: 2002,
+    destinoId: 6, actor: { sub: 1, perfil: 'LIDER', login: 'LIDER.FRENTE302' }
+  }), (error) => error.statusCode === 409);
+  assert.equal(calls.some(({ sql }) => /set status = 'X'/.test(sql)), false);
+  assert.equal(calls.at(-1).sql, 'ROLLBACK');
+  calls.length = 0;
+  pendingRows = [{ TRANSF_ID: 17, STATUS: 'P', TENTATIVAS: 1, MESES_GERADOS: '[]' }];
+  await assert.rejects(loaded.exports.transferirSubsecaoFuncionario({
+    lojaId: 302, mesRef: '2099-11-01', escfuncId: 91, escsecaoId: 2002,
+    destinoId: 6, actor: { sub: 1, perfil: 'LIDER', login: 'LIDER.FRENTE302' }
+  }), (error) => error.statusCode === 409);
+  assert.equal(calls.some(({ sql }) => /set status = 'X'/.test(sql)), false);
+  assert.equal(calls.at(-1).sql, 'ROLLBACK');
 });
 
 test('open months hide stale operational days after a move to Deposito', () => {
